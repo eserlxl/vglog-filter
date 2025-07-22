@@ -122,24 +122,23 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     makepkg -si
     exit 0
 elif [[ "$MODE" == "aur-git" ]]; then
-    cp -f "$PKGBUILD0" "$PKGBUILD"
-    echo "[aur-git] PKGBUILD.0 copied to PKGBUILD."
-    # Check if the target tag exists in the remote repository
-    if ! git ls-remote --exit-code --tags "https://github.com/eserlxl/${PKGNAME}.git" "refs/tags/v${PKGVER}" >/dev/null; then
-        echo "Error: Tag v${PKGVER} does not exist in the repository https://github.com/eserlxl/${PKGNAME}.git."
-        echo "Please create and push the tag before proceeding."
-        exit 1
+    # Generate PKGBUILD.git from PKGBUILD.0
+    cp -f "$PKGBUILD0" "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i 's/^pkgname=.*/pkgname=vglog-filter-git/' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i 's|^source=(.*)|source=("git+https://github.com/eserlxl/vglog-filter.git#branch=main")|' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i 's/^b2sums=.*/sha256sums=(\'SKIP\')/' "$SCRIPT_DIR/PKGBUILD.git"
+    if ! grep -q '^sha256sums=' "$SCRIPT_DIR/PKGBUILD.git"; then
+        echo "sha256sums=('SKIP')" >> "$SCRIPT_DIR/PKGBUILD.git"
     fi
-    # Replace source, sha256sums, and validpgpkeys
-    sed -i "s|source=(\".*\")|source=(\"git+https://github.com/eserlxl/${PKGNAME}.git#tag=v${PKGVER}\")|" "$PKGBUILD"
-    if grep -q '^sha256sums=' "$PKGBUILD"; then
-        sed -i "s|^sha256sums=.*|sha256sums=('SKIP')|" "$PKGBUILD"
-    else
-        echo "sha256sums=('SKIP')" >> "$PKGBUILD"
+    if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
+        sed -i '/^source=/a \
+pkgver() {\n  cd \"$srcdir/${pkgname%-git}\"\n  git describe --long --tags 2>/dev/null | sed \"s/^v//;s/-/./g\" || \\\n  printf \"r%s.%s\" \"$(git rev-list --count HEAD)\" \"$(git rev-parse --short HEAD)\"\n}\n' "$SCRIPT_DIR/PKGBUILD.git"
     fi
-    if grep -q '^validpgpkeys=' "$PKGBUILD"; then
-        sed -i "s|^validpgpkeys=.*|validpgpkeys=('F677BC1E3BD7246E')|" "$PKGBUILD"
-    else
+    PKGBUILD_TEMPLATE="$SCRIPT_DIR/PKGBUILD.git"
+    cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
+    echo "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
+    # Set validpgpkeys if missing
+    if ! grep -q '^validpgpkeys=' "$PKGBUILD"; then
         echo "validpgpkeys=('F677BC1E3BD7246E')" >> "$PKGBUILD"
     fi
     # Check for required tools
