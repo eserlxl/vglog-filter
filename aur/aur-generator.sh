@@ -222,7 +222,8 @@ elif [[ "$MODE" == "aur-git" ]]; then
     sed -i '/^sha256sums=/d' "$SCRIPT_DIR/PKGBUILD.git"
     # Insert sha256sums=('SKIP') after the source= line using awk -v
     awk -v sums="sha256sums=('SKIP')" '/^source=/ { print; print sums; next } { print }' "$SCRIPT_DIR/PKGBUILD.git" > "$SCRIPT_DIR/PKGBUILD.git.tmp" && mv "$SCRIPT_DIR/PKGBUILD.git.tmp" "$SCRIPT_DIR/PKGBUILD.git"
-    # Replace every literal ${pkgname}-${pkgver} or $pkgname-$pkgver with ${pkgname%-git}
+    # shellcheck disable=SC2016
+    # We want to replace the literal text '${pkgname}-${pkgver}' in the PKGBUILD template, not expand shell variables.
     sed -i 's|\${pkgname}-\${pkgver}|\${pkgname%-git}|g; s|\$pkgname-\$pkgver|\${pkgname%-git}|g' "$SCRIPT_DIR/PKGBUILD.git"
     # Remove the global replacements for ${pkgname}-${pkgver} and $pkgname-$pkgver to avoid affecting comments
     # Insert pkgver() as before if missing
