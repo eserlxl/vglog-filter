@@ -1,6 +1,6 @@
-# Contributing to lightXDM
+# Contributing to vglog-filter
 
-Thank you for considering contributing to lightXDM! We welcome contributions from everyone.
+Thank you for considering contributing to vglog-filter! We welcome contributions from everyone.
 
 ## How to Contribute
 
