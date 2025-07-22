@@ -13,6 +13,9 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PKGNAME=vglog-filter
 
+# Helper: require tools
+require() { for t; do command -v "$t" >/dev/null || { echo "Missing $t"; exit 1; }; done; }
+
 function usage() {
     echo "Usage: $0 [local|aur|aur-git|clean]"
     echo
@@ -38,12 +41,15 @@ echo "Running in $MODE mode"
 case "$MODE" in
     local)
         echo "[local] Build and install from local tarball."
+        require makepkg updpkgsums curl
         ;;
     aur)
         echo "[aur] Prepare for AUR upload: creates tarball, GPG signature, and PKGBUILD for release."
+        require makepkg updpkgsums curl gpg
         ;;
     aur-git)
         echo "[aur-git] Prepare PKGBUILD for VCS (git) package. No tarball is created."
+        require makepkg
         ;;
     clean)
         echo "[clean] Remove generated files and directories."
@@ -235,10 +241,7 @@ elif [[ "$MODE" == "aur-git" ]]; then
         echo "validpgpkeys=('F677BC1E3BD7246E')" >> "$PKGBUILD"
     fi
     # Check for required tools
-    if ! command -v makepkg >/dev/null 2>&1; then
-        echo "Error: makepkg is required but not installed."
-        exit 1
-    fi
+    require makepkg
     # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
     # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
     # Always generate .SRCINFO from PKGBUILD
