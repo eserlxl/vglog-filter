@@ -31,6 +31,8 @@ function usage() {
     echo "- Requires PKGBUILD.0 as the template for PKGBUILD generation."
     echo "- For 'aur' mode, a GPG secret key is required for signing the tarball."
     echo "- For 'aur' and 'local' modes, the script will attempt to update checksums and .SRCINFO."
+    echo "- To skip the GPG key selection menu in 'aur' mode, set GPG_KEY_ID to your key's ID:"
+    echo "    GPG_KEY_ID=ABCDEF ./aur-generator.sh aur"
     exit 1
 }
 
