@@ -134,17 +134,23 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
     echo "[$MODE] PKGBUILD.0 copied to PKGBUILD."
     if [[ "$MODE" == "aur" ]]; then
-        sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
-        echo "[aur] Updated source line in PKGBUILD."
+        # Fix: Try correct link first, fallback to old 'v' link if needed
+        sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
+        echo "[aur] Updated source line in PKGBUILD (no 'v' before version)."
         # Check if the tarball exists on GitHub before running updpkgsums
-        TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
-        if curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
-            updpkgsums
-            echo "[aur] Ran updpkgsums (b2sums updated)."
-        else
-            echo "[aur] Release asset not found at $TARBALL_URL. Skipping updpkgsums."
-            echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
+        TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
+        if ! curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
+            echo "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
+            sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
+            TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
+            if ! curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
+                echo "[aur] ERROR: Release asset not found at either $TARBALL_URL or without 'v'. Aborting."
+                echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
+                exit 1
+            fi
         fi
+        updpkgsums
+        echo "[aur] Ran updpkgsums (b2sums updated)."
     else
         updpkgsums
         echo "[$MODE] Ran updpkgsums (b2sums updated)."
