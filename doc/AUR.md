@@ -10,18 +10,20 @@
 ## Usage
 
 ```sh
-./aur-generator.sh [local|aur|clean]
+./aur-generator.sh [local|aur|aur-git|clean]
 ```
 
 - `local`: Prepares PKGBUILD and .SRCINFO for local testing/installation.
 - `aur`: Updates PKGBUILD and .SRCINFO for AUR submission, sets the source URL to the latest GitHub release tarball, updates checksums, and runs `makepkg`.
+- `aur-git`: Prepares PKGBUILD and .SRCINFO for a VCS (git tag) build, sets the source to the specified git tag, sets `sha256sums=('SKIP')`, adds `validpgpkeys`, and runs `makepkg`. Useful for testing or maintaining a `-git` AUR package.
 - `clean`: Cleans up generated files and directories in the `aur/` folder.
 
 ## How It Works
-- Always creates a new source tarball from the project root, excluding build and VCS files.
+- Always creates a new source tarball from the project root, excluding build and VCS files (except in `aur-git` mode).
 - Copies and updates PKGBUILD from the template file (`PKGBUILD.0`).
-- For `aur` mode, updates the `source` line in PKGBUILD to point to the latest GitHub release and runs `updpkgsums` and `makepkg`.
-- For both `local` and `aur` modes, generates `.SRCINFO` from the current PKGBUILD using `makepkg --printsrcinfo > .SRCINFO` (or `mksrcinfo`).
+- For `aur` mode, updates the `source` line in PKGBUILD to point to the latest GitHub release tarball and runs `updpkgsums` and `makepkg`.
+- For `aur-git` mode, updates the `source` line in PKGBUILD to use the git tag as the source, sets `sha256sums=('SKIP')`, and adds/updates `validpgpkeys`.
+- For both `local`, `aur`, and `aur-git` modes, generates `.SRCINFO` from the current PKGBUILD using `makepkg --printsrcinfo > .SRCINFO` (or `mksrcinfo`).
 - For `clean` mode, removes generated files and build artifacts from the `aur/` directory.
 - The `validpgpkeys` array is always present in `PKGBUILD.0` to ensure correct signature verification.
 
