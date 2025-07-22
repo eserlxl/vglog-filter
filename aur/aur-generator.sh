@@ -11,8 +11,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-PKGNAME=vglog-filter
-
 # Helper: require tools
 require() { for t; do command -v "$t" >/dev/null || { echo "Missing $t"; exit 1; }; done; }
 
