@@ -12,7 +12,7 @@ readonly PKGNAME="vglog-filter"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COLOR=1
-VALID_MODES=(local aur aur-git clean)
+VALID_MODES=(local aur aur-git clean test)
 
 # --- Functions ---
 require() {
@@ -73,13 +73,14 @@ install_pkg() {
 }
 
 function usage() {
-    log "Usage: $0 [--no-color|-n] [local|aur|aur-git|clean] [--dry-run|-d]"
+    log "Usage: $0 [--no-color|-n] [local|aur|aur-git|clean|test] [--dry-run|-d]"
     echo
     log "Modes:"
     log "  local     Build and install the package from a local tarball (for testing)."
     log "  aur       Prepare a release tarball, sign it with GPG, and update PKGBUILD for AUR upload."
     log "  aur-git   Generate a PKGBUILD for the -git (VCS) AUR package (no tarball/signing)."
     log "  clean     Remove all generated files and directories"
+    log "  test      Run all modes in dry-run mode to check for errors and report results"
     echo
     log "Options:"
     log "  --no-color, -n   Disable colored output (also supported via NO_COLOR env variable)"
@@ -96,6 +97,7 @@ function usage() {
     log "- If GitHub CLI (gh) is installed, the script can automatically upload missing release assets."
     log "- To skip the automatic upload prompt in 'aur' mode, set AUTO=y:"
     log "    AUTO=y ./aur-generator.sh aur"
+    log "- The 'test' mode runs all other modes in dry-run mode to verify they work correctly."
     exit 1
 }
 
@@ -172,6 +174,60 @@ case "$MODE" in
         log "Clean complete."
         exit 0
         ;;
+    test)
+        log "[test] Running all modes in dry-run mode to check for errors."
+        TEST_ERRORS=0
+        
+        # Test each mode
+        for test_mode in local aur aur-git; do
+            log "--- Testing $test_mode mode ---"
+            
+            # Always run clean before each test
+            log "[test] Running clean before $test_mode test..."
+            if ! bash "$SCRIPT_DIR/aur-generator.sh" clean > /dev/null 2>&1; then
+                warn "[test] Warning: Clean failed for $test_mode test, but continuing..."
+            fi
+            
+            # Create a temporary directory for this test
+            TEMP_DIR=$(mktemp -d)
+            cd "$TEMP_DIR"
+            
+            # Set up test environment
+            export DRY_RUN=1
+            export CI=1  # Skip prompts
+            
+            # For aur mode, set a dummy GPG key to avoid prompts
+            if [[ "$test_mode" == "aur" ]]; then
+                export GPG_KEY_ID="TEST_KEY_FOR_DRY_RUN"
+            fi
+            
+            # Run the test mode
+            if bash "$SCRIPT_DIR/aur-generator.sh" "$test_mode" --dry-run > "$TEMP_DIR/test_output.log" 2>&1; then
+                log "[test] ✓ $test_mode mode passed"
+            else
+                err "[test] ✗ $test_mode mode failed"
+                TEST_ERRORS=$((TEST_ERRORS + 1))
+                # Show the error output
+                if [[ -f "$TEMP_DIR/test_output.log" ]]; then
+                    warn "Error output for $test_mode:"
+                    cat "$TEMP_DIR/test_output.log" >&2
+                fi
+            fi
+            
+            # Clean up
+            cd "$SCRIPT_DIR"
+            rm -rf "$TEMP_DIR"
+        done
+        
+        # Report results
+        if [[ $TEST_ERRORS -eq 0 ]]; then
+            log "[test] ✓ All test modes passed successfully!"
+        else
+            err "[test] ✗ $TEST_ERRORS test mode(s) failed"
+            exit 1
+        fi
+        exit 0
+        ;;
     *)
         err "Unknown mode: $MODE"
         usage
@@ -220,7 +276,13 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         # GPG key selection logic
         GPG_KEY=""
         if [[ -n "${GPG_KEY_ID:-}" ]]; then
-            GPG_KEY="$GPG_KEY_ID"
+            if [[ "${GPG_KEY_ID}" == "TEST_KEY_FOR_DRY_RUN" ]]; then
+                # In test mode, skip GPG signing
+                log "[aur] Test mode: Skipping GPG signing"
+                GPG_KEY=""
+            else
+                GPG_KEY="$GPG_KEY_ID"
+            fi
         else
             # List available secret keys and prompt user
             mapfile -t KEYS < <(gpg --list-secret-keys --with-colons | awk -F: '/^sec/ {print $5}')
@@ -242,10 +304,15 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         fi
         if [[ -n "$GPG_KEY" ]]; then
             gpg --detach-sign -u "$GPG_KEY" --output "$OUTDIR/$TARBALL.sig" "$OUTDIR/$TARBALL"
+            log "[aur] Created GPG signature: $OUTDIR/$TARBALL.sig"
+        elif [[ "${GPG_KEY_ID:-}" == "TEST_KEY_FOR_DRY_RUN" ]]; then
+            # In test mode, create a dummy signature file
+            touch "$OUTDIR/$TARBALL.sig"
+            log "[aur] Test mode: Created dummy signature file: $OUTDIR/$TARBALL.sig"
         else
             gpg --detach-sign --output "$OUTDIR/$TARBALL.sig" "$OUTDIR/$TARBALL"
+            log "[aur] Created GPG signature: $OUTDIR/$TARBALL.sig"
         fi
-        log "[aur] Created GPG signature: $OUTDIR/$TARBALL.sig"
     fi
 fi
 
