@@ -20,7 +20,7 @@ function usage() {
     echo "  local     Build and install the package from a local tarball (for testing)."
     echo "  aur       Prepare a release tarball, sign it with GPG, and update PKGBUILD for AUR upload."
     echo "  aur-git   Generate a PKGBUILD for the -git (VCS) AUR package (no tarball/signing)."
-    echo "  clean     Remove all generated files and directories in the aur/ folder."
+    echo "  clean     Remove all generated files and directories"
     echo
     echo "Notes:"
     echo "- Requires PKGBUILD.0 as the template for PKGBUILD generation."
