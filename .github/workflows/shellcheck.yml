@@ -7,11 +7,11 @@ on:
   push:
     paths:
       - 'build.sh'
-      - 'aur/make-local-tarball.sh'
+      - 'aur/aur-generator.sh'
   pull_request:
     paths:
       - 'build.sh'
-      - 'aur/make-local-tarball.sh'
+      - 'aur/aur-generator.sh'
 
 jobs:
   shellcheck:
@@ -22,5 +22,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Run ShellCheck
         run: shellcheck build.sh 
-      - name: Run ShellCheck on aur/make-local-tarball.sh
-        run: shellcheck aur/make-local-tarball.sh 
+      - name: Run ShellCheck on aur/aur-generator.sh
+        run: shellcheck aur/aur-generator.sh 
