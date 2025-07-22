@@ -138,7 +138,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     echo "[$MODE] PKGBUILD.0 copied to PKGBUILD."
     if [[ "$MODE" == "aur" ]]; then
         # Fix: Try correct link first, fallback to old 'v' link if needed
-        sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
+        sed -E -i "s|^source=\\(.*\\)|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
         echo "[aur] Updated source line in PKGBUILD (no 'v' before version)."
         # Check if the tarball exists on GitHub before running updpkgsums
         TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
@@ -174,7 +174,7 @@ elif [[ "$MODE" == "aur-git" ]]; then
     # Generate PKGBUILD.git from PKGBUILD.0
     cp -f "$PKGBUILD0" "$SCRIPT_DIR/PKGBUILD.git"
     sed -i 's/^pkgname=.*/pkgname=vglog-filter-git/' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i 's|^source=(.*)|source=("git+https://github.com/eserlxl/vglog-filter.git#branch=main")|' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -E -i 's|^source=\(.*\)|source=("git+https://github.com/eserlxl/vglog-filter.git#branch=main")|' "$SCRIPT_DIR/PKGBUILD.git"
     # Remove any b2sums or sha256sums lines
     sed -i '/^b2sums=/d' "$SCRIPT_DIR/PKGBUILD.git"
     sed -i '/^sha256sums=/d' "$SCRIPT_DIR/PKGBUILD.git"
