@@ -18,14 +18,16 @@ readonly PKGNAME="vglog-filter"
 
 # Colorized log helpers (disable color if NO_COLOR is set or --no-color/-n is passed)
 COLOR=1
-for arg in "$@"; do
-    if [[ "$arg" == "--no-color" || "$arg" == "-n" ]]; then
-        COLOR=0
-        # Remove the option from arguments
-        set -- "${@/--no-color/}"
-        set -- "${@/-n/}"
-        break
-    fi
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --no-color|-n)
+            COLOR=0
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
 done
 if [[ -n "${NO_COLOR:-}" ]]; then
     COLOR=0
