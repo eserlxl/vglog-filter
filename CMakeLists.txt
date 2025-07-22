@@ -42,3 +42,10 @@ target_compile_definitions(vglog-filter PRIVATE
     $<$<BOOL:PERFORMANCE_BUILD>:NDEBUG>
     $<$<BOOL:DEBUG_MODE>:DEBUG>
 )
+
+# Log compiler flags and options
+message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+message(STATUS "OPT_FLAGS: ${OPT_FLAGS}")
+message(STATUS "WARNING_FLAGS: ${WARNING_FLAGS}")
+get_target_property(VGLOG_COMPILE_OPTIONS vglog-filter COMPILE_OPTIONS)
+message(STATUS "vglog-filter target compile options: ${VGLOG_COMPILE_OPTIONS}")
