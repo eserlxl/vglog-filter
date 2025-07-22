@@ -87,6 +87,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         --exclude="aur" \
         --exclude="build" \
         --exclude="doc" \
+        --numeric-owner --owner=0 --group=0 --mtime='@0' \
         -czf "$OUTDIR/$TARBALL" . --transform "s,^.,${PKGNAME}-${PKGVER},"
     echo "Created $OUTDIR/$TARBALL"
 
