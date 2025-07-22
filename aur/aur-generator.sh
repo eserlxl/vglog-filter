@@ -40,6 +40,42 @@ log() { if (( COLOR )); then printf '\e[1;32m%s\e[0m\n' "$*"; else printf '%s\n'
 warn() { if (( COLOR )); then printf '\e[1;33m%s\e[0m\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi; }
 err() { if (( COLOR )); then printf '\e[1;31m%s\e[0m\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi; }
 
+# --- Utility Functions for Repeated Steps ---
+update_checksums() {
+    updpkgsums
+    log "[update_checksums] Ran updpkgsums (b2sums updated)."
+}
+generate_srcinfo() {
+    if command -v makepkg >/dev/null 2>&1; then
+        makepkg --printsrcinfo > .SRCINFO
+        log "[generate_srcinfo] Updated .SRCINFO with makepkg --printsrcinfo."
+    elif command -v mksrcinfo >/dev/null 2>&1; then
+        mksrcinfo
+        log "[generate_srcinfo] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
+    else
+        warn "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
+    fi
+}
+install_pkg() {
+    local mode="$1"
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "[$mode] --dry-run: Skipping makepkg -si. All previous steps completed successfully."
+    else
+        if [[ "$mode" == "aur" ]]; then
+            if [[ "${CI:-}" == 1 || "${AUTO:-}" == "y" ]]; then
+                run_makepkg=n
+            else
+                read -rp "Do you want to run makepkg -si now? [y/N] " run_makepkg
+            fi
+            if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
+                makepkg -si
+            fi
+        else
+            makepkg -si
+        fi
+    fi
+}
+
 function usage() {
     log "Usage: $0 [--no-color|-n] [local|aur|aur-git|clean] [--dry-run|-d]"
     echo
@@ -216,53 +252,17 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                 exit 1
             fi
         fi
-        updpkgsums
-        log "[aur] Ran updpkgsums (b2sums updated)."
-        # Always generate .SRCINFO from PKGBUILD
-        if command -v makepkg >/dev/null 2>&1; then
-            makepkg --printsrcinfo > .SRCINFO
-            log "[aur] Updated .SRCINFO with makepkg --printsrcinfo."
-        elif command -v mksrcinfo >/dev/null 2>&1; then
-            mksrcinfo
-            log "[aur] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
-        else
-            warn "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
-        fi
+        update_checksums
+        generate_srcinfo
         log "[aur] Preparation complete."
         echo "Now push the git tag and upload ${TARBALL} and ${TARBALL}.sig to the GitHub release page."
         echo "Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package."
-        # Honour CI=1 or AUTO=y to auto-answer "no" to the makepkg -si question (for CI/automation)
-        if [[ $DRY_RUN -eq 1 ]]; then
-            log "[aur] --dry-run: Skipping makepkg -si. All previous steps completed successfully."
-        else
-            if [[ "${CI:-}" == 1 || "${AUTO:-}" == "y" ]]; then
-                run_makepkg=n
-            else
-                read -rp "Do you want to run makepkg -si now? [y/N] " run_makepkg
-            fi
-            if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
-                makepkg -si
-            fi
-        fi
+        install_pkg "aur"
         exit 0
     else
-        updpkgsums
-        log "[$MODE] Ran updpkgsums (b2sums updated)."
-        # Always generate .SRCINFO from PKGBUILD
-        if command -v makepkg >/dev/null 2>&1; then
-            makepkg --printsrcinfo > .SRCINFO
-            log "[$MODE] Updated .SRCINFO with makepkg --printsrcinfo."
-        elif command -v mksrcinfo >/dev/null 2>&1; then
-            mksrcinfo
-            log "[$MODE] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
-        else
-            warn "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
-        fi
-        if [[ $DRY_RUN -eq 1 ]]; then
-            log "[$MODE] --dry-run: Skipping makepkg -si. All previous steps completed successfully."
-        else
-            makepkg -si
-        fi
+        update_checksums
+        generate_srcinfo
+        install_pkg "$MODE"
         exit 0
     fi
 elif [[ "$MODE" == "aur-git" ]]; then
@@ -305,21 +305,8 @@ elif [[ "$MODE" == "aur-git" ]]; then
     require makepkg
     # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
     # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
-    # Always generate .SRCINFO from PKGBUILD
-    if command -v makepkg >/dev/null 2>&1; then
-        makepkg --printsrcinfo > .SRCINFO
-        log "[aur-git] Updated .SRCINFO with makepkg --printsrcinfo."
-    elif command -v mksrcinfo >/dev/null 2>&1; then
-        mksrcinfo
-        log "[aur-git] Updated .SRCINFO with mksrcinfo."
-    else
-        warn "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
-    fi
-    if [[ $DRY_RUN -eq 1 ]]; then
-        log "[aur-git] --dry-run: Skipping makepkg -si. All previous steps completed successfully."
-    else
-        makepkg -si
-    fi
+    generate_srcinfo
+    install_pkg "aur-git"
     exit 0
 else
     usage
