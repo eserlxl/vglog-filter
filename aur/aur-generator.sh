@@ -190,7 +190,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     git archive \
         --format=tar.gz \
         --prefix="${PKGNAME}-${PKGVER}/" \
-        -o "$OUTDIR/$TARBALL" \
+        --output="$OUTDIR/$TARBALL" \
         HEAD
     log "Created $OUTDIR/$TARBALL"
 
