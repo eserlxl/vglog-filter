@@ -173,7 +173,12 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         echo "[aur] Preparation complete."
         echo "Now push the git tag and upload ${TARBALL} and ${TARBALL}.sig to the GitHub release page."
         echo "Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package."
-        read -rp "Do you want to run makepkg -si now? [y/N] " run_makepkg
+        # Honour CI=1 or AUTO=y to auto-answer "no" to the makepkg -si question (for CI/automation)
+        if [[ "${CI:-}" == 1 || "${AUTO:-}" == "y" ]]; then
+            run_makepkg=n
+        else
+            read -rp "Do you want to run makepkg -si now? [y/N] " run_makepkg
+        fi
         if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
             makepkg -si
         fi
