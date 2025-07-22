@@ -122,6 +122,12 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
 elif [[ "$MODE" == "aur-git" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
     echo "[aur-git] PKGBUILD.0 copied to PKGBUILD."
+    # Check if the target tag exists in the remote repository
+    if ! git ls-remote --exit-code --tags "https://github.com/eserlxl/${PKGNAME}.git" "refs/tags/v${PKGVER}" >/dev/null; then
+        echo "Error: Tag v${PKGVER} does not exist in the repository https://github.com/eserlxl/${PKGNAME}.git."
+        echo "Please create and push the tag before proceeding."
+        exit 1
+    fi
     # Replace source, sha256sums, and validpgpkeys
     sed -i "s|source=(\".*\")|source=(\"git+https://github.com/eserlxl/${PKGNAME}.git#tag=v${PKGVER}\")|" "$PKGBUILD"
     if grep -q '^sha256sums=' "$PKGBUILD"; then
