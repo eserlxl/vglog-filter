@@ -78,7 +78,7 @@ function usage() {
     log "Modes:"
     log "  local     Build and install the package from a local tarball (for testing)."
     log "  aur       Prepare a release tarball, sign it with GPG, and update PKGBUILD for AUR upload."
-    log "  aur-git   Generate a PKGBUILD for the -git (VCS) AUR package (no tarball/signing)."
+    log "  aur-git   Generate a PKGBUILD for the -git (VCS) AUR package and optionally install it (no tarball/signing)."
     log "  clean     Remove all generated files and directories"
     log "  test      Run all modes in dry-run mode to check for errors and report results"
     echo
@@ -90,6 +90,7 @@ function usage() {
     log "- Requires PKGBUILD.0 as the template for PKGBUILD generation."
     log "- For 'aur' mode, a GPG secret key is required for signing the tarball."
     log "- For 'aur' and 'local' modes, the script will attempt to update checksums and .SRCINFO."
+    log "- For 'aur-git' mode, checksums are set to 'SKIP' (required for VCS packages)."
     log "- To skip the GPG key selection menu in 'aur' mode, set GPG_KEY_ID to your key's ID:"
     log "    GPG_KEY_ID=ABCDEF ./aur-generator.sh aur"
     log "- To disable colored output, set NO_COLOR=1 or use --no-color/-n."
@@ -97,6 +98,8 @@ function usage() {
     log "- If GitHub CLI (gh) is installed, the script can automatically upload missing release assets."
     log "- To skip the automatic upload prompt in 'aur' mode, set AUTO=y:"
     log "    AUTO=y ./aur-generator.sh aur"
+    log "- To skip interactive prompts in 'aur' mode (for CI), set CI=1:"
+    log "    CI=1 ./aur-generator.sh aur"
     log "- The 'test' mode runs all other modes in dry-run mode to verify they work correctly."
     exit 1
 }
