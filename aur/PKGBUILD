@@ -12,7 +12,7 @@ b2sums=('SKIP')
 
 build() {
   cd "${srcdir}/${pkgname}-${pkgver}"
-  bash ../build.sh performance warnings
+  bash ./build.sh performance warnings
 }
 
 package() {
