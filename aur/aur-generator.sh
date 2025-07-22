@@ -11,8 +11,10 @@ set -euo pipefail
 readonly PKGNAME="vglog-filter"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+COLOR=1
+VALID_MODES=(local aur aur-git clean)
 
-# Helper: require tools
+# --- Functions ---
 require() {
     local t
     for t in "$@"; do
@@ -20,27 +22,10 @@ require() {
     done
 }
 
-# Colorized log helpers (disable color if NO_COLOR is set or --no-color/-n is passed)
-COLOR=1
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --no-color|-n)
-            COLOR=0
-            shift
-            ;;
-        *)
-            break
-            ;;
-    esac
-done
-if [[ -n "${NO_COLOR:-}" ]]; then
-    COLOR=0
-fi
 log() { if (( COLOR )); then printf '\e[1;32m%s\e[0m\n' "$*"; else printf '%s\n' "$*"; fi; }
 warn() { if (( COLOR )); then printf '\e[1;33m%s\e[0m\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi; }
 err() { if (( COLOR )); then printf '\e[1;31m%s\e[0m\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi; }
 
-# --- Utility Functions for Repeated Steps ---
 update_checksums() {
     updpkgsums
     log "[update_checksums] Ran updpkgsums (b2sums updated)."
@@ -100,6 +85,23 @@ function usage() {
     exit 1
 }
 
+# --- Main Logic ---
+# Colorized log helpers (disable color if NO_COLOR is set or --no-color/-n is passed)
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --no-color|-n)
+            COLOR=0
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+if [[ -n "${NO_COLOR:-}" ]]; then
+    COLOR=0
+fi
+
 if [[ $# -lt 1 || $# -gt 2 ]]; then
     usage
 fi
@@ -142,7 +144,7 @@ case "$MODE" in
         # Use an explicit array to safely handle files with spaces
         files=("${TARBALL_GLOB[@]}" "${TARBALL_GLOB[@]/%/.sig}")
         echo "Cleaning AUR directory..."
-        if ((${#files[@]})); then
+        if (( ${#files[@]} )); then
             rm -f -- "${files[@]}"
         fi
         rm -f "$PKGBUILD" "$SRCINFO"
@@ -283,7 +285,7 @@ elif [[ "$MODE" == "aur-git" ]]; then
     if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
         awk -v pkgver_func='pkgver() {
   cd "$srcdir/${pkgname%-git}"
-  git describe --long --tags 2>/dev/null | sed "s/^v//;s/-/./g" || \\
+  git describe --long --tags 2>/dev/null | sed "s/^v//;s/-/./g" || \
   printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }' '
             /^source=/ {
