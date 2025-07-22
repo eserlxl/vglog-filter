@@ -142,14 +142,14 @@ pkgver() {\n  cd \"$srcdir/${pkgname%-git}\"\n  git describe --long --tags 2>/de
         echo "validpgpkeys=('F677BC1E3BD7246E')" >> "$PKGBUILD"
     fi
     # Check for required tools
-    for tool in updpkgsums makepkg; do
+    for tool in makepkg; do
         if ! command -v $tool >/dev/null 2>&1; then
             echo "Error: $tool is required but not installed."
             exit 1
         fi
     done
-    updpkgsums
-    echo "[aur-git] Ran updpkgsums (b2sums updated)."
+    # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
+    # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
     # Always generate .SRCINFO from PKGBUILD
     if command -v mksrcinfo >/dev/null 2>&1; then
         mksrcinfo
