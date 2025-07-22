@@ -156,7 +156,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     echo "[$MODE] PKGBUILD.0 copied to PKGBUILD."
     if [[ "$MODE" == "aur" ]]; then
         # Fix: Try correct link first, fallback to old 'v' link if needed
-        sed -E -i "s|^[[:space:]]*source=\\([^)]*\\)|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
+        sed -E -i "s|^([[:space:]]*source=\([^)]*\))([[:space:]]*#.*)?$|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")\2|" "$PKGBUILD"
         echo "[aur] Updated source line in PKGBUILD (no 'v' before version)."
         # Check if the tarball exists on GitHub before running updpkgsums
         TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
