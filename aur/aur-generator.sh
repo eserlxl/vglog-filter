@@ -29,20 +29,48 @@ if [[ $# -ne 1 ]]; then
 fi
 
 MODE="$1"
+echo "Running in $MODE mode"
+case "$MODE" in
+    local)
+        echo "[local] Build and install from local tarball."
+        ;;
+    aur)
+        echo "[aur] Prepare for AUR upload: creates tarball, GPG signature, and PKGBUILD for release."
+        ;;
+    aur-git)
+        echo "[aur-git] Prepare PKGBUILD for VCS (git) package. No tarball is created."
+        ;;
+    clean)
+        echo "[clean] Remove generated files and directories."
+        ;;
+esac
 
-# Always create the tarball for both modes
-cd "$PROJECT_ROOT"
-tar --exclude-vcs \
-    --exclude="**/${TARBALL}" \
-    --exclude=".github" \
-    --exclude=".vscode" \
-    --exclude="Backups" \
-    --exclude="CMakeFiles" \
-    --exclude="aur" \
-    --exclude="build" \
-    --exclude="doc" \
-    -czf "$OUTDIR/$TARBALL" . --transform "s,^.,${PKGNAME}-${PKGVER},"
-echo "Created $OUTDIR/$TARBALL"
+# Only create the tarball for aur and local modes
+if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
+    cd "$PROJECT_ROOT"
+    tar --exclude-vcs \
+        --exclude="**/${TARBALL}" \
+        --exclude=".github" \
+        --exclude=".vscode" \
+        --exclude="Backups" \
+        --exclude="CMakeFiles" \
+        --exclude="aur" \
+        --exclude="build" \
+        --exclude="doc" \
+        -czf "$OUTDIR/$TARBALL" . --transform "s,^.,${PKGNAME}-${PKGVER},"
+    echo "Created $OUTDIR/$TARBALL"
+
+    # Create GPG signature for aur mode only
+    if [[ "$MODE" == "aur" ]]; then
+        # Check for GPG secret key before signing
+        if ! gpg --list-secret-keys | grep -q '^sec'; then
+            echo "Error: No GPG secret key found. Please generate or import a GPG key before signing."
+            exit 1
+        fi
+        gpg --detach-sign --output "$OUTDIR/$TARBALL.sig" "$OUTDIR/$TARBALL"
+        echo "[aur] Created GPG signature: $OUTDIR/$TARBALL.sig"
+    fi
+fi
 
 cd "$SCRIPT_DIR"
 
