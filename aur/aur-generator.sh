@@ -174,13 +174,32 @@ elif [[ "$MODE" == "aur-git" ]]; then
     cp -f "$PKGBUILD0" "$SCRIPT_DIR/PKGBUILD.git"
     sed -i 's/^pkgname=.*/pkgname=vglog-filter-git/' "$SCRIPT_DIR/PKGBUILD.git"
     sed -i 's|^source=(.*)|source=("git+https://github.com/eserlxl/vglog-filter.git#branch=main")|' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i 's/^b2sums=.*/sha256sums=(\'SKIP\')/' "$SCRIPT_DIR/PKGBUILD.git"
-    if ! grep -q '^sha256sums=' "$SCRIPT_DIR/PKGBUILD.git"; then
-        echo "sha256sums=('SKIP')" >> "$SCRIPT_DIR/PKGBUILD.git"
-    fi
+    # Remove any b2sums or sha256sums lines
+    sed -i '/^b2sums=/d' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i '/^sha256sums=/d' "$SCRIPT_DIR/PKGBUILD.git"
+    # Insert sha256sums=('SKIP') after the source= line using awk -v
+    awk -v sums="sha256sums=('SKIP')" '/^source=/ { print; print sums; next } { print }' "$SCRIPT_DIR/PKGBUILD.git" > "$SCRIPT_DIR/PKGBUILD.git.tmp" && mv "$SCRIPT_DIR/PKGBUILD.git.tmp" "$SCRIPT_DIR/PKGBUILD.git"
+    # Fix build/package dir for VCS: replace all variants to use ${pkgname%-git}
+    sed -i 's|cd "$srcdir/${pkgname}-${pkgver}"|cd "$srcdir/${pkgname%-git}"|g' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i 's|cd "$srcdir/$pkgname-$pkgver"|cd "$srcdir/${pkgname%-git}"|g' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i 's|cd "${srcdir}/${pkgname}-${pkgver}"|cd "$srcdir/${pkgname%-git}"|g' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i 's|cd "${srcdir}/$pkgname-$pkgver"|cd "$srcdir/${pkgname%-git}"|g' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i 's|${pkgname}-${pkgver}|${pkgname%-git}|g' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i 's|$pkgname-$pkgver|${pkgname%-git}|g' "$SCRIPT_DIR/PKGBUILD.git"
+    # Insert pkgver() as before if missing
     if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
-        sed -i "/^source=/a \
-pkgver() {\n  cd \"\$srcdir/\${pkgname%-git}\"\n  git describe --long --tags 2>/dev/null | sed \"s/^v//;s/-/./g\" || \\\n  printf \"r%s.%s\" \"\$(git rev-list --count HEAD)\" \"\$(git rev-parse --short HEAD)\"\n}\n" "$SCRIPT_DIR/PKGBUILD.git"
+        awk -v pkgver_func='pkgver() {
+  cd "$srcdir/${pkgname%-git}"
+  git describe --long --tags 2>/dev/null | sed "s/^v//;s/-/./g" || \\
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}' '
+            /^source=/ {
+                print;
+                print pkgver_func;
+                next
+            }
+            { print }
+        ' "$SCRIPT_DIR/PKGBUILD.git" > "$SCRIPT_DIR/PKGBUILD.git.tmp" && mv "$SCRIPT_DIR/PKGBUILD.git.tmp" "$SCRIPT_DIR/PKGBUILD.git"
     fi
     PKGBUILD_TEMPLATE="$SCRIPT_DIR/PKGBUILD.git"
     cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
