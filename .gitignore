@@ -77,3 +77,7 @@ Backups/
 # AUR PKG & SRC
 aur/pkg/
 aur/src/
+aur/PKGBUILD
+aur/.SRCINFO
+aur/vglog-filter-*.tar.gz
+aur/*.pkg.tar.*
