@@ -18,6 +18,14 @@ PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
 SRCINFO="$SCRIPT_DIR/.SRCINFO"
 
+# Check for PKGBUILD.0 and source pkgver early
+if [[ ! -f "$PKGBUILD0" ]]; then
+    echo "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
+    exit 1
+fi
+source "$PKGBUILD0"
+PKGVER="$pkgver"
+
 function usage() {
     echo "Usage: $0 [local|aur|clean]"
     exit 1
@@ -72,15 +80,6 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
 fi
 
 cd "$SCRIPT_DIR"
-
-if [[ ! -f "$PKGBUILD0" ]]; then
-    echo "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
-    exit 1
-fi
-
-# Source PKGBUILD.0 to get pkgver
-source "$PKGBUILD0"
-PKGVER="$pkgver"
 
 if [[ "$MODE" == "clean" ]]; then
     echo "Cleaning AUR directory..."
