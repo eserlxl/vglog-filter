@@ -7,14 +7,13 @@
 # See the LICENSE file in the project root for details.
 set -euo pipefail
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# --- Config / Constants ---
+readonly PKGNAME="vglog-filter"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Helper: require tools
 require() { for t; do command -v "$t" >/dev/null || { echo "Missing $t"; exit 1; }; done; }
-
-readonly PKGNAME="vglog-filter"
 
 # Colorized log helpers (disable color if NO_COLOR is set or --no-color/-n is passed)
 COLOR=1
@@ -133,7 +132,9 @@ if [[ -z "$PKGVER" ]]; then
 fi
 readonly PKGVER
 TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
-readonly OUTDIR="$SCRIPT_DIR"
+readonly TARBALL
+OUTDIR="$SCRIPT_DIR"
+readonly OUTDIR
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
 SRCINFO="$SCRIPT_DIR/.SRCINFO"
 
