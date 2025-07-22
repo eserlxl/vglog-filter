@@ -94,16 +94,19 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     if [[ "$MODE" == "aur" ]]; then
         sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
         echo "[aur] Updated source line in PKGBUILD."
-    fi
-    # Check for required tools
-    for tool in updpkgsums makepkg; do
-        if ! command -v $tool >/dev/null 2>&1; then
-            echo "Error: $tool is required but not installed."
-            exit 1
+        # Check if the tarball exists on GitHub before running updpkgsums
+        TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
+        if curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
+            updpkgsums
+            echo "[aur] Ran updpkgsums (b2sums updated)."
+        else
+            echo "[aur] Release asset not found at $TARBALL_URL. Skipping updpkgsums."
+            echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
         fi
-    done
-    updpkgsums
-    echo "[$MODE] Ran updpkgsums (b2sums updated)."
+    else
+        updpkgsums
+        echo "[$MODE] Ran updpkgsums (b2sums updated)."
+    fi
     # Always generate .SRCINFO from PKGBUILD
     if command -v mksrcinfo >/dev/null 2>&1; then
         mksrcinfo
