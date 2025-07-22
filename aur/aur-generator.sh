@@ -59,6 +59,7 @@ case "$MODE" in
         rm -f "${files[@]}" "$PKGBUILD" "$SRCINFO"
         rm -rf "$SCRIPT_DIR/src" "$SCRIPT_DIR/pkg"
         rm -f "$SCRIPT_DIR"/*.pkg.tar.*
+        shopt -u nullglob
         echo "Clean complete."
         exit 0
         ;;
