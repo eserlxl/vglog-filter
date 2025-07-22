@@ -64,7 +64,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
     echo "[$MODE] PKGBUILD.0 copied to PKGBUILD."
     if [[ "$MODE" == "aur" ]]; then
-        sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/vglog-filter/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
+        sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
         echo "[aur] Updated source line in PKGBUILD."
     fi
     # Check for required tools
@@ -83,6 +83,42 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     elif command -v makepkg >/dev/null 2>&1; then
         makepkg --printsrcinfo > .SRCINFO
         echo "[$MODE] Updated .SRCINFO with makepkg --printsrcinfo."
+    else
+        echo "Warning: Could not update .SRCINFO (mksrcinfo/makepkg not found)."
+    fi
+    makepkg -si
+    exit 0
+elif [[ "$MODE" == "aur-git" ]]; then
+    cp -f "$PKGBUILD0" "$PKGBUILD"
+    echo "[aur-git] PKGBUILD.0 copied to PKGBUILD."
+    # Replace source, sha256sums, and validpgpkeys
+    sed -i "s|source=(\".*\")|source=(\"git+https://github.com/eserlxl/${PKGNAME}.git#tag=v${PKGVER}\")|" "$PKGBUILD"
+    if grep -q '^sha256sums=' "$PKGBUILD"; then
+        sed -i "s|^sha256sums=.*|sha256sums=('SKIP')|" "$PKGBUILD"
+    else
+        echo "sha256sums=('SKIP')" >> "$PKGBUILD"
+    fi
+    if grep -q '^validpgpkeys=' "$PKGBUILD"; then
+        sed -i "s|^validpgpkeys=.*|validpgpkeys=('F677BC1E3BD7246E')|" "$PKGBUILD"
+    else
+        echo "validpgpkeys=('F677BC1E3BD7246E')" >> "$PKGBUILD"
+    fi
+    # Check for required tools
+    for tool in updpkgsums makepkg; do
+        if ! command -v $tool >/dev/null 2>&1; then
+            echo "Error: $tool is required but not installed."
+            exit 1
+        fi
+    done
+    updpkgsums
+    echo "[aur-git] Ran updpkgsums (b2sums updated)."
+    # Always generate .SRCINFO from PKGBUILD
+    if command -v mksrcinfo >/dev/null 2>&1; then
+        mksrcinfo
+        echo "[aur-git] Updated .SRCINFO with mksrcinfo."
+    elif command -v makepkg >/dev/null 2>&1; then
+        makepkg --printsrcinfo > .SRCINFO
+        echo "[aur-git] Updated .SRCINFO with makepkg --printsrcinfo."
     else
         echo "Warning: Could not update .SRCINFO (mksrcinfo/makepkg not found)."
     fi
