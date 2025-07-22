@@ -53,6 +53,7 @@ case "$MODE" in
         SRCINFO="$SCRIPT_DIR/.SRCINFO"
         TARBALL_GLOB="$SCRIPT_DIR/"${PKGNAME}-*.tar.gz
         echo "Cleaning AUR directory..."
+        shopt -s nullglob
         rm -f $TARBALL_GLOB $TARBALL_GLOB.sig "$PKGBUILD" "$SRCINFO"
         rm -rf "$SCRIPT_DIR/src" "$SCRIPT_DIR/pkg"
         rm -f "$SCRIPT_DIR"/*.pkg.tar.*
