@@ -20,7 +20,7 @@ PKGBUILD="$SCRIPT_DIR/PKGBUILD"
 SRCINFO="$SCRIPT_DIR/.SRCINFO"
 
 function usage() {
-    echo "Usage: $0 [local|aur]"
+    echo "Usage: $0 [local|aur|clean]"
     exit 1
 }
 
@@ -51,13 +51,40 @@ if [[ ! -f "$PKGBUILD0" ]]; then
     exit 1
 fi
 
+if [[ "$MODE" == "clean" ]]; then
+    echo "Cleaning AUR directory..."
+    rm -f "$OUTDIR/$TARBALL" "$PKGBUILD" "$SRCINFO"
+    rm -rf "$SCRIPT_DIR/src" "$SCRIPT_DIR/pkg"
+    rm -f "$SCRIPT_DIR"/*.pkg.tar.*
+    echo "Clean complete."
+    exit 0
+fi
+
 if [[ "$MODE" == "local" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
     echo "[local] PKGBUILD.0 copied to PKGBUILD."
+    # Create .SRCINFO from .SRCINFO.0 and update pkgver/pkgname
+    if [[ ! -f "$SCRIPT_DIR/.SRCINFO.0" ]]; then
+        echo "Error: $SCRIPT_DIR/.SRCINFO.0 not found. Please create it from your original .SRCINFO."
+        exit 1
+    fi
+    cp -f "$SCRIPT_DIR/.SRCINFO.0" "$SRCINFO"
+    sed -i "s/^pkgver = .*/pkgver = $PKGVER/" "$SRCINFO"
+    sed -i "s/^pkgname = .*/pkgname = $PKGNAME/" "$SRCINFO"
+    echo "[local] .SRCINFO.0 copied to .SRCINFO and updated."
     makepkg -si
     exit 0
 elif [[ "$MODE" == "aur" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
+    # Create .SRCINFO from .SRCINFO.0 and update pkgver/pkgname
+    if [[ ! -f "$SCRIPT_DIR/.SRCINFO.0" ]]; then
+        echo "Error: $SCRIPT_DIR/.SRCINFO.0 not found. Please create it from your original .SRCINFO."
+        exit 1
+    fi
+    cp -f "$SCRIPT_DIR/.SRCINFO.0" "$SRCINFO"
+    sed -i "s/^pkgver = .*/pkgver = $PKGVER/" "$SRCINFO"
+    sed -i "s/^pkgname = .*/pkgname = $PKGNAME/" "$SRCINFO"
+    echo "[aur] .SRCINFO.0 copied to .SRCINFO and updated."
     sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/vglog-filter/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
     echo "[aur] Updated source line in PKGBUILD."
     # Check for required tools
@@ -68,7 +95,7 @@ elif [[ "$MODE" == "aur" ]]; then
         fi
     done
     updpkgsums
-    echo "[aur] Ran updpkgsums."
+    echo "[aur] Ran updpkgsums (b2sums updated)."
     if command -v mksrcinfo >/dev/null 2>&1; then
         mksrcinfo
         echo "[aur] Updated .SRCINFO with mksrcinfo."
