@@ -102,7 +102,10 @@ case "$MODE" in
         # Use an explicit array to safely handle files with spaces
         files=("${TARBALL_GLOB[@]}" "${TARBALL_GLOB[@]/%/.sig}")
         echo "Cleaning AUR directory..."
-        rm -f "${files[@]}" "$PKGBUILD" "$SRCINFO"
+        if ((${#files[@]})); then
+            rm -f -- "${files[@]}"
+        fi
+        rm -f "$PKGBUILD" "$SRCINFO"
         rm -rf "$SCRIPT_DIR/src" "$SCRIPT_DIR/pkg"
         rm -f "$SCRIPT_DIR"/*.pkg.tar.*
         shopt -u nullglob
