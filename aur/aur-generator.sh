@@ -72,7 +72,8 @@ if [[ ! -f "$PKGBUILD0" ]]; then
 fi
 # shellcheck source=PKGBUILD.0
 source "$PKGBUILD0"
-PKGVER="$pkgver" # shellcheck disable=SC2154
+# shellcheck disable=SC2154
+PKGVER="$pkgver"
 TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
 OUTDIR="$SCRIPT_DIR"
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
