@@ -83,7 +83,7 @@ cd "$SCRIPT_DIR"
 
 if [[ "$MODE" == "clean" ]]; then
     echo "Cleaning AUR directory..."
-    rm -f "$OUTDIR/$TARBALL" "$PKGBUILD" "$SRCINFO"
+    rm -f "$OUTDIR/$TARBALL" "$OUTDIR/$TARBALL.sig" "$PKGBUILD" "$SRCINFO"
     rm -rf "$SCRIPT_DIR/src" "$SCRIPT_DIR/pkg"
     rm -f "$SCRIPT_DIR"/*.pkg.tar.*
     echo "Clean complete."
