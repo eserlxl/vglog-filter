@@ -198,11 +198,9 @@ SRCINFO="$SCRIPT_DIR/.SRCINFO"
 if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     cd "$PROJECT_ROOT"
     # Use git archive to create the release tarball, including only tracked files
-    git archive \
-        --format=tar.gz \
-        --prefix="${PKGNAME}-${PKGVER}/" \
-        --output="$OUTDIR/$TARBALL" \
-        HEAD
+    # This avoids hand-maintaining exclude lists by respecting .gitignore
+    git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" HEAD | \
+        gzip -n > "$OUTDIR/$TARBALL"
     log "Created $OUTDIR/$TARBALL"
 
     # Create GPG signature for aur mode only
