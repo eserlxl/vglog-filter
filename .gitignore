@@ -72,3 +72,8 @@ Backups/
 *.tar.zst
 *.tar.zstd
 *.tar.z
+*.tar.7z
+
+# AUR PKG & SRC
+aur/pkg/
+aur/src/
