@@ -22,9 +22,20 @@ require() {
     done
 }
 
-log() { if (( COLOR )); then printf '\e[1;32m%s\e[0m\n' "$*"; else printf '%s\n' "$*"; fi; }
-warn() { if (( COLOR )); then printf '\e[1;33m%s\e[0m\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi; }
-err() { if (( COLOR )); then printf '\e[1;31m%s\e[0m\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi; }
+# Color helper function
+color_echo() {
+    local color_code="$1"
+    shift
+    if (( COLOR )); then
+        printf '\e[%sm%s\e[0m\n' "$color_code" "$*"
+    else
+        printf '%s\n' "$*"
+    fi
+}
+
+log() { color_echo "1;32" "$*"; }
+warn() { color_echo "1;33" "$*" >&2; }
+err() { color_echo "1;31" "$*" >&2; }
 
 update_checksums() {
     updpkgsums
