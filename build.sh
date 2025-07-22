@@ -20,7 +20,7 @@
 #   - You can combine 'warnings' with either mode.
 #   - Example: ./build.sh performance warnings
 #
-set -e
+set -euo pipefail
 
 PERFORMANCE_BUILD=OFF
 WARNING_MODE=OFF
