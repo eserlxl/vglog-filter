@@ -3,49 +3,50 @@ project(vglog-filter LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-option(DEBUG_MODE "Enable debug build flags" OFF)
-option(PERFORMANCE_BUILD "Enable performance-optimized build flags" OFF)
-option(WARNING_MODE "Enable extra warnings" OFF)
+option(DEBUG_MODE        "Enable debug build flags"         OFF)
+option(PERFORMANCE_BUILD "Enable performance-optimised flags" ON)
+option(WARNING_MODE      "Enable extra warnings"             ON)
 
-if(DEBUG_MODE AND PERFORMANCE_BUILD)
+if (DEBUG_MODE AND PERFORMANCE_BUILD)
     message(FATAL_ERROR "DEBUG_MODE and PERFORMANCE_BUILD cannot both be ON.")
 endif()
 
 add_executable(vglog-filter src/vglog-filter.cpp)
 
-# Optimization flags
-set(OPT_FLAGS
-    $<$<BOOL:DEBUG_MODE>:-g -O0>
-    $<$<AND:$<NOT:$<BOOL:DEBUG_MODE>>,$<BOOL:PERFORMANCE_BUILD>>:-O3 -march=native -mtune=native -flto>
-    $<$<AND:$<NOT:$<BOOL:DEBUG_MODE>>,$<NOT:$<BOOL:PERFORMANCE_BUILD>>>:-O2>
-)
-
-# Link flags
-set(LINK_FLAGS
-    $<$<AND:$<NOT:$<BOOL:DEBUG_MODE>>,$<BOOL:PERFORMANCE_BUILD>>:-flto>
-)
-
-# Warning flags
-set(WARNING_FLAGS -Wall -pedantic)
-if(WARNING_MODE)
-    list(APPEND WARNING_FLAGS -Wextra)
+# ---------------- compile / link flags ---------------------------------------
+if (DEBUG_MODE)
+    set(OPT_FLAGS -g -O0)
+elseif (PERFORMANCE_BUILD)
+    set(OPT_FLAGS -O3 -march=native -mtune=native)
+else()
+    set(OPT_FLAGS -O2)
 endif()
 
+set(WARNING_FLAGS -Wall -pedantic)
+if (WARNING_MODE)
+    list(APPEND WARNING_FLAGS -Wextra)
+endif()
+    
 target_compile_options(vglog-filter PRIVATE ${OPT_FLAGS} ${WARNING_FLAGS})
-target_link_options(vglog-filter PRIVATE ${LINK_FLAGS})
+
+# Let CMake manage LTO automatically (requires 3.9+)
+if (PERFORMANCE_BUILD AND NOT DEBUG_MODE)
+    set_target_properties(vglog-filter PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
 
 target_compile_definitions(vglog-filter PRIVATE
     $<$<BOOL:PERFORMANCE_BUILD>:NDEBUG>
-    $<$<BOOL:DEBUG_MODE>:DEBUG>
-)
+    $<$<BOOL:DEBUG_MODE>:DEBUG>)
 
-# Log compiler flags and options
-message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
-message(STATUS "OPT_FLAGS: ${OPT_FLAGS}")
-message(STATUS "WARNING_FLAGS: ${WARNING_FLAGS}")
+# ---------------- log summary -------------------------------------------------
+message(STATUS "DEBUG_MODE     : ${DEBUG_MODE}")
+message(STATUS "PERFORMANCE_BUILD: ${PERFORMANCE_BUILD}")
+message(STATUS "WARNING_MODE   : ${WARNING_MODE}")
+message(STATUS "OPT_FLAGS      : ${OPT_FLAGS}")
+message(STATUS "WARNING_FLAGS  : ${WARNING_FLAGS}")
+get_target_property(LTO_ENABLED vglog-filter INTERPROCEDURAL_OPTIMIZATION)
+message(STATUS "INTERPROCEDURAL_OPTIMIZATION (LTO) enabled: ${LTO_ENABLED}")
 get_target_property(VGLOG_COMPILE_OPTIONS vglog-filter COMPILE_OPTIONS)
 message(STATUS "vglog-filter target compile options: ${VGLOG_COMPILE_OPTIONS}")
