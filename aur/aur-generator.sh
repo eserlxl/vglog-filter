@@ -71,7 +71,7 @@ if [[ ! -f "$PKGBUILD0" ]]; then
     exit 1
 fi
 # Extract pkgver from PKGBUILD.0 without sourcing
-PKGVER=$(awk -F= '/^pkgver=/{gsub(/^[ \t\"]+|[ \t\"]+$/, "", $2); print $2}' "$PKGBUILD0")
+PKGVER=$(awk -F= '/^pkgver=/{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' "$PKGBUILD0")
 if [[ -z "$PKGVER" ]]; then
     echo "Error: Could not extract pkgver from $PKGBUILD0"
     exit 1
