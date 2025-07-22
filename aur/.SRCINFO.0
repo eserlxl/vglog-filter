@@ -5,6 +5,7 @@ pkgbase = vglog-filter
 	url = https://github.com/eserlxl/vglog-filter
 	arch = x86_64
 	license = GPL3
+	validpgpkeys = F677BC1E3BD7246E
 	makedepends = cmake
 	makedepends = make
 	makedepends = gcc
