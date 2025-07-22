@@ -78,7 +78,7 @@ SRCINFO="$SCRIPT_DIR/.SRCINFO"
 if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     cd "$PROJECT_ROOT"
     tar --exclude-vcs \
-        --exclude="**/${TARBALL}" \
+        --exclude="aur/${TARBALL}" \
         --exclude=".github" \
         --exclude=".vscode" \
         --exclude="Backups" \
