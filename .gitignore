@@ -71,4 +71,5 @@ Backups/
 aur/pkg/
 aur/src/
 aur/PKGBUILD
-aur/.SRCINFOaur/PKGBUILD.git
+aur/.SRCINFO
+aur/PKGBUILD.git
