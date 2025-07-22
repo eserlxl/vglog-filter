@@ -37,7 +37,7 @@ warn() { if (( COLOR )); then printf '\e[1;33m%s\e[0m\n' "$*" >&2; else printf '
 err() { if (( COLOR )); then printf '\e[1;31m%s\e[0m\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi; }
 
 function usage() {
-    log "Usage: $0 [--no-color|-n] [local|aur|aur-git|clean]"
+    log "Usage: $0 [--no-color|-n] [local|aur|aur-git|clean] [--dry-run|-d]"
     echo
     log "Modes:"
     log "  local     Build and install the package from a local tarball (for testing)."
@@ -47,6 +47,7 @@ function usage() {
     echo
     log "Options:"
     log "  --no-color, -n   Disable colored output (also supported via NO_COLOR env variable)"
+    log "  --dry-run, -d    Run all steps except the final makepkg -si (for CI/testing)"
     echo
     log "Notes:"
     log "- Requires PKGBUILD.0 as the template for PKGBUILD generation."
@@ -55,6 +56,7 @@ function usage() {
     log "- To skip the GPG key selection menu in 'aur' mode, set GPG_KEY_ID to your key's ID:"
     log "    GPG_KEY_ID=ABCDEF ./aur-generator.sh aur"
     log "- To disable colored output, set NO_COLOR=1 or use --no-color/-n."
+    log "- To test the script without running makepkg -si, add --dry-run or -d as the second argument."
     exit 1
 }
 
@@ -63,6 +65,18 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
 fi
 
 MODE="$1"
+DRY_RUN=0
+if [[ $# -eq 2 ]]; then
+    case "$2" in
+        --dry-run|-d)
+            DRY_RUN=1
+            ;;
+        *)
+            err "Unknown second argument: $2"
+            usage
+            ;;
+    esac
+fi
 log "Running in $MODE mode"
 case "$MODE" in
     local)
@@ -212,13 +226,17 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         echo "Now push the git tag and upload ${TARBALL} and ${TARBALL}.sig to the GitHub release page."
         echo "Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package."
         # Honour CI=1 or AUTO=y to auto-answer "no" to the makepkg -si question (for CI/automation)
-        if [[ "${CI:-}" == 1 || "${AUTO:-}" == "y" ]]; then
-            run_makepkg=n
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log "[aur] --dry-run: Skipping makepkg -si. All previous steps completed successfully."
         else
-            read -rp "Do you want to run makepkg -si now? [y/N] " run_makepkg
-        fi
-        if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
-            makepkg -si
+            if [[ "${CI:-}" == 1 || "${AUTO:-}" == "y" ]]; then
+                run_makepkg=n
+            else
+                read -rp "Do you want to run makepkg -si now? [y/N] " run_makepkg
+            fi
+            if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
+                makepkg -si
+            fi
         fi
         exit 0
     else
@@ -234,7 +252,11 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         else
             warn "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
         fi
-        makepkg -si
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log "[$MODE] --dry-run: Skipping makepkg -si. All previous steps completed successfully."
+        else
+            makepkg -si
+        fi
         exit 0
     fi
 elif [[ "$MODE" == "aur-git" ]]; then
@@ -287,7 +309,11 @@ elif [[ "$MODE" == "aur-git" ]]; then
     else
         warn "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
     fi
-    makepkg -si
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "[aur-git] --dry-run: Skipping makepkg -si. All previous steps completed successfully."
+    else
+        makepkg -si
+    fi
     exit 0
 else
     usage
