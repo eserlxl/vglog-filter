@@ -14,7 +14,18 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PKGNAME=vglog-filter
 
 function usage() {
-    echo "Usage: $0 [local|aur|clean]"
+    echo "Usage: $0 [local|aur|aur-git|clean]"
+    echo
+    echo "Modes:"
+    echo "  local     Build and install the package from a local tarball (for testing)."
+    echo "  aur       Prepare a release tarball, sign it with GPG, and update PKGBUILD for AUR upload."
+    echo "  aur-git   Generate a PKGBUILD for the -git (VCS) AUR package (no tarball/signing)."
+    echo "  clean     Remove all generated files and directories in the aur/ folder."
+    echo
+    echo "Notes:"
+    echo "- Requires PKGBUILD.0 as the template for PKGBUILD generation."
+    echo "- For 'aur' mode, a GPG secret key is required for signing the tarball."
+    echo "- For 'aur' and 'local' modes, the script will attempt to update checksums and .SRCINFO."
     exit 1
 }
 
