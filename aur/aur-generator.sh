@@ -148,17 +148,12 @@ SRCINFO="$SCRIPT_DIR/.SRCINFO"
 # Only create the tarball for aur and local modes
 if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     cd "$PROJECT_ROOT"
-    tar --exclude-vcs \
-        --exclude="./${TARBALL}" \
-        --exclude=".github" \
-        --exclude=".vscode" \
-        --exclude="Backups" \
-        --exclude="CMakeFiles" \
-        --exclude="aur" \
-        --exclude="build" \
-        --exclude="doc" \
-        --numeric-owner --owner=0 --group=0 --mtime='@0' --format=gnu \
-        -czf "$OUTDIR/$TARBALL" . --transform "s,^.,${PKGNAME}-${PKGVER},"
+    # Use git archive to create the release tarball, including only tracked files
+    git archive \
+        --format=tar.gz \
+        --prefix="${PKGNAME}-${PKGVER}/" \
+        -o "$OUTDIR/$TARBALL" \
+        HEAD
     log "Created $OUTDIR/$TARBALL"
 
     # Create GPG signature for aur mode only
