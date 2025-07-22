@@ -156,22 +156,40 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         fi
         updpkgsums
         echo "[aur] Ran updpkgsums (b2sums updated)."
+        # Always generate .SRCINFO from PKGBUILD
+        if command -v makepkg >/dev/null 2>&1; then
+            makepkg --printsrcinfo > .SRCINFO
+            echo "[aur] Updated .SRCINFO with makepkg --printsrcinfo."
+        elif command -v mksrcinfo >/dev/null 2>&1; then
+            mksrcinfo
+            echo "[aur] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
+        else
+            echo "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
+        fi
+        echo "[aur] Preparation complete."
+        echo "Now push the git tag and upload ${TARBALL} and ${TARBALL}.sig to the GitHub release page."
+        echo "Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package."
+        read -rp "Do you want to run makepkg -si now? [y/N] " run_makepkg
+        if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
+            makepkg -si
+        fi
+        exit 0
     else
         updpkgsums
         echo "[$MODE] Ran updpkgsums (b2sums updated)."
+        # Always generate .SRCINFO from PKGBUILD
+        if command -v makepkg >/dev/null 2>&1; then
+            makepkg --printsrcinfo > .SRCINFO
+            echo "[$MODE] Updated .SRCINFO with makepkg --printsrcinfo."
+        elif command -v mksrcinfo >/dev/null 2>&1; then
+            mksrcinfo
+            echo "[$MODE] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
+        else
+            echo "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
+        fi
+        makepkg -si
+        exit 0
     fi
-    # Always generate .SRCINFO from PKGBUILD
-    if command -v makepkg >/dev/null 2>&1; then
-        makepkg --printsrcinfo > .SRCINFO
-        echo "[$MODE] Updated .SRCINFO with makepkg --printsrcinfo."
-    elif command -v mksrcinfo >/dev/null 2>&1; then
-        mksrcinfo
-        echo "[$MODE] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
-    else
-        echo "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
-    fi
-    makepkg -si
-    exit 0
 elif [[ "$MODE" == "aur-git" ]]; then
     # Generate PKGBUILD.git from PKGBUILD.0
     cp -f "$PKGBUILD0" "$SCRIPT_DIR/PKGBUILD.git"
