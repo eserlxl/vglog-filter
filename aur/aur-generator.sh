@@ -12,7 +12,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PKGNAME=vglog-filter
-PKGVER=1.0.0
 TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
 OUTDIR="$SCRIPT_DIR"
 PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
@@ -78,6 +77,10 @@ if [[ ! -f "$PKGBUILD0" ]]; then
     echo "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
     exit 1
 fi
+
+# Source PKGBUILD.0 to get pkgver
+source "$PKGBUILD0"
+PKGVER="$pkgver"
 
 if [[ "$MODE" == "clean" ]]; then
     echo "Cleaning AUR directory..."
