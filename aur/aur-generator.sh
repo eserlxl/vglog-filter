@@ -179,8 +179,8 @@ elif [[ "$MODE" == "aur-git" ]]; then
         echo "sha256sums=('SKIP')" >> "$SCRIPT_DIR/PKGBUILD.git"
     fi
     if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
-        sed -i '/^source=/a \
-pkgver() {\n  cd \"$srcdir/${pkgname%-git}\"\n  git describe --long --tags 2>/dev/null | sed \"s/^v//;s/-/./g\" || \\\n  printf \"r%s.%s\" \"$(git rev-list --count HEAD)\" \"$(git rev-parse --short HEAD)\"\n}\n' "$SCRIPT_DIR/PKGBUILD.git"
+        sed -i "/^source=/a \
+pkgver() {\n  cd \"\$srcdir/\${pkgname%-git}\"\n  git describe --long --tags 2>/dev/null | sed \"s/^v//;s/-/./g\" || \\\n  printf \"r%s.%s\" \"\$(git rev-list --count HEAD)\" \"\$(git rev-parse --short HEAD)\"\n}\n" "$SCRIPT_DIR/PKGBUILD.git"
     fi
     PKGBUILD_TEMPLATE="$SCRIPT_DIR/PKGBUILD.git"
     cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
