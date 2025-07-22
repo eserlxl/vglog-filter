@@ -62,4 +62,13 @@ build/
 # Backups
 *.bak
 Backups/
+
+# Tarballs
 *.tar.gz
+*.tar.xz
+*.tar.bz2
+*.tar.lzma
+*.tar.lz
+*.tar.zst
+*.tar.zstd
+*.tar.z
