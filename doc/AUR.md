@@ -82,6 +82,15 @@ You can disable colored output in two ways:
 - Set `GPG_KEY_ID` to avoid GPG key selection prompts.
 - Use `--dry-run` to test without installing packages.
 
+### Environment Variables
+
+The script supports several environment variables for automation:
+
+- **`NO_COLOR`**: Set to any value to disable colored output (alternative to `--no-color` option)
+- **`GPG_KEY_ID`**: Set to your GPG key ID to skip the interactive key selection menu
+- **`AUTO=y`**: Skip the GitHub asset upload prompt in `aur` mode
+- **`CI=1`**: Skip interactive prompts in `aur` mode (useful for CI/CD pipelines)
+
 ## How It Works
 
 ### Tarball Creation
@@ -96,7 +105,7 @@ You can disable colored output in two ways:
 
 ### Checksums and .SRCINFO
 - For `aur` and `local` modes: Runs `updpkgsums` to update checksums and generates `.SRCINFO`.
-- For `aur-git` mode: Skips `updpkgsums` (checksums must be 'SKIP' for VCS packages).
+- For `aur-git` mode: Skips `updpkgsums` and sets `sha256sums=('SKIP')` (required for VCS packages).
 - Uses `makepkg --printsrcinfo` (or `mksrcinfo` as fallback) to generate `.SRCINFO`.
 
 ### GPG Signing (aur mode only)
@@ -137,9 +146,11 @@ You can disable colored output in two ways:
 - The script will fail if required tools or the template are missing.
 - For CI or automation, set `GPG_KEY_ID` to avoid interactive prompts.
 - For CI or automation with automatic asset upload, set `AUTO=y` to skip upload prompts.
+- For CI environments, set `CI=1` to skip all interactive prompts.
 - Use `./aur-generator.sh test` to verify all modes work correctly before making changes or releases.
 - The script automatically handles both 'v' and non-'v' prefixed GitHub release URLs.
 - VCS packages (`aur-git` mode) automatically set `sha256sums=('SKIP')` and add `validpgpkeys`.
+- All environment variables are documented in the script's usage function (`./aur-generator.sh` without arguments).
 
 ## Error Handling
 
