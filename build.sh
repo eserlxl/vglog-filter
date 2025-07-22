@@ -1,3 +1,4 @@
+#!/bin/bash
 # Copyright (C) 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
@@ -19,7 +20,6 @@
 #   - You can combine 'warnings' with either mode.
 #   - Example: ./build.sh performance warnings
 #
-#!/bin/bash
 set -e
 
 PERFORMANCE_BUILD=OFF
