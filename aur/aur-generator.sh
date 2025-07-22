@@ -16,6 +16,8 @@ PKGNAME=vglog-filter
 # Helper: require tools
 require() { for t; do command -v "$t" >/dev/null || { echo "Missing $t"; exit 1; }; done; }
 
+readonly PKGNAME
+
 function usage() {
     echo "Usage: $0 [local|aur|aur-git|clean]"
     echo
@@ -73,6 +75,7 @@ esac
 
 # Only define PKGVER and PKGVER-dependent variables for non-clean modes
 PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
+readonly PKGBUILD0
 if [[ ! -f "$PKGBUILD0" ]]; then
     echo "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
     exit 1
@@ -83,8 +86,10 @@ if [[ -z "$PKGVER" ]]; then
     echo "Error: Could not extract pkgver from $PKGBUILD0"
     exit 1
 fi
+readonly PKGVER
 TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
 OUTDIR="$SCRIPT_DIR"
+readonly OUTDIR
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
 SRCINFO="$SCRIPT_DIR/.SRCINFO"
 
