@@ -157,14 +157,14 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         echo "[$MODE] Ran updpkgsums (b2sums updated)."
     fi
     # Always generate .SRCINFO from PKGBUILD
-    if command -v mksrcinfo >/dev/null 2>&1; then
-        mksrcinfo
-        echo "[$MODE] Updated .SRCINFO with mksrcinfo."
-    elif command -v makepkg >/dev/null 2>&1; then
+    if command -v makepkg >/dev/null 2>&1; then
         makepkg --printsrcinfo > .SRCINFO
         echo "[$MODE] Updated .SRCINFO with makepkg --printsrcinfo."
+    elif command -v mksrcinfo >/dev/null 2>&1; then
+        mksrcinfo
+        echo "[$MODE] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
     else
-        echo "Warning: Could not update .SRCINFO (mksrcinfo/makepkg not found)."
+        echo "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
     fi
     makepkg -si
     exit 0
@@ -216,14 +216,14 @@ elif [[ "$MODE" == "aur-git" ]]; then
     # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
     # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
     # Always generate .SRCINFO from PKGBUILD
-    if command -v mksrcinfo >/dev/null 2>&1; then
-        mksrcinfo
-        echo "[aur-git] Updated .SRCINFO with mksrcinfo."
-    elif command -v makepkg >/dev/null 2>&1; then
+    if command -v makepkg >/dev/null 2>&1; then
         makepkg --printsrcinfo > .SRCINFO
         echo "[aur-git] Updated .SRCINFO with makepkg --printsrcinfo."
+    elif command -v mksrcinfo >/dev/null 2>&1; then
+        mksrcinfo
+        echo "[aur-git] Updated .SRCINFO with mksrcinfo."
     else
-        echo "Warning: Could not update .SRCINFO (mksrcinfo/makepkg not found)."
+        echo "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
     fi
     makepkg -si
     exit 0
