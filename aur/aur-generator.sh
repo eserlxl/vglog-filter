@@ -13,7 +13,12 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Helper: require tools
-require() { for t; do command -v "$t" >/dev/null || { echo "Missing $t"; exit 1; }; done; }
+require() {
+    local t
+    for t in "$@"; do
+        command -v "$t" >/dev/null || { echo "Missing $t"; exit 1; }
+    done
+}
 
 # Colorized log helpers (disable color if NO_COLOR is set or --no-color/-n is passed)
 COLOR=1
