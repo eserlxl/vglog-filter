@@ -159,7 +159,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     # Create GPG signature for aur mode only
     if [[ "$MODE" == "aur" ]]; then
         # Check for GPG secret key before signing
-        if ! gpg --list-secret-keys | grep -q '^sec'; then
+        if ! gpg --list-secret-keys --with-colons | grep -q '^sec:'; then
             err "Error: No GPG secret key found. Please generate or import a GPG key before signing."
             exit 1
         fi
