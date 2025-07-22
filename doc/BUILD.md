@@ -43,4 +43,6 @@ You can provide one or more of the following options:
 - The compiled binary and build artifacts will be placed in the `build/` directory.
 
 ---
+**Note for Arch Linux/AUR users:** The `updpkgsums` tool (used for updating PKGBUILD checksums) is provided by the `pacman-contrib` package. Be sure to install it if you plan to maintain or update the PKGBUILD or use the AUR automation scripts.
+
 For troubleshooting or advanced configuration, see the comments in `build.sh` or the CMakeLists.txt file. 
