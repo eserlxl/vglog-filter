@@ -64,20 +64,11 @@ build/
 Backups/
 
 # Tarballs
-*.tar.gz
-*.tar.xz
-*.tar.bz2
-*.tar.lzma
-*.tar.lz
-*.tar.zst
-*.tar.zstd
-*.tar.z
-*.tar.7z
+*.tar
+*.tar.*
 
 # AUR PKG & SRC
 aur/pkg/
 aur/src/
 aur/PKGBUILD
 aur/.SRCINFO
-aur/vglog-filter-*.tar.gz
-aur/*.pkg.tar.*
