@@ -16,7 +16,7 @@ PKGNAME=vglog-filter
 # Helper: require tools
 require() { for t; do command -v "$t" >/dev/null || { echo "Missing $t"; exit 1; }; done; }
 
-readonly PKGNAME
+readonly PKGNAME="vglog-filter"
 
 function usage() {
     echo "Usage: $0 [local|aur|aur-git|clean]"
@@ -90,8 +90,7 @@ if [[ -z "$PKGVER" ]]; then
 fi
 readonly PKGVER
 TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
-OUTDIR="$SCRIPT_DIR"
-readonly OUTDIR
+readonly OUTDIR="$SCRIPT_DIR"
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
 SRCINFO="$SCRIPT_DIR/.SRCINFO"
 
@@ -107,7 +106,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         --exclude="aur" \
         --exclude="build" \
         --exclude="doc" \
-        --numeric-owner --owner=0 --group=0 --mtime='@0' \
+        --numeric-owner --owner=0 --group=0 --mtime='@0' --format=gnu \
         -czf "$OUTDIR/$TARBALL" . --transform "s,^.,${PKGNAME}-${PKGVER},"
     echo "Created $OUTDIR/$TARBALL"
 
@@ -157,7 +156,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     echo "[$MODE] PKGBUILD.0 copied to PKGBUILD."
     if [[ "$MODE" == "aur" ]]; then
         # Fix: Try correct link first, fallback to old 'v' link if needed
-        sed -E -i "s|^[[:space:]]*source=\\(.*\\)|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
+        sed -E -i "s|^[[:space:]]*source=\\([^)]*\\)|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
         echo "[aur] Updated source line in PKGBUILD (no 'v' before version)."
         # Check if the tarball exists on GitHub before running updpkgsums
         TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
