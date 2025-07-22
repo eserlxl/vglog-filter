@@ -12,8 +12,7 @@ b2sums=('SKIP')
 
 build() {
   cd "${srcdir}/${pkgname}-${pkgver}"
-  cmake -B build -S .
-  make -C build -j$(nproc)
+  bash ../build.sh performance warnings
 }
 
 package() {
