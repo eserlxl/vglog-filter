@@ -93,6 +93,9 @@ function usage() {
     log "    GPG_KEY_ID=ABCDEF ./aur-generator.sh aur"
     log "- To disable colored output, set NO_COLOR=1 or use --no-color/-n."
     log "- To test the script without running makepkg -si, add --dry-run or -d as the second argument."
+    log "- If GitHub CLI (gh) is installed, the script can automatically upload missing release assets."
+    log "- To skip the automatic upload prompt in 'aur' mode, set AUTO=y:"
+    log "    AUTO=y ./aur-generator.sh aur"
     exit 1
 }
 
@@ -139,6 +142,10 @@ case "$MODE" in
     aur)
         log "[aur] Prepare for AUR upload: creates tarball, GPG signature, and PKGBUILD for release."
         require makepkg updpkgsums curl gpg
+        # Check for optional GitHub CLI
+        if ! command -v gh >/dev/null 2>&1; then
+            warn "[aur] Note: GitHub CLI (gh) not found. Automatic asset upload will not be available."
+        fi
         ;;
     aur-git)
         log "[aur-git] Prepare PKGBUILD for VCS (git) package. No tarball is created."
@@ -258,15 +265,58 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
             TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
             if ! curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
-                err "[aur] ERROR: Release asset not found at either $TARBALL_URL or without 'v'. Aborting."
-                echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
-                exit 1
+                # Asset not found - offer to upload automatically if gh CLI is available
+                if command -v gh >/dev/null 2>&1; then
+                    warn "[aur] Release asset not found. GitHub CLI (gh) detected."
+                    if [[ "${CI:-}" == 1 || "${AUTO:-}" == "y" ]]; then
+                        upload_choice="y"
+                    else
+                        read -rp "Do you want to upload the tarball and signature to GitHub releases automatically? [y/N] " upload_choice
+                    fi
+                    if [[ "$upload_choice" =~ ^[Yy]$ ]]; then
+                        log "[aur] Uploading ${TARBALL} and ${TARBALL}.sig to GitHub release ${PKGVER}..."
+                        # Upload tarball
+                        if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL" --repo "eserlxl/${PKGNAME}"; then
+                            log "[aur] Successfully uploaded ${TARBALL}"
+                        else
+                            err "[aur] Failed to upload ${TARBALL}"
+                            exit 1
+                        fi
+                        # Upload signature
+                        if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL.sig" --repo "eserlxl/${PKGNAME}"; then
+                            log "[aur] Successfully uploaded ${TARBALL}.sig"
+                        else
+                            err "[aur] Failed to upload ${TARBALL}.sig"
+                            exit 1
+                        fi
+                        # Verify the upload was successful
+                        sleep 2  # Give GitHub a moment to process
+                        if curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
+                            log "[aur] Asset upload verified successfully."
+                        else
+                            warn "[aur] Asset upload may not be immediately available. Continuing anyway..."
+                        fi
+                    else
+                        err "[aur] Release asset not found and automatic upload declined. Aborting."
+                        echo "After uploading the tarball manually, run: makepkg -g >> PKGBUILD to update checksums."
+                        exit 1
+                    fi
+                else
+                    err "[aur] ERROR: Release asset not found at either location. GitHub CLI (gh) not available for automatic upload."
+                    echo "Please install GitHub CLI (gh) or manually upload ${TARBALL} and ${TARBALL}.sig to the GitHub release page."
+                    echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
+                    exit 1
+                fi
             fi
         fi
         update_checksums
         generate_srcinfo
         log "[aur] Preparation complete."
-        echo "Now push the git tag and upload ${TARBALL} and ${TARBALL}.sig to the GitHub release page."
+        if command -v gh >/dev/null 2>&1; then
+            echo "Assets have been automatically uploaded to GitHub release ${PKGVER}."
+        else
+            echo "Now push the git tag and upload ${TARBALL} and ${TARBALL}.sig to the GitHub release page."
+        fi
         echo "Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package."
         install_pkg "aur"
         exit 0
