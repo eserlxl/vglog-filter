@@ -70,10 +70,12 @@ if [[ ! -f "$PKGBUILD0" ]]; then
     echo "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
     exit 1
 fi
-# shellcheck source=PKGBUILD.0
-source "$PKGBUILD0"
-# shellcheck disable=SC2154
-PKGVER="$pkgver"
+# Extract pkgver from PKGBUILD.0 without sourcing
+PKGVER=$(awk -F= '/^pkgver=/{gsub(/^[ \t\"]+|[ \t\"]+$/, "", $2); print $2}' "$PKGBUILD0")
+if [[ -z "$PKGVER" ]]; then
+    echo "Error: Could not extract pkgver from $PKGBUILD0"
+    exit 1
+fi
 TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
 OUTDIR="$SCRIPT_DIR"
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
