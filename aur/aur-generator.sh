@@ -5,7 +5,7 @@
 # This file is part of vglog-filter and is licensed under
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
-set -e
+set -euo pipefail
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
