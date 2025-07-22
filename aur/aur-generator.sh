@@ -125,6 +125,8 @@ if [[ ! -f "$PKGBUILD0" ]]; then
     exit 1
 fi
 # Extract pkgver from PKGBUILD.0 without sourcing
+# NOTE: PKGBUILD.0 is always a static template with a simple pkgver=... assignment.
+# Dynamic or function-based pkgver is not supported or needed for this workflow.
 PKGVER=$(awk -F= '/^[[:space:]]*pkgver[[:space:]]*=/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' "$PKGBUILD0" | tr -d "\"'")
 if [[ -z "$PKGVER" ]]; then
     err "Error: Could not extract pkgver from $PKGBUILD0"
