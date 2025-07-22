@@ -74,14 +74,6 @@ OUTDIR="$SCRIPT_DIR"
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
 SRCINFO="$SCRIPT_DIR/.SRCINFO"
 
-# Check for PKGBUILD.0 and source pkgver early
-if [[ ! -f "$PKGBUILD0" ]]; then
-    echo "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
-    exit 1
-fi
-source "$PKGBUILD0"
-PKGVER="$pkgver"
-
 # Only create the tarball for aur and local modes
 if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     cd "$PROJECT_ROOT"
