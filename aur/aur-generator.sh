@@ -18,45 +18,67 @@ require() { for t; do command -v "$t" >/dev/null || { echo "Missing $t"; exit 1;
 
 readonly PKGNAME="vglog-filter"
 
+# Colorized log helpers (disable color if NO_COLOR is set or --no-color/-n is passed)
+COLOR=1
+for arg in "$@"; do
+    if [[ "$arg" == "--no-color" || "$arg" == "-n" ]]; then
+        COLOR=0
+        # Remove the option from arguments
+        set -- "${@/--no-color/}"
+        set -- "${@/-n/}"
+        break
+    fi
+done
+if [[ -n "${NO_COLOR:-}" ]]; then
+    COLOR=0
+fi
+log() { if (( COLOR )); then printf '\e[1;32m%s\e[0m\n' "$*"; else printf '%s\n' "$*"; fi; }
+warn() { if (( COLOR )); then printf '\e[1;33m%s\e[0m\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi; }
+err() { if (( COLOR )); then printf '\e[1;31m%s\e[0m\n' "$*" >&2; else printf '%s\n' "$*" >&2; fi; }
+
 function usage() {
-    echo "Usage: $0 [local|aur|aur-git|clean]"
+    log "Usage: $0 [--no-color|-n] [local|aur|aur-git|clean]"
     echo
-    echo "Modes:"
-    echo "  local     Build and install the package from a local tarball (for testing)."
-    echo "  aur       Prepare a release tarball, sign it with GPG, and update PKGBUILD for AUR upload."
-    echo "  aur-git   Generate a PKGBUILD for the -git (VCS) AUR package (no tarball/signing)."
-    echo "  clean     Remove all generated files and directories"
+    log "Modes:"
+    log "  local     Build and install the package from a local tarball (for testing)."
+    log "  aur       Prepare a release tarball, sign it with GPG, and update PKGBUILD for AUR upload."
+    log "  aur-git   Generate a PKGBUILD for the -git (VCS) AUR package (no tarball/signing)."
+    log "  clean     Remove all generated files and directories"
     echo
-    echo "Notes:"
-    echo "- Requires PKGBUILD.0 as the template for PKGBUILD generation."
-    echo "- For 'aur' mode, a GPG secret key is required for signing the tarball."
-    echo "- For 'aur' and 'local' modes, the script will attempt to update checksums and .SRCINFO."
-    echo "- To skip the GPG key selection menu in 'aur' mode, set GPG_KEY_ID to your key's ID:"
-    echo "    GPG_KEY_ID=ABCDEF ./aur-generator.sh aur"
+    log "Options:"
+    log "  --no-color, -n   Disable colored output (also supported via NO_COLOR env variable)"
+    echo
+    log "Notes:"
+    log "- Requires PKGBUILD.0 as the template for PKGBUILD generation."
+    log "- For 'aur' mode, a GPG secret key is required for signing the tarball."
+    log "- For 'aur' and 'local' modes, the script will attempt to update checksums and .SRCINFO."
+    log "- To skip the GPG key selection menu in 'aur' mode, set GPG_KEY_ID to your key's ID:"
+    log "    GPG_KEY_ID=ABCDEF ./aur-generator.sh aur"
+    log "- To disable colored output, set NO_COLOR=1 or use --no-color/-n."
     exit 1
 }
 
-if [[ $# -ne 1 ]]; then
+if [[ $# -lt 1 || $# -gt 2 ]]; then
     usage
 fi
 
 MODE="$1"
-echo "Running in $MODE mode"
+log "Running in $MODE mode"
 case "$MODE" in
     local)
-        echo "[local] Build and install from local tarball."
+        log "[local] Build and install from local tarball."
         require makepkg updpkgsums curl
         ;;
     aur)
-        echo "[aur] Prepare for AUR upload: creates tarball, GPG signature, and PKGBUILD for release."
+        log "[aur] Prepare for AUR upload: creates tarball, GPG signature, and PKGBUILD for release."
         require makepkg updpkgsums curl gpg
         ;;
     aur-git)
-        echo "[aur-git] Prepare PKGBUILD for VCS (git) package. No tarball is created."
+        log "[aur-git] Prepare PKGBUILD for VCS (git) package. No tarball is created."
         require makepkg
         ;;
     clean)
-        echo "[clean] Remove generated files and directories."
+        log "[clean] Remove generated files and directories."
         # Clean mode does not require PKGVER or PKGBUILD0
         OUTDIR="$SCRIPT_DIR"
         PKGBUILD="$SCRIPT_DIR/PKGBUILD"
@@ -70,8 +92,12 @@ case "$MODE" in
         rm -rf "$SCRIPT_DIR/src" "$SCRIPT_DIR/pkg"
         rm -f "$SCRIPT_DIR"/*.pkg.tar.*
         shopt -u nullglob
-        echo "Clean complete."
+        log "Clean complete."
         exit 0
+        ;;
+    *)
+        err "Unknown mode: $MODE"
+        usage
         ;;
 esac
 
@@ -79,13 +105,13 @@ esac
 PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
 readonly PKGBUILD0
 if [[ ! -f "$PKGBUILD0" ]]; then
-    echo "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
+    err "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
     exit 1
 fi
 # Extract pkgver from PKGBUILD.0 without sourcing
 PKGVER=$(awk -F= '/^[[:space:]]*pkgver[[:space:]]*=/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' "$PKGBUILD0" | tr -d "\"'")
 if [[ -z "$PKGVER" ]]; then
-    echo "Error: Could not extract pkgver from $PKGBUILD0"
+    err "Error: Could not extract pkgver from $PKGBUILD0"
     exit 1
 fi
 readonly PKGVER
@@ -108,13 +134,13 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         --exclude="doc" \
         --numeric-owner --owner=0 --group=0 --mtime='@0' --format=gnu \
         -czf "$OUTDIR/$TARBALL" . --transform "s,^.,${PKGNAME}-${PKGVER},"
-    echo "Created $OUTDIR/$TARBALL"
+    log "Created $OUTDIR/$TARBALL"
 
     # Create GPG signature for aur mode only
     if [[ "$MODE" == "aur" ]]; then
         # Check for GPG secret key before signing
         if ! gpg --list-secret-keys | grep -q '^sec'; then
-            echo "Error: No GPG secret key found. Please generate or import a GPG key before signing."
+            err "Error: No GPG secret key found. Please generate or import a GPG key before signing."
             exit 1
         fi
         # GPG key selection logic
@@ -125,17 +151,17 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             # List available secret keys and prompt user
             mapfile -t KEYS < <(gpg --list-secret-keys --with-colons | awk -F: '/^sec/ {print $5}')
             if [[ ${#KEYS[@]} -eq 0 ]]; then
-                echo "No GPG secret keys found."
+                err "No GPG secret keys found."
                 exit 1
             fi
-            echo "Available GPG secret keys:" >&2
+            warn "Available GPG secret keys:" >&2
             for i in "${!KEYS[@]}"; do
                 USER=$(gpg --list-secret-keys "${KEYS[$i]}" | grep uid | head -n1 | sed 's/.*] //')
-                echo "$((i+1)). ${KEYS[$i]} ($USER)" >&2
+                warn "$((i+1)). ${KEYS[$i]} ($USER)" >&2
             done
             read -rp "Select a key [1-${#KEYS[@]}]: " choice
             if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#KEYS[@]} )); then
-                echo "Invalid selection."
+                err "Invalid selection."
                 exit 1
             fi
             GPG_KEY="${KEYS[$((choice-1))]}"
@@ -145,7 +171,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         else
             gpg --detach-sign --output "$OUTDIR/$TARBALL.sig" "$OUTDIR/$TARBALL"
         fi
-        echo "[aur] Created GPG signature: $OUTDIR/$TARBALL.sig"
+        log "[aur] Created GPG signature: $OUTDIR/$TARBALL.sig"
     fi
 fi
 
@@ -153,36 +179,36 @@ cd "$SCRIPT_DIR"
 
 if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
-    echo "[$MODE] PKGBUILD.0 copied to PKGBUILD."
+    log "[$MODE] PKGBUILD.0 copied to PKGBUILD."
     if [[ "$MODE" == "aur" ]]; then
         # Fix: Try correct link first, fallback to old 'v' link if needed
         sed -E -i "s|^([[:space:]]*source=\([^)]*\))([[:space:]]*#.*)?$|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")\2|" "$PKGBUILD"
-        echo "[aur] Updated source line in PKGBUILD (no 'v' before version)."
+        log "[aur] Updated source line in PKGBUILD (no 'v' before version)."
         # Check if the tarball exists on GitHub before running updpkgsums
         TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
         if ! curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
-            echo "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
+            warn "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
             sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
             TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
             if ! curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
-                echo "[aur] ERROR: Release asset not found at either $TARBALL_URL or without 'v'. Aborting."
+                err "[aur] ERROR: Release asset not found at either $TARBALL_URL or without 'v'. Aborting."
                 echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
                 exit 1
             fi
         fi
         updpkgsums
-        echo "[aur] Ran updpkgsums (b2sums updated)."
+        log "[aur] Ran updpkgsums (b2sums updated)."
         # Always generate .SRCINFO from PKGBUILD
         if command -v makepkg >/dev/null 2>&1; then
             makepkg --printsrcinfo > .SRCINFO
-            echo "[aur] Updated .SRCINFO with makepkg --printsrcinfo."
+            log "[aur] Updated .SRCINFO with makepkg --printsrcinfo."
         elif command -v mksrcinfo >/dev/null 2>&1; then
             mksrcinfo
-            echo "[aur] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
+            log "[aur] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
         else
-            echo "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
+            warn "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
         fi
-        echo "[aur] Preparation complete."
+        log "[aur] Preparation complete."
         echo "Now push the git tag and upload ${TARBALL} and ${TARBALL}.sig to the GitHub release page."
         echo "Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package."
         # Honour CI=1 or AUTO=y to auto-answer "no" to the makepkg -si question (for CI/automation)
@@ -197,16 +223,16 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         exit 0
     else
         updpkgsums
-        echo "[$MODE] Ran updpkgsums (b2sums updated)."
+        log "[$MODE] Ran updpkgsums (b2sums updated)."
         # Always generate .SRCINFO from PKGBUILD
         if command -v makepkg >/dev/null 2>&1; then
             makepkg --printsrcinfo > .SRCINFO
-            echo "[$MODE] Updated .SRCINFO with makepkg --printsrcinfo."
+            log "[$MODE] Updated .SRCINFO with makepkg --printsrcinfo."
         elif command -v mksrcinfo >/dev/null 2>&1; then
             mksrcinfo
-            echo "[$MODE] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
+            log "[$MODE] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
         else
-            echo "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
+            warn "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
         fi
         makepkg -si
         exit 0
@@ -242,7 +268,7 @@ elif [[ "$MODE" == "aur-git" ]]; then
     fi
     PKGBUILD_TEMPLATE="$SCRIPT_DIR/PKGBUILD.git"
     cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
-    echo "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
+    log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
     # Set validpgpkeys if missing
     if ! grep -q '^validpgpkeys=' "$PKGBUILD"; then
         echo "validpgpkeys=('F677BC1E3BD7246E')" >> "$PKGBUILD"
@@ -254,12 +280,12 @@ elif [[ "$MODE" == "aur-git" ]]; then
     # Always generate .SRCINFO from PKGBUILD
     if command -v makepkg >/dev/null 2>&1; then
         makepkg --printsrcinfo > .SRCINFO
-        echo "[aur-git] Updated .SRCINFO with makepkg --printsrcinfo."
+        log "[aur-git] Updated .SRCINFO with makepkg --printsrcinfo."
     elif command -v mksrcinfo >/dev/null 2>&1; then
         mksrcinfo
-        echo "[aur-git] Updated .SRCINFO with mksrcinfo."
+        log "[aur-git] Updated .SRCINFO with mksrcinfo."
     else
-        echo "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
+        warn "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
     fi
     makepkg -si
     exit 0

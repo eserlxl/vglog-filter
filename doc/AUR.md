@@ -10,13 +10,28 @@
 ## Usage
 
 ```sh
-./aur-generator.sh [local|aur|aur-git|clean]
+./aur-generator.sh [--no-color|-n] [local|aur|aur-git|clean]
 ```
 
 - `local`: Prepares PKGBUILD and .SRCINFO for local testing/installation.
 - `aur`: Updates PKGBUILD and .SRCINFO for AUR submission, sets the source URL to the latest GitHub release tarball, updates checksums, and runs `makepkg`. Signs the tarball with GPG (see GPG automation below).
 - `aur-git`: Prepares PKGBUILD and .SRCINFO for a VCS (git tag) build, sets the source to the specified git tag, sets `sha256sums=('SKIP')`, adds `validpgpkeys`, and runs `makepkg`. Useful for testing or maintaining a `-git` AUR package.
 - `clean`: Cleans up generated files and directories in the `aur/` folder.
+- `--no-color`, `-n`: Disables colored output (for accessibility or when redirecting output). You can also set the `NO_COLOR` environment variable to any value to disable color.
+
+### Disabling Colored Output
+
+You can disable colored output in two ways:
+
+- By passing the `--no-color` or `-n` option:
+  ```sh
+  ./aur-generator.sh --no-color aur
+  ```
+- By setting the `NO_COLOR` environment variable to any value (including empty):
+  ```sh
+  NO_COLOR= ./aur-generator.sh aur
+  ```
+  This is useful for CI, automation, or when redirecting output to files.
 
 ### GPG Key Automation
 - For `aur` mode, a GPG secret key is required to sign the release tarball.
