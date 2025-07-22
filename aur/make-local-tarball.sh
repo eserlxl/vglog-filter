@@ -17,5 +17,14 @@ TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
 OUTDIR="$SCRIPT_DIR"
 
 cd "$PROJECT_ROOT"
-tar --exclude-vcs --exclude="**/${TARBALL}" -czf "$OUTDIR/$TARBALL" . --transform "s,^.,${PKGNAME}-${PKGVER},"
+tar --exclude-vcs \
+    --exclude="**/${TARBALL}" \
+    --exclude=".github" \
+    --exclude=".vscode" \
+    --exclude="Backups" \
+    --exclude="CMakeFiles" \
+    --exclude="aur" \
+    --exclude="build" \
+    --exclude="doc" \
+    -czf "$OUTDIR/$TARBALL" . --transform "s,^.,${PKGNAME}-${PKGVER},"
 echo "Created $OUTDIR/$TARBALL" 
