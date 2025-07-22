@@ -74,7 +74,34 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             echo "Error: No GPG secret key found. Please generate or import a GPG key before signing."
             exit 1
         fi
-        gpg --detach-sign --output "$OUTDIR/$TARBALL.sig" "$OUTDIR/$TARBALL"
+        # GPG key selection logic
+        GPG_KEY=""
+        if [[ -n "${GPG_KEY_ID:-}" ]]; then
+            GPG_KEY="$GPG_KEY_ID"
+        else
+            # List available secret keys and prompt user
+            mapfile -t KEYS < <(gpg --list-secret-keys --with-colons | awk -F: '/^sec/ {print $5}')
+            if [[ ${#KEYS[@]} -eq 0 ]]; then
+                echo "No GPG secret keys found."
+                exit 1
+            fi
+            echo "Available GPG secret keys:" >&2
+            for i in "${!KEYS[@]}"; do
+                USER=$(gpg --list-secret-keys "${KEYS[$i]}" | grep uid | head -n1 | sed 's/.*] //')
+                echo "$((i+1)). ${KEYS[$i]} ($USER)" >&2
+            done
+            read -rp "Select a key [1-${#KEYS[@]}]: " choice
+            if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#KEYS[@]} )); then
+                echo "Invalid selection."
+                exit 1
+            fi
+            GPG_KEY="${KEYS[$((choice-1))]}"
+        fi
+        if [[ -n "$GPG_KEY" ]]; then
+            gpg --detach-sign -u "$GPG_KEY" --output "$OUTDIR/$TARBALL.sig" "$OUTDIR/$TARBALL"
+        else
+            gpg --detach-sign --output "$OUTDIR/$TARBALL.sig" "$OUTDIR/$TARBALL"
+        fi
         echo "[aur] Created GPG signature: $OUTDIR/$TARBALL.sig"
     fi
 fi
