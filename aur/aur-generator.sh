@@ -54,6 +54,8 @@ fi
 if [[ "$MODE" == "local" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
     echo "[local] PKGBUILD.0 copied to PKGBUILD."
+    makepkg -si
+    exit 0
 elif [[ "$MODE" == "aur" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
     sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/vglog-filter/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
@@ -77,9 +79,7 @@ elif [[ "$MODE" == "aur" ]]; then
         echo "Warning: Could not update .SRCINFO (mksrcinfo/makepkg not found)."
     fi
     makepkg -si
+    exit 0
 else
     usage
-    exit 0
 fi
-
-makepkg -si
