@@ -11,6 +11,7 @@ pkgdesc="A log filtering tool for Valgrind logs."
 arch=('x86_64')
 url="https://github.com/eserlxl/vglog-filter"
 license=('GPL3')
+validpgpkeys=('F677BC1E3BD7246E')
 depends=()
 makedepends=('cmake' 'make' 'gcc')
 source=("${pkgname}-${pkgver}.tar.gz")

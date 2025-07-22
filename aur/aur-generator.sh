@@ -60,33 +60,13 @@ if [[ "$MODE" == "clean" ]]; then
     exit 0
 fi
 
-if [[ "$MODE" == "local" ]]; then
+if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
-    echo "[local] PKGBUILD.0 copied to PKGBUILD."
-    # Create .SRCINFO from .SRCINFO.0 and update pkgver/pkgname
-    if [[ ! -f "$SCRIPT_DIR/.SRCINFO.0" ]]; then
-        echo "Error: $SCRIPT_DIR/.SRCINFO.0 not found. Please create it from your original .SRCINFO."
-        exit 1
+    echo "[$MODE] PKGBUILD.0 copied to PKGBUILD."
+    if [[ "$MODE" == "aur" ]]; then
+        sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/vglog-filter/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
+        echo "[aur] Updated source line in PKGBUILD."
     fi
-    cp -f "$SCRIPT_DIR/.SRCINFO.0" "$SRCINFO"
-    sed -i "s/^pkgver = .*/pkgver = $PKGVER/" "$SRCINFO"
-    sed -i "s/^pkgname = .*/pkgname = $PKGNAME/" "$SRCINFO"
-    echo "[local] .SRCINFO.0 copied to .SRCINFO and updated."
-    makepkg -si
-    exit 0
-elif [[ "$MODE" == "aur" ]]; then
-    cp -f "$PKGBUILD0" "$PKGBUILD"
-    # Create .SRCINFO from .SRCINFO.0 and update pkgver/pkgname
-    if [[ ! -f "$SCRIPT_DIR/.SRCINFO.0" ]]; then
-        echo "Error: $SCRIPT_DIR/.SRCINFO.0 not found. Please create it from your original .SRCINFO."
-        exit 1
-    fi
-    cp -f "$SCRIPT_DIR/.SRCINFO.0" "$SRCINFO"
-    sed -i "s/^pkgver = .*/pkgver = $PKGVER/" "$SRCINFO"
-    sed -i "s/^pkgname = .*/pkgname = $PKGNAME/" "$SRCINFO"
-    echo "[aur] .SRCINFO.0 copied to .SRCINFO and updated."
-    sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/vglog-filter/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
-    echo "[aur] Updated source line in PKGBUILD."
     # Check for required tools
     for tool in updpkgsums makepkg; do
         if ! command -v $tool >/dev/null 2>&1; then
@@ -95,13 +75,14 @@ elif [[ "$MODE" == "aur" ]]; then
         fi
     done
     updpkgsums
-    echo "[aur] Ran updpkgsums (b2sums updated)."
+    echo "[$MODE] Ran updpkgsums (b2sums updated)."
+    # Always generate .SRCINFO from PKGBUILD
     if command -v mksrcinfo >/dev/null 2>&1; then
         mksrcinfo
-        echo "[aur] Updated .SRCINFO with mksrcinfo."
+        echo "[$MODE] Updated .SRCINFO with mksrcinfo."
     elif command -v makepkg >/dev/null 2>&1; then
         makepkg --printsrcinfo > .SRCINFO
-        echo "[aur] Updated .SRCINFO with makepkg --printsrcinfo."
+        echo "[$MODE] Updated .SRCINFO with makepkg --printsrcinfo."
     else
         echo "Warning: Could not update .SRCINFO (mksrcinfo/makepkg not found)."
     fi

@@ -19,20 +19,21 @@
 
 ## How It Works
 - Always creates a new source tarball from the project root, excluding build and VCS files.
-- Copies and updates PKGBUILD and .SRCINFO from template files (`PKGBUILD.0`, `.SRCINFO.0`).
+- Copies and updates PKGBUILD from the template file (`PKGBUILD.0`).
 - For `aur` mode, updates the `source` line in PKGBUILD to point to the latest GitHub release and runs `updpkgsums` and `makepkg`.
-- For `local` mode, prepares files for local installation/testing.
+- For both `local` and `aur` modes, generates `.SRCINFO` from the current PKGBUILD using `makepkg --printsrcinfo > .SRCINFO` (or `mksrcinfo`).
 - For `clean` mode, removes generated files and build artifacts from the `aur/` directory.
+- The `validpgpkeys` array is always present in `PKGBUILD.0` to ensure correct signature verification.
 
 ## Requirements
 - `updpkgsums` (from `pacman-contrib`)
 - `makepkg`
-- For AUR submission: ensure `.SRCINFO.0` and `PKGBUILD.0` templates are present in `aur/`
+- For AUR submission: ensure `PKGBUILD.0` template is present in `aur/`
 
 ## Notes for AUR Maintainers
 - Always update `PKGVER` and `PKGNAME` variables in the script as needed for new releases.
-- The script expects template files (`PKGBUILD.0`, `.SRCINFO.0`) to exist and be up to date.
-- The script will fail if required tools or templates are missing.
+- The script expects the template file (`PKGBUILD.0`) to exist and be up to date.
+- The script will fail if required tools or the template are missing.
 
 ---
 For more details, see the comments in `aur/aur-generator.sh` or the [BUILD.md](BUILD.md) documentation. 
