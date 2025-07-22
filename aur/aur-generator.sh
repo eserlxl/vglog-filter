@@ -51,10 +51,10 @@ case "$MODE" in
         OUTDIR="$SCRIPT_DIR"
         PKGBUILD="$SCRIPT_DIR/PKGBUILD"
         SRCINFO="$SCRIPT_DIR/.SRCINFO"
-        TARBALL_GLOB="$SCRIPT_DIR/"${PKGNAME}-*.tar.gz
-        echo "Cleaning AUR directory..."
         shopt -s nullglob
-        rm -f $TARBALL_GLOB $TARBALL_GLOB.sig "$PKGBUILD" "$SRCINFO"
+        TARBALL_GLOB=("$SCRIPT_DIR/${PKGNAME}-"*.tar.gz)
+        echo "Cleaning AUR directory..."
+        rm -f "${TARBALL_GLOB[@]}" "${TARBALL_GLOB[@]/%/.sig}" "$PKGBUILD" "$SRCINFO"
         rm -rf "$SCRIPT_DIR/src" "$SCRIPT_DIR/pkg"
         rm -f "$SCRIPT_DIR"/*.pkg.tar.*
         echo "Clean complete."
@@ -68,8 +68,9 @@ if [[ ! -f "$PKGBUILD0" ]]; then
     echo "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
     exit 1
 fi
+# shellcheck source=PKGBUILD.0
 source "$PKGBUILD0"
-PKGVER="$pkgver"
+PKGVER="$pkgver" # shellcheck disable=SC2154
 TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
 OUTDIR="$SCRIPT_DIR"
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
@@ -180,10 +181,10 @@ elif [[ "$MODE" == "aur-git" ]]; then
     # Insert sha256sums=('SKIP') after the source= line using awk -v
     awk -v sums="sha256sums=('SKIP')" '/^source=/ { print; print sums; next } { print }' "$SCRIPT_DIR/PKGBUILD.git" > "$SCRIPT_DIR/PKGBUILD.git.tmp" && mv "$SCRIPT_DIR/PKGBUILD.git.tmp" "$SCRIPT_DIR/PKGBUILD.git"
     # Fix build/package dir for VCS: replace all variants to use ${pkgname%-git}
-    sed -i '/^[[:space:]]*cd[[:space:]]\+"\$srcdir\/\${pkgname}-\${pkgver}"/s|\${pkgname}-\${pkgver}|\${pkgname%-git}|' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i '/^[[:space:]]*cd[[:space:]]\+"\$srcdir\/\$pkgname-\$pkgver"/s|\$pkgname-\$pkgver|\${pkgname%-git}|' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i '/^[[:space:]]*cd[[:space:]]\+"\${srcdir}\/\${pkgname}-\${pkgver}"/s|\${pkgname}-\${pkgver}|\${pkgname%-git}|' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i '/^[[:space:]]*cd[[:space:]]\+"\${srcdir}\/\$pkgname-\$pkgver"/s|\$pkgname-\$pkgver|\${pkgname%-git}|' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i "/^[[:space:]]*cd[[:space:]]*\\\"\$srcdir\/\${pkgname}-\${pkgver}\"/s|\${pkgname}-\${pkgver}|\${pkgname%-git}|" "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i "/^[[:space:]]*cd[[:space:]]*\\\"\$srcdir\/\$pkgname-\$pkgver\"/s|\$pkgname-\$pkgver|\${pkgname%-git}|" "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i "/^[[:space:]]*cd[[:space:]]*\\\"\${srcdir}\/\${pkgname}-\${pkgver}\"/s|\${pkgname}-\${pkgver}|\${pkgname%-git}|" "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i "/^[[:space:]]*cd[[:space:]]*\\\"\${srcdir}\/\$pkgname-\$pkgver\"/s|\$pkgname-\$pkgver|\${pkgname%-git}|" "$SCRIPT_DIR/PKGBUILD.git"
     # Remove the global replacements for ${pkgname}-${pkgver} and $pkgname-$pkgver to avoid affecting comments
     # Insert pkgver() as before if missing
     if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
@@ -208,12 +209,10 @@ elif [[ "$MODE" == "aur-git" ]]; then
         echo "validpgpkeys=('F677BC1E3BD7246E')" >> "$PKGBUILD"
     fi
     # Check for required tools
-    for tool in makepkg; do
-        if ! command -v $tool >/dev/null 2>&1; then
-            echo "Error: $tool is required but not installed."
-            exit 1
-        fi
-    done
+    if ! command -v makepkg >/dev/null 2>&1; then
+        echo "Error: makepkg is required but not installed."
+        exit 1
+    fi
     # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
     # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
     # Always generate .SRCINFO from PKGBUILD
