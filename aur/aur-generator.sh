@@ -53,8 +53,10 @@ case "$MODE" in
         SRCINFO="$SCRIPT_DIR/.SRCINFO"
         shopt -s nullglob
         TARBALL_GLOB=("$SCRIPT_DIR/${PKGNAME}-"*.tar.gz)
+        # Use an explicit array to safely handle files with spaces
+        files=("${TARBALL_GLOB[@]}" "${TARBALL_GLOB[@]/%/.sig}")
         echo "Cleaning AUR directory..."
-        rm -f "${TARBALL_GLOB[@]}" "${TARBALL_GLOB[@]/%/.sig}" "$PKGBUILD" "$SRCINFO"
+        rm -f "${files[@]}" "$PKGBUILD" "$SRCINFO"
         rm -rf "$SCRIPT_DIR/src" "$SCRIPT_DIR/pkg"
         rm -f "$SCRIPT_DIR"/*.pkg.tar.*
         echo "Clean complete."
