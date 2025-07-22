@@ -172,12 +172,11 @@ elif [[ "$MODE" == "aur-git" ]]; then
     # Insert sha256sums=('SKIP') after the source= line using awk -v
     awk -v sums="sha256sums=('SKIP')" '/^source=/ { print; print sums; next } { print }' "$SCRIPT_DIR/PKGBUILD.git" > "$SCRIPT_DIR/PKGBUILD.git.tmp" && mv "$SCRIPT_DIR/PKGBUILD.git.tmp" "$SCRIPT_DIR/PKGBUILD.git"
     # Fix build/package dir for VCS: replace all variants to use ${pkgname%-git}
-    sed -i 's|cd "$srcdir/${pkgname}-${pkgver}"|cd "$srcdir/${pkgname%-git}"|g' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i 's|cd "$srcdir/$pkgname-$pkgver"|cd "$srcdir/${pkgname%-git}"|g' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i 's|cd "${srcdir}/${pkgname}-${pkgver}"|cd "$srcdir/${pkgname%-git}"|g' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i 's|cd "${srcdir}/$pkgname-$pkgver"|cd "$srcdir/${pkgname%-git}"|g' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i 's|${pkgname}-${pkgver}|${pkgname%-git}|g' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i 's|$pkgname-$pkgver|${pkgname%-git}|g' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i '/^[[:space:]]*cd[[:space:]]\+"\$srcdir\/\${pkgname}-\${pkgver}"/s|\${pkgname}-\${pkgver}|\${pkgname%-git}|' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i '/^[[:space:]]*cd[[:space:]]\+"\$srcdir\/\$pkgname-\$pkgver"/s|\$pkgname-\$pkgver|\${pkgname%-git}|' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i '/^[[:space:]]*cd[[:space:]]\+"\${srcdir}\/\${pkgname}-\${pkgver}"/s|\${pkgname}-\${pkgver}|\${pkgname%-git}|' "$SCRIPT_DIR/PKGBUILD.git"
+    sed -i '/^[[:space:]]*cd[[:space:]]\+"\${srcdir}\/\$pkgname-\$pkgver"/s|\$pkgname-\$pkgver|\${pkgname%-git}|' "$SCRIPT_DIR/PKGBUILD.git"
+    # Remove the global replacements for ${pkgname}-${pkgver} and $pkgname-$pkgver to avoid affecting comments
     # Insert pkgver() as before if missing
     if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
         awk -v pkgver_func='pkgver() {
