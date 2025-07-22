@@ -12,19 +12,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PKGNAME=vglog-filter
-TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
-OUTDIR="$SCRIPT_DIR"
-PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
-PKGBUILD="$SCRIPT_DIR/PKGBUILD"
-SRCINFO="$SCRIPT_DIR/.SRCINFO"
-
-# Check for PKGBUILD.0 and source pkgver early
-if [[ ! -f "$PKGBUILD0" ]]; then
-    echo "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
-    exit 1
-fi
-source "$PKGBUILD0"
-PKGVER="$pkgver"
 
 function usage() {
     echo "Usage: $0 [local|aur|clean]"
@@ -49,8 +36,40 @@ case "$MODE" in
         ;;
     clean)
         echo "[clean] Remove generated files and directories."
+        # Clean mode does not require PKGVER or PKGBUILD0
+        OUTDIR="$SCRIPT_DIR"
+        PKGBUILD="$SCRIPT_DIR/PKGBUILD"
+        SRCINFO="$SCRIPT_DIR/.SRCINFO"
+        TARBALL_GLOB="$SCRIPT_DIR/"${PKGNAME}-*.tar.gz
+        echo "Cleaning AUR directory..."
+        rm -f $TARBALL_GLOB $TARBALL_GLOB.sig "$PKGBUILD" "$SRCINFO"
+        rm -rf "$SCRIPT_DIR/src" "$SCRIPT_DIR/pkg"
+        rm -f "$SCRIPT_DIR"/*.pkg.tar.*
+        echo "Clean complete."
+        exit 0
         ;;
 esac
+
+# Only define PKGVER and PKGVER-dependent variables for non-clean modes
+PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
+if [[ ! -f "$PKGBUILD0" ]]; then
+    echo "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
+    exit 1
+fi
+source "$PKGBUILD0"
+PKGVER="$pkgver"
+TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
+OUTDIR="$SCRIPT_DIR"
+PKGBUILD="$SCRIPT_DIR/PKGBUILD"
+SRCINFO="$SCRIPT_DIR/.SRCINFO"
+
+# Check for PKGBUILD.0 and source pkgver early
+if [[ ! -f "$PKGBUILD0" ]]; then
+    echo "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
+    exit 1
+fi
+source "$PKGBUILD0"
+PKGVER="$pkgver"
 
 # Only create the tarball for aur and local modes
 if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
@@ -107,15 +126,6 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
 fi
 
 cd "$SCRIPT_DIR"
-
-if [[ "$MODE" == "clean" ]]; then
-    echo "Cleaning AUR directory..."
-    rm -f "$OUTDIR/$TARBALL" "$OUTDIR/$TARBALL.sig" "$PKGBUILD" "$SRCINFO"
-    rm -rf "$SCRIPT_DIR/src" "$SCRIPT_DIR/pkg"
-    rm -f "$SCRIPT_DIR"/*.pkg.tar.*
-    echo "Clean complete."
-    exit 0
-fi
 
 if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
