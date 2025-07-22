@@ -2,6 +2,15 @@
 
 vglog-filter is a fast and flexible tool designed to process and clean up Valgrind log files. It helps developers and testers focus on the most relevant information by removing noise, deduplicating stack traces, and normalizing logs for easier inspection and comparison. This streamlines the debugging process, especially for large or repetitive Valgrind outputs.
 
+## Documentation
+
+Comprehensive documentation is available in the [`doc/`](doc/) folder:
+
+- [USAGE.md](doc/USAGE.md): Basic usage, options, and workflow
+- [FAQ.md](doc/FAQ.md): Frequently asked questions
+- [ADVANCED.md](doc/ADVANCED.md): Advanced filtering, signature depth, marker customization, and deduplication logic
+- [BUILD.md](doc/BUILD.md): Build script and configuration options
+
 ## Why Use vglog-filter?
 
 Valgrind is a powerful tool for detecting memory errors and leaks in C/C++ programs, but its logs can be overwhelming—especially for large projects or repeated test runs. Raw Valgrind logs often contain:
