@@ -14,6 +14,9 @@ if ((BASH_VERSINFO[0] < 4)); then
     exit 1
 fi
 
+# Ensure GPG pinentry works in CI/sudo/non-interactive shells
+export GPG_TTY=$(tty)  # Needed for GPG signing to work reliably (pinentry) in CI/sudo
+
 # --- Global cleanup for CI/test temp dirs ---
 TEMP_DIRS=()
 # shellcheck disable=SC2317
