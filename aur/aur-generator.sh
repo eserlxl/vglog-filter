@@ -96,7 +96,7 @@ require() {
         fi
     done
     if (( ${#missing[@]} )); then
-        err "Missing required tool(s): ${missing[*]}"
+        err "Missing required tool(s): $(IFS=, ; echo "${missing[*]}")"
         exit 1
     fi
 }
