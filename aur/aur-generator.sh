@@ -50,7 +50,7 @@ declare -Ar PKG_HINT=(
     [gh]=github-cli
     [flock]=util-linux
     [awk]=gawk
-    [git]=base
+    [git]=git
 )
 # Trap errors and print a helpful message with line number and command
 # set -E: Ensure ERR trap is inherited by functions and subshells (Bash >=4.4). For older Bash, enable errtrace explicitly.
