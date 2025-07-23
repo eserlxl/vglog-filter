@@ -328,7 +328,9 @@ ascii_armor=${ASCII_ARMOR_DEFAULT:-0}
 getopt_output=$(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help,usage -- "$@")
 getopt_status=$?
 if (( getopt_status != 0 )); then
-    err "Failed to parse options."; help; exit 1
+    echo "Error: Failed to parse options." >&2
+    help
+    exit 1
 fi
 # Use eval set -- for proper argument parsing from getopt output
 # This handles quoted arguments correctly and avoids issues with array splitting
