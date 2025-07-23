@@ -15,10 +15,15 @@
 # NOTE: This script requires GNU getopt (util-linux) and is not compatible with macOS/BSD systems.
 # The script is designed for GNU/Linux environments and does not aim to support macOS/BSD.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
+PKGBUILD="$SCRIPT_DIR/PKGBUILD"
+SRCINFO="$SCRIPT_DIR/.SRCINFO"
+OUTDIR="$SCRIPT_DIR"
+export PKGBUILD0 PKGBUILD SRCINFO OUTDIR
+
 # --- Constants (grouped at top, all readonly) ---
 readonly PKGNAME="vglog-filter"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly SCRIPT_DIR
 SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_NAME
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -406,6 +411,7 @@ log "Running in $MODE mode"
 case "$MODE" in
     local)
         log "[local] Build and install from local tarball."
+        cp -f "$PKGBUILD0" "$PKGBUILD"
         # require call moved above
         ;;
     aur)
@@ -453,6 +459,10 @@ case "$MODE" in
         ;;
     test)
         log "[test] Running all modes in dry-run mode to check for errors."
+        log "[test] Cleaning up old test logs..."
+        rm -f "$SCRIPT_DIR"/test-*.log
+        rm -f "$SCRIPT_DIR"/.aur-generator.lock
+        log "[test] Old test logs removed."
         TEST_ERRORS=0
         # Run the test mode (rely only on --dry-run flag, do not export DRY_RUN)
         for test_mode in local aur aur-git; do
@@ -492,6 +502,37 @@ case "$MODE" in
             fi
             log "[test] Log for $test_mode: $TEST_LOG_FILE"
         done
+        # Additional: Test invalid/nonsense command-line arguments
+        log "[test] Running invalid argument tests..."
+        INVALID_ARGS_LIST=(
+            "-0"
+            "-1"
+            "--usagex"
+            "-X"
+            "-0 local"
+            "-1 aur"
+            "--usagex aur-git"
+            "-X lint"
+            "-n -0 local"
+            "-a --usagex aur"
+            "-d -X test"
+            "-n -a -1"
+            "--no-color --usagex"
+            "-n -a -X lint"
+            "-d --usagex test"
+        )
+        for invalid_args in "${INVALID_ARGS_LIST[@]}"; do
+            TEST_LOG_FILE="$SCRIPT_DIR/test-invalid-$(echo "$invalid_args" | tr ' /' '__').log"
+            log "[test] Testing invalid args: $invalid_args"
+            if bash "$SCRIPT_DIR/$SCRIPT_NAME" $invalid_args >"$TEST_LOG_FILE" 2>&1; then
+                err "[test] ✗ Invalid args '$invalid_args' did NOT fail as expected!"
+                TEST_ERRORS=$((TEST_ERRORS + 1))
+                cat "$TEST_LOG_FILE" >&2
+            else
+                log "[test] ✓ Invalid args '$invalid_args' failed as expected."
+            fi
+            log "[test] Log for invalid args '$invalid_args': $TEST_LOG_FILE"
+        done
         # Report results
         if [[ $TEST_ERRORS -eq 0 ]]; then
             log "[test] ✓ All test modes passed successfully!"
@@ -522,13 +563,8 @@ case "$MODE" in
         ;;
 esac
 
-# Only define PKGVER and PKGVER-dependent variables for non-clean modes
-PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
-readonly PKGBUILD0
-if [[ ! -f "$PKGBUILD0" ]]; then
-    err "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
-    exit 1
-fi
+# PKGBUILD0, PKGBUILD, SRCINFO, OUTDIR, etc.
+# (Find and move from below the case block to above it)
 # Extract pkgver from PKGBUILD.0 without sourcing
 # NOTE: PKGBUILD.0 is always a static template with a simple pkgver=... assignment.
 # Dynamic or function-based pkgver is not supported or needed for this workflow.
@@ -549,6 +585,11 @@ OUTDIR="$SCRIPT_DIR"
 readonly OUTDIR
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
 SRCINFO="$SCRIPT_DIR/.SRCINFO"
+export PKGBUILD0 PKGBUILD SRCINFO OUTDIR
+if [[ ! -f "$PKGBUILD0" ]]; then
+    err "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
+    exit 1
+fi
 
 # Only create the tarball for aur and local modes
 if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
@@ -632,8 +673,8 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         log "[aur] Using $([[ $ascii_armor -eq 1 ]] && echo 'ASCII-armored signatures (.asc)' || echo 'binary signatures (.sig)')"
         # GPG key selection logic
         GPG_KEY=""
-        if [[ -n "$GPG_KEY_ID" ]]; then
-            if [[ "$GPG_KEY_ID" == "TEST_KEY_FOR_DRY_RUN" ]]; then
+        if [[ -n "${GPG_KEY_ID:-}" ]]; then
+            if [[ "${GPG_KEY_ID:-}" == "TEST_KEY_FOR_DRY_RUN" ]]; then
                 # In test mode, skip GPG signing
                 log "[aur] Test mode: Skipping GPG signing"
                 GPG_KEY=""
@@ -726,12 +767,14 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         # Fix: Append tarball URL to source=(), robustly handling multiline arrays and preserving extra sources
         set_signature_ext
         TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
+        # Remove any stray quotes from GH_USER or PKGNAME
+        TARBALL_URL=$(echo "$TARBALL_URL" | sed 's/"//g')
         awk -v tarball_url="$TARBALL_URL" '
             BEGIN { in_source=0; new_source_line=""; }
             /^source=\(/ {
                 in_source=1;
                 # Properly quote tarball_url for PKGBUILD
-                printf "source=(\"%s\"\n", tarball_url);
+                printf "source=(\"%s\")\n", tarball_url;
                 next
             }
             in_source && /\)/ {
@@ -855,14 +898,15 @@ awk -v gh_user="$GH_USER" -v pkgname_short="${PKGNAME%-git}" '
 ' "$PKGBUILD0" >| "$SCRIPT_DIR/PKGBUILD.git"
 # Insert pkgver() as before if missing
 if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
-    awk -v pkgver_func='pkgver() {
-    cd "$srcdir/${pkgname%-git}"
-    git describe --long --tags 2>/dev/null | sed "s/^v//;s/-/./g" || \
-    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
-}' '
+    awk '
         /^source=/ {
             print;
-            print pkgver_func;
+            print "";
+            print "pkgver() {";
+            print "    cd \"$srcdir/${pkgname%-git}\"";
+            printf "    git describe --long --tags 2>/dev/null | sed \"s/^v//;s/-/./g\" || \\\n";
+            print "        printf \"r%s.%s\" \"$(git rev-list --count HEAD)\" \"$(git rev-parse --short HEAD)\"";
+            print "}";
             next
         }
         { print }
