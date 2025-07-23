@@ -148,7 +148,8 @@ hint() {
 }
 
 require() {
-    local t missing=()
+    local t
+    local -a missing=()
     for t in "$@"; do
         if ! command -v "$t" >/dev/null; then
             missing+=("$t")
@@ -159,7 +160,7 @@ require() {
         for t in "${missing[@]}"; do
             hint "$t"
         done
-        exit 1
+        return 1
     fi
 }
 
@@ -295,15 +296,15 @@ fi
 case "$MODE" in
     local)
         # local mode requires: makepkg, updpkgsums, curl
-        require makepkg updpkgsums curl
+        require makepkg updpkgsums curl || exit 1
         ;;
     aur)
         # aur mode requires: makepkg, updpkgsums, curl, gpg
-        require makepkg updpkgsums curl gpg
+        require makepkg updpkgsums curl gpg || exit 1
         ;;
     aur-git)
         # aur-git mode requires: makepkg
-        require makepkg
+        require makepkg || exit 1
         ;;
     # clean and test modes do not require special tools
 esac
@@ -705,7 +706,7 @@ if [[ -n "${GPG_KEY_ID:-}" ]]; then
     grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || echo "validpgpkeys=('$GPG_KEY_ID')" >> "$PKGBUILD"
 fi
 # Check for required tools
-require makepkg
+require makepkg || exit 1
 # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
 # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
 generate_srcinfo
