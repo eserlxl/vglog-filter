@@ -191,6 +191,7 @@ generate_srcinfo() {
         makepkg --printsrcinfo > .SRCINFO
         log "[generate_srcinfo] Updated .SRCINFO with makepkg --printsrcinfo."
     elif command -v mksrcinfo >/dev/null 2>&1; then
+        warn "[generate_srcinfo] Warning: Falling back to deprecated mksrcinfo. Please update pacman/makepkg to use makepkg --printsrcinfo. Support for mksrcinfo will be removed in the future."
         mksrcinfo
         log "[generate_srcinfo] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
     else
@@ -489,7 +490,21 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         log "[aur] Using commit date (epoch $COMMIT_EPOCH) of $GIT_REF for tarball mtime."
     fi
     # Check if git archive supports --mtime (Git >= 2.32)
+    GIT_VERSION=$(git --version | awk '{print $3}')
+    GIT_VERSION_MAJOR=$(echo "$GIT_VERSION" | cut -d. -f1)
+    GIT_VERSION_MINOR=$(echo "$GIT_VERSION" | cut -d. -f2)
+    GIT_VERSION_PATCH=$(echo "$GIT_VERSION" | cut -d. -f3)
+    GIT_MTIME_SUPPORTED=0
+    if (( GIT_VERSION_MAJOR > 2 )) || { (( GIT_VERSION_MAJOR == 2 )) && (( GIT_VERSION_MINOR > 31 )); }; then
+        GIT_MTIME_SUPPORTED=1
+    fi
     if git archive --help | grep -q -- '--mtime'; then
+        GIT_MTIME_SUPPORTED=1
+    fi
+    if (( ! GIT_MTIME_SUPPORTED )); then
+        warn "[aur-generator] Your git version ($GIT_VERSION) does not support 'git archive --mtime'. For fully reproducible tarballs, upgrade to git ≥ 2.32.0. Falling back to manual mtime setting."
+    fi
+    if (( GIT_MTIME_SUPPORTED )); then
         (
             set -euo pipefail
             unset CI
@@ -654,7 +669,8 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         # Check if the tarball exists on GitHub before running updpkgsums
         asset_exists=1
         if command -v gh >/dev/null 2>&1; then
-            if ! gh api "/repos/${GH_USER}/${PKGNAME}/releases/assets" --jq ".[] | select(.name == \"${TARBALL}\")" >/dev/null 2>&1; then
+            # Use gh release view --json assets for faster asset detection
+            if ! gh release view "$PKGVER" --json assets 2>/dev/null | grep -q '"name": *"'"${TARBALL}"'"'; then
                 asset_exists=0
             fi
         else
@@ -668,7 +684,8 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
             asset_exists=1
             if command -v gh >/dev/null 2>&1; then
-                if ! gh api "/repos/${GH_USER}/${PKGNAME}/releases/assets" --jq ".[] | select(.name == \"${TARBALL}\")" >/dev/null 2>&1; then
+                # Use gh release view --json assets for faster asset detection
+                if ! gh release view "$PKGVER" --json assets 2>/dev/null | grep -q '"name": *"'"${TARBALL}"'"'; then
                     asset_exists=0
                 fi
             else
