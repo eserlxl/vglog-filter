@@ -144,6 +144,13 @@ set -E
 set -o errtrace  # Ensure ERR trap is inherited by functions and subshells (for maximum compatibility)
 trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 
+cleanup_test_logs() {
+    # Remove all test and diff log files before running tests
+    rm -f "$SCRIPT_DIR"/test-*.log
+    rm -f "$SCRIPT_DIR"/diff-*.log
+    rm -f "$SCRIPT_DIR"/.aur-generator.lock
+}
+
 # --- Functions ---
 # Minimal help for scripts/AUR helpers
 usage() {
@@ -488,8 +495,7 @@ case "$MODE" in
     test)
         log "[test] Running all modes in dry-run mode to check for errors."
         log "[test] Cleaning up old test logs..."
-        rm -f "$SCRIPT_DIR"/test-*.log
-        rm -f "$SCRIPT_DIR"/.aur-generator.lock
+        cleanup_test_logs
         log "[test] Old test logs removed."
         TEST_ERRORS=0
         # Run the test mode (rely only on --dry-run flag, do not export DRY_RUN)
