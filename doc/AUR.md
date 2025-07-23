@@ -137,6 +137,9 @@ This will:
 - Set `GPG_KEY_ID` to avoid GPG key selection prompts.
 - Use `--dry-run` to test without installing packages (must be before the mode).
 
+> **Prompt Handling and CI Safety:**
+> All interactive prompts in this script always supply a default value. This ensures that, even in CI or headless environments (when `CI=1`), the default is automatically selected and the corresponding variable is always set. This design prevents failures due to unset variables and is intentional for robust automation. If you add new prompts, always supply a default value to maintain this guarantee.
+
 > **Prompt Skipping in CI:**
 > When `CI=1` is set, all interactive prompts are skipped. If a prompt has a default value, it is automatically selected. If no default is provided, the prompt is skipped and the function returns a non-zero exit code (1), which may be checked by the script to determine how to proceed. This shortcut is relied upon in some automation code paths.
 
@@ -191,59 +194,4 @@ The script supports several environment variables for automation:
 - Verifies upload success before proceeding.
 
 ### Installation
-- For `aur` mode: Prompts before running `makepkg -si` (unless `CI=1` or `AUTO=y`).
-- For other modes: Automatically runs `makepkg -si`.
-- Respects `--dry-run` flag to skip installation (must be before the mode).
-
-## Requirements
-
-### Required Tools
-- `bash` **version 4 or newer** (the script will exit with an error if run on Bash 3 or earlier)
-- `makepkg` (from `pacman`)
-- `updpkgsums` (from `pacman-contrib`)
-- `curl` (for checking GitHub assets)
-- `getopt` (GNU version from util-linux; the script will not work with BSD/macOS getopt)
-- **Tool Hints:** If a required tool is missing, the script will print a hint with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums).
-
-> **Warning:** `pacman-contrib` is not included in the `base-devel` group on Arch Linux. You must install it separately, or you will get a `updpkgsums: command not found` error when building or packaging.
-
-### Optional Tools
-- `gpg` (required for `aur` mode signing)
-- `gh` (GitHub CLI, for automatic asset upload)
-
-### Files
-- `PKGBUILD.0` template file in `aur/` directory
-
-## Notes for AUR Maintainers
-
-- Always update `PKGVER` in `PKGBUILD.0` for new releases.
-- The script expects `PKGBUILD.0` to exist and be up to date.
-- The script will fail if required tools or the template are missing.
-- For CI or automation, set `GPG_KEY_ID` to avoid interactive prompts.
-- For CI or automation with automatic asset upload, set `AUTO=y` to skip upload prompts.
-- For CI environments, set `CI=1` to skip all interactive prompts.
-- Use `./aur-generator.sh test` to verify all modes work correctly before making changes or releases.
-- The script automatically handles both 'v' and non-'v' prefixed GitHub release URLs.
-- VCS packages (`aur-git` mode) automatically set `sha256sums=('SKIP')` and add `validpgpkeys`.
-- All environment variables are documented in the script's usage function (`./aur-generator.sh` without arguments).
-- Use `--ascii-armor` or `-a` to create ASCII-armored signatures (.asc) instead of binary signatures (.sig) for better compatibility with some AUR helpers (must be before the mode).
-
-## Error Handling
-
-- Comprehensive error checking for missing tools, files, and GPG keys.
-- Graceful fallback for GitHub asset URLs (tries both with and without 'v' prefix).
-- Clear error messages with actionable instructions.
-- Test mode provides detailed error reporting for all modes.
-
-## Argument Parsing: Why We Use 'eval set --'
-
-The script uses GNU getopt for robust option parsing. To correctly handle quoted arguments and avoid subtle bugs (such as modes being passed with extra quotes), we use:
-
-```bash
-eval set -- "$getopt_output"
-```
-
-This is the recommended approach (see: https://mywiki.wooledge.org/BashFAQ/035) because it ensures that all arguments are split and quoted as the user intended, even if they contain spaces or special characters. Avoid using array-based splitting (e.g., `read -ra`) on getopt output, as it can introduce quoting bugs and break mode detection. This fix was introduced after a bug where the mode was parsed as `'lint'` (with quotes) instead of `lint`, causing the script to reject valid modes.
-
----
-For more details, see the comments in `
+- For `aur` mode: Prompts before running `makepkg -si` (unless `CI=1` or `AUTO=y`
