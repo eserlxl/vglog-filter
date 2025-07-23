@@ -46,6 +46,10 @@
 - **`clean`**: Remove all generated files and directories in the `aur/` folder, including tarballs, signatures, PKGBUILD, .SRCINFO, and build artifacts.
 - **`test`**: Run all modes (local, aur, aur-git) in dry-run mode to check for errors and report results. Useful for verifying all modes work correctly without performing actual operations.
 - **`lint`**: Run `shellcheck` and `bash -n` on `aur-generator.sh` itself. This is a quick self-test/linting mode for CI or local development. Exits with nonzero status if any check fails. Example:
+  ```sh
+  ./aur-generator.sh lint
+  ```
+  This will run both tools and print a summary. If `shellcheck` is not installed, it will be skipped with a warning.
 - **`golden`**: Regenerate the golden PKGBUILD files in `test/fixtures/` for test comparison. This is used to update the reference PKGBUILD files that are compared in test mode.
 
 ### Options
