@@ -822,38 +822,98 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         # Fix: Append tarball URL to source=(), robustly handling multiline arrays and preserving extra sources
         set_signature_ext
         TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
-        # Remove any stray quotes from GH_USER or PKGNAME
         TARBALL_URL="${TARBALL_URL//\"/}"
-        awk -v tarball_url="$TARBALL_URL" '
-            BEGIN { in_source=0; new_source_line=""; }
-            /^source=\(/ {
-                in_source=1;
-                # Properly quote tarball_url for PKGBUILD
-                printf "source=(\"%s\")\n", tarball_url;
-                next
-            }
-            in_source && /\)/ {
-                in_source=0;
-                # Remove closing parenthesis from the line
-                sub(/\)/, "");
-                # Print any remaining sources/comments on this line
-                if (length($0) > 0) {
-                    # Remove leading/trailing whitespace
-                    gsub(/^ +| +$/, "");
-                    if (length($0) > 0) print $0;
-                }
-                print ")";
-                print "# <<< aur-generator >>>";
-                next
-            }
-            in_source {
-                # Print all lines inside the array (sources, comments)
-                print;
-                next
-            }
-            { print }
-        ' "$PKGBUILD" >| "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
-        log "[aur] Appended tarball URL to source array in PKGBUILD (preserves extra sources and comments)."
+        asset_exists=1
+        # Check if the tarball exists on GitHub before running updpkgsums
+        if command -v gh >/dev/null 2>&1; then
+            ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets 2>/dev/null | jq '.assets[].name')
+            if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
+                asset_exists=0
+            fi
+        else
+            CURL_OUTPUT=$(curl -sSf -L -w '%{http_code}' -o /dev/null "$TARBALL_URL" 2>&1)
+            if ! [[ "$CURL_OUTPUT" =~ 200$ ]]; then
+                asset_exists=0
+            fi
+        fi
+        if (( asset_exists == 0 )); then
+            warn "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
+            TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
+            asset_exists=1
+            if command -v gh >/dev/null 2>&1; then
+                ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets 2>/dev/null | jq '.assets[].name')
+                if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
+                    asset_exists=0
+                fi
+            else
+                CURL_OUTPUT=$(curl -sSf -L -w '%{http_code}' -o /dev/null "$TARBALL_URL" 2>&1)
+                if ! [[ "$CURL_OUTPUT" =~ 200$ ]]; then
+                    asset_exists=0
+                fi
+            fi
+            if (( asset_exists == 0 )); then
+                # Asset not found - offer to upload automatically if gh CLI is available
+                if command -v gh >/dev/null 2>&1; then
+                    warn "[aur] Release asset not found. GitHub CLI (gh) detected."
+                    if [[ "${AUTO:-}" == "y" ]]; then
+                        upload_choice="y"
+                    else
+                        # Default is always supplied to prompt; variable will always be set, even in CI/headless mode.
+                        prompt "Do you want to upload the tarball and signature to GitHub releases automatically? [y/N] " upload_choice n
+                    fi
+                    if [[ "$upload_choice" =~ ^[Yy]$ ]]; then
+                        set_signature_ext
+                        log "[aur] Uploading ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to GitHub release ${PKGVER}..."
+                        # Upload tarball
+                        gh_upload_or_exit "$OUTDIR/$TARBALL" "${GH_USER}/${PKGNAME}" "${PKGVER}"
+                        # Upload signature
+                        gh_upload_or_exit "$OUTDIR/$TARBALL$SIGNATURE_EXT" "${GH_USER}/${PKGNAME}" "${PKGVER}"
+                        if (( no_wait )); then
+                            echo "[aur] --no-wait flag set: Skipping post-upload wait for asset availability. (CI/advanced mode)" >&2
+                        else
+                            echo "[aur] Waiting for GitHub to propagate the uploaded asset (this may take some time due to CDN delay)..." >&2
+                            RETRIES=6
+                            DELAYS=(10 20 30 40 50 60)
+                            total_wait=0
+                            for ((i=1; i<=RETRIES; i++)); do
+                                DELAY=${DELAYS[$((i-1))]}
+                                if curl -I -L -f --silent "$TARBALL_URL" > /dev/null; then
+                                    log "[aur] Asset is now available on GitHub (after $i attempt(s))."
+                                    if (( total_wait > 0 )); then
+                                        echo "[aur] Total wait time: ${total_wait} seconds." >&2
+                                    fi
+                                    break
+                                else
+                                    if (( i < RETRIES )); then
+                                        echo "[aur] Asset not available yet (attempt $i/$RETRIES). Waiting $DELAY seconds..." >&2
+                                        sleep "$DELAY"
+                                        total_wait=$((total_wait + DELAY))
+                                    else
+                                        warn "[aur] Asset still not available after $RETRIES attempts. This is normal if GitHub CDN is slow."
+                                        echo "[aur] Please check the asset URL in your browser: $TARBALL_URL" >&2
+                                        echo "If the asset is available, you can continue. If not, wait a bit longer and refresh the page." >&2
+                                        prompt "Press Enter to continue when the asset is available (or Ctrl+C to abort)..." _
+                                    fi
+                                fi
+                            done
+                        fi
+                        echo "[aur] Note: After upload, makepkg will attempt to download the asset to generate checksums. If you see a download error, wait a few seconds and retry. This is normal due to GitHub CDN propagation." >&2
+                    else
+                        err "[aur] Release asset not found and automatic upload declined. Aborting."
+                        echo "After uploading the tarball manually, run: makepkg -g >> PKGBUILD to update checksums."
+                        exit 1
+                    fi
+                else
+                    err "[aur] ERROR: Release asset not found at either location. GitHub CLI (gh) not available for automatic upload."
+                    echo "Please install GitHub CLI (gh) or manually upload ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to the GitHub release page."
+                    echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
+                    exit 1
+                fi
+            fi
+        fi
+        # Only update the source array once, after the final TARBALL_URL is determined
+        update_source_array_in_pkgbuild "$PKGBUILD" "$TARBALL_URL"
+        log "[aur] Set tarball URL in source array in PKGBUILD (single authoritative update)."
         # Check if the tarball exists on GitHub before running updpkgsums
         asset_exists=1
         if command -v gh >/dev/null 2>&1; then
