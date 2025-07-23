@@ -277,11 +277,24 @@ SRCINFO="$SCRIPT_DIR/.SRCINFO"
 # Only create the tarball for aur and local modes
 if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     cd "$PROJECT_ROOT"
+    # Determine the git reference to use for archiving
+    # Try to use the tag that matches pkgver first, fall back to HEAD if tag doesn't exist
+    GIT_REF="HEAD"
+    if git -C "$PROJECT_ROOT" rev-parse "v${PKGVER}" >/dev/null 2>&1; then
+        GIT_REF="v${PKGVER}"
+        log "[$MODE] Using tag v${PKGVER} for archiving"
+    elif git -C "$PROJECT_ROOT" rev-parse "${PKGVER}" >/dev/null 2>&1; then
+        GIT_REF="${PKGVER}"
+        log "[$MODE] Using tag ${PKGVER} for archiving"
+    else
+        warn "[$MODE] Warning: No tag found for version ${PKGVER}, using HEAD (this may cause checksum mismatches)"
+    fi
+    
     # Use git archive to create the release tarball, including only tracked files
     # This avoids hand-maintaining exclude lists by respecting .gitignore
-    git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" HEAD | \
+    git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$GIT_REF" | \
         gzip -n > "$OUTDIR/$TARBALL"
-    log "Created $OUTDIR/$TARBALL"
+    log "Created $OUTDIR/$TARBALL using $GIT_REF"
 
     # Create GPG signature for aur mode only
     if [[ "$MODE" == "aur" ]]; then
