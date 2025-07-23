@@ -536,6 +536,8 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     # --- pkgrel bump logic for aur mode ---
     if [[ "$MODE" == "aur" ]]; then
         # --- Begin flock-protected critical section for pkgrel bump ---
+        # Use exclusive flock to ensure only one process can bump pkgrel at a time.
+        # The lockfile is not written to, but exclusive lock prevents race conditions.
         LOCKFILE="$SCRIPT_DIR/PKGBUILD.lock"
         (
             flock 200
@@ -565,7 +567,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             fi
             # Update pkgrel in the new PKGBUILD
             awk -v new_pkgrel="$NEW_PKGREL" 'BEGIN{done=0} /^[[:space:]]*pkgrel[[:space:]]*=/ && !done {print "pkgrel=" new_pkgrel; done=1; next} {print}' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
-            trap -p RETURN &>/dev/null && trap - RETURN
+            trap - RETURN
         ) 200>"$LOCKFILE"
         # --- End flock-protected critical section ---
     fi
