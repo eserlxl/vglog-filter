@@ -13,8 +13,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 readonly PROJECT_ROOT
-COLOR=1
-ASCII_ARMOR=0
 # VALID_MODES is used for validation in the usage function and mode checking
 VALID_MODES=(local aur aur-git clean test)
 
@@ -98,7 +96,7 @@ install_pkg() {
 }
 
 function usage() {
-    log "Usage: $0 [--no-color|-n] [--ascii-armor|-a] [local|aur|aur-git|clean|test] [--dry-run|-d]"
+    log "Usage: $0 [--no-color|-n] [--ascii-armor|-a] [--dry-run|-d] <mode>"
     echo
     log "Modes:"
     log "  local     Build and install the package from a local tarball (for testing)."
@@ -107,12 +105,13 @@ function usage() {
     log "  clean     Remove all generated files and directories"
     log "  test      Run all modes in dry-run mode to check for errors and report results"
     echo
-    log "Options:"
-    log "  --no-color, -n   Disable colored output (also supported via NO_COLOR env variable)"
-    log "  --ascii-armor, -a Use ASCII-armored signatures (.asc) instead of binary (.sig) for GPG signing"
-    log "  --dry-run, -d    Run all steps except the final makepkg -si (for CI/testing)"
+    log "Options (must appear before the mode):"
+    log "  --no-color, -n     Disable colored output (also supported via NO_COLOR env variable)"
+    log "  --ascii-armor, -a  Use ASCII-armored signatures (.asc) instead of binary (.sig) for GPG signing"
+    log "  --dry-run, -d      Run all steps except the final makepkg -si (for CI/testing)"
     echo
     log "Notes:"
+    log "- Flags must appear before the mode (e.g., $0 -n --dry-run aur)."
     log "- Requires PKGBUILD.0 as the template for PKGBUILD generation."
     log "- For 'aur' mode, a GPG secret key is required for signing the tarball."
     log "- For 'aur' and 'local' modes, the script will attempt to update checksums and .SRCINFO."
@@ -121,7 +120,7 @@ function usage() {
     log "    GPG_KEY_ID=ABCDEF ./aur-generator.sh aur"
     log "- To disable colored output, set NO_COLOR=1 or use --no-color/-n."
     log "- To use ASCII-armored signatures (.asc), use --ascii-armor/-a (some AUR helpers prefer this format)."
-    log "- To test the script without running makepkg -si, add --dry-run or -d as the second argument."
+    log "- To test the script without running makepkg -si, add --dry-run or -d as a flag before the mode."
     log "- If GitHub CLI (gh) is installed, the script can automatically upload missing release assets."
     log "- To skip the automatic upload prompt in 'aur' mode, set AUTO=y:"
     log "    AUTO=y ./aur-generator.sh aur"
@@ -132,42 +131,28 @@ function usage() {
 }
 
 # --- Main Logic ---
-# Colorized log helpers (disable color if NO_COLOR is set or --no-color/-n is passed)
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --no-color|-n)
-            COLOR=0
-            shift
-            ;;
-        --ascii-armor|-a)
-            ASCII_ARMOR=1
-            shift
-            ;;
-        *)
-            break
-            ;;
+# --- Flag parsing (replace current while loop) ---
+DRY_RUN=0
+ASCII_ARMOR=0
+COLOR=1
+while getopts ":nad-:" opt; do
+    case "$opt" in
+        n) COLOR=0 ;;
+        a) ASCII_ARMOR=1 ;;
+        d) DRY_RUN=1 ;;
+        -) case "${OPTARG}" in
+               no-color) COLOR=0 ;;
+               ascii-armor) ASCII_ARMOR=1 ;;
+               dry-run) DRY_RUN=1 ;;
+               *) err "Unknown option --${OPTARG}"; usage ;;
+           esac ;;
+        \?) err "Unknown option -$OPTARG"; usage ;;
     esac
 done
-if [[ -n "${NO_COLOR:-}" ]]; then
-    COLOR=0
-fi
-
-if [[ $# -lt 1 || $# -gt 2 ]]; then
+shift $((OPTIND-1))
+MODE=${1:-}
+if [[ -z $MODE ]]; then
     usage
-fi
-
-MODE="$1"
-DRY_RUN=0
-if [[ $# -eq 2 ]]; then
-    case "$2" in
-        --dry-run|-d)
-            DRY_RUN=1
-            ;;
-        *)
-            err "Unknown second argument: $2"
-            usage
-            ;;
-    esac
 fi
 
 # Validate mode against VALID_MODES array

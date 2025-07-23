@@ -10,8 +10,10 @@
 ## Usage
 
 ```sh
-./aur-generator.sh [--no-color|-n] [--ascii-armor|-a] [local|aur|aur-git|clean|test] [--dry-run|-d]
+./aur-generator.sh [--no-color|-n] [--ascii-armor|-a] [--dry-run|-d] <mode>
 ```
+
+> **Note:** All flags/options must appear before the mode. For example: `./aur-generator.sh -n --dry-run aur`. Flags after the mode are not supported.
 
 ### Modes
 
@@ -27,11 +29,21 @@
 - **`--ascii-armor`, `-a`**: Use ASCII-armored signatures (.asc) instead of binary signatures (.sig) for GPG signing. Some AUR helpers (like aurutils) prefer ASCII-armored signatures.
 - **`--dry-run`, `-d`**: Run all steps except the final `makepkg -si` (useful for CI/testing).
 
+> **Important:** All options/flags must be specified before the mode. For example:
+> ```sh
+> ./aur-generator.sh --no-color --ascii-armor --dry-run aur
+> ./aur-generator.sh -n -a -d aur
+> ```
+> The following is **not** supported:
+> ```sh
+> ./aur-generator.sh aur --dry-run   # Not supported
+> ```
+
 ### Disabling Colored Output
 
 You can disable colored output in two ways:
 
-- By passing the `--no-color` or `-n` option:
+- By passing the `--no-color` or `-n` option **before the mode**:
   ```sh
   ./aur-generator.sh --no-color aur
   ```
@@ -45,7 +57,7 @@ You can disable colored output in two ways:
 
 By default, the script creates binary GPG signatures (.sig files). Some AUR helpers and maintainers prefer ASCII-armored signatures (.asc files) for better compatibility and readability.
 
-To use ASCII-armored signatures, add the `--ascii-armor` or `-a` option:
+To use ASCII-armored signatures, add the `--ascii-armor` or `-a` option **before the mode**:
 
 ```sh
 ./aur-generator.sh --ascii-armor aur
@@ -97,7 +109,7 @@ This will:
 - Set `CI=1` to skip interactive prompts in `aur` mode (automatically skips `makepkg -si` prompt).
 - Set `AUTO=y` to skip the GitHub asset upload prompt.
 - Set `GPG_KEY_ID` to avoid GPG key selection prompts.
-- Use `--dry-run` to test without installing packages.
+- Use `--dry-run` to test without installing packages (must be before the mode).
 
 ### Environment Variables
 
@@ -140,7 +152,7 @@ The script supports several environment variables for automation:
 ### Installation
 - For `aur` mode: Prompts before running `makepkg -si` (unless `CI=1` or `AUTO=y`).
 - For other modes: Automatically runs `makepkg -si`.
-- Respects `--dry-run` flag to skip installation.
+- Respects `--dry-run` flag to skip installation (must be before the mode).
 
 ## Requirements
 
@@ -168,7 +180,7 @@ The script supports several environment variables for automation:
 - The script automatically handles both 'v' and non-'v' prefixed GitHub release URLs.
 - VCS packages (`aur-git` mode) automatically set `sha256sums=('SKIP')` and add `validpgpkeys`.
 - All environment variables are documented in the script's usage function (`./aur-generator.sh` without arguments).
-- Use `--ascii-armor` or `-a` to create ASCII-armored signatures (.asc) instead of binary signatures (.sig) for better compatibility with some AUR helpers.
+- Use `--ascii-armor` or `-a` to create ASCII-armored signatures (.asc) instead of binary signatures (.sig) for better compatibility with some AUR helpers (must be before the mode).
 
 ## Error Handling
 
