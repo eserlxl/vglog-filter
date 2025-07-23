@@ -112,9 +112,8 @@ color_enabled=${COLOR:-1}  # safe default, must be set before any error handling
 set -o noclobber  # Prevent accidental file overwrite with > redirection
 # --- Tiny Helper Functions (moved to top for trap consistency) ---
 err() {
-    trap - ERR
     (( color_enabled )) && printf '%b%s%b\n' "$RED" "$*" "$RESET" || printf '%s\n' "$*" >&2
-    trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
+    exit 1
 }
 gh_upload_or_exit() {
     local file="$1"
