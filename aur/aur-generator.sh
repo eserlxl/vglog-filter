@@ -476,19 +476,20 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         exit 0
     fi
 elif [[ "$MODE" == "aur-git" ]]; then
-    # Generate PKGBUILD.git from PKGBUILD.0
-    cp -f "$PKGBUILD0" "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i 's/^pkgname=.*/pkgname=vglog-filter-git/' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -E -i 's|^source=\(.*\)|source=("git+https://github.com/eserlxl/vglog-filter.git#branch=main")|' "$SCRIPT_DIR/PKGBUILD.git"
-    # Remove any b2sums or sha256sums lines
-    sed -i '/^b2sums=/d' "$SCRIPT_DIR/PKGBUILD.git"
-    sed -i '/^sha256sums=/d' "$SCRIPT_DIR/PKGBUILD.git"
-    # Insert sha256sums=('SKIP') after the source= line using awk -v
-    awk -v sums="sha256sums=('SKIP')" '/^source=/ { print; print sums; next } { print }' "$SCRIPT_DIR/PKGBUILD.git" > "$SCRIPT_DIR/PKGBUILD.git.tmp" && mv "$SCRIPT_DIR/PKGBUILD.git.tmp" "$SCRIPT_DIR/PKGBUILD.git"
-    # shellcheck disable=SC2016
-    # We want to replace the literal text '${pkgname}-${pkgver}' in the PKGBUILD template, not expand shell variables.
-    sed -i 's|\${pkgname}-\${pkgver}|\${pkgname%-git}|g; s|\$pkgname-\$pkgver|\${pkgname%-git}|g' "$SCRIPT_DIR/PKGBUILD.git"
-    # Remove the global replacements for ${pkgname}-${pkgver} and $pkgname-$pkgver to avoid affecting comments
+    # Generate PKGBUILD.git from PKGBUILD.0 using a single awk pass
+    awk '
+        BEGIN { sums = "sha256sums=(\'SKIP\')" }
+        /^pkgname=/ {
+            print "pkgname=vglog-filter-git"; next
+        }
+        /^source=/ {
+            print "source=(\"git+https://github.com/eserlxl/vglog-filter.git#branch=main\")";
+            print sums;
+            next
+        }
+        /^b2sums=/ || /^sha256sums=/ { next }
+        { gsub(/\${pkgname}-\${pkgver}|\$pkgname-\$pkgver/, "${pkgname%-git}"); print }
+    ' "$PKGBUILD0" > "$SCRIPT_DIR/PKGBUILD.git"
     # Insert pkgver() as before if missing
     if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
         awk -v pkgver_func='pkgver() {
