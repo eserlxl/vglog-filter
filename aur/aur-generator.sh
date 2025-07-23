@@ -465,31 +465,39 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     log "[$MODE] PKGBUILD.0 copied to PKGBUILD."
     # --- pkgrel bump logic for aur mode ---
     if [[ "$MODE" == "aur" ]]; then
-        OLD_PKGVER=""
-        OLD_PKGREL=""
-        if [[ -s "$PKGBUILD" ]]; then
-            cp "$PKGBUILD" "$PKGBUILD.bak"
-            trap 'rm -f "$PKGBUILD.bak"' RETURN
-            OLD_PKGVER=$(awk -F= '/^[[:space:]]*pkgver[[:space:]]*=/ {print $2}' "$PKGBUILD.bak" | tr -d "\"'[:space:]")
-            OLD_PKGREL=$(awk -F= '/^[[:space:]]*pkgrel[[:space:]]*=/ {print $2}' "$PKGBUILD.bak" | tr -d "\"'[:space:]")
-        fi
-        NEW_PKGREL=1
-        if [[ -n "$OLD_PKGVER" && -n "$OLD_PKGREL" ]]; then
-            if [[ "$OLD_PKGVER" == "$PKGVER" ]]; then
-                # Same version, bump pkgrel
-                NEW_PKGREL=$((OLD_PKGREL + 1))
-                log "[aur] pkgver unchanged ($PKGVER), bumping pkgrel to $NEW_PKGREL."
-            else
-                # New version, reset pkgrel
-                NEW_PKGREL=1
-                log "[aur] pkgver changed ($OLD_PKGVER -> $PKGVER), setting pkgrel to 1."
+        # --- Begin flock-protected critical section for pkgrel bump ---
+        LOCKFILE="$SCRIPT_DIR/PKGBUILD.lock"
+        (
+            flock 200
+            OLD_PKGVER=""
+            OLD_PKGREL=""
+            cp -f "$PKGBUILD0" "$PKGBUILD"
+            log "[$MODE] PKGBUILD.0 copied to PKGBUILD. (locked)"
+            if [[ -s "$PKGBUILD" ]]; then
+                cp "$PKGBUILD" "$PKGBUILD.bak"
+                trap 'rm -f "$PKGBUILD.bak"' RETURN
+                OLD_PKGVER=$(awk -F= '/^[[:space:]]*pkgver[[:space:]]*=/ {print $2}' "$PKGBUILD.bak" | tr -d "\"'[:space:]")
+                OLD_PKGREL=$(awk -F= '/^[[:space:]]*pkgrel[[:space:]]*=/ {print $2}' "$PKGBUILD.bak" | tr -d "\"'[:space:]")
             fi
-        else
-            log "[aur] No previous PKGBUILD found, setting pkgrel to 1."
-        fi
-        # Update pkgrel in the new PKGBUILD
-        awk -v new_pkgrel="$NEW_PKGREL" 'BEGIN{done=0} /^[[:space:]]*pkgrel[[:space:]]*=/ && !done {print "pkgrel=" new_pkgrel; done=1; next} {print}' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
-        trap -p RETURN &>/dev/null && trap - RETURN
+            NEW_PKGREL=1
+            if [[ -n "$OLD_PKGVER" && -n "$OLD_PKGREL" ]]; then
+                if [[ "$OLD_PKGVER" == "$PKGVER" ]]; then
+                    # Same version, bump pkgrel
+                    NEW_PKGREL=$((OLD_PKGREL + 1))
+                    log "[aur] pkgver unchanged ($PKGVER), bumping pkgrel to $NEW_PKGREL. (locked)"
+                else
+                    # New version, reset pkgrel
+                    NEW_PKGREL=1
+                    log "[aur] pkgver changed ($OLD_PKGVER -> $PKGVER), setting pkgrel to 1. (locked)"
+                fi
+            else
+                log "[aur] No previous PKGBUILD found, setting pkgrel to 1. (locked)"
+            fi
+            # Update pkgrel in the new PKGBUILD
+            awk -v new_pkgrel="$NEW_PKGREL" 'BEGIN{done=0} /^[[:space:]]*pkgrel[[:space:]]*=/ && !done {print "pkgrel=" new_pkgrel; done=1; next} {print}' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
+            trap -p RETURN &>/dev/null && trap - RETURN
+        ) 200>"$LOCKFILE"
+        # --- End flock-protected critical section ---
     fi
     if [[ "$MODE" == "aur" ]]; then
         # Fix: Replace source=() with correct URL, robustly handling multiline arrays
