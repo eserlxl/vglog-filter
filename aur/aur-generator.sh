@@ -28,6 +28,7 @@ export GPG_TTY
 # color_enabled is set from env or default, but will be overridden by CLI options below
 # Remove unreachable Bash version check for color_enabled
 set -euo pipefail
+color_enabled=${COLOR:-1}  # safe default, must be set before any error handling
 set -o noclobber  # Prevent accidental file overwrite with > redirection
 # --- Tiny Helper Functions (moved to top for trap consistency) ---
 err() {
@@ -307,7 +308,7 @@ fi
 # (No longer using read/array idiom)
 eval set -- "$getopt_output"
 # Set color_enabled default from environment, will be overridden by CLI flags
-color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
+# color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
 while true; do
     case "$1" in
         -n|--no-color)
