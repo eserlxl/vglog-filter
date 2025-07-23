@@ -235,30 +235,26 @@ case "$MODE" in
     test)
         log "[test] Running all modes in dry-run mode to check for errors."
         TEST_ERRORS=0
-        
+        TEMP_DIRS=()
+        trap 'for d in "${TEMP_DIRS[@]}"; do rm -rf "$d"; done' EXIT
         # Test each mode
         for test_mode in local aur aur-git; do
             log "--- Testing $test_mode mode ---"
-            
             # Always run clean before each test
             log "[test] Running clean before $test_mode test..."
             if ! bash "$SCRIPT_DIR/aur-generator.sh" clean > /dev/null 2>&1; then
                 warn "[test] Warning: Clean failed for $test_mode test, but continuing..."
             fi
-            
             # Create a temporary directory for this test
             TEMP_DIR=$(mktemp -d)
-            trap 'rm -rf "$TEMP_DIR"' EXIT
+            TEMP_DIRS+=("$TEMP_DIR")
             cd "$TEMP_DIR"
-            
             # Set up test environment
             export CI=1  # Skip prompts
-            
             # For aur mode, set a dummy GPG key to avoid prompts
             if [[ "$test_mode" == "aur" ]]; then
                 export GPG_KEY_ID="TEST_KEY_FOR_DRY_RUN"
             fi
-            
             # Run the test mode (rely only on --dry-run flag, do not export DRY_RUN)
             if bash "$SCRIPT_DIR/aur-generator.sh" "$test_mode" --dry-run > "$TEMP_DIR/test_output.log" 2>&1; then
                 log "[test] ✓ $test_mode mode passed"
@@ -271,12 +267,10 @@ case "$MODE" in
                     cat "$TEMP_DIR/test_output.log" >&2
                 fi
             fi
-            
             # Clean up
             cd "$SCRIPT_DIR"
-            # Manual rm -rf "$TEMP_DIR" is now handled by trap
+            # Manual rm -rf "$TEMP_DIR" is now handled by the outer trap
         done
-        
         # Report results
         if [[ $TEST_ERRORS -eq 0 ]]; then
             log "[test] ✓ All test modes passed successfully!"
