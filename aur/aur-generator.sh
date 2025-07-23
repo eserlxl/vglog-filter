@@ -17,9 +17,13 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
-PKGBUILD="$SCRIPT_DIR/PKGBUILD"
-SRCINFO="$SCRIPT_DIR/.SRCINFO"
+readonly PKGBUILD0
 OUTDIR="$SCRIPT_DIR"
+readonly OUTDIR
+PKGBUILD="$OUTDIR/PKGBUILD"
+readonly PKGBUILD
+SRCINFO="$OUTDIR/.SRCINFO"
+readonly SRCINFO
 export PKGBUILD0 PKGBUILD SRCINFO OUTDIR
 
 # --- Constants (grouped at top, all readonly) ---
@@ -469,9 +473,6 @@ case "$MODE" in
     clean)
         log "[clean] Remove generated files and directories."
         # Clean mode does not require PKGVER or PKGBUILD0
-        OUTDIR="$SCRIPT_DIR"
-        PKGBUILD="$SCRIPT_DIR/PKGBUILD"
-        SRCINFO="$SCRIPT_DIR/.SRCINFO"
         shopt -s nullglob
         # Create separate arrays for tarballs and signatures to avoid duplicate glob expansion
         TARBALLS=("$SCRIPT_DIR/${PKGNAME}-"*.tar.gz)
@@ -647,11 +648,6 @@ fi
 readonly PKGVER
 TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
 readonly TARBALL
-OUTDIR="$SCRIPT_DIR"
-readonly OUTDIR
-PKGBUILD="$SCRIPT_DIR/PKGBUILD"
-SRCINFO="$SCRIPT_DIR/.SRCINFO"
-export PKGBUILD0 PKGBUILD SRCINFO OUTDIR
 
 # Only create the tarball for aur and local modes
 if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
