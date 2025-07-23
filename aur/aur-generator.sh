@@ -19,29 +19,6 @@ set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
 # Note: set -E implies errtrace in Bash >=4.4, but older Bash may not propagate ERR trap into all subshells.
 trap 'err "[FATAL] ${BASH_SOURCE[1]}:${BASH_LINENO[0]}: $BASH_COMMAND"' ERR
 
-# --- Config / Constants ---
-declare -r PKGNAME="vglog-filter"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-declare -r SCRIPT_DIR
-SCRIPT_NAME=$(basename "$0")
-declare -r SCRIPT_NAME
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-declare -r PROJECT_ROOT
-# Determine GH_USER: environment > PKGBUILD.0 url > fallback
-if [[ -z "${GH_USER:-}" ]]; then
-    PKGBUILD0_URL=$(awk -F'="' '/^url="https:\/\/github.com\// {print $2}' "$SCRIPT_DIR/PKGBUILD.0" | cut -d'/' -f4)
-    if [[ -n "$PKGBUILD0_URL" ]]; then
-        GH_USER="$PKGBUILD0_URL"
-    else
-        GH_USER="eserlxl"
-        warn "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'."
-    fi
-fi
-declare -r GH_USER
-# VALID_MODES is used for validation in the usage function and mode checking
-# shellcheck disable=SC2034
-declare -a VALID_MODES=(local aur aur-git clean test)
-
 # --- Functions ---
 # Color variables (set once if tput is available)
 if command -v tput >/dev/null 2>&1; then
@@ -169,44 +146,28 @@ install_pkg() {
     fi
 }
 
-function usage() {
-    log "Usage: $0 [--no-color|-n] [--ascii-armor|-a] [--dry-run|-d] <mode>"
-    printf '\n'
-    log "Modes:"
-    log "  local     Build and install the package from a local tarball (for testing)."
-    log "  aur       Prepare a release tarball, sign it with GPG, and update PKGBUILD for AUR upload."
-    log "  aur-git   Generate a PKGBUILD for the -git (VCS) AUR package and optionally install it (no tarball/signing)."
-    log "  clean     Remove all generated files and directories"
-    log "  test      Run all modes in dry-run mode to check for errors and report results"
-    printf '\n'
-    log "Options (must appear before the mode, parsed with getopt):"
-    log "  --no-color, -n     Disable colored output (also supported via NO_COLOR env variable)"
-    log "  --ascii-armor, -a  Use ASCII-armored signatures (.asc) instead of binary (.sig) for GPG signing"
-    log "  --dry-run, -d      Run all steps except the final makepkg -si (for CI/testing)"
-    log "                   (can also be set via DRY_RUN=1 environment variable)"
-    printf '\n'
-    log "Notes:"
-    log "- All options must appear before the mode (e.g., $0 -n --dry-run aur)."
-    log "- Both short and long options are supported and parsed using getopt for robustness."
-    log "- Requires PKGBUILD.0 as the template for PKGBUILD generation."
-    log "- For 'aur' mode, a GPG secret key is required for signing the tarball."
-    log "- For 'aur' and 'local' modes, the script will attempt to update checksums and .SRCINFO."
-    log "- For 'aur-git' mode, checksums are set to 'SKIP' (required for VCS packages)."
-    log "- To skip the GPG key selection menu in 'aur' mode, set GPG_KEY_ID to your key's ID:"
-    log "    GPG_KEY_ID=ABCDEF ./aur-generator.sh aur"
-    log "- To disable colored output, set NO_COLOR=1 or use --no-color/-n."
-    log "- To use ASCII-armored signatures (.asc), use --ascii-armor/-a (some AUR helpers prefer this format)."
-    log "- To test the script without running makepkg -si, add --dry-run or -d as a flag before the mode."
-    log "  Alternatively, set DRY_RUN=1 in the environment to enable dry-run mode."
-    log "- If GitHub CLI (gh) is installed, the script can automatically upload missing release assets."
-    log "- To skip the automatic upload prompt in 'aur' mode, set AUTO=y:"
-    log "    AUTO=y ./aur-generator.sh aur"
-    log "- To skip interactive prompts in 'aur' mode (for CI), set CI=1:"
-    log "    CI=1 ./aur-generator.sh aur"
-    log "- The 'test' mode runs all other modes in dry-run mode to verify they work correctly."
-    log "- Options are parsed using getopt for unified short and long option support."
-    exit 1
-}
+# --- Config / Constants ---
+declare -r PKGNAME="vglog-filter"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+declare -r SCRIPT_DIR
+SCRIPT_NAME=$(basename "$0")
+declare -r SCRIPT_NAME
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+declare -r PROJECT_ROOT
+# Determine GH_USER: environment > PKGBUILD.0 url > fallback
+if [[ -z "${GH_USER:-}" ]]; then
+    PKGBUILD0_URL=$(awk -F'="' '/^url="https:\/\/github.com\// {print $2}' "$SCRIPT_DIR/PKGBUILD.0" | cut -d'/' -f4)
+    if [[ -n "$PKGBUILD0_URL" ]]; then
+        GH_USER="$PKGBUILD0_URL"
+    else
+        GH_USER="eserlxl"
+        warn "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'."
+    fi
+fi
+declare -r GH_USER
+# VALID_MODES is used for validation in the usage function and mode checking
+# shellcheck disable=SC2034
+declare -a VALID_MODES=(local aur aur-git clean test)
 
 # --- Main Logic ---
 # Initialize variables from environment or defaults before flag parsing
