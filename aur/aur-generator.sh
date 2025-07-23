@@ -1065,7 +1065,7 @@ cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
 log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
 # Set validpgpkeys if missing
 if [[ -n "${GPG_KEY_ID:-}" ]]; then
-    grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || printf "validpgpkeys=('${GPG_KEY_ID}')\n" >> "$PKGBUILD"
+    grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || printf "validpgpkeys=('%s')\n" "$GPG_KEY_ID" >> "$PKGBUILD"
 fi
 # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
 # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
