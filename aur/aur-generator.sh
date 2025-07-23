@@ -559,9 +559,6 @@ fi
 cd "$SCRIPT_DIR" || exit 1
 
 if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
-    cp -f "$PKGBUILD0" "$PKGBUILD"
-    log "[aur] PKGBUILD.0 copied to PKGBUILD."
-    # --- pkgrel bump logic for aur mode ---
     if [[ "$MODE" == "aur" ]]; then
         # --- Begin flock-protected critical section for pkgrel bump ---
         # Use exclusive flock to ensure only one process can bump pkgrel at a time.
