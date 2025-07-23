@@ -257,7 +257,7 @@ case "$MODE" in
         ASC_SIGNATURES=("$SCRIPT_DIR/${PKGNAME}-"*.tar.gz.asc)
         # Combine arrays for removal
         files=("${TARBALLS[@]}" "${SIGNATURES[@]}" "${ASC_SIGNATURES[@]}")
-        echo "Cleaning AUR directory..."
+        log "Cleaning AUR directory..."
         if (( ${#files[@]} )); then
             rm -f -- "${files[@]}"
         fi
