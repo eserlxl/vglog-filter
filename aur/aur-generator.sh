@@ -457,6 +457,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     fi
     # Disable ERR trap in this subshell to avoid duplicate error messages from pipeline subshells (see Bash pipeline/trap behavior)
     (
+        unset CI
         trap '' ERR
         git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$ARCHIVE_MTIME" "$GIT_REF" | \
             gzip -n > "$OUTDIR/$TARBALL"
