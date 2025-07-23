@@ -128,13 +128,14 @@ function usage() {
     log "  clean     Remove all generated files and directories"
     log "  test      Run all modes in dry-run mode to check for errors and report results"
     echo
-    log "Options (must appear before the mode):"
+    log "Options (must appear before the mode, parsed with getopt):"
     log "  --no-color, -n     Disable colored output (also supported via NO_COLOR env variable)"
     log "  --ascii-armor, -a  Use ASCII-armored signatures (.asc) instead of binary (.sig) for GPG signing"
     log "  --dry-run, -d      Run all steps except the final makepkg -si (for CI/testing)"
     echo
     log "Notes:"
-    log "- Flags must appear before the mode (e.g., $0 -n --dry-run aur)."
+    log "- All options must appear before the mode (e.g., $0 -n --dry-run aur)."
+    log "- Both short and long options are supported and parsed using getopt for robustness."
     log "- Requires PKGBUILD.0 as the template for PKGBUILD generation."
     log "- For 'aur' mode, a GPG secret key is required for signing the tarball."
     log "- For 'aur' and 'local' modes, the script will attempt to update checksums and .SRCINFO."
@@ -150,6 +151,7 @@ function usage() {
     log "- To skip interactive prompts in 'aur' mode (for CI), set CI=1:"
     log "    CI=1 ./aur-generator.sh aur"
     log "- The 'test' mode runs all other modes in dry-run mode to verify they work correctly."
+    log "- Options are parsed using getopt for unified short and long option support."
     exit 1
 }
 
