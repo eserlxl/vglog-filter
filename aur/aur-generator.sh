@@ -148,7 +148,7 @@ if [[ -z "${GH_USER:-}" ]]; then
     else
         GH_USER="eserlxl"
         # warn is not available yet, so use printf
-        printf '[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'.\n' >&2
+        printf "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'.\n" >&2
     fi
 fi
 # Robustness: Detect if GH_USER is the same as PKGNAME (likely a mistake)
