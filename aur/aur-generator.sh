@@ -22,24 +22,30 @@ declare -r PROJECT_ROOT
 declare -a VALID_MODES=(local aur aur-git clean test)
 
 # --- Functions ---
-# Color helper function
+# Color variables (set once if tput is available)
+if command -v tput >/dev/null 2>&1; then
+    RED="$(tput setaf 1)$(tput bold)"
+    GREEN="$(tput setaf 2)$(tput bold)"
+    YELLOW="$(tput setaf 3)$(tput bold)"
+    RESET="$(tput sgr0)"
+else
+    RED='\e[1;31m'
+    GREEN='\e[1;32m'
+    YELLOW='\e[1;33m'
+    RESET='\e[0m'
+fi
+
 color_echo() {
     local color_code="$1"
     shift
     local msg="$*"
     if (( color_enabled )); then
-        if command -v tput >/dev/null 2>&1; then
-            case "$color_code" in
-                "1;31") tput setaf 1; tput bold ;; # Red bold
-                "1;32") tput setaf 2; tput bold ;; # Green bold
-                "1;33") tput setaf 3; tput bold ;; # Yellow bold
-                *) tput sgr0 ;;
-            esac
-            printf '%s\n' "$msg"
-            tput sgr0
-        else
-            printf '\e[%sm%s\e[0m\n' "$color_code" "$msg"
-        fi
+        case "$color_code" in
+            "1;31") printf "%b%s%b\n" "$RED" "$msg" "$RESET" ;;
+            "1;32") printf "%b%s%b\n" "$GREEN" "$msg" "$RESET" ;;
+            "1;33") printf "%b%s%b\n" "$YELLOW" "$msg" "$RESET" ;;
+            *) printf '%s\n' "$msg" ;;
+        esac
     else
         printf '%s\n' "$msg"
     fi
