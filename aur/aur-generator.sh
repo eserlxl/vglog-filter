@@ -54,7 +54,7 @@ declare -Ar PKG_HINT=(
 # Trap errors and print a helpful message with line number and command
 # set -E: Ensure ERR trap is inherited by functions and subshells (Bash >=4.4). For older Bash, enable errtrace explicitly.
 set -E
-shopt -s errtrace
+set -o errtrace  # Ensure ERR trap is inherited by functions and subshells (for maximum compatibility)
 trap 'err "[FATAL] ${RED}" "${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND" "${RESET}"' ERR
 
 # --- Functions ---
@@ -300,12 +300,12 @@ getopt_status=$?
 if (( getopt_status != 0 )); then
     err "Failed to parse options."; usage; exit 1
 fi
-if ! read -ra PARSED_OPTS <<< "$getopt_output"; then
-    err "Failed to parse options."; usage; exit 1
-fi
-# Note: set -- resets positional parameters to the parsed result
-# Use array-safe idiom to avoid word-splitting hazard (see shell scripting best practices)
-set -- "${PARSED_OPTS[@]}"
+# Use eval set -- for proper argument parsing
+# if ! read -ra PARSED_OPTS <<< "$getopt_output"; then
+#     err "Failed to parse options."; usage; exit 1
+# fi
+# set -- "${PARSED_OPTS[@]}"
+eval set -- "$getopt_output"
 # Set color_enabled default from environment, will be overridden by CLI flags
 color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
 while true; do
