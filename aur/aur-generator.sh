@@ -404,11 +404,11 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                 # Asset not found - offer to upload automatically if gh CLI is available
                 if command -v gh >/dev/null 2>&1; then
                     warn "[aur] Release asset not found. GitHub CLI (gh) detected."
-                                    if [[ "${AUTO:-}" == "y" ]]; then
-                    upload_choice="y"
-                else
-                    prompt "Do you want to upload the tarball and signature to GitHub releases automatically? [y/N] " upload_choice n
-                fi
+                    if [[ "${AUTO:-}" == "y" ]]; then
+                        upload_choice="y"
+                    else
+                        prompt "Do you want to upload the tarball and signature to GitHub releases automatically? [y/N] " upload_choice n
+                    fi
                     if [[ "$upload_choice" =~ ^[Yy]$ ]]; then
                         # Set signature file extension based on ASCII_ARMOR setting
                         if [[ $ascii_armor -eq 1 ]]; then
@@ -492,9 +492,9 @@ elif [[ "$MODE" == "aur-git" ]]; then
     # Insert pkgver() as before if missing
     if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
         awk -v pkgver_func='pkgver() {
-  cd "$srcdir/${pkgname%-git}"
-  git describe --long --tags 2>/dev/null | sed "s/^v//;s/-/./g" || \
-  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    cd "$srcdir/${pkgname%-git}"
+    git describe --long --tags 2>/dev/null | sed "s/^v//;s/-/./g" || \
+    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }' '
             /^source=/ {
                 print;
