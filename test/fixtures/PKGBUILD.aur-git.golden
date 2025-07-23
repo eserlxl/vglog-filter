@@ -33,5 +33,6 @@ build() {
 package() {
   cd "${srcdir}/vglog-filter"
   install -Dm755 build/vglog-filter "${pkgdir}/usr/bin/vglog-filter"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
 } 
 validpgpkeys=('TEST_KEY_FOR_DRY_RUN')
