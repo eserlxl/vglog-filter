@@ -19,7 +19,6 @@ GPG_TTY=$(tty)  # Needed for GPG signing to work reliably (pinentry) in CI/sudo
 export GPG_TTY
 
 # color_enabled is set from env or default, but will be overridden by CLI options below
-color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
 # Remove unreachable Bash version check for color_enabled
 set -euo pipefail
 set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
@@ -276,6 +275,8 @@ fi
 # Note: set -- resets positional parameters to the parsed result
 # Use array-safe idiom to avoid word-splitting hazard (see shell scripting best practices)
 set -- "${PARSED_OPTS[@]}"
+# Set color_enabled default from environment, will be overridden by CLI flags
+color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
 while true; do
     case "$1" in
         -n|--no-color)
@@ -292,6 +293,30 @@ while true; do
             err "Unknown option: $1"; usage; exit 1 ;;
     esac
 done
+# Now set color variables based on final color_enabled value
+HAVE_TPUT=0
+if command -v tput >/dev/null 2>&1; then
+    HAVE_TPUT=1
+fi
+if (( color_enabled )); then
+    if (( HAVE_TPUT )) && [[ -t 1 ]]; then
+        RED="$(tput setaf 1)$(tput bold)"
+        GREEN="$(tput setaf 2)$(tput bold)"
+        YELLOW="$(tput setaf 3)$(tput bold)"
+        RESET="$(tput sgr0)"
+    else
+        RED='\e[1;31m'
+        GREEN='\e[1;32m'
+        YELLOW='\e[1;33m'
+        RESET='\e[0m'
+    fi
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    RESET=''
+fi
+
 MODE=${1:-}
 if [[ -z $MODE ]]; then
     usage; exit 1
