@@ -55,13 +55,13 @@ else
     RESET=''
 fi
 # Use associative array for color codes (Bash >= 4 is required at script start)
-declare -A COL=(
-    [red]="$RED" [green]="$GREEN" [yellow]="$YELLOW"
-)
+# declare -A COL=(
+#     [red]="$RED" [green]="$GREEN" [yellow]="$YELLOW"
+# )
 
 # Trap errors and print a helpful message with line number and command
 # Note: set -E implies errtrace in Bash >=4.4, but older Bash may not propagate ERR trap into all subshells.
-trap 'err "[FATAL]  [36m${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND [0m"' ERR
+trap 'err "[FATAL] ${RED}${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND${RESET}"' ERR
 
 # --- Functions ---
 # Minimal help for scripts/AUR helpers
@@ -103,7 +103,12 @@ color_echo() {
     shift
     local msg="$*"
     if (( color_enabled )); then
-        printf '%b%s%b\n' "${COL[$color_name]}" "$msg" "$RESET"
+        case "$color_name" in
+            red) printf '%b%s%b\n' "$RED" "$msg" "$RESET" ;;
+            green) printf '%b%s%b\n' "$GREEN" "$msg" "$RESET" ;;
+            yellow) printf '%b%s%b\n' "$YELLOW" "$msg" "$RESET" ;;
+            *) printf '%s\n' "$msg" ;;
+        esac
     else
         printf '%s\n' "$msg"
     fi
