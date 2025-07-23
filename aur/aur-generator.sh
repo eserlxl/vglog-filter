@@ -182,9 +182,11 @@ case "$MODE" in
         PKGBUILD="$SCRIPT_DIR/PKGBUILD"
         SRCINFO="$SCRIPT_DIR/.SRCINFO"
         shopt -s nullglob
-        TARBALL_GLOB=("$SCRIPT_DIR/${PKGNAME}-"*.tar.gz)
-        # Use an explicit array to safely handle files with spaces
-        files=("${TARBALL_GLOB[@]}" "${TARBALL_GLOB[@]/%/.sig}")
+        # Create separate arrays for tarballs and signatures to avoid duplicate glob expansion
+        TARBALLS=("$SCRIPT_DIR/${PKGNAME}-"*.tar.gz)
+        SIGNATURES=("$SCRIPT_DIR/${PKGNAME}-"*.tar.gz.sig)
+        # Combine arrays for removal
+        files=("${TARBALLS[@]}" "${SIGNATURES[@]}")
         echo "Cleaning AUR directory..."
         if (( ${#files[@]} )); then
             rm -f -- "${files[@]}"
