@@ -36,26 +36,35 @@ else
     YELLOW='\e[1;33m'
     RESET='\e[0m'
 fi
+# Use associative array for color codes
+# shellcheck disable=SC2034
+if declare -A test_assoc 2>/dev/null; then
+    declare -A COL=([
+        red]="$RED" [green]="$GREEN" [yellow]="$YELLOW"
+    )
+else
+    # Fallback for non-Bash 4 (should not happen, but for safety)
+    COL_red="$RED"; COL_green="$GREEN"; COL_yellow="$YELLOW"
+fi
 
 color_echo() {
-    local color_code="$1"
+    local color_name="$1"
     shift
     local msg="$*"
     if (( color_enabled )); then
-        case "$color_code" in
-            "1;31") printf "%b%s%b\n" "$RED" "$msg" "$RESET" ;;
-            "1;32") printf "%b%s%b\n" "$GREEN" "$msg" "$RESET" ;;
-            "1;33") printf "%b%s%b\n" "$YELLOW" "$msg" "$RESET" ;;
-            *) printf '%s%s%s\n' "${RESET:-}" "$msg" "${RESET:-}" ;;
-        esac
+        if declare -p COL &>/dev/null && [[ -n "${COL[$color_name]:-}" ]]; then
+            printf '%b%s%b\n' "${COL[$color_name]}" "$msg" "$RESET"
+        else
+            printf '%s%s%s\n' "${RESET:-}" "$msg" "${RESET:-}"
+        fi
     else
         printf '%s\n' "$msg"
     fi
 }
 
-log() { color_echo "1;32" "$*"; }
-warn() { color_echo "1;33" "$*" >&2; }
-err() { color_echo "1;31" "$*" >&2; }
+log() { color_echo green "$*"; }
+warn() { color_echo yellow "$*" >&2; }
+err() { color_echo red "$*" >&2; }
 
 require() {
     local t missing=()
