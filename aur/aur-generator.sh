@@ -28,6 +28,20 @@ err() {
 }
 warn() { color_echo yellow "$*" >&2; }
 log() { color_echo green "$*"; }
+# Tool-to-package mapping for Arch Linux hints
+# shellcheck disable=SC2034
+# Associative array: tool name -> package name
+# This is more maintainable than a case statement
+# Requires Bash 4+
+declare -Ar PKG_HINT=(
+    [updpkgsums]=pacman-contrib
+    [makepkg]=base-devel
+    [curl]=curl
+    [gpg]=gnupg
+    [gh]=github-cli
+    [flock]=util-linux
+    [awk]=gawk
+)
 # Trap errors and print a helpful message with line number and command
 # set -E: Ensure ERR trap is inherited by functions and subshells (Bash >=4.4). For older Bash, enable errtrace explicitly.
 set -E
@@ -98,32 +112,12 @@ color_echo() {
 
 hint() {
     local tool="$1"
-    case "$tool" in
-        updpkgsums)
-            warn "Hint: Install with 'pacman -S pacman-contrib' (Arch Linux)"
-            ;;
-        makepkg)
-            warn "Hint: Install with 'pacman -S base-devel' (Arch Linux)"
-            ;;
-        curl)
-            warn "Hint: Install with 'pacman -S curl' (Arch Linux)"
-            ;;
-        gpg)
-            warn "Hint: Install with 'pacman -S gnupg' (Arch Linux)"
-            ;;
-        gh)
-            warn "Hint: Install with 'pacman -S github-cli' (Arch Linux)"
-            ;;
-        flock)
-            warn "Hint: Install with 'pacman -S util-linux' (Arch Linux)"
-            ;;
-        awk)
-            warn "Hint: Install with 'pacman -S gawk' (Arch Linux)"
-            ;;
-        *)
-            warn "Hint: Install '$tool' using your package manager (e.g., pacman -S $tool)"
-            ;;
-    esac
+    local pkg="${PKG_HINT[$tool]:-}"
+    if [[ -n "$pkg" ]]; then
+        warn "Hint: Install with 'pacman -S $pkg' (Arch Linux)"
+    else
+        warn "Hint: Install '$tool' using your package manager (e.g., pacman -S $tool)"
+    fi
 }
 
 require() {
