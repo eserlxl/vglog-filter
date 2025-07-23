@@ -251,6 +251,7 @@ install_pkg() {
             if [[ "${AUTO:-}" == "y" ]]; then
                 run_makepkg=n
             else
+                # Default is always supplied to prompt; variable will always be set, even in CI/headless mode.
                 prompt "Do you want to run makepkg -si now? [y/N] " run_makepkg n
             fi
             if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
@@ -598,6 +599,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
                 err "No interactive terminal: please set GPG_KEY_ID in headless mode."
                 exit 1
             fi
+            # Default is always supplied to prompt; variable will always be set, even in CI/headless mode.
             prompt "Select a key [1-${#KEYS[@]}]: " choice 1
             # Ensure choice is set to a default if empty
             # shellcheck disable=SC2154
@@ -731,6 +733,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                     if [[ "${AUTO:-}" == "y" ]]; then
                         upload_choice="y"
                     else
+                        # Default is always supplied to prompt; variable will always be set, even in CI/headless mode.
                         prompt "Do you want to upload the tarball and signature to GitHub releases automatically? [y/N] " upload_choice n
                     fi
                     if [[ "$upload_choice" =~ ^[Yy]$ ]]; then
