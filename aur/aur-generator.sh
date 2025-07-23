@@ -261,13 +261,12 @@ fi
 # --- End GNU getopt check ---
 # WARNING: The ERR trap is disabled below for getopt parsing. If you add code after getopt_output=... and before the trap is restored,
 # errors will not trigger the custom ERR trap (though set -e is still active). If you add more code here, consider re-enabling the trap earlier.
-set +e
 trap - ERR
+set +e
 getopt_output=$(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help,usage,no-wait -- "$@")
 getopt_status=$?
-# Restore ERR trap and set -e
-trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 set -e
+trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 if (( getopt_status != 0 )); then
     echo "Error: Failed to parse options." >&2
     help
