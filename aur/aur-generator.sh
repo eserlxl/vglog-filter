@@ -48,6 +48,74 @@ gh_upload_or_exit() {
         err "[aur] Failed to upload \"$file\" to GitHub release \"$tag\""
     fi
 }
+require() {
+    local missing=()
+    for tool in "$@"; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            missing+=("$tool")
+        fi
+    done
+    if (( ${#missing[@]} )); then
+        for tool in "${missing[@]}"; do
+            hint "$tool"
+        done
+        err "Missing required tool(s): ${missing[*]}"
+    fi
+}
+hint() {
+    local tool="$1"
+    local pkg="${PKG_HINT[$tool]:-}"
+    if [[ -n "$pkg" ]]; then
+        warn "[aur-generator] Hint: Install '$tool' with: sudo pacman -S $pkg"
+    else
+        warn "[aur-generator] Hint: Install '$tool' (no package hint available)"
+    fi
+}
+prompt() {
+    local msg="$1"; local __resultvar="$2"; local default="$3"
+    if have_tty; then
+        read -r -p "$msg" input
+        if [[ -z "$input" && -n "$default" ]]; then
+            input="$default"
+        fi
+        eval "$__resultvar=\"\$input\""
+    else
+        eval "$__resultvar=\"$default\""
+    fi
+}
+asset_exists() {
+    local url="$1"
+    curl -I -L -f --silent "$url" > /dev/null
+}
+update_checksums() {
+    if ! updpkgsums; then
+        err "[aur-generator] updpkgsums failed."
+    fi
+}
+generate_srcinfo() {
+    if ! makepkg --printsrcinfo > "$SRCINFO"; then
+        err "[aur-generator] makepkg --printsrcinfo failed."
+    fi
+}
+install_pkg() {
+    local mode="$1"
+    if (( dry_run )); then
+        log "[install_pkg] Dry run: skipping install for mode $mode."
+        return
+    fi
+    case "$mode" in
+        local)
+            log "[install_pkg] Running makepkg -si for local install."
+            makepkg -si
+            ;;
+        aur|aur-git)
+            log "[install_pkg] PKGBUILD and .SRCINFO are ready for AUR upload."
+            ;;
+        *)
+            warn "[install_pkg] Unknown mode: $mode"
+            ;;
+    esac
+}
 # Tool-to-package mapping for Arch Linux hints
 # shellcheck disable=SC2034
 # Associative array: tool name -> package name
