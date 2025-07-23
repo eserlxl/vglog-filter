@@ -45,10 +45,10 @@ if [[ -z "${GH_USER:-}" ]]; then
 fi
 # Robustness: Detect if GH_USER is the same as PKGNAME (likely a mistake)
 if [[ "$GH_USER" == "$PKGNAME" ]]; then
-    color_echo red "[aur-generator] ERROR: Detected GH_USER='$GH_USER' (same as PKGNAME). This usually means the url field in PKGBUILD.0 is wrong." >&2
-    color_echo red "[aur-generator] Please set the url field in PKGBUILD.0 to your real GitHub repo, e.g.:" >&2
-    color_echo red "    url=\"https://github.com/<yourusername>/$PKGNAME\"" >&2
-    color_echo red "[aur-generator] Detected url line:" >&2
+    err "[aur-generator] ERROR: Detected GH_USER='$GH_USER' (same as PKGNAME). This usually means the url field in PKGBUILD.0 is wrong." >&2
+    err "[aur-generator] Please set the url field in PKGBUILD.0 to your real GitHub repo, e.g.:" >&2
+    err "[aur-generator]     url=\"https://github.com/<yourusername>/$PKGNAME\"" >&2
+    err "[aur-generator] Detected url line:" >&2
     grep '^url=' "$SCRIPT_DIR/PKGBUILD.0" >&2
     exit 1
 fi
@@ -57,7 +57,7 @@ readonly -a VALID_MODES=(local aur aur-git clean test lint golden)
 
 # Require Bash >= 4 early, before using any Bash 4+ features
 if ((BASH_VERSINFO[0] < 4)); then
-    echo "Bash ≥ 4 required" >&2
+    err "Bash ≥ 4 required" >&2
     exit 1
 fi
 
@@ -108,12 +108,12 @@ export GPG_TTY
 # color_enabled is set from env or default, but will be overridden by CLI options below
 set -euo pipefail
 color_enabled=${COLOR:-1}  # safe default, must be set before any error handling
-init_colors
+# init_colors  # Removed from here
 set -o noclobber  # Prevent accidental file overwrite with > redirection
 # --- Tiny Helper Functions (moved to top for trap consistency) ---
 err() {
     trap - ERR
-    color_echo red "$*" >&2
+    (( color_enabled )) && printf '%b%s%b\n' "$RED" "$*" "$RESET" || printf '%s\n' "$*" >&2
     trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 }
 gh_upload_or_exit() {
@@ -125,8 +125,12 @@ gh_upload_or_exit() {
         exit 1
     fi
 }
-warn() { color_echo yellow "$*" >&2; }
-log() { color_echo green "$*"; }
+warn() {
+    (( color_enabled )) && printf '%b%s%b\n' "$YELLOW" "$*" "$RESET" || printf '%s\n' "$*"
+}
+log() {
+    (( color_enabled )) && printf '%b%s%b\n' "$GREEN" "$*" "$RESET" || printf '%s\n' "$*"
+}
 # Tool-to-package mapping for Arch Linux hints
 # shellcheck disable=SC2034
 # Associative array: tool name -> package name
@@ -217,23 +221,7 @@ set_signature_ext() {
 # Group color variable definitions and helpers at the top
 # init_colors moved to top
 
-color_echo() {
-    # Uses memoized color variables set by init_colors; does not recompute them
-    local color_name="$1"
-    shift
-    local msg="$*"
-    if (( color_enabled )); then
-        case "$color_name" in
-            red) printf '%b%s%b\n' "$RED" "$msg" "$RESET" ;;
-            green) printf '%b%s%b\n' "$GREEN" "$msg" "$RESET" ;;
-            yellow) printf '%b%s%b\n' "$YELLOW" "$msg" "$RESET" ;;
-            *) printf '%s\n' "$msg" ;;
-        esac
-    else
-        printf '%s\n' "$msg"
-    fi
-}
-
+# Replace all color_echo calls with log, warn, or err as appropriate
 hint() {
     local tool="$1"
     local pkg="${PKG_HINT[$tool]:-}"
@@ -412,9 +400,14 @@ while true; do
         *)
             err "Unknown option: $1"; help; exit 1 ;;
     esac
+    # No need to call init_colors here
+    # We'll call it once after all flags are parsed
+    # This ensures color_enabled is set correctly
+    # and color variables are initialized accordingly
+    # (see below)
 done
-# Initialize color variables after color_enabled is set
-# init_colors # Moved to top
+# Initialize color variables after color_enabled is set and CLI flags are parsed
+init_colors
 
 MODE=${1:-}
 if [[ -z $MODE ]]; then
