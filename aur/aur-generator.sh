@@ -131,10 +131,10 @@ function usage() {
 }
 
 # --- Main Logic ---
-# --- Flag parsing (replace current while loop) ---
-DRY_RUN=0
-ASCII_ARMOR=0
-COLOR=1
+# Initialize variables from environment or defaults before flag parsing
+DRY_RUN=${DRY_RUN:-0}
+ASCII_ARMOR=${ASCII_ARMOR:-0}
+COLOR=${COLOR:-1}
 while getopts ":nad-:" opt; do
     case "$opt" in
         n) COLOR=0 ;;
@@ -230,7 +230,6 @@ case "$MODE" in
             cd "$TEMP_DIR"
             
             # Set up test environment
-            export DRY_RUN=1
             export CI=1  # Skip prompts
             
             # For aur mode, set a dummy GPG key to avoid prompts
@@ -238,7 +237,7 @@ case "$MODE" in
                 export GPG_KEY_ID="TEST_KEY_FOR_DRY_RUN"
             fi
             
-            # Run the test mode
+            # Run the test mode (rely only on --dry-run flag, do not export DRY_RUN)
             if bash "$SCRIPT_DIR/aur-generator.sh" "$test_mode" --dry-run > "$TEMP_DIR/test_output.log" 2>&1; then
                 log "[test] ✓ $test_mode mode passed"
             else
