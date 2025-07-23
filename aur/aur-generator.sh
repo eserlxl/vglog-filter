@@ -348,8 +348,8 @@ case "$MODE" in
         require makepkg updpkgsums curl || exit 1
         ;;
     aur)
-        # aur mode requires: makepkg, updpkgsums, curl, gpg
-        require makepkg updpkgsums curl gpg || exit 1
+        # aur mode requires: makepkg, updpkgsums, curl, gpg, jq
+        require makepkg updpkgsums curl gpg jq || exit 1
         ;;
     aur-git)
         # aur-git mode requires: makepkg
@@ -703,8 +703,8 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         # Check if the tarball exists on GitHub before running updpkgsums
         asset_exists=1
         if command -v gh >/dev/null 2>&1; then
-            # Use gh release view --json assets for faster asset detection
-            if ! gh release view "$PKGVER" --json assets 2>/dev/null | grep -q '"name": *"'"${TARBALL}"'"'; then
+            # Use gh release view --json assets and jq for robust asset detection
+            if ! gh release view "$PKGVER" --json assets 2>/dev/null | jq -e '.assets[].name == "'$TARBALL'"' >/dev/null; then
                 asset_exists=0
             fi
         else
@@ -718,8 +718,8 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
             asset_exists=1
             if command -v gh >/dev/null 2>&1; then
-                # Use gh release view --json assets for faster asset detection
-                if ! gh release view "$PKGVER" --json assets 2>/dev/null | grep -q '"name": *"'"${TARBALL}"'"'; then
+                # Use gh release view --json assets and jq for robust asset detection
+                if ! gh release view "$PKGVER" --json assets 2>/dev/null | jq -e '.assets[].name == "'$TARBALL'"' >/dev/null; then
                     asset_exists=0
                 fi
             else
