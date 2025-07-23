@@ -826,8 +826,14 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         asset_exists=1
         # Check if the tarball exists on GitHub before running updpkgsums
         if command -v gh >/dev/null 2>&1; then
-            ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets 2>/dev/null | jq '.assets[].name')
-            if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
+            if gh release view "$PKGVER" --json assets >/dev/null 2>&1; then
+                ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
+                if [[ $ASSET_LIST_OUTPUT == *"$TARBALL"* ]]; then
+                    asset_exists=1
+                else
+                    asset_exists=0
+                fi
+            else
                 asset_exists=0
             fi
         else
@@ -841,8 +847,14 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
             asset_exists=1
             if command -v gh >/dev/null 2>&1; then
-                ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets 2>/dev/null | jq '.assets[].name')
-                if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
+                if gh release view "$PKGVER" --json assets >/dev/null 2>&1; then
+                    ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
+                    if [[ $ASSET_LIST_OUTPUT == *"$TARBALL"* ]]; then
+                        asset_exists=1
+                    else
+                        asset_exists=0
+                    fi
+                else
                     asset_exists=0
                 fi
             else
@@ -918,13 +930,17 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         asset_exists=1
         if command -v gh >/dev/null 2>&1; then
             # Use gh release view --json assets and jq for robust asset detection
-            ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets 2>/dev/null | jq '.assets[].name')
-            echo "[DEBUG] gh release view output for $PKGVER:" >&2
-            echo "$ASSET_LIST_OUTPUT" >&2
-            if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
+            if gh release view "$PKGVER" --json assets >/dev/null 2>&1; then
+                ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
+                echo "[DEBUG] gh release view output for $PKGVER:" >&2
+                echo "$ASSET_LIST_OUTPUT" >&2
+                if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
+                    asset_exists=0
+                fi
+                echo "[DEBUG] asset_exists after gh/jq check: $asset_exists" >&2
+            else
                 asset_exists=0
             fi
-            echo "[DEBUG] asset_exists after gh/jq check: $asset_exists" >&2
         else
             CURL_OUTPUT=$(curl -sSf -L -w '%{http_code}' -o /dev/null "$TARBALL_URL" 2>&1)
             echo "[DEBUG] curl output for $TARBALL_URL: $CURL_OUTPUT" >&2
@@ -940,13 +956,17 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             asset_exists=1
             if command -v gh >/dev/null 2>&1; then
                 # Use gh release view --json assets and jq for robust asset detection
-                ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets 2>/dev/null | jq '.assets[].name')
-                echo "[DEBUG] gh release view output for $PKGVER:" >&2
-                echo "$ASSET_LIST_OUTPUT" >&2
-                if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
+                if gh release view "$PKGVER" --json assets >/dev/null 2>&1; then
+                    ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
+                    echo "[DEBUG] gh release view output for $PKGVER:" >&2
+                    echo "$ASSET_LIST_OUTPUT" >&2
+                    if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
+                        asset_exists=0
+                    fi
+                    echo "[DEBUG] asset_exists after gh/jq check: $asset_exists" >&2
+                else
                     asset_exists=0
                 fi
-                echo "[DEBUG] asset_exists after gh/jq check: $asset_exists" >&2
             else
                 CURL_OUTPUT=$(curl -sSf -L -w '%{http_code}' -o /dev/null "$TARBALL_URL" 2>&1)
                 echo "[DEBUG] curl output for $TARBALL_URL: $CURL_OUTPUT" >&2
