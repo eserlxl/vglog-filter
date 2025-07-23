@@ -602,6 +602,8 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     fi
     if [[ "$MODE" == "aur" ]]; then
         # Fix: Append tarball URL to source=(), robustly handling multiline arrays and preserving extra sources
+        set_signature_ext
+        TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
         awk -v tarball_url="$TARBALL_URL" '
             BEGIN { in_source=0; new_source_line=""; }
             /^source=\(/ {
@@ -633,8 +635,6 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         ' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
         log "[aur] Appended tarball URL to source array in PKGBUILD (preserves extra sources and comments)."
         # Check if the tarball exists on GitHub before running updpkgsums
-        set_signature_ext
-        TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
         asset_exists=1
         if command -v gh >/dev/null 2>&1; then
             if ! gh api "/repos/${GH_USER}/${PKGNAME}/releases/assets" --jq ".[] | select(.name == \"${TARBALL}\")" >/dev/null 2>&1; then
