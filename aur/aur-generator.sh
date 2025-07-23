@@ -7,11 +7,14 @@
 # See the LICENSE file in the project root for details.
 #
 # Modes summary:
-#   local   - Build/install from a local tarball for testing.
-#   aur     - Prepare a signed release tarball and PKGBUILD for AUR upload.
-#   aur-git - Generate a PKGBUILD for the -git (VCS) AUR package.
-#   lint    - Run shellcheck and bash -n on this script for quick CI linting.
-# See doc/AUR.md for full details on each mode and workflow.
+#   local     - Build and install from a local tarball (for testing).
+#   aur       - Prepare a signed release tarball and PKGBUILD for AUR upload.
+#   aur-git   - Generate a PKGBUILD for the -git (VCS) AUR package.
+#   clean     - Remove generated files and directories.
+#   test      - Run all modes in dry-run mode and check for errors.
+#   lint      - Run shellcheck and bash -n on this script for quick CI linting.
+#   golden    - Regenerate golden PKGBUILD files for test fixtures.
+# See 'doc/AUR.md' or run with --help for full details on each mode and workflow.
 # NOTE: This script requires GNU getopt (util-linux) and is not compatible with macOS/BSD systems.
 # The script is designed for GNU/Linux environments and does not aim to support macOS/BSD.
 
