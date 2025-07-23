@@ -517,7 +517,7 @@ case "$MODE" in
                 GOLDEN_FILE="$PROJECT_ROOT/test/fixtures/PKGBUILD.$test_mode.golden"
                 GENERATED_PKG="$SCRIPT_DIR/PKGBUILD"
                 if [[ -f "$GOLDEN_FILE" ]]; then
-                    if ! diff -u "$GOLDEN_FILE" "$GENERATED_PKG" > "$SCRIPT_DIR/diff-$test_mode.log"; then
+                    if ! diff -u <(tail -n +2 "$GOLDEN_FILE") "$GENERATED_PKG" > "$SCRIPT_DIR/diff-$test_mode.log"; then
                         err "[test] ✗ $test_mode PKGBUILD does not match golden file! See $SCRIPT_DIR/diff-$test_mode.log"
                         cat "$SCRIPT_DIR/diff-$test_mode.log" >&2
                         TEST_ERRORS=$((TEST_ERRORS + 1))
