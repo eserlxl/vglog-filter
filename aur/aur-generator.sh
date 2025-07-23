@@ -29,17 +29,18 @@ require() {
 # Prompt helper function that auto-skips when CI is set
 prompt() {
     local prompt_text="$1"
-    local default_value="${2:-n}"  # Default to 'n' for safety
-    local var_name="$3"
-    
-    if [[ "${CI:-}" == 1 ]]; then
-        # In CI mode, use default value and log the action
-        eval "$var_name=\"$default_value\""
-        log "[CI] Auto-selected '$default_value' for: $prompt_text"
-        return 0
+    local var_name="$2"
+    local default_value="${3:-}"
+    if [[ ${CI:-0} == 1 ]]; then
+        if [[ -n "$default_value" ]]; then
+            eval "$var_name=\"$default_value\""
+            log "[CI] Auto-selected '$default_value' for: $prompt_text"
+            return 0
+        else
+            log "[CI] Skipping prompt: $prompt_text"
+            return 1
+        fi
     fi
-    
-    # Normal interactive mode
     read -rp "$prompt_text" "$var_name"
 }
 
@@ -83,7 +84,7 @@ install_pkg() {
                     if [[ "${AUTO:-}" == "y" ]]; then
             run_makepkg=n
         else
-            prompt "Do you want to run makepkg -si now? [y/N] " "n" "run_makepkg"
+            prompt "Do you want to run makepkg -si now? [y/N] " run_makepkg n
         fi
             if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
                 makepkg -si
@@ -365,7 +366,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
                 USER=$(gpg --list-secret-keys "${KEYS[$i]}" | grep uid | head -n1 | sed 's/.*] //')
                 warn "$((i+1)). ${KEYS[$i]} ($USER)" >&2
             done
-            prompt "Select a key [1-${#KEYS[@]}]: " "1" "choice"
+            prompt "Select a key [1-${#KEYS[@]}]: " choice 1
             if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#KEYS[@]} )); then
                 err "Invalid selection."
                 exit 1
@@ -408,7 +409,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                                     if [[ "${AUTO:-}" == "y" ]]; then
                     upload_choice="y"
                 else
-                    prompt "Do you want to upload the tarball and signature to GitHub releases automatically? [y/N] " "n" "upload_choice"
+                    prompt "Do you want to upload the tarball and signature to GitHub releases automatically? [y/N] " upload_choice n
                 fi
                     if [[ "$upload_choice" =~ ^[Yy]$ ]]; then
                         # Set signature file extension based on ASCII_ARMOR setting
