@@ -10,7 +10,7 @@
 ## Usage
 
 ```sh
-./aur-generator.sh [--no-color|-n] [local|aur|aur-git|clean|test] [--dry-run|-d]
+./aur-generator.sh [--no-color|-n] [--ascii-armor|-a] [local|aur|aur-git|clean|test] [--dry-run|-d]
 ```
 
 ### Modes
@@ -24,6 +24,7 @@
 ### Options
 
 - **`--no-color`, `-n`**: Disable colored output (for accessibility or when redirecting output). You can also set the `NO_COLOR` environment variable to any value to disable color.
+- **`--ascii-armor`, `-a`**: Use ASCII-armored signatures (.asc) instead of binary signatures (.sig) for GPG signing. Some AUR helpers (like aurutils) prefer ASCII-armored signatures.
 - **`--dry-run`, `-d`**: Run all steps except the final `makepkg -si` (useful for CI/testing).
 
 ### Disabling Colored Output
@@ -39,6 +40,22 @@ You can disable colored output in two ways:
   NO_COLOR= ./aur-generator.sh aur
   ```
   This is useful for CI, automation, or when redirecting output to files.
+
+### ASCII-Armored Signatures
+
+By default, the script creates binary GPG signatures (.sig files). Some AUR helpers and maintainers prefer ASCII-armored signatures (.asc files) for better compatibility and readability.
+
+To use ASCII-armored signatures, add the `--ascii-armor` or `-a` option:
+
+```sh
+./aur-generator.sh --ascii-armor aur
+```
+
+This will:
+- Use `gpg --armor --detach-sign` instead of `gpg --detach-sign`
+- Create `.asc` files instead of `.sig` files
+- Update all references to signature files in logs and messages
+- Clean up both `.sig` and `.asc` files when using the `clean` mode
 
 ### GPG Key Automation
 
@@ -111,7 +128,7 @@ The script supports several environment variables for automation:
 ### GPG Signing (aur mode only)
 - Checks for available GPG secret keys.
 - Prompts for key selection or uses `GPG_KEY_ID` environment variable.
-- Creates detached signature for the tarball.
+- Creates detached signature for the tarball (binary .sig by default, ASCII-armored .asc with `--ascii-armor`).
 - In test mode, creates dummy signature files.
 
 ### GitHub Asset Upload
@@ -151,6 +168,7 @@ The script supports several environment variables for automation:
 - The script automatically handles both 'v' and non-'v' prefixed GitHub release URLs.
 - VCS packages (`aur-git` mode) automatically set `sha256sums=('SKIP')` and add `validpgpkeys`.
 - All environment variables are documented in the script's usage function (`./aur-generator.sh` without arguments).
+- Use `--ascii-armor` or `-a` to create ASCII-armored signatures (.asc) instead of binary signatures (.sig) for better compatibility with some AUR helpers.
 
 ## Error Handling
 
@@ -160,4 +178,4 @@ The script supports several environment variables for automation:
 - Test mode provides detailed error reporting for all modes.
 
 ---
-For more details, see the comments in `aur/aur-generator.sh` or the [BUILD.md](BUILD.md) documentation. 
+For more details, see the comments in `aur/aur-generator.sh` or the [BUILD.md](BUILD.md) documentation.

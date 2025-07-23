@@ -14,6 +14,7 @@ readonly SCRIPT_DIR
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 readonly PROJECT_ROOT
 COLOR=1
+ASCII_ARMOR=0
 # VALID_MODES is used for validation in the usage function and mode checking
 VALID_MODES=(local aur aur-git clean test)
 
@@ -77,7 +78,7 @@ install_pkg() {
 }
 
 function usage() {
-    log "Usage: $0 [--no-color|-n] [local|aur|aur-git|clean|test] [--dry-run|-d]"
+    log "Usage: $0 [--no-color|-n] [--ascii-armor|-a] [local|aur|aur-git|clean|test] [--dry-run|-d]"
     echo
     log "Modes:"
     log "  local     Build and install the package from a local tarball (for testing)."
@@ -88,6 +89,7 @@ function usage() {
     echo
     log "Options:"
     log "  --no-color, -n   Disable colored output (also supported via NO_COLOR env variable)"
+    log "  --ascii-armor, -a Use ASCII-armored signatures (.asc) instead of binary (.sig) for GPG signing"
     log "  --dry-run, -d    Run all steps except the final makepkg -si (for CI/testing)"
     echo
     log "Notes:"
@@ -98,6 +100,7 @@ function usage() {
     log "- To skip the GPG key selection menu in 'aur' mode, set GPG_KEY_ID to your key's ID:"
     log "    GPG_KEY_ID=ABCDEF ./aur-generator.sh aur"
     log "- To disable colored output, set NO_COLOR=1 or use --no-color/-n."
+    log "- To use ASCII-armored signatures (.asc), use --ascii-armor/-a (some AUR helpers prefer this format)."
     log "- To test the script without running makepkg -si, add --dry-run or -d as the second argument."
     log "- If GitHub CLI (gh) is installed, the script can automatically upload missing release assets."
     log "- To skip the automatic upload prompt in 'aur' mode, set AUTO=y:"
@@ -114,6 +117,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-color|-n)
             COLOR=0
+            shift
+            ;;
+        --ascii-armor|-a)
+            ASCII_ARMOR=1
             shift
             ;;
         *)
@@ -185,8 +192,9 @@ case "$MODE" in
         # Create separate arrays for tarballs and signatures to avoid duplicate glob expansion
         TARBALLS=("$SCRIPT_DIR/${PKGNAME}-"*.tar.gz)
         SIGNATURES=("$SCRIPT_DIR/${PKGNAME}-"*.tar.gz.sig)
+        ASC_SIGNATURES=("$SCRIPT_DIR/${PKGNAME}-"*.tar.gz.asc)
         # Combine arrays for removal
-        files=("${TARBALLS[@]}" "${SIGNATURES[@]}")
+        files=("${TARBALLS[@]}" "${SIGNATURES[@]}" "${ASC_SIGNATURES[@]}")
         echo "Cleaning AUR directory..."
         if (( ${#files[@]} )); then
             rm -f -- "${files[@]}"
@@ -306,6 +314,18 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             err "Error: No GPG secret key found. Please generate or import a GPG key before signing."
             exit 1
         fi
+        
+        # Set signature file extension based on ASCII_ARMOR setting
+        if [[ $ASCII_ARMOR -eq 1 ]]; then
+            SIGNATURE_EXT=".asc"
+            GPG_ARMOR_OPT="--armor"
+            log "[aur] Using ASCII-armored signatures (.asc)"
+        else
+            SIGNATURE_EXT=".sig"
+            GPG_ARMOR_OPT=""
+            log "[aur] Using binary signatures (.sig)"
+        fi
+        
         # GPG key selection logic
         GPG_KEY=""
         if [[ -n "${GPG_KEY_ID:-}" ]]; then
@@ -336,15 +356,15 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             GPG_KEY="${KEYS[$((choice-1))]}"
         fi
         if [[ -n "$GPG_KEY" ]]; then
-            gpg --detach-sign -u "$GPG_KEY" --output "$OUTDIR/$TARBALL.sig" "$OUTDIR/$TARBALL"
-            log "[aur] Created GPG signature: $OUTDIR/$TARBALL.sig"
+            gpg --detach-sign $GPG_ARMOR_OPT -u "$GPG_KEY" --output "$OUTDIR/$TARBALL$SIGNATURE_EXT" "$OUTDIR/$TARBALL"
+            log "[aur] Created GPG signature: $OUTDIR/$TARBALL$SIGNATURE_EXT"
         elif [[ "${GPG_KEY_ID:-}" == "TEST_KEY_FOR_DRY_RUN" ]]; then
             # In test mode, create a dummy signature file
-            touch "$OUTDIR/$TARBALL.sig"
-            log "[aur] Test mode: Created dummy signature file: $OUTDIR/$TARBALL.sig"
+            touch "$OUTDIR/$TARBALL$SIGNATURE_EXT"
+            log "[aur] Test mode: Created dummy signature file: $OUTDIR/$TARBALL$SIGNATURE_EXT"
         else
-            gpg --detach-sign --output "$OUTDIR/$TARBALL.sig" "$OUTDIR/$TARBALL"
-            log "[aur] Created GPG signature: $OUTDIR/$TARBALL.sig"
+            gpg --detach-sign $GPG_ARMOR_OPT --output "$OUTDIR/$TARBALL$SIGNATURE_EXT" "$OUTDIR/$TARBALL"
+            log "[aur] Created GPG signature: $OUTDIR/$TARBALL$SIGNATURE_EXT"
         fi
     fi
 fi
@@ -374,7 +394,14 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         read -rp "Do you want to upload the tarball and signature to GitHub releases automatically? [y/N] " upload_choice
                     fi
                     if [[ "$upload_choice" =~ ^[Yy]$ ]]; then
-                        log "[aur] Uploading ${TARBALL} and ${TARBALL}.sig to GitHub release ${PKGVER}..."
+                        # Set signature file extension based on ASCII_ARMOR setting
+                        if [[ $ASCII_ARMOR -eq 1 ]]; then
+                            SIGNATURE_EXT=".asc"
+                        else
+                            SIGNATURE_EXT=".sig"
+                        fi
+                        
+                        log "[aur] Uploading ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to GitHub release ${PKGVER}..."
                         # Upload tarball
                         if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL" --repo "eserlxl/${PKGNAME}"; then
                             log "[aur] Successfully uploaded ${TARBALL}"
@@ -383,10 +410,10 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                             exit 1
                         fi
                         # Upload signature
-                        if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL.sig" --repo "eserlxl/${PKGNAME}"; then
-                            log "[aur] Successfully uploaded ${TARBALL}.sig"
+                        if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL$SIGNATURE_EXT" --repo "eserlxl/${PKGNAME}"; then
+                            log "[aur] Successfully uploaded ${TARBALL}${SIGNATURE_EXT}"
                         else
-                            err "[aur] Failed to upload ${TARBALL}.sig"
+                            err "[aur] Failed to upload ${TARBALL}${SIGNATURE_EXT}"
                             exit 1
                         fi
                         # Verify the upload was successful
@@ -403,7 +430,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                     fi
                 else
                     err "[aur] ERROR: Release asset not found at either location. GitHub CLI (gh) not available for automatic upload."
-                    echo "Please install GitHub CLI (gh) or manually upload ${TARBALL} and ${TARBALL}.sig to the GitHub release page."
+                    echo "Please install GitHub CLI (gh) or manually upload ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to the GitHub release page."
                     echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
                     exit 1
                 fi
@@ -415,7 +442,13 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         if command -v gh >/dev/null 2>&1; then
             echo "Assets have been automatically uploaded to GitHub release ${PKGVER}."
         else
-            echo "Now push the git tag and upload ${TARBALL} and ${TARBALL}.sig to the GitHub release page."
+            # Set signature file extension based on ASCII_ARMOR setting
+            if [[ $ASCII_ARMOR -eq 1 ]]; then
+                SIGNATURE_EXT=".asc"
+            else
+                SIGNATURE_EXT=".sig"
+            fi
+            echo "Now push the git tag and upload ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to the GitHub release page."
         fi
         echo "Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package."
         install_pkg "aur"
