@@ -163,8 +163,7 @@ color_enabled=${COLOR:-1}
 
 # Use getopt for unified short and long option parsing
 # This allows for robust handling of both short (-n) and long (--no-color) options
-PARSED_OPTS=$(getopt -o nad --long no-color,ascii-armor,dry-run -- "$@")
-if [[ $? -ne 0 ]]; then
+if ! PARSED_OPTS=$(getopt -o nad --long no-color,ascii-armor,dry-run -- "$@"); then
     err "Failed to parse options."; usage
 fi
 # Note: set -- resets positional parameters to the parsed result
@@ -292,6 +291,8 @@ case "$MODE" in
                 export GPG_KEY_ID="TEST_KEY_FOR_DRY_RUN"
             fi
             # Run the test mode (rely only on --dry-run flag, do not export DRY_RUN)
+            # shellcheck disable=SC2154
+            trap 'for d in "${TEMP_DIRS[@]}"; do rm -rf "$d"; done' EXIT
             if bash "$SCRIPT_DIR/aur-generator.sh" "$test_mode" --dry-run > "$TEMP_DIR/test_output.log" 2>&1; then
                 log "[test] ✓ $test_mode mode passed"
             else
@@ -372,7 +373,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         ARCHIVE_MTIME="--mtime=UTC 2020-01-01 00:00:00"
         log "[$MODE] Using static mtime for tarball: UTC 2020-01-01 00:00:00."
     fi
-    git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" $ARCHIVE_MTIME "$GIT_REF" | \
+    git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$ARCHIVE_MTIME" "$GIT_REF" | \
         gzip -n > "$OUTDIR/$TARBALL"
     log "Created $OUTDIR/$TARBALL using $GIT_REF with reproducible mtime."
 
@@ -576,7 +577,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
 fi
 
 awk '
-    BEGIN { sums = "b2sums=('SKIP')" }
+    BEGIN { sums = "b2sums=(\"SKIP\")" }
     /^pkgname=/ {
         print "pkgname=vglog-filter-git"; next
     }
