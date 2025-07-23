@@ -506,6 +506,8 @@ case "$MODE" in
             fi
             # Use a persistent log file in SCRIPT_DIR
             TEST_LOG_FILE="$SCRIPT_DIR/test-$test_mode-$(date +%s).log"
+            # Save and restore CI to avoid leaking into nested calls
+            _old_ci=${CI:-}
             export CI=1  # Skip prompts
             if [[ "$test_mode" == "aur" ]]; then
                 export GPG_KEY_ID="TEST_KEY_FOR_DRY_RUN"
@@ -532,6 +534,12 @@ case "$MODE" in
                 TEST_ERRORS=$((TEST_ERRORS + 1))
                 warn "Error output for $test_mode is in: $TEST_LOG_FILE"
                 cat "$TEST_LOG_FILE" >&2
+            fi
+            # Restore previous CI value
+            if [[ -n $_old_ci ]]; then
+                export CI="$_old_ci"
+            else
+                unset CI
             fi
             log "[test] Log for $test_mode: $TEST_LOG_FILE"
         done
@@ -606,6 +614,8 @@ case "$MODE" in
             # Clean before each mode
             bash "$SCRIPT_DIR/$SCRIPT_NAME" clean > /dev/null 2>&1 || warn "[golden] Clean failed for $mode, continuing..."
             # Generate PKGBUILD (not dry-run, but skip install)
+            # Save and restore CI to avoid leaking into nested calls
+            _old_ci=${CI:-}
             export CI=1
             export GPG_KEY_ID="TEST_KEY_FOR_DRY_RUN"
             if bash "$SCRIPT_DIR/$SCRIPT_NAME" --dry-run "$mode" > /dev/null 2>&1; then
@@ -617,6 +627,12 @@ case "$MODE" in
                 log "[golden] Updated $GOLDEN_FILE"
             else
                 err "[golden] Failed to generate PKGBUILD for $mode. Golden file not updated."
+            fi
+            # Restore previous CI value
+            if [[ -n $_old_ci ]]; then
+                export CI="$_old_ci"
+            else
+                unset CI
             fi
         done
         log "[golden] All golden files updated."
