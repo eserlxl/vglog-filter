@@ -171,7 +171,7 @@ ascii_armor=${ASCII_ARMOR:-0}
 
 # Use getopt for unified short and long option parsing
 # This allows for robust handling of both short (-n) and long (--no-color) options
-if ! PARSED_OPTS=$(getopt -o nad --long no-color,ascii-armor,dry-run -- "$@"); then
+if ! PARSED_OPTS=$(getopt -o nad --long no-color,ascii-armor,dry-run -- "$@" ); then
     err "Failed to parse options."; usage
 fi
 # Note: set -- resets positional parameters to the parsed result
@@ -405,8 +405,8 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         
         # GPG key selection logic
         GPG_KEY=""
-        if [[ -n "${GPG_KEY_ID:-}" ]]; then
-            if [[ "${GPG_KEY_ID}" == "TEST_KEY_FOR_DRY_RUN" ]]; then
+        if [[ -n "$GPG_KEY_ID" ]]; then
+            if [[ "$GPG_KEY_ID" == "TEST_KEY_FOR_DRY_RUN" ]]; then
                 # In test mode, skip GPG signing
                 log "[aur] Test mode: Skipping GPG signing"
                 GPG_KEY=""
