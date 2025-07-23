@@ -504,7 +504,9 @@ elif [[ "$MODE" == "aur-git" ]]; then
     log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
     # Set validpgpkeys if missing
     if ! grep -q '^validpgpkeys=' "$PKGBUILD"; then
-        echo "validpgpkeys=('F677BC1E3BD7246E')" >> "$PKGBUILD"
+        if [[ -n "${GPG_KEY_ID:-}" ]]; then
+            echo "validpgpkeys=('$GPG_KEY_ID')" >> "$PKGBUILD"
+        fi
     fi
     # Check for required tools
     require makepkg
