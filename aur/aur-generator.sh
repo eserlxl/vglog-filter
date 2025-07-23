@@ -504,10 +504,21 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         # Fix: Replace source=() with correct URL, robustly handling multiline arrays
         awk -v new_source="source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")" '
             BEGIN { in_source=0 }
-            /^source=\(/ { in_source=1; print new_source; next }
-            in_source && /\)/ { in_source=0; next }
+            /^source=\(/ {
+                in_source=1;
+                print new_source;
+                print "# <<< aur-generator >>>";
+                next
+            }
+            in_source && /\)/ {
+                in_source=0;
+                # If there is a trailing comment after the closing parenthesis, print it after the marker
+                match($0, /\)[[:space:]]*(#.*)/, arr)
+                if (arr[1] != "") print arr[1];
+                next
+            }
             in_source {
-                if ($0 ~ /^[[:space:]]*#/) print; # preserve comments
+                if ($0 ~ /^[[:space:]]*#/) print; # preserve comments inside array
                 next
             }
             { print }
