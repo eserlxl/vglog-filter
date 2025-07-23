@@ -27,7 +27,16 @@ SCRIPT_NAME=$(basename "$0")
 declare -r SCRIPT_NAME
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 declare -r PROJECT_ROOT
-GH_USER="${GH_USER:-eserlxl}"
+# Determine GH_USER: environment > PKGBUILD.0 url > fallback
+if [[ -z "${GH_USER:-}" ]]; then
+    PKGBUILD0_URL=$(awk -F'="' '/^url="https:\/\/github.com\// {print $2}' "$SCRIPT_DIR/PKGBUILD.0" | cut -d'/' -f4)
+    if [[ -n "$PKGBUILD0_URL" ]]; then
+        GH_USER="$PKGBUILD0_URL"
+    else
+        GH_USER="eserlxl"
+        warn "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'."
+    fi
+fi
 declare -r GH_USER
 # VALID_MODES is used for validation in the usage function and mode checking
 # shellcheck disable=SC2034
