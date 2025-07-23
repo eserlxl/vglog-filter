@@ -32,6 +32,34 @@ set -euo pipefail
 set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
 set -o errtrace  # Explicitly propagate ERR trap to all subshells (Bash ≥4.4, safer)
 
+# Color variables (set once if tput is available)
+HAVE_TPUT=0
+if command -v tput >/dev/null 2>&1; then
+    HAVE_TPUT=1
+fi
+if (( color_enabled )); then
+    if (( HAVE_TPUT )); then
+        RED="$(tput setaf 1)$(tput bold)"
+        GREEN="$(tput setaf 2)$(tput bold)"
+        YELLOW="$(tput setaf 3)$(tput bold)"
+        RESET="$(tput sgr0)"
+    else
+        RED='\e[1;31m'
+        GREEN='\e[1;32m'
+        YELLOW='\e[1;33m'
+        RESET='\e[0m'
+    fi
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    RESET=''
+fi
+# Use associative array for color codes (Bash >= 4 is required at script start)
+declare -A COL=(
+    [red]="$RED" [green]="$GREEN" [yellow]="$YELLOW"
+)
+
 # Trap errors and print a helpful message with line number and command
 # Note: set -E implies errtrace in Bash >=4.4, but older Bash may not propagate ERR trap into all subshells.
 trap 'err "[FATAL]  [36m${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND [0m"' ERR
@@ -58,27 +86,6 @@ usage() {
     echo
     echo "If a required tool is missing, a hint will be printed with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums)."
 }
-
-# Color variables (set once if tput is available)
-HAVE_TPUT=0
-if command -v tput >/dev/null 2>&1; then
-    HAVE_TPUT=1
-fi
-if (( HAVE_TPUT )); then
-    RED="$(tput setaf 1)$(tput bold)"
-    GREEN="$(tput setaf 2)$(tput bold)"
-    YELLOW="$(tput setaf 3)$(tput bold)"
-    RESET="$(tput sgr0)"
-else
-    RED='\e[1;31m'
-    GREEN='\e[1;32m'
-    YELLOW='\e[1;33m'
-    RESET='\e[0m'
-fi
-# Use associative array for color codes (Bash >= 4 is required at script start)
-declare -A COL=(
-    [red]="$RED" [green]="$GREEN" [yellow]="$YELLOW"
-)
 
 # Helper to set signature extension and GPG armor option
 set_signature_ext() {
