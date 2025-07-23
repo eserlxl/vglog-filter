@@ -29,10 +29,11 @@ require() {
 color_echo() {
     local color_code="$1"
     shift
+    local msg="$*"
     if (( COLOR )); then
-        printf '\e[%sm%s\e[0m\n' "$color_code" "$*"
+        printf '\e[%sm%s\e[0m\n' "$color_code" "$msg"
     else
-        printf '%s\n' "$*"
+        printf '%s\n' "$msg"
     fi
 }
 
