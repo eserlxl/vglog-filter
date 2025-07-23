@@ -27,6 +27,7 @@ export GPG_TTY
 # color_enabled is set from env or default, but will be overridden by CLI options below
 # Remove unreachable Bash version check for color_enabled
 set -euo pipefail
+set -o noclobber  # Prevent accidental file overwrite with > redirection
 # --- Tiny Helper Functions (moved to top for trap consistency) ---
 err() {
     trap - ERR
@@ -291,10 +292,18 @@ if (( color_enabled )); then
         YELLOW="$(tput setaf 3)$(tput bold)"
         RESET="$(tput sgr0)"
     else
-        RED='\e[1;31m'
-        GREEN='\e[1;32m'
-        YELLOW='\e[1;33m'
-        RESET='\e[0m'
+        # Use Bash-specific \e if available, else fallback to POSIX \033 for dash/other shells
+        if [[ -n "${BASH_VERSION:-}" ]]; then
+            RED='\e[1;31m'
+            GREEN='\e[1;32m'
+            YELLOW='\e[1;33m'
+            RESET='\e[0m'
+        else
+            RED='\033[1;31m'
+            GREEN='\033[1;32m'
+            YELLOW='\033[1;33m'
+            RESET='\033[0m'
+        fi
     fi
 else
     RED=''
