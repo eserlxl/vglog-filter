@@ -45,7 +45,7 @@ gh_upload_or_exit() {
     local repo="$2"
     local tag="$3"
     if ! gh release upload "$tag" "$file" --repo "$repo" --clobber; then
-        err "[aur] Failed to upload $file to GitHub release $tag"
+        err "[aur] Failed to upload \"$file\" to GitHub release \"$tag\""
     fi
 }
 # Tool-to-package mapping for Arch Linux hints
@@ -355,7 +355,7 @@ case "$MODE" in
     # clean and test modes do not require special tools
 esac
 
-log "Running in $MODE mode"
+log "Running in \"$MODE\" mode"
 case "$MODE" in
     local)
         log "[local] Build and install from local tarball."
@@ -411,10 +411,10 @@ case "$MODE" in
         TEST_ERRORS=0
         # Run the test mode (rely only on --dry-run flag, do not export DRY_RUN)
         for test_mode in local aur aur-git; do
-            log "--- Testing $test_mode mode ---"
-            log "[test] Running clean before $test_mode test..."
+            log "--- Testing \"$test_mode\" mode ---"
+            log "[test] Running clean before \"$test_mode\" test..."
             if ! bash "$SCRIPT_DIR/$SCRIPT_NAME" clean > /dev/null 2>&1; then
-                warn "[test] Warning: Clean failed for $test_mode test, but continuing..."
+                warn "[test] Warning: Clean failed for \"$test_mode\" test, but continuing..."
             fi
             # Use a persistent log file in SCRIPT_DIR
             TEST_LOG_FILE="$SCRIPT_DIR/test-$test_mode-$(date +%s).log"
@@ -431,7 +431,7 @@ case "$MODE" in
                 GENERATED_PKG="$SCRIPT_DIR/PKGBUILD"
                 if [[ -f "$GOLDEN_FILE" ]]; then
                     if ! diff -u <(tail -n +2 "$GOLDEN_FILE") "$GENERATED_PKG" > "$SCRIPT_DIR/diff-$test_mode.log"; then
-                        err "[test] ✗ $test_mode PKGBUILD does not match golden file! See $SCRIPT_DIR/diff-$test_mode.log"
+                        err "[test] ✗ $test_mode PKGBUILD does not match golden file! See \"$SCRIPT_DIR/diff-$test_mode.log\""
                         # shellcheck disable=SC2317
                         cat "$SCRIPT_DIR/diff-$test_mode.log" >&2
                         # shellcheck disable=SC2317
@@ -440,7 +440,7 @@ case "$MODE" in
                         log "[test] ✓ $test_mode PKGBUILD matches golden file."
                     fi
                 else
-                    warn "[test] Golden file $GOLDEN_FILE not found. Skipping PKGBUILD diff for $test_mode."
+                    warn "[test] Golden file \"$GOLDEN_FILE\" not found. Skipping PKGBUILD diff for \"$test_mode\"."
                 fi
                 # --- End golden PKGBUILD diff ---
             else
@@ -448,7 +448,7 @@ case "$MODE" in
                 # shellcheck disable=SC2317
                 TEST_ERRORS=$((TEST_ERRORS + 1))
                 # shellcheck disable=SC2317
-                warn "Error output for $test_mode is in: $TEST_LOG_FILE"
+                warn "Error output for $test_mode is in: \"$TEST_LOG_FILE\""
                 # shellcheck disable=SC2317
                 cat "$TEST_LOG_FILE" >&2
             fi
@@ -608,12 +608,12 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     # For reproducibility: set mtime using SOURCE_DATE_EPOCH if available, else use a fixed date
     if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
         ARCHIVE_MTIME="--mtime=@$SOURCE_DATE_EPOCH"
-        log "[aur] Using SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH for tarball mtime."
+        log "[aur] Using SOURCE_DATE_EPOCH=\"$SOURCE_DATE_EPOCH\" for tarball mtime."
     else
         # Use the commit date of GIT_REF for reproducible, traceable mtime
         COMMIT_EPOCH=$(git show -s --format=%ct "$GIT_REF")
         ARCHIVE_MTIME="--mtime=@$COMMIT_EPOCH"
-        log "[aur] Using commit date (epoch $COMMIT_EPOCH) of $GIT_REF for tarball mtime."
+        log "[aur] Using commit date (epoch \"$COMMIT_EPOCH\") of \"$GIT_REF\" for tarball mtime."
     fi
     # Check if git archive supports --mtime (Git >= 2.32)
     GIT_VERSION=$(git --version | awk '{print $3}')
@@ -810,7 +810,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                                 if curl -I -L -f --silent "$TARBALL_URL" > /dev/null; then
                                     log "[aur] Asset is now available on GitHub (after $i attempt(s))."
                                     if (( total_wait > 0 )); then
-                                        echo "[aur] Total wait time: ${total_wait} seconds." >&2
+                                        echo "[aur] Total wait time: $total_wait seconds." >&2
                                     fi
                                     break
                                 else
@@ -899,7 +899,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                                 if curl -I -L -f --silent "$TARBALL_URL" > /dev/null; then
                                     log "[aur] Asset is now available on GitHub (after $i attempt(s))."
                                     if (( total_wait > 0 )); then
-                                        echo "[aur] Total wait time: ${total_wait} seconds." >&2
+                                        echo "[aur] Total wait time: $total_wait seconds." >&2
                                     fi
                                     break
                                 else
