@@ -11,7 +11,7 @@ set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
 
 # Trap errors and print a helpful message with line number and command
 # Note: set -E implies errtrace in Bash >=4.4, but older Bash may not propagate ERR trap into all subshells.
-trap 'err "[FATAL] Error at line $LINENO: $BASH_COMMAND"' ERR
+trap 'err "[FATAL] ${BASH_SOURCE[1]}:${BASH_LINENO[0]}: $BASH_COMMAND"' ERR
 
 # --- Config / Constants ---
 declare -r PKGNAME="vglog-filter"
