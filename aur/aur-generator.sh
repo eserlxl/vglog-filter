@@ -137,19 +137,19 @@ install_pkg() {
 
 function usage() {
     log "Usage: $0 [--no-color|-n] [--ascii-armor|-a] [--dry-run|-d] <mode>"
-    echo
+    printf '\n'
     log "Modes:"
     log "  local     Build and install the package from a local tarball (for testing)."
     log "  aur       Prepare a release tarball, sign it with GPG, and update PKGBUILD for AUR upload."
     log "  aur-git   Generate a PKGBUILD for the -git (VCS) AUR package and optionally install it (no tarball/signing)."
     log "  clean     Remove all generated files and directories"
     log "  test      Run all modes in dry-run mode to check for errors and report results"
-    echo
+    printf '\n'
     log "Options (must appear before the mode, parsed with getopt):"
     log "  --no-color, -n     Disable colored output (also supported via NO_COLOR env variable)"
     log "  --ascii-armor, -a  Use ASCII-armored signatures (.asc) instead of binary (.sig) for GPG signing"
     log "  --dry-run, -d      Run all steps except the final makepkg -si (for CI/testing)"
-    echo
+    printf '\n'
     log "Notes:"
     log "- All options must appear before the mode (e.g., $0 -n --dry-run aur)."
     log "- Both short and long options are supported and parsed using getopt for robustness."
