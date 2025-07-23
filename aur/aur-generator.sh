@@ -254,9 +254,8 @@ if ! PARSED_OPTS=$(getopt -o nadh --long no-color,ascii-armor,dry-run,help -- "$
     err "Failed to parse options."; usage; exit 1
 fi
 # Note: set -- resets positional parameters to the parsed result
-# shellcheck disable=SC2086
-# (PARSED_OPTS is safe here as it comes from getopt)
-eval set -- $PARSED_OPTS
+# Use quoted eval to avoid word-splitting hazard (see shell scripting best practices)
+eval "set -- $PARSED_OPTS"
 while true; do
     case "$1" in
         -n|--no-color)
