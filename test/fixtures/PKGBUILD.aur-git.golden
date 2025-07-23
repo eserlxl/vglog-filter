@@ -1,2 +1,37 @@
-# Placeholder golden PKGBUILD for aur-git mode
-echo "Update this file with the expected PKGBUILD output for aur-git mode." 
+# This is a golden file for test comparison only. Do not use for actual builds or releases.
+# Copyright (C) 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+pkgname=vglog-filter-git
+makedepends=(git)
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="A log filtering tool for Valgrind logs."
+arch=('x86_64')
+url="https://github.com/eserlxl/vglog-filter"
+license=('GPL3')
+validpgpkeys=('F677BC1E3BD7246E')
+depends=()
+makedepends=('cmake' 'make' 'gcc')
+source=("git+https://github.com/eserlxl/vglog-filter.git#branch=main")
+
+pkgver() {
+    cd "$srcdir/${pkgname%-git}"
+    git describe --long --tags 2>/dev/null | sed "s/^v//;s/-/./g" || \
+        printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+b2sums=("SKIP")
+
+build() {
+  cd "${srcdir}/vglog-filter"
+  bash ./build.sh performance warnings
+}
+
+package() {
+  cd "${srcdir}/vglog-filter"
+  install -Dm755 build/vglog-filter "${pkgdir}/usr/bin/vglog-filter"
+} 
+validpgpkeys=('TEST_KEY_FOR_DRY_RUN')

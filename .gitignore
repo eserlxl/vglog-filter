@@ -33,6 +33,7 @@ vglog-filter
 *.swp
 *.tmp
 *.log
+*.lock
 
 # CMake
 CMakeFiles/
