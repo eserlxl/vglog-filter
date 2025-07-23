@@ -371,6 +371,8 @@ ascii_armor=${ASCII_ARMOR_DEFAULT:-0}
 command -v getopt >/dev/null 2>&1 && getopt -T >/dev/null 2>&1 || 
     err "GNU getopt required (util-linux)."
 # --- End GNU getopt check ---
+# WARNING: The ERR trap is disabled below for getopt parsing. If you add code after getopt_output=... and before the trap is restored,
+# errors will not trigger the custom ERR trap (though set -e is still active). If you add more code here, consider re-enabling the trap earlier.
 set +e
 trap - ERR
 getopt_output=$(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help,usage,no-wait -- "$@")
