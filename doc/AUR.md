@@ -8,6 +8,7 @@
 - **License:** GPLv3 or later (see LICENSE)
 - **Platform:** The script is designed for GNU/Linux environments and does not aim to support macOS/BSD. It requires GNU getopt (util-linux) and will not work with BSD/macOS getopt implementations.
 - **Bash Version:** The script requires **Bash version 4 or newer**. It will exit with an error if run on an older version.
+- **Tool Hints:** If a required tool is missing, the script will print a hint with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums).
 
 ## Usage
 
@@ -194,6 +195,7 @@ The script supports several environment variables for automation:
 - `updpkgsums` (from `pacman-contrib`)
 - `curl` (for checking GitHub assets)
 - `getopt` (GNU version from util-linux; the script will not work with BSD/macOS getopt)
+- **Tool Hints:** If a required tool is missing, the script will print a hint with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums).
 
 > **Warning:** `pacman-contrib` is not included in the `base-devel` group on Arch Linux. You must install it separately, or you will get a `updpkgsums: command not found` error when building or packaging.
 
