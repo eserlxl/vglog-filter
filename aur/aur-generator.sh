@@ -461,14 +461,8 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     if [[ "$MODE" == "aur" ]]; then
         OLD_PKGVER=""
         OLD_PKGREL=""
-        if [[ -f "$PKGBUILD".bak ]]; then
-            rm -f "$PKGBUILD".bak
-        fi
-        if [[ -f "$PKGBUILD" ]]; then
-            # Save a backup in case of error
-            cp "$PKGBUILD" "$PKGBUILD".bak
-        fi
-        if [[ -f "$PKGBUILD.bak" ]]; then
+        if [[ -s "$PKGBUILD" ]]; then
+            cp "$PKGBUILD" "$PKGBUILD.bak"
             OLD_PKGVER=$(awk -F= '/^[[:space:]]*pkgver[[:space:]]*=/ {print $2}' "$PKGBUILD.bak" | tr -d "\"'[:space:]")
             OLD_PKGREL=$(awk -F= '/^[[:space:]]*pkgrel[[:space:]]*=/ {print $2}' "$PKGBUILD.bak" | tr -d "\"'[:space:]")
         fi
