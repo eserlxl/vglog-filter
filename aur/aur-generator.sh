@@ -6,6 +6,10 @@
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
 set -euo pipefail
+set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
+
+# Trap errors and print a helpful message with line number and command
+trap 'err "[FATAL] Error at line $LINENO: $BASH_COMMAND"' ERR
 
 # --- Config / Constants ---
 readonly PKGNAME="vglog-filter"
