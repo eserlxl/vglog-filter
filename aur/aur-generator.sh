@@ -9,7 +9,7 @@
 # The script is designed for GNU/Linux environments and does not aim to support macOS/BSD.
 
 # Require Bash >= 4 early, before using any Bash 4+ features
-if [[ -v BASH_VERSINFO && ${BASH_VERSINFO[0]} -lt 4 ]]; then
+if ((BASH_VERSINFO[0] < 4)); then
     echo "Bash ≥ 4 required" >&2
     exit 1
 fi
