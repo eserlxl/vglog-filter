@@ -29,18 +29,19 @@ cleanup() {
 }
 trap 'cleanup' EXIT
 
+# color_enabled is set from env or default, but will be overridden by CLI options below
 color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
 # Remove unreachable Bash version check for color_enabled
 set -euo pipefail
 set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
 
-# Color variables (set once if tput is available)
+# Color variables (set once if tput is available and output is a terminal)
 HAVE_TPUT=0
 if command -v tput >/dev/null 2>&1; then
     HAVE_TPUT=1
 fi
 if (( color_enabled )); then
-    if (( HAVE_TPUT )); then
+    if (( HAVE_TPUT )) && [[ -t 1 ]]; then
         RED="$(tput setaf 1)$(tput bold)"
         GREEN="$(tput setaf 2)$(tput bold)"
         YELLOW="$(tput setaf 3)$(tput bold)"
@@ -359,6 +360,7 @@ case "$MODE" in
         # Combine arrays for removal
         files=("${TARBALLS[@]}" "${SIGNATURES[@]}" "${ASC_SIGNATURES[@]}")
         log "Cleaning AUR directory..."
+        # rm -f -- "${files[@]}" is safe even if files is empty due to nullglob and the check above
         if (( ${#files[@]} )); then
             rm -f -- "${files[@]}"
         fi
