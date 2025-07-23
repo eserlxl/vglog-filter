@@ -30,6 +30,7 @@ color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
 # Remove unreachable Bash version check for color_enabled
 set -euo pipefail
 set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
+set -o errtrace  # Explicitly propagate ERR trap to all subshells (Bash ≥4.4, safer)
 
 # Trap errors and print a helpful message with line number and command
 # Note: set -E implies errtrace in Bash >=4.4, but older Bash may not propagate ERR trap into all subshells.
