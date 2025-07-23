@@ -27,6 +27,8 @@ SCRIPT_NAME=$(basename "$0")
 declare -r SCRIPT_NAME
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 declare -r PROJECT_ROOT
+GH_USER="${GH_USER:-eserlxl}"
+declare -r GH_USER
 # VALID_MODES is used for validation in the usage function and mode checking
 # shellcheck disable=SC2034
 declare -a VALID_MODES=(local aur aur-git clean test)
@@ -502,7 +504,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     fi
     if [[ "$MODE" == "aur" ]]; then
         # Fix: Replace source=() with correct URL, robustly handling multiline arrays
-        awk -v new_source="source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")" '
+        awk -v new_source="source=(\"https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")" '
             BEGIN { in_source=0 }
             /^source=\(/ {
                 in_source=1;
@@ -526,11 +528,11 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         log "[aur] Updated source line in PKGBUILD (handles multiline arrays)."
         # Check if the tarball exists on GitHub before running updpkgsums
         local SIGNATURE_EXT
-        TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
+        TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
         if ! curl --head --silent --fail --location "$TARBALL_URL" > /dev/null; then
             warn "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
-            sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
-            TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
+            sed -i "s|source=(\".*\")|source=(\"https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
+            TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
             if ! curl --head --silent --fail --location "$TARBALL_URL" > /dev/null; then
                 # Asset not found - offer to upload automatically if gh CLI is available
                 if command -v gh >/dev/null 2>&1; then
@@ -549,14 +551,14 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         fi
                         log "[aur] Uploading ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to GitHub release ${PKGVER}..."
                         # Upload tarball
-                        if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL" --repo "eserlxl/${PKGNAME}"; then
+                        if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL" --repo "${GH_USER}/${PKGNAME}"; then
                             log "[aur] Successfully uploaded ${TARBALL}"
                         else
                             err "[aur] Failed to upload ${TARBALL}"
                             exit 1
                         fi
                         # Upload signature
-                        if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL$SIGNATURE_EXT" --repo "eserlxl/${PKGNAME}"; then
+                        if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL$SIGNATURE_EXT" --repo "${GH_USER}/${PKGNAME}"; then
                             log "[aur] Successfully uploaded ${TARBALL}${SIGNATURE_EXT}"
                         else
                             err "[aur] Failed to upload ${TARBALL}${SIGNATURE_EXT}"
@@ -613,7 +615,7 @@ awk '
         print "pkgname=vglog-filter-git"; next
     }
     /^source=/ {
-        print "source=(\"git+https://github.com/eserlxl/vglog-filter.git#branch=main\")";
+        print "source=(\"git+https://github.com/${GH_USER}/vglog-filter.git#branch=main\")";
         print sums;
         next
     }
