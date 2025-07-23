@@ -222,6 +222,33 @@ set_signature_ext() {
     fi
 }
 
+# Helper to update the source array in PKGBUILD with a new tarball URL, preserving extra sources
+update_source_array_in_pkgbuild() {
+    local pkgbuild_file="$1"
+    local tarball_url="$2"
+    # Use awk to robustly update the first entry in source=(), preserving extras and multiline arrays
+    awk -v newurl="$tarball_url" '
+        BEGIN { in_source=0; replaced=0 }
+        /^source=\(/ {
+            in_source=1; printf "%s\n", $0; next
+        }
+        in_source && /\)/ {
+            in_source=0;
+            if (!replaced) {
+                # If no source lines were found, insert the new one
+                printf "    \"%s\"\n", newurl
+                replaced=1
+            }
+            print $0; next
+        }
+        in_source && !replaced {
+            # Replace the first source entry
+            print "    \"" newurl "\""; replaced=1; next
+        }
+        { print $0 }
+    ' "$pkgbuild_file" > "$pkgbuild_file.tmp" && mv "$pkgbuild_file.tmp" "$pkgbuild_file"
+}
+
 # --- Color Setup ---
 # Group color variable definitions and helpers at the top
 # init_colors moved to top
