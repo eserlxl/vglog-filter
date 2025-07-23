@@ -576,29 +576,36 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         # --- End flock-protected critical section ---
     fi
     if [[ "$MODE" == "aur" ]]; then
-        # Fix: Replace source=() with correct URL, robustly handling multiline arrays
-        awk -v new_source="source=(\"https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")" '
-            BEGIN { in_source=0 }
+        # Fix: Append tarball URL to source=(), robustly handling multiline arrays and preserving extra sources
+        awk -v tarball_url="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}" '
+            BEGIN { in_source=0; new_source_line=""; }
             /^source=\(/ {
                 in_source=1;
-                print new_source;
-                print "# <<< aur-generator >>>";
+                print "source=(\"" tarball_url "\"";
                 next
             }
             in_source && /\)/ {
                 in_source=0;
-                # If there is a trailing comment after the closing parenthesis, print it after the marker
-                match($0, /\)[[:space:]]*(#.*)/, arr)
-                if (arr[1] != "") print arr[1];
+                # Remove closing parenthesis from the line
+                sub(/\)/, "");
+                # Print any remaining sources/comments on this line
+                if (length($0) > 0) {
+                    # Remove leading/trailing whitespace
+                    gsub(/^ +| +$/, "");
+                    if (length($0) > 0) print $0;
+                }
+                print ")";
+                print "# <<< aur-generator >>>";
                 next
             }
             in_source {
-                if ($0 ~ /^[[:space:]]*#/) print; # preserve comments inside array
+                # Print all lines inside the array (sources, comments)
+                print;
                 next
             }
             { print }
         ' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
-        log "[aur] Updated source line in PKGBUILD (handles multiline arrays)."
+        log "[aur] Appended tarball URL to source array in PKGBUILD (preserves extra sources and comments)."
         # Check if the tarball exists on GitHub before running updpkgsums
         set_signature_ext
         TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
