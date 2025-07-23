@@ -30,14 +30,23 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 readonly PROJECT_ROOT
 # Determine GH_USER: environment > PKGBUILD.0 url > fallback
 if [[ -z "${GH_USER:-}" ]]; then
-    PKGBUILD0_URL=$(awk -F/ '/^url="https:\/\/github.com\// {print $5}' "$SCRIPT_DIR/PKGBUILD.0")
+    PKGBUILD0_URL=$(awk -F/ '/^url="https:\/\/github.com\// {print $4}' "$SCRIPT_DIR/PKGBUILD.0")
     if [[ -n "$PKGBUILD0_URL" ]]; then
-        GH_USER="$PKGBUILD0_URL"
+        GH_USER="${PKGBUILD0_URL%\"}"
     else
         GH_USER="eserlxl"
         # warn is not available yet, so use echo
         echo "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'." >&2
     fi
+fi
+# Robustness: Detect if GH_USER is the same as PKGNAME (likely a mistake)
+if [[ "$GH_USER" == "$PKGNAME" ]]; then
+    color_echo red "[aur-generator] ERROR: Detected GH_USER='$GH_USER' (same as PKGNAME). This usually means the url field in PKGBUILD.0 is wrong." >&2
+    color_echo red "[aur-generator] Please set the url field in PKGBUILD.0 to your real GitHub repo, e.g.:" >&2
+    color_echo red "    url=\"https://github.com/<yourusername>/$PKGNAME\"" >&2
+    color_echo red "[aur-generator] Detected url line:" >&2
+    grep '^url=' "$SCRIPT_DIR/PKGBUILD.0" >&2
+    exit 1
 fi
 readonly GH_USER
 readonly -a VALID_MODES=(local aur aur-git clean test lint)
@@ -102,6 +111,15 @@ err() {
     trap - ERR
     color_echo red "$*" >&2
     trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
+}
+gh_upload_or_exit() {
+    local file="$1"
+    local repo="$2"
+    local tag="$3"
+    if ! gh release upload "$tag" "$file" --repo "$repo" --clobber; then
+        err "[aur] Failed to upload $file to GitHub release $tag"
+        exit 1
+    fi
 }
 warn() { color_echo yellow "$*" >&2; }
 log() { color_echo green "$*"; }
@@ -805,13 +823,20 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         asset_exists=1
         if command -v gh >/dev/null 2>&1; then
             # Use gh release view --json assets and jq for robust asset detection
-            if ! gh release view "$PKGVER" --json assets 2>/dev/null | jq -e '.assets[].name == "'"$TARBALL"'"' >/dev/null; then
+            ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets 2>/dev/null | jq '.assets[].name')
+            echo "[DEBUG] gh release view output for $PKGVER:" >&2
+            echo "$ASSET_LIST_OUTPUT" >&2
+            if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
                 asset_exists=0
             fi
+            echo "[DEBUG] asset_exists after gh/jq check: $asset_exists" >&2
         else
-            if ! curl -sSf -L "$TARBALL_URL" -o /dev/null; then
+            CURL_OUTPUT=$(curl -sSf -L -w '%{http_code}' -o /dev/null "$TARBALL_URL" 2>&1)
+            echo "[DEBUG] curl output for $TARBALL_URL: $CURL_OUTPUT" >&2
+            if ! [[ "$CURL_OUTPUT" =~ 200$ ]]; then
                 asset_exists=0
             fi
+            echo "[DEBUG] asset_exists after curl check: $asset_exists" >&2
         fi
         if (( asset_exists == 0 )); then
             warn "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
@@ -820,13 +845,20 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             asset_exists=1
             if command -v gh >/dev/null 2>&1; then
                 # Use gh release view --json assets and jq for robust asset detection
-                if ! gh release view "$PKGVER" --json assets 2>/dev/null | jq -e '.assets[].name == "'"$TARBALL"'"' >/dev/null; then
+                ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets 2>/dev/null | jq '.assets[].name')
+                echo "[DEBUG] gh release view output for $PKGVER:" >&2
+                echo "$ASSET_LIST_OUTPUT" >&2
+                if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
                     asset_exists=0
                 fi
+                echo "[DEBUG] asset_exists after gh/jq check: $asset_exists" >&2
             else
-                if ! curl -sSf -L "$TARBALL_URL" -o /dev/null; then
+                CURL_OUTPUT=$(curl -sSf -L -w '%{http_code}' -o /dev/null "$TARBALL_URL" 2>&1)
+                echo "[DEBUG] curl output for $TARBALL_URL: $CURL_OUTPUT" >&2
+                if ! [[ "$CURL_OUTPUT" =~ 200$ ]]; then
                     asset_exists=0
                 fi
+                echo "[DEBUG] asset_exists after curl check: $asset_exists" >&2
             fi
             if (( asset_exists == 0 )); then
                 # Asset not found - offer to upload automatically if gh CLI is available
@@ -868,11 +900,15 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         update_checksums
         generate_srcinfo
         log "[aur] Preparation complete."
-        if command -v gh >/dev/null 2>&1; then
-            echo "Assets have been automatically uploaded to GitHub release ${PKGVER}."
+        if (( asset_exists == 0 )); then
+            if command -v gh >/dev/null 2>&1; then
+                echo "Assets have been automatically uploaded to GitHub release ${PKGVER}."
+            else
+                set_signature_ext
+                printf 'Now push the git tag and upload %q and %q to the GitHub release page.\n' "$OUTDIR/$TARBALL" "$OUTDIR/$TARBALL$SIGNATURE_EXT"
+            fi
         else
-            set_signature_ext
-            printf 'Now push the git tag and upload %q and %q to the GitHub release page.\n' "$OUTDIR/$TARBALL" "$OUTDIR/$TARBALL$SIGNATURE_EXT"
+            echo "Assets already exist on GitHub release ${PKGVER}. No upload was performed." >&2
         fi
         echo "Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package."
         install_pkg "aur"
