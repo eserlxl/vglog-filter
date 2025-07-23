@@ -363,40 +363,27 @@ case "$MODE" in
         log "[test] Running all modes in dry-run mode to check for errors."
         TEST_ERRORS=0
         # Run the test mode (rely only on --dry-run flag, do not export DRY_RUN)
-        # shellcheck disable=SC2154
-        # trap 'for d in "${TEMP_DIRS[@]}"; do rm -rf "$d"; done' EXIT  # Now handled globally
-        # Test each mode
         for test_mode in local aur aur-git; do
             log "--- Testing $test_mode mode ---"
-            # Always run clean before each test
             log "[test] Running clean before $test_mode test..."
             if ! bash "$SCRIPT_DIR/$SCRIPT_NAME" clean > /dev/null 2>&1; then
                 warn "[test] Warning: Clean failed for $test_mode test, but continuing..."
             fi
-            # Create a temporary directory for this test
-            TEMP_DIR=$(mktemp -d)
-            TEMP_DIRS+=("$TEMP_DIR")
-            cd "$TEMP_DIR" || exit 1
-            # Set up test environment
+            # Use a persistent log file in SCRIPT_DIR
+            TEST_LOG_FILE="$SCRIPT_DIR/test-$test_mode-$(date +%s).log"
             export CI=1  # Skip prompts
-            # For aur mode, set a dummy GPG key to avoid prompts
             if [[ "$test_mode" == "aur" ]]; then
                 export GPG_KEY_ID="TEST_KEY_FOR_DRY_RUN"
             fi
-            if bash "$SCRIPT_DIR/$SCRIPT_NAME" --dry-run "$test_mode" > "$TEMP_DIR/test_output.log" 2>&1; then
+            if bash "$SCRIPT_DIR/$SCRIPT_NAME" --dry-run "$test_mode" > "$TEST_LOG_FILE" 2>&1; then
                 log "[test] ✓ $test_mode mode passed"
             else
                 err "[test] ✗ $test_mode mode failed"
                 TEST_ERRORS=$((TEST_ERRORS + 1))
-                # Show the error output
-                if [[ -f "$TEMP_DIR/test_output.log" ]]; then
-                    warn "Error output for $test_mode:"
-                    cat "$TEMP_DIR/test_output.log" >&2
-                fi
+                warn "Error output for $test_mode is in: $TEST_LOG_FILE"
+                cat "$TEST_LOG_FILE" >&2
             fi
-            # Clean up
-            cd "$SCRIPT_DIR" || exit 1
-            # Manual rm -rf "$TEMP_DIR" is now handled by the outer trap
+            log "[test] Log for $test_mode: $TEST_LOG_FILE"
         done
         # Report results
         if [[ $TEST_ERRORS -eq 0 ]]; then
