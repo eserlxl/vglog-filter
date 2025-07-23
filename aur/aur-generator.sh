@@ -56,7 +56,7 @@ declare -Ar PKG_HINT=(
 # set -E: Ensure ERR trap is inherited by functions and subshells (Bash >=4.4). For older Bash, enable errtrace explicitly.
 set -E
 set -o errtrace  # Ensure ERR trap is inherited by functions and subshells (for maximum compatibility)
-trap 'err "[FATAL] ${RED}" "${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND" "${RESET}"' ERR
+trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 
 # --- Functions ---
 # Minimal help for scripts/AUR helpers
