@@ -203,14 +203,24 @@ init_colors() {
     fi
 }
 
-# --- Cleanup lingering lock and test log files at script start ---
-cleanup_test_logs() {
-    # Remove all test and diff log files before running tests or any mode
+# --- Cleanup lingering lock and generated files at script start or before modes ---
+cleanup() {
+    # Remove lock file
+    rm -f "$SCRIPT_DIR/.aur-generator.lock"
+    # Remove generated PKGBUILD files
+    rm -f "$SCRIPT_DIR/PKGBUILD" "$SCRIPT_DIR/PKGBUILD.git"
+    # Remove generated SRCINFO
+    rm -f "$SCRIPT_DIR/.SRCINFO"
+    # Remove any test or diff logs
     rm -f "$SCRIPT_DIR"/test-*.log
     rm -f "$SCRIPT_DIR"/diff-*.log
-    rm -f "$SCRIPT_DIR"/.aur-generator.lock
+    # Remove any generated tarballs and signatures
+    rm -f "$SCRIPT_DIR/${PKGNAME}-"*.tar.gz
+    rm -f "$SCRIPT_DIR/${PKGNAME}-"*.tar.gz.sig
+    rm -f "$SCRIPT_DIR/${PKGNAME}-"*.tar.gz.asc
+    # Remove any generated package files
+    rm -f "$SCRIPT_DIR"/*.pkg.tar.*
 }
-cleanup_test_logs
 
 # Enable debug tracing if DEBUG=1
 if [[ "${DEBUG:-0}" == 1 ]]; then
@@ -400,14 +410,17 @@ case "$MODE" in
     local)
         # local mode requires: makepkg, updpkgsums, curl
         require makepkg updpkgsums curl || exit 1
+        cleanup
         ;;
     aur)
         # aur mode requires: makepkg, updpkgsums, curl, gpg, jq
         require makepkg updpkgsums curl gpg jq || exit 1
+        cleanup
         ;;
     aur-git)
         # aur-git mode requires: makepkg
         require makepkg || exit 1
+        cleanup
         ;;
     lint)
         # lint mode requires: shellcheck, bash
