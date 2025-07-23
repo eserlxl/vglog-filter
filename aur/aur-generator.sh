@@ -49,7 +49,7 @@ if [[ "$GH_USER" == "$PKGNAME" ]]; then
     exit 1
 fi
 readonly GH_USER
-readonly -a VALID_MODES=(local aur aur-git clean test lint)
+readonly -a VALID_MODES=(local aur aur-git clean test lint golden)
 
 # Require Bash >= 4 early, before using any Bash 4+ features
 if ((BASH_VERSINFO[0] < 4)); then
@@ -148,7 +148,7 @@ trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 # Minimal help for scripts/AUR helpers
 usage() {
     printf 'Usage: %s [OPTIONS] MODE\n' "$SCRIPT_NAME"
-    printf 'Modes: local | aur | aur-git | clean | test | lint\n'
+    printf 'Modes: local | aur | aur-git | clean | test | lint | golden\n'
     printf 'Options: --no-wait (skip post-upload wait, for CI/advanced users)\n'
 }
 
@@ -186,6 +186,8 @@ help() {
     printf 'If a required tool is missing, a hint will be printed with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums).\n'
     printf '\n'
     printf 'The lint mode runs shellcheck and bash -n on this script for quick CI/self-test.\n'
+    printf '\n'
+    printf 'The golden mode regenerates golden PKGBUILD files for test/fixtures/.\n'
 }
 
 # Helper to set signature extension and GPG armor option
@@ -426,6 +428,10 @@ case "$MODE" in
         # lint mode requires: shellcheck, bash
         require shellcheck bash || exit 1
         ;;
+    golden)
+        # golden mode requires: makepkg, updpkgsums, curl, gpg, jq
+        require makepkg updpkgsums curl gpg jq || exit 1
+        ;;
     # clean and test modes do not require special tools
 esac
 
@@ -582,6 +588,32 @@ case "$MODE" in
             err "[lint] ✗ Lint checks failed."
             exit 1
         fi
+        ;;
+    golden)
+        log "[golden] Regenerating golden PKGBUILD files in test/fixtures/."
+        GOLDEN_MODES=(local aur aur-git)
+        GOLDEN_DIR="$PROJECT_ROOT/test/fixtures"
+        mkdir -p "$GOLDEN_DIR"
+        for mode in "${GOLDEN_MODES[@]}"; do
+            log "[golden] Generating PKGBUILD for $mode..."
+            # Clean before each mode
+            bash "$SCRIPT_DIR/$SCRIPT_NAME" clean > /dev/null 2>&1 || warn "[golden] Clean failed for $mode, continuing..."
+            # Generate PKGBUILD (not dry-run, but skip install)
+            export CI=1
+            export GPG_KEY_ID="TEST_KEY_FOR_DRY_RUN"
+            if bash "$SCRIPT_DIR/$SCRIPT_NAME" --dry-run "$mode" > /dev/null 2>&1; then
+                GOLDEN_FILE="$GOLDEN_DIR/PKGBUILD.$mode.golden"
+                cp -f "$SCRIPT_DIR/PKGBUILD" "$GOLDEN_FILE"
+                echo "# This is a golden file for test comparison only. Do not use for actual builds or releases." > "$GOLDEN_FILE.tmp"
+                cat "$GOLDEN_FILE" >> "$GOLDEN_FILE.tmp"
+                mv "$GOLDEN_FILE.tmp" "$GOLDEN_FILE"
+                log "[golden] Updated $GOLDEN_FILE"
+            else
+                err "[golden] Failed to generate PKGBUILD for $mode. Golden file not updated."
+            fi
+        done
+        log "[golden] All golden files updated."
+        exit 0
         ;;
 esac
 
