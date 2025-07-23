@@ -77,15 +77,16 @@ generate_srcinfo() {
 }
 install_pkg() {
     local mode="$1"
+    local run_makepkg=n  # Always initialize to avoid set -u errors
     if [[ $DRY_RUN -eq 1 ]]; then
         log "[$mode] --dry-run: Skipping makepkg -si. All required steps completed successfully."
     else
         if [[ "$mode" == "aur" ]]; then
-                    if [[ "${AUTO:-}" == "y" ]]; then
-            run_makepkg=n
-        else
-            prompt "Do you want to run makepkg -si now? [y/N] " run_makepkg n
-        fi
+            if [[ "${AUTO:-}" == "y" ]]; then
+                run_makepkg=n
+            else
+                prompt "Do you want to run makepkg -si now? [y/N] " run_makepkg n
+            fi
             if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
                 makepkg -si
             fi
