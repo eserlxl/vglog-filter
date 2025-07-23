@@ -167,6 +167,8 @@ The script supports several environment variables for automation:
 - `updpkgsums` (from `pacman-contrib`)
 - `curl` (for checking GitHub assets)
 
+> **Warning:** `pacman-contrib` is not included in the `base-devel` group on Arch Linux. You must install it separately, or you will get a `updpkgsums: command not found` error when building or packaging.
+
 ### Optional Tools
 - `gpg` (required for `aur` mode signing)
 - `gh` (GitHub CLI, for automatic asset upload)
