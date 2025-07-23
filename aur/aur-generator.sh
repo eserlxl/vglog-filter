@@ -71,6 +71,100 @@ set -E
 set -o errtrace  # Ensure ERR trap is inherited by functions and subshells (for maximum compatibility)
 trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 
+# --- Constants (grouped at top, all readonly) ---
+readonly PKGNAME="vglog-filter"
+SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_NAME
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+readonly PROJECT_ROOT
+# Determine GH_USER: environment > PKGBUILD.0 url > fallback
+if [[ -z "${GH_USER:-}" ]]; then
+    PKGBUILD0_URL=$(awk -F/ '/^url="https:\/\/github.com\// {print $4}' "$SCRIPT_DIR/PKGBUILD.0")
+    if [[ -n "$PKGBUILD0_URL" ]]; then
+        GH_USER="${PKGBUILD0_URL%\"}"
+    else
+        GH_USER="eserlxl"
+        # warn is not available yet, so use echo
+        echo "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'." >&2
+    fi
+fi
+# Robustness: Detect if GH_USER is the same as PKGNAME (likely a mistake)
+if [[ "$GH_USER" == "$PKGNAME" ]]; then
+    err "[aur-generator] ERROR: Detected GH_USER='$GH_USER' (same as PKGNAME). This usually means the url field in PKGBUILD.0 is wrong." >&2
+    err "[aur-generator] Please set the url field in PKGBUILD.0 to your real GitHub repo, e.g.:" >&2
+    err "[aur-generator]     url=\"https://github.com/<yourusername>/$PKGNAME\"" >&2
+    err "[aur-generator] Detected url line:" >&2
+    grep '^url=' "$SCRIPT_DIR/PKGBUILD.0" >&2
+    exit 1
+fi
+readonly GH_USER
+readonly -a VALID_MODES=(local aur aur-git clean test lint golden)
+
+# Require Bash >= 4 early, before using any Bash 4+ features
+if ((BASH_VERSINFO[0] < 4)); then
+    err "Bash ≥ 4 required" >&2
+    exit 1
+fi
+
+# --- Color Setup ---
+# Group color variable definitions and helpers at the top
+init_colors() {
+    # Color variables are initialized once here and memoized for all color_echo calls
+    HAVE_TPUT=0
+    if command -v tput >/dev/null 2>&1; then
+        HAVE_TPUT=1
+    fi
+    if (( color_enabled )); then
+        if (( HAVE_TPUT )) && [[ -t 1 ]]; then
+            RED="$(tput setaf 1)$(tput bold)"
+            GREEN="$(tput setaf 2)$(tput bold)"
+            YELLOW="$(tput setaf 3)$(tput bold)"
+            RESET="$(tput sgr0)"
+        else
+            if [[ -n "${BASH_VERSION:-}" ]]; then
+                RED='\e[1;31m'
+                GREEN='\e[1;32m'
+                YELLOW='\e[1;33m'
+                RESET='\e[0m'
+            else
+                RED='\033[1;31m'
+                GREEN='\033[1;32m'
+                YELLOW='\033[1;33m'
+                RESET='\033[0m'
+            fi
+        fi
+    else
+        RED=''
+        GREEN=''
+        YELLOW=''
+        RESET=''
+    fi
+}
+
+# --- Cleanup lingering lock and test log files at script start ---
+cleanup_test_logs() {
+    # Remove all test and diff log files before running tests or any mode
+    rm -f "$SCRIPT_DIR"/test-*.log
+    rm -f "$SCRIPT_DIR"/diff-*.log
+    rm -f "$SCRIPT_DIR"/.aur-generator.lock
+}
+cleanup_test_logs
+
+# Enable debug tracing if DEBUG=1
+if [[ "${DEBUG:-0}" == 1 ]]; then
+    set -x
+fi
+
+# Ensure GPG pinentry works in CI/sudo/non-interactive shells
+GPG_TTY=$(tty)  # Needed for GPG signing to work reliably (pinentry) in CI/sudo
+export GPG_TTY
+
+# color_enabled is set from env or default, but will be overridden by CLI options below
+set -euo pipefail
+color_enabled=${COLOR:-1}  # safe default, must be set before any error handling
+init_colors  # Ensure color variables are initialized before any error handling
+set -o noclobber  # Prevent accidental file overwrite with > redirection
+
 # --- Functions ---
 # Minimal help for scripts/AUR helpers
 usage() {
