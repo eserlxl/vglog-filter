@@ -6,6 +6,10 @@
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
 color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo ${COLOR:-1})
+# Disable color if Bash version is less than 4 (associative arrays unsupported)
+if [[ -v BASH_VERSION && ${BASH_VERSINFO[0]} -lt 4 ]]; then
+    color_enabled=0
+fi
 set -euo pipefail
 set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
 
