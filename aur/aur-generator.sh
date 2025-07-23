@@ -872,41 +872,19 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         set_signature_ext
         TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
         TARBALL_URL="${TARBALL_URL//\"/}"
-        asset_exists=1
-        # Check if the tarball exists on GitHub before running updpkgsums
-        if command -v gh >/dev/null 2>&1; then
-            if gh release view "$PKGVER" --json assets >/dev/null 2>&1; then
-                ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
-                if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^$TARBALL$"; then
-                    asset_exists=0
-                fi
-            else
-                asset_exists=0
-            fi
+        # Helper: Check if a release asset exists on GitHub (by URL or via gh CLI)
+        if asset_exists "$TARBALL_URL" "$PKGVER" "$TARBALL"; then
+            asset_exists=1
         else
-            CURL_OUTPUT=$(curl -sSf -L -w '%{http_code}' -o /dev/null "$TARBALL_URL" 2>&1)
-            if ! [[ "$CURL_OUTPUT" =~ 200$ ]]; then
-                asset_exists=0
-            fi
+            asset_exists=0
         fi
         if (( asset_exists == 0 )); then
             warn "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
             TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
-            asset_exists=1
-            if command -v gh >/dev/null 2>&1; then
-                if gh release view "$PKGVER" --json assets >/dev/null 2>&1; then
-                    ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
-                    if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^$TARBALL$"; then
-                        asset_exists=0
-                    fi
-                else
-                    asset_exists=0
-                fi
+            if asset_exists "$TARBALL_URL" "$PKGVER" "$TARBALL"; then
+                asset_exists=1
             else
-                CURL_OUTPUT=$(curl -sSf -L -w '%{http_code}' -o /dev/null "$TARBALL_URL" 2>&1)
-                if ! [[ "$CURL_OUTPUT" =~ 200$ ]]; then
-                    asset_exists=0
-                fi
+                asset_exists=0
             fi
             if (( asset_exists == 0 )); then
                 # Asset not found - offer to upload automatically if gh CLI is available
@@ -982,53 +960,20 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             log "[aur] Added missing b2sums=('SKIP') to PKGBUILD."
         fi
         # Check if the tarball exists on GitHub before running updpkgsums
-        asset_exists=1
-        if command -v gh >/dev/null 2>&1; then
-            # Use gh release view --json assets and jq for robust asset detection
-            if gh release view "$PKGVER" --json assets >/dev/null 2>&1; then
-                ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
-                echo "[DEBUG] gh release view output for $PKGVER:" >&2
-                echo "$ASSET_LIST_OUTPUT" >&2
-                if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^$TARBALL$"; then
-                    asset_exists=0
-                fi
-                echo "[DEBUG] asset_exists after gh/jq check: $asset_exists" >&2
-            else
-                asset_exists=0
-            fi
+        # Helper: Check if a release asset exists on GitHub (by URL or via gh CLI)
+        if asset_exists "$TARBALL_URL" "$PKGVER" "$TARBALL"; then
+            asset_exists=1
         else
-            CURL_OUTPUT=$(curl -sSf -L -w '%{http_code}' -o /dev/null "$TARBALL_URL" 2>&1)
-            echo "[DEBUG] curl output for $TARBALL_URL: $CURL_OUTPUT" >&2
-            if ! [[ "$CURL_OUTPUT" =~ 200$ ]]; then
-                asset_exists=0
-            fi
-            echo "[DEBUG] asset_exists after curl check: $asset_exists" >&2
+            asset_exists=0
         fi
         if (( asset_exists == 0 )); then
             warn "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
             sed -i "s|source=(\".*\")|source=(\"https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
             TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
-            asset_exists=1
-            if command -v gh >/dev/null 2>&1; then
-                # Use gh release view --json assets and jq for robust asset detection
-                if gh release view "$PKGVER" --json assets >/dev/null 2>&1; then
-                    ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
-                    echo "[DEBUG] gh release view output for $PKGVER:" >&2
-                    echo "$ASSET_LIST_OUTPUT" >&2
-                    if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^$TARBALL$"; then
-                        asset_exists=0
-                    fi
-                    echo "[DEBUG] asset_exists after gh/jq check: $asset_exists" >&2
-                else
-                    asset_exists=0
-                fi
+            if asset_exists "$TARBALL_URL" "$PKGVER" "$TARBALL"; then
+                asset_exists=1
             else
-                CURL_OUTPUT=$(curl -sSf -L -w '%{http_code}' -o /dev/null "$TARBALL_URL" 2>&1)
-                echo "[DEBUG] curl output for $TARBALL_URL: $CURL_OUTPUT" >&2
-                if ! [[ "$CURL_OUTPUT" =~ 200$ ]]; then
-                    asset_exists=0
-                fi
-                echo "[DEBUG] asset_exists after curl check: $asset_exists" >&2
+                asset_exists=0
             fi
             if (( asset_exists == 0 )); then
                 # Asset not found - offer to upload automatically if gh CLI is available
