@@ -7,7 +7,7 @@
 # See the LICENSE file in the project root for details.
 # NOTE: This script requires GNU getopt (util-linux) and is not compatible with macOS/BSD systems.
 # The script is designed for GNU/Linux environments and does not aim to support macOS/BSD.
-color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo ${COLOR:-1})
+color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
 # Disable color if Bash version is less than 4 (associative arrays unsupported)
 if [[ -v BASH_VERSION && ${BASH_VERSINFO[0]} -lt 4 ]]; then
     color_enabled=0
