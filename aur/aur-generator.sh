@@ -38,6 +38,25 @@ set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
 trap 'err "[FATAL] ${BASH_SOURCE[1]}:${BASH_LINENO[0]}: $BASH_COMMAND"' ERR
 
 # --- Functions ---
+# Minimal help for scripts/AUR helpers
+help() {
+    echo "Usage: $SCRIPT_NAME [OPTIONS] MODE"
+    echo "Modes: local | aur | aur-git | clean | test"
+}
+
+# Full usage (detailed help)
+usage() {
+    help
+    echo
+    echo "Options:"
+    echo "  -n, --no-color      Disable color output"
+    echo "  -a, --ascii-armor   Use ASCII-armored GPG signatures (.asc)"
+    echo "  -d, --dry-run       Dry run (no changes, for testing)"
+    echo "      --help, -h      Show minimal usage and exit"
+    echo
+    echo "For detailed documentation, see doc/USAGE.md."
+}
+
 # Color variables (set once if tput is available)
 if command -v tput >/dev/null 2>&1; then
     RED="$(tput setaf 1)$(tput bold)"
@@ -195,8 +214,8 @@ ascii_armor=${ASCII_ARMOR:-0}
 
 # Use getopt for unified short and long option parsing
 # This allows for robust handling of both short (-n) and long (--no-color) options
-if ! PARSED_OPTS=$(getopt -o nad --long no-color,ascii-armor,dry-run -- "$@" ); then
-    err "Failed to parse options."; usage
+if ! PARSED_OPTS=$(getopt -o nadh --long no-color,ascii-armor,dry-run,help -- "$@" ); then
+    err "Failed to parse options."; usage; exit 1
 fi
 # Note: set -- resets positional parameters to the parsed result
 # shellcheck disable=SC2086
@@ -210,15 +229,17 @@ while true; do
             ascii_armor=1; shift ;;
         -d|--dry-run)
             dry_run=1; shift ;;
+        -h|--help)
+            help; exit 0 ;;
         --)
             shift; break ;;
         *)
-            err "Unknown option: $1"; usage ;;
+            err "Unknown option: $1"; usage; exit 1 ;;
     esac
 done
 MODE=${1:-}
 if [[ -z $MODE ]]; then
-    usage
+    usage; exit 1
 fi
 
 # Validate mode against VALID_MODES array
@@ -232,7 +253,7 @@ done
 
 if [[ "$valid_mode" == "false" ]]; then
     err "Unknown mode: $MODE"
-    usage
+    usage; exit 1
 fi
 
 # --- Early dependency checks: fail fast if required tools are missing ---
