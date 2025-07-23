@@ -189,6 +189,15 @@ prompt() {
             return 1
         fi
     fi
+    if ! [[ -t 0 ]]; then
+        warn "[prompt] No interactive terminal available for: $prompt_text. Skipping prompt."
+        if [[ -n "$default_value" ]]; then
+            eval "$var_name=\"$default_value\""
+            return 0
+        else
+            return 1
+        fi
+    fi
     local input
     read -rp "$prompt_text" input
     eval "$var_name=\"$input\""
@@ -487,15 +496,33 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         ARCHIVE_MTIME="--mtime=@$COMMIT_EPOCH"
         log "[$MODE] Using commit date (epoch $COMMIT_EPOCH) of $GIT_REF for tarball mtime."
     fi
-    # Disable ERR trap in this subshell to avoid duplicate error messages from pipeline subshells (see Bash pipeline/trap behavior)
-    (
-        set -euo pipefail  # Ensure require and all commands fail early in CI and subshells
-        unset CI
-        trap '' ERR
-        git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$ARCHIVE_MTIME" "$GIT_REF" | \
-            gzip -n > "$OUTDIR/$TARBALL"
-    )
-    log "Created $OUTDIR/$TARBALL using $GIT_REF with reproducible mtime."
+    # Check if git archive supports --mtime (Git >= 2.32)
+    if git archive --help | grep -q -- '--mtime'; then
+        (
+            set -euo pipefail
+            unset CI
+            trap '' ERR
+            git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" $ARCHIVE_MTIME "$GIT_REF" | \
+                gzip -n > "$OUTDIR/$TARBALL"
+        )
+        log "Created $OUTDIR/$TARBALL using $GIT_REF with reproducible mtime."
+    else
+        (
+            set -euo pipefail
+            unset CI
+            trap '' ERR
+            git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$GIT_REF" > "$OUTDIR/$TARBALL.tmp.tar"
+            gzip -n < "$OUTDIR/$TARBALL.tmp.tar" > "$OUTDIR/$TARBALL"
+            rm -f "$OUTDIR/$TARBALL.tmp.tar"
+            # Set mtime on the tarball if possible
+            if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
+                touch -d "@${SOURCE_DATE_EPOCH}" "$OUTDIR/$TARBALL"
+            else
+                touch -d "@${COMMIT_EPOCH}" "$OUTDIR/$TARBALL"
+            fi
+        )
+        log "Created $OUTDIR/$TARBALL using $GIT_REF (fallback: no --mtime in git archive, set mtime on tarball)."
+    fi
 
     # Create GPG signature for aur mode only
     if [[ "$MODE" == "aur" ]]; then
@@ -567,7 +594,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         # --- Begin flock-protected critical section for pkgrel bump ---
         # Use exclusive flock to ensure only one process can bump pkgrel at a time.
         # The lockfile is not written to, but exclusive lock prevents race conditions.
-        LOCKFILE="$SCRIPT_DIR/PKGBUILD.lock"
+        LOCKFILE="$PWD/.lock"
         (
             set -euo pipefail  # Ensure require and all commands fail early in flock-protected critical section
             flock 200
@@ -603,11 +630,12 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     fi
     if [[ "$MODE" == "aur" ]]; then
         # Fix: Append tarball URL to source=(), robustly handling multiline arrays and preserving extra sources
-        awk -v tarball_url="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}" '
+        awk -v tarball_url="$TARBALL_URL" '
             BEGIN { in_source=0; new_source_line=""; }
             /^source=\(/ {
                 in_source=1;
-                print "source=(\"" tarball_url "\"";
+                # Properly quote tarball_url for PKGBUILD
+                printf "source=(\"%s\"\n", tarball_url);
                 next
             }
             in_source && /\)/ {
@@ -635,11 +663,31 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         # Check if the tarball exists on GitHub before running updpkgsums
         set_signature_ext
         TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
-        if ! curl -I -L -f --silent --retry 3 --retry-delay 2 --retry-all-errors "$TARBALL_URL" > /dev/null; then
+        asset_exists=1
+        if command -v gh >/dev/null 2>&1; then
+            if ! gh api "/repos/${GH_USER}/${PKGNAME}/releases/assets" --jq ".[] | select(.name == \"${TARBALL}\")" >/dev/null 2>&1; then
+                asset_exists=0
+            fi
+        else
+            if ! curl -sSf -L "$TARBALL_URL" -o /dev/null; then
+                asset_exists=0
+            fi
+        fi
+        if (( asset_exists == 0 )); then
             warn "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
             sed -i "s|source=(\".*\")|source=(\"https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
             TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
-            if ! curl -I -L -f --silent --retry 3 --retry-delay 2 --retry-all-errors "$TARBALL_URL" > /dev/null; then
+            asset_exists=1
+            if command -v gh >/dev/null 2>&1; then
+                if ! gh api "/repos/${GH_USER}/${PKGNAME}/releases/assets" --jq ".[] | select(.name == \"${TARBALL}\")" >/dev/null 2>&1; then
+                    asset_exists=0
+                fi
+            else
+                if ! curl -sSf -L "$TARBALL_URL" -o /dev/null; then
+                    asset_exists=0
+                fi
+            fi
+            if (( asset_exists == 0 )); then
                 # Asset not found - offer to upload automatically if gh CLI is available
                 if command -v gh >/dev/null 2>&1; then
                     warn "[aur] Release asset not found. GitHub CLI (gh) detected."
