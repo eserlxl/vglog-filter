@@ -727,9 +727,11 @@ cd "$SCRIPT_DIR" || exit 1
 if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     if [[ "$MODE" == "aur" ]]; then
         # --- Begin flock-protected critical section for pkgrel bump ---
+        # Remove lockfile if it exists to avoid noclobber errors
+        LOCKFILE="$SCRIPT_DIR/.aur-generator.lock"
+        rm -f "$LOCKFILE"
         # Use exclusive flock to ensure only one process can bump pkgrel at a time.
         # The lockfile is not written to, but exclusive lock prevents race conditions.
-        LOCKFILE="$SCRIPT_DIR/.aur-generator.lock"
         (
             set -euo pipefail  # Ensure require and all commands fail early in flock-protected critical section
             flock 200
