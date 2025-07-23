@@ -21,38 +21,17 @@ export GPG_TTY
 # color_enabled is set from env or default, but will be overridden by CLI options below
 # Remove unreachable Bash version check for color_enabled
 set -euo pipefail
-set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
-
-# Color variables (set once if tput is available and output is a terminal)
-HAVE_TPUT=0
-if command -v tput >/dev/null 2>&1; then
-    HAVE_TPUT=1
-fi
-if (( color_enabled )); then
-    if (( HAVE_TPUT )) && [[ -t 1 ]]; then
-        RED="$(tput setaf 1)$(tput bold)"
-        GREEN="$(tput setaf 2)$(tput bold)"
-        YELLOW="$(tput setaf 3)$(tput bold)"
-        RESET="$(tput sgr0)"
-    else
-        RED='\e[1;31m'
-        GREEN='\e[1;32m'
-        YELLOW='\e[1;33m'
-        RESET='\e[0m'
-    fi
-else
-    RED=''
-    GREEN=''
-    YELLOW=''
-    RESET=''
-fi
-# Use associative array for color codes (Bash >= 4 is required at script start)
-# declare -A COL=(
-#     [red]="$RED" [green]="$GREEN" [yellow]="$YELLOW"
-# )
-
+# --- Tiny Helper Functions (moved to top for trap consistency) ---
+err() {
+    trap - ERR
+    color_echo red "$*" >&2;
+}
+warn() { color_echo yellow "$*" >&2; }
+log() { color_echo green "$*"; }
 # Trap errors and print a helpful message with line number and command
-# Note: set -E implies errtrace in Bash >=4.4, but older Bash may not propagate ERR trap into all subshells.
+# set -E: Ensure ERR trap is inherited by functions and subshells (Bash >=4.4). For older Bash, enable errtrace explicitly.
+set -E
+shopt -s errtrace
 trap 'err "[FATAL] ${RED}${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND${RESET}"' ERR
 
 # --- Functions ---
@@ -115,13 +94,6 @@ color_echo() {
     else
         printf '%s\n' "$msg"
     fi
-}
-
-log() { color_echo green "$*"; }
-warn() { color_echo yellow "$*" >&2; }
-err() {
-    trap - ERR
-    color_echo red "$*" >&2;
 }
 
 hint() {
@@ -476,12 +448,12 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     GIT_REF="HEAD"
     if git -C "$PROJECT_ROOT" rev-parse "v${PKGVER}" >/dev/null 2>&1; then
         GIT_REF="v${PKGVER}"
-        log "[$MODE] Using tag v${PKGVER} for archiving"
+        log "[aur] Using tag v${PKGVER} for archiving"
     elif git -C "$PROJECT_ROOT" rev-parse "${PKGVER}" >/dev/null 2>&1; then
         GIT_REF="${PKGVER}"
-        log "[$MODE] Using tag ${PKGVER} for archiving"
+        log "[aur] Using tag ${PKGVER} for archiving"
     else
-        warn "[$MODE] Warning: No tag found for version ${PKGVER}, using HEAD (this may cause checksum mismatches)"
+        warn "[aur] Warning: No tag found for version ${PKGVER}, using HEAD (this may cause checksum mismatches)"
     fi
     
     # Use git archive to create the release tarball, including only tracked files
@@ -489,12 +461,12 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     # For reproducibility: set mtime using SOURCE_DATE_EPOCH if available, else use a fixed date
     if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
         ARCHIVE_MTIME="--mtime=@$SOURCE_DATE_EPOCH"
-        log "[$MODE] Using SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH for tarball mtime."
+        log "[aur] Using SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH for tarball mtime."
     else
         # Use the commit date of GIT_REF for reproducible, traceable mtime
         COMMIT_EPOCH=$(git show -s --format=%ct "$GIT_REF")
         ARCHIVE_MTIME="--mtime=@$COMMIT_EPOCH"
-        log "[$MODE] Using commit date (epoch $COMMIT_EPOCH) of $GIT_REF for tarball mtime."
+        log "[aur] Using commit date (epoch $COMMIT_EPOCH) of $GIT_REF for tarball mtime."
     fi
     # Check if git archive supports --mtime (Git >= 2.32)
     if git archive --help | grep -q -- '--mtime'; then
@@ -588,7 +560,7 @@ cd "$SCRIPT_DIR" || exit 1
 
 if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
-    log "[$MODE] PKGBUILD.0 copied to PKGBUILD."
+    log "[aur] PKGBUILD.0 copied to PKGBUILD."
     # --- pkgrel bump logic for aur mode ---
     if [[ "$MODE" == "aur" ]]; then
         # --- Begin flock-protected critical section for pkgrel bump ---
@@ -601,7 +573,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             OLD_PKGVER=""
             OLD_PKGREL=""
             cp -f "$PKGBUILD0" "$PKGBUILD"
-            log "[$MODE] PKGBUILD.0 copied to PKGBUILD. (locked)"
+            log "[aur] PKGBUILD.0 copied to PKGBUILD. (locked)"
             if [[ -s "$PKGBUILD" ]]; then
                 cp "$PKGBUILD" "$PKGBUILD.bak"
                 trap 'rm -f "$PKGBUILD.bak"' RETURN
