@@ -575,7 +575,6 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     fi
 fi
 
-# shellcheck disable=SC2026
 awk '
     BEGIN { sums = "b2sums=('SKIP')" }
     /^pkgname=/ {
