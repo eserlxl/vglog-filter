@@ -158,21 +158,31 @@ function usage() {
 dry_run=${DRY_RUN:-0}
 ascii_armor=${ASCII_ARMOR:-0}
 color_enabled=${COLOR:-1}
-while getopts ":nad-:" opt; do
-    case "$opt" in
-        n) color_enabled=0 ;;
-        a) ascii_armor=1 ;;
-        d) dry_run=1 ;;
-        -) case "${OPTARG}" in
-               no-color) color_enabled=0 ;;
-               ascii-armor) ascii_armor=1 ;;
-               dry-run) dry_run=1 ;;
-               *) err "Unknown option --${OPTARG}"; usage ;;
-           esac ;;
-        \?) err "Unknown option -$OPTARG"; usage ;;
+
+# Use getopt for unified short and long option parsing
+# This allows for robust handling of both short (-n) and long (--no-color) options
+PARSED_OPTS=$(getopt -o nad --long no-color,ascii-armor,dry-run -- "$@")
+if [[ $? -ne 0 ]]; then
+    err "Failed to parse options."; usage
+fi
+# Note: set -- resets positional parameters to the parsed result
+# shellcheck disable=SC2086
+# (PARSED_OPTS is safe here as it comes from getopt)
+eval set -- $PARSED_OPTS
+while true; do
+    case "$1" in
+        -n|--no-color)
+            color_enabled=0; shift ;;
+        -a|--ascii-armor)
+            ascii_armor=1; shift ;;
+        -d|--dry-run)
+            dry_run=1; shift ;;
+        --)
+            shift; break ;;
+        *)
+            err "Unknown option: $1"; usage ;;
     esac
 done
-shift $((OPTIND-1))
 MODE=${1:-}
 if [[ -z $MODE ]]; then
     usage
