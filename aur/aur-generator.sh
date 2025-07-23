@@ -437,13 +437,9 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             gpg --detach-sign $GPG_ARMOR_OPT -u "$GPG_KEY" --output "$OUTDIR/$TARBALL$SIGNATURE_EXT" "$OUTDIR/$TARBALL"
             log "[aur] Created GPG signature: $OUTDIR/$TARBALL$SIGNATURE_EXT"
         elif [[ "${GPG_KEY_ID:-}" == "TEST_KEY_FOR_DRY_RUN" ]]; then
-            # In test mode, only create a dummy .asc file, not .sig
-            if [[ "$SIGNATURE_EXT" == ".asc" ]]; then
-                touch "$OUTDIR/$TARBALL$SIGNATURE_EXT"
-                log "[aur] Test mode: Created dummy ASCII-armored signature file: $OUTDIR/$TARBALL$SIGNATURE_EXT"
-            else
-                warn "[aur] Test mode: Skipping creation of dummy binary signature (.sig). Ensure signature verification is disabled in CI."
-            fi
+            # In test mode, always create a dummy signature file (.asc or .sig) to satisfy CI expectations
+            touch "$OUTDIR/$TARBALL$SIGNATURE_EXT"
+            log "[aur] Test mode: Created dummy signature file: $OUTDIR/$TARBALL$SIGNATURE_EXT"
             GPG_KEY=""
         else
             gpg --detach-sign $GPG_ARMOR_OPT --output "$OUTDIR/$TARBALL$SIGNATURE_EXT" "$OUTDIR/$TARBALL"
