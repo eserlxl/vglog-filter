@@ -10,6 +10,7 @@
 #   local   - Build/install from a local tarball for testing.
 #   aur     - Prepare a signed release tarball and PKGBUILD for AUR upload.
 #   aur-git - Generate a PKGBUILD for the -git (VCS) AUR package.
+#   lint    - Run shellcheck and bash -n on this script for quick CI linting.
 # See doc/AUR.md for full details on each mode and workflow.
 # NOTE: This script requires GNU getopt (util-linux) and is not compatible with macOS/BSD systems.
 # The script is designed for GNU/Linux environments and does not aim to support macOS/BSD.
@@ -60,7 +61,7 @@ trap 'err "[FATAL] ${RED}" "${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND" "${RESET}"
 # Minimal help for scripts/AUR helpers
 help() {
     printf 'Usage: %s [OPTIONS] MODE\n' "$SCRIPT_NAME"
-    printf 'Modes: local | aur | aur-git | clean | test\n'
+    printf 'Modes: local | aur | aur-git | clean | test | lint\n'
 }
 
 # Helper to check for interactive terminal
@@ -279,7 +280,7 @@ fi
 readonly GH_USER
 # VALID_MODES is used for validation in the usage function and mode checking
 # shellcheck disable=SC2034
-readonly -a VALID_MODES=(local aur aur-git clean test)
+readonly -a VALID_MODES=(local aur aur-git clean test lint)
 
 # --- Main Logic ---
 # Initialize variables from environment or defaults before flag parsing
@@ -348,6 +349,10 @@ case "$MODE" in
     aur-git)
         # aur-git mode requires: makepkg
         require makepkg || exit 1
+        ;;
+    lint)
+        # lint mode requires: shellcheck, bash
+        require shellcheck bash || exit 1
         ;;
     # clean and test modes do not require special tools
 esac
@@ -435,6 +440,25 @@ case "$MODE" in
             exit 1
         fi
         exit 0
+        ;;
+    lint)
+        log "[lint] Running shellcheck and bash -n on $SCRIPT_NAME."
+        SHELLCHECK_OK=0
+        BASHN_OK=0
+        if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck "$SCRIPT_DIR/$SCRIPT_NAME" && SHELLCHECK_OK=1 || SHELLCHECK_OK=0
+        else
+            warn "[lint] shellcheck not found; skipping shellcheck."
+            SHELLCHECK_OK=1
+        fi
+        bash -n "$SCRIPT_DIR/$SCRIPT_NAME" && BASHN_OK=1 || BASHN_OK=0
+        if (( SHELLCHECK_OK && BASHN_OK )); then
+            log "[lint] ✓ Lint checks passed."
+            exit 0
+        else
+            err "[lint] ✗ Lint checks failed."
+            exit 1
+        fi
         ;;
 esac
 
