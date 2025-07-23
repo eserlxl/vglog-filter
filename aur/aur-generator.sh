@@ -61,7 +61,11 @@ usage() {
 }
 
 # Color variables (set once if tput is available)
+HAVE_TPUT=0
 if command -v tput >/dev/null 2>&1; then
+    HAVE_TPUT=1
+fi
+if (( HAVE_TPUT )); then
     RED="$(tput setaf 1)$(tput bold)"
     GREEN="$(tput setaf 2)$(tput bold)"
     YELLOW="$(tput setaf 3)$(tput bold)"
