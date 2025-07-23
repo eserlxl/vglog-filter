@@ -183,6 +183,11 @@ case "$MODE" in
     aur)
         log "[aur] Prepare for AUR upload: creates tarball, GPG signature, and PKGBUILD for release."
         require makepkg updpkgsums curl gpg
+        # Fail early in CI if AUTO=y but gh is not installed
+        if [[ "${AUTO:-}" == "y" ]] && ! command -v gh >/dev/null 2>&1; then
+            err "[aur] ERROR: AUTO=y is set but GitHub CLI (gh) is not installed. Cannot upload assets automatically in CI. Please install gh or unset AUTO."
+            exit 1
+        fi
         # Check for optional GitHub CLI
         if ! command -v gh >/dev/null 2>&1; then
             warn "[aur] Note: GitHub CLI (gh) not found. Automatic asset upload will not be available."
