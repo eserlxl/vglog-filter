@@ -680,18 +680,18 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     fi
 fi
 
-awk '
+awk -v gh_user="$GH_USER" -v pkgname_short="${PKGNAME%-git}" '
     BEGIN { sums = "b2sums=(\"SKIP\")" }
     /^pkgname=/ {
         print "pkgname=vglog-filter-git"; next
     }
     /^source=/ {
-        print "source=(\"git+https://github.com/${GH_USER}/vglog-filter.git#branch=main\")";
+        print "source=(\"git+https://github.com/" gh_user "/vglog-filter.git#branch=main\")";
         print sums;
         next
     }
     /^b2sums=/ || /^sha256sums=/ { next }
-    { gsub(/\${pkgname}-\${pkgver}|\$pkgname-\$pkgver/, "${pkgname%-git}"); print }
+    { gsub(/\${pkgname}-\${pkgver}|\$pkgname-\$pkgver/, pkgname_short); print }
 ' "$PKGBUILD0" > "$SCRIPT_DIR/PKGBUILD.git"
 # Insert pkgver() as before if missing
 if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
