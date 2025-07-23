@@ -153,6 +153,9 @@ The script supports several environment variables for automation:
 - For `aur-git` mode: Skips `updpkgsums` and sets `sha256sums=('SKIP')` (required for VCS packages).
 - Uses `makepkg --printsrcinfo` (or `mksrcinfo` as fallback) to generate `.SRCINFO`.
 
+> **Note for maintainers:**
+> If you ever split sources by architecture (e.g., x86_64, aarch64), you must update the corresponding `b2sums_x86_64=()`, `b2sums_aarch64=()`, etc., arrays in addition to the generic `b2sums=()`. This script uses `b2sums` (BLAKE2) for checksums, not `sha256sums`. Adjust accordingly if you change the checksum type.
+
 ### GPG Signing (aur mode only)
 - Checks for available GPG secret keys.
 - Prompts for key selection or uses `GPG_KEY_ID` environment variable.
