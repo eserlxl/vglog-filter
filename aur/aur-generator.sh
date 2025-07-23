@@ -48,18 +48,24 @@ declare -Ar PKG_HINT=(
     [gh]=github-cli
     [flock]=util-linux
     [awk]=gawk
+    [git]=base
 )
 # Trap errors and print a helpful message with line number and command
 # set -E: Ensure ERR trap is inherited by functions and subshells (Bash >=4.4). For older Bash, enable errtrace explicitly.
 set -E
 shopt -s errtrace
-trap 'err "[FATAL] ${RED}${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND${RESET}"' ERR
+trap 'err "[FATAL] ${RED}" "${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND" "${RESET}"' ERR
 
 # --- Functions ---
 # Minimal help for scripts/AUR helpers
 help() {
     printf 'Usage: %s [OPTIONS] MODE\n' "$SCRIPT_NAME"
     printf 'Modes: local | aur | aur-git | clean | test\n'
+}
+
+# Helper to check for interactive terminal
+have_tty() {
+    [[ -t 0 ]]
 }
 
 # Function to check if a mode is valid
@@ -162,7 +168,7 @@ prompt() {
             return 1
         fi
     fi
-    if ! [[ -t 0 ]]; then
+    if ! have_tty; then
         warn "[prompt] No interactive terminal available for: $prompt_text. Skipping prompt."
         if [[ -n "$default_value" ]]; then
             eval "$var_name=\"$default_value\""
@@ -542,7 +548,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
                 USER=$(gpg --list-secret-keys "${KEYS[$i]}" | grep uid | head -n1 | sed 's/.*] //')
                 warn "$((i+1)). ${KEYS[$i]} ($USER)" >&2
             done
-            if ! [ -t 0 ]; then
+            if ! have_tty; then
                 err "No interactive terminal: please set GPG_KEY_ID in headless mode."
                 exit 1
             fi
