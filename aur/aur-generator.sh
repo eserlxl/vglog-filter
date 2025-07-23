@@ -34,7 +34,7 @@ set -o errtrace  # Explicitly propagate ERR trap to all subshells (Bash ≥4.4, 
 
 # Trap errors and print a helpful message with line number and command
 # Note: set -E implies errtrace in Bash >=4.4, but older Bash may not propagate ERR trap into all subshells.
-trap 'err "[FATAL] ${BASH_SOURCE[1]}:${BASH_LINENO[0]}: $BASH_COMMAND"' ERR
+trap 'err "[FATAL]  [36m${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND [0m"' ERR
 
 # --- Functions ---
 # Minimal help for scripts/AUR helpers
