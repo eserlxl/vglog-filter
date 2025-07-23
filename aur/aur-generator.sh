@@ -985,6 +985,11 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         # Only update the source array once, after the final TARBALL_URL is determined
         update_source_array_in_pkgbuild "$PKGBUILD" "$TARBALL_URL"
         log "[aur] Set tarball URL in source array in PKGBUILD (single authoritative update)."
+        # Ensure b2sums array is present (prevents updpkgsums from defaulting to sha256sums)
+        if ! grep -q '^b2sums=' "$PKGBUILD"; then
+            echo "b2sums=('SKIP')" >> "$PKGBUILD"
+            log "[aur] Added missing b2sums=('SKIP') to PKGBUILD."
+        fi
         # Check if the tarball exists on GitHub before running updpkgsums
         asset_exists=1
         if command -v gh >/dev/null 2>&1; then
