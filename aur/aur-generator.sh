@@ -130,6 +130,7 @@ declare -Ar PKG_HINT=(
     [flock]=util-linux
     [awk]=gawk
     [git]=git
+    [jq]=jq
 )
 # Trap errors and print a helpful message with line number and command
 # set -E: Ensure ERR trap is inherited by functions and subshells (Bash >=4.4). For older Bash, enable errtrace explicitly.
