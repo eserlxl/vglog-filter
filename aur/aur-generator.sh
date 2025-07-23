@@ -19,14 +19,10 @@
 # The script is designed for GNU/Linux environments and does not aim to support macOS/BSD.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
-readonly PKGBUILD0
-OUTDIR="$SCRIPT_DIR"
-readonly OUTDIR
-PKGBUILD="$OUTDIR/PKGBUILD"
-readonly PKGBUILD
-SRCINFO="$OUTDIR/.SRCINFO"
-readonly SRCINFO
+declare -r PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
+declare -r OUTDIR="$SCRIPT_DIR"
+declare -r PKGBUILD="$OUTDIR/PKGBUILD"
+declare -r SRCINFO="$OUTDIR/.SRCINFO"
 export PKGBUILD0 PKGBUILD SRCINFO OUTDIR
 
 # --- Tiny Helper Functions (moved to top for trap consistency) ---
@@ -139,11 +135,11 @@ set -o errtrace  # Ensure ERR trap is inherited by functions and subshells (for 
 trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 
 # --- Constants (grouped at top, all readonly) ---
-readonly PKGNAME="vglog-filter"
+declare -r PKGNAME="vglog-filter"
 SCRIPT_NAME="$(basename "$0")"
-readonly SCRIPT_NAME
+declare -r SCRIPT_NAME
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-readonly PROJECT_ROOT
+declare -r PROJECT_ROOT
 # Determine GH_USER: environment > PKGBUILD.0 url > fallback
 if [[ -z "${GH_USER:-}" ]]; then
     PKGBUILD0_URL=$(awk -F/ '/^url="https:\/\/github.com\// {print $4}' "$SCRIPT_DIR/PKGBUILD.0")
@@ -151,8 +147,8 @@ if [[ -z "${GH_USER:-}" ]]; then
         GH_USER="${PKGBUILD0_URL%\"}"
     else
         GH_USER="eserlxl"
-        # warn is not available yet, so use echo
-        echo "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'." >&2
+        # warn is not available yet, so use printf
+        printf '[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'.\n' >&2
     fi
 fi
 # Robustness: Detect if GH_USER is the same as PKGNAME (likely a mistake)
@@ -164,8 +160,8 @@ if [[ "$GH_USER" == "$PKGNAME" ]]; then
     grep '^url=' "$SCRIPT_DIR/PKGBUILD.0" >&2
     err "[aur-generator] Aborting due to invalid GH_USER configuration."
 fi
-readonly GH_USER
-readonly -a VALID_MODES=(local aur aur-git clean test lint golden)
+declare -r GH_USER
+declare -ar VALID_MODES=(local aur aur-git clean test lint golden)
 
 # Require Bash >= 4 early, before using any Bash 4+ features
 if ((BASH_VERSINFO[0] < 4)); then
@@ -337,7 +333,7 @@ getopt_status=$?
 set -e
 trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 if (( getopt_status != 0 )); then
-    echo "Error: Failed to parse options." >&2
+    printf 'Error: Failed to parse options.\n' >&2
     help
     exit 1
 fi
@@ -652,9 +648,9 @@ if [[ -z "$PKGVER" ]]; then
     # shellcheck disable=SC2317
     exit 1
 fi
-readonly PKGVER
+declare -r PKGVER
 TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
-readonly TARBALL
+declare -r TARBALL
 
 # Only create the tarball for aur and local modes
 if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
@@ -736,7 +732,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         fi
         # Set signature file extension and armor option
         set_signature_ext
-        log "[aur] Using $([[ $ascii_armor -eq 1 ]] && echo 'ASCII-armored signatures (.asc)' || echo 'binary signatures (.sig)')"
+        log "[aur] Using $( [[ $ascii_armor -eq 1 ]] && printf '%s' 'ASCII-armored signatures (.asc)' || printf '%s' 'binary signatures (.sig)' )"
         # GPG key selection logic
         GPG_KEY=""
         if [[ -n "${GPG_KEY_ID:-}" ]]; then
@@ -868,9 +864,9 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         # Upload signature
                         gh_upload_or_exit "$OUTDIR/$TARBALL$SIGNATURE_EXT" "${GH_USER}/${PKGNAME}" "${PKGVER}"
                         if (( no_wait )); then
-                            echo "[aur] --no-wait flag set: Skipping post-upload wait for asset availability. (CI/advanced mode)" >&2
+                            printf '[aur] --no-wait flag set: Skipping post-upload wait for asset availability. (CI/advanced mode)\n' >&2
                         else
-                            echo "[aur] Waiting for GitHub to propagate the uploaded asset (this may take some time due to CDN delay)..." >&2
+                            printf '[aur] Waiting for GitHub to propagate the uploaded asset (this may take some time due to CDN delay)...\n' >&2
                             RETRIES=6
                             DELAYS=(10 20 30 40 50 60)
                             total_wait=0
@@ -879,37 +875,37 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                                 if curl -I -L -f --silent "$TARBALL_URL" > /dev/null; then
                                     log "[aur] Asset is now available on GitHub (after $i attempt(s))."
                                     if (( total_wait > 0 )); then
-                                        echo "[aur] Total wait time: $total_wait seconds." >&2
+                                        printf '[aur] Total wait time: %s seconds.\n' "$total_wait" >&2
                                     fi
                                     break
                                 else
                                     if (( i < RETRIES )); then
-                                        echo "[aur] Asset not available yet (attempt $i/$RETRIES). Waiting $DELAY seconds..." >&2
+                                        printf '[aur] Asset not available yet (attempt %s/%s). Waiting %s seconds...\n' "$i" "$RETRIES" "$DELAY" >&2
                                         sleep "$DELAY"
                                         total_wait=$((total_wait + DELAY))
                                     else
                                         warn "[aur] Asset still not available after $RETRIES attempts. This is normal if GitHub CDN is slow."
-                                        echo "[aur] Please check the asset URL in your browser: $TARBALL_URL" >&2
-                                        echo "If the asset is available, you can continue. If not, wait a bit longer and refresh the page." >&2
+                                        printf '[aur] Please check the asset URL in your browser: %s\n' "$TARBALL_URL" >&2
+                                        printf 'If the asset is available, you can continue. If not, wait a bit longer and refresh the page.\n' >&2
                                         prompt "Press Enter to continue when the asset is available (or Ctrl+C to abort)..." _
                                     fi
                                 fi
                             done
                         fi
-                        echo "[aur] Note: After upload, makepkg will attempt to download the asset to generate checksums. If you see a download error, wait a few seconds and retry. This is normal due to GitHub CDN propagation." >&2
+                        printf '[aur] Note: After upload, makepkg will attempt to download the asset to generate checksums. If you see a download error, wait a few seconds and retry. This is normal due to GitHub CDN propagation.\n' >&2
                     else
                         err "[aur] Release asset not found and automatic upload declined. Aborting."
                         # shellcheck disable=SC2317
-                        echo "After uploading the tarball manually, run: makepkg -g >> PKGBUILD to update checksums."
+                        printf 'After uploading the tarball manually, run: makepkg -g >> PKGBUILD to update checksums.\n'
                         # shellcheck disable=SC2317
                         exit 1
                     fi
                 else
                     err "[aur] ERROR: Release asset not found at either location. GitHub CLI (gh) not available for automatic upload."
                     # shellcheck disable=SC2317
-                    echo "Please install GitHub CLI (gh) or manually upload ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to the GitHub release page."
+                    printf 'Please install GitHub CLI (gh) or manually upload %q and %q to the GitHub release page.\n' "$OUTDIR/$TARBALL" "$OUTDIR/$TARBALL$SIGNATURE_EXT"
                     # shellcheck disable=SC2317
-                    echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
+                    printf 'After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums.\n'
                     # shellcheck disable=SC2317
                     exit 1
                 fi
@@ -920,7 +916,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         log "[aur] Set tarball URL in source array in PKGBUILD (single authoritative update)."
         # Ensure b2sums array is present (prevents updpkgsums from defaulting to sha256sums)
         if ! grep -q '^b2sums=' "$PKGBUILD"; then
-            echo "b2sums=('SKIP')" >> "$PKGBUILD"
+            printf 'b2sums=(\'SKIP\')\n' >> "$PKGBUILD"
             log "[aur] Added missing b2sums=('SKIP') to PKGBUILD."
         fi
         # Check if the tarball exists on GitHub before running updpkgsums
@@ -957,9 +953,9 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         # Upload signature
                         gh_upload_or_exit "$OUTDIR/$TARBALL$SIGNATURE_EXT" "${GH_USER}/${PKGNAME}" "${PKGVER}"
                         if (( no_wait )); then
-                            echo "[aur] --no-wait flag set: Skipping post-upload wait for asset availability. (CI/advanced mode)" >&2
+                            printf '[aur] --no-wait flag set: Skipping post-upload wait for asset availability. (CI/advanced mode)\n' >&2
                         else
-                            echo "[aur] Waiting for GitHub to propagate the uploaded asset (this may take some time due to CDN delay)..." >&2
+                            printf '[aur] Waiting for GitHub to propagate the uploaded asset (this may take some time due to CDN delay)...\n' >&2
                             RETRIES=6
                             DELAYS=(10 20 30 40 50 60)
                             total_wait=0
@@ -968,37 +964,37 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                                 if curl -I -L -f --silent "$TARBALL_URL" > /dev/null; then
                                     log "[aur] Asset is now available on GitHub (after $i attempt(s))."
                                     if (( total_wait > 0 )); then
-                                        echo "[aur] Total wait time: $total_wait seconds." >&2
+                                        printf '[aur] Total wait time: %s seconds.\n' "$total_wait" >&2
                                     fi
                                     break
                                 else
                                     if (( i < RETRIES )); then
-                                        echo "[aur] Asset not available yet (attempt $i/$RETRIES). Waiting $DELAY seconds..." >&2
+                                        printf '[aur] Asset not available yet (attempt %s/%s). Waiting %s seconds...\n' "$i" "$RETRIES" "$DELAY" >&2
                                         sleep "$DELAY"
                                         total_wait=$((total_wait + DELAY))
                                     else
                                         warn "[aur] Asset still not available after $RETRIES attempts. This is normal if GitHub CDN is slow."
-                                        echo "[aur] Please check the asset URL in your browser: $TARBALL_URL" >&2
-                                        echo "If the asset is available, you can continue. If not, wait a bit longer and refresh the page." >&2
+                                        printf '[aur] Please check the asset URL in your browser: %s\n' "$TARBALL_URL" >&2
+                                        printf 'If the asset is available, you can continue. If not, wait a bit longer and refresh the page.\n' >&2
                                         prompt "Press Enter to continue when the asset is available (or Ctrl+C to abort)..." _
                                     fi
                                 fi
                             done
                         fi
-                        echo "[aur] Note: After upload, makepkg will attempt to download the asset to generate checksums. If you see a download error, wait a few seconds and retry. This is normal due to GitHub CDN propagation." >&2
+                        printf '[aur] Note: After upload, makepkg will attempt to download the asset to generate checksums. If you see a download error, wait a few seconds and retry. This is normal due to GitHub CDN propagation.\n' >&2
                     else
                         err "[aur] Release asset not found and automatic upload declined. Aborting."
                         # shellcheck disable=SC2317
-                        echo "After uploading the tarball manually, run: makepkg -g >> PKGBUILD to update checksums."
+                        printf 'After uploading the tarball manually, run: makepkg -g >> PKGBUILD to update checksums.\n'
                         # shellcheck disable=SC2317
                         exit 1
                     fi
                 else
                     err "[aur] ERROR: Release asset not found at either location. GitHub CLI (gh) not available for automatic upload."
                     # shellcheck disable=SC2317
-                    echo "Please install GitHub CLI (gh) or manually upload ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to the GitHub release page."
+                    printf 'Please install GitHub CLI (gh) or manually upload %q and %q to the GitHub release page.\n' "$OUTDIR/$TARBALL" "$OUTDIR/$TARBALL$SIGNATURE_EXT"
                     # shellcheck disable=SC2317
-                    echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
+                    printf 'After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums.\n'
                     # shellcheck disable=SC2317
                     exit 1
                 fi
@@ -1009,15 +1005,15 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         log "[aur] Preparation complete."
         if (( asset_exists == 0 )); then
             if command -v gh >/dev/null 2>&1; then
-                echo "Assets have been automatically uploaded to GitHub release ${PKGVER}."
+                printf 'Assets have been automatically uploaded to GitHub release %s.\n' "$PKGVER"
             else
                 set_signature_ext
                 printf 'Now push the git tag and upload %q and %q to the GitHub release page.\n' "$OUTDIR/$TARBALL" "$OUTDIR/$TARBALL$SIGNATURE_EXT"
             fi
         else
-            echo "Assets already exist on GitHub release ${PKGVER}. No upload was performed." >&2
+            printf 'Assets already exist on GitHub release %s. No upload was performed.\n' "$PKGVER" >&2
         fi
-        echo "Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package."
+        printf 'Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package.\n'
         install_pkg "aur"
         exit 0
     else
@@ -1069,7 +1065,7 @@ cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
 log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
 # Set validpgpkeys if missing
 if [[ -n "${GPG_KEY_ID:-}" ]]; then
-    grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || echo "validpgpkeys=('${GPG_KEY_ID}')" >> "$PKGBUILD"
+    grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || printf "validpgpkeys=('${GPG_KEY_ID}')\n" >> "$PKGBUILD"
 fi
 # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
 # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
