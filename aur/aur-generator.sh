@@ -42,7 +42,7 @@ log() { color_echo green "$*"; }
 # shellcheck disable=SC2034
 # Associative array: tool name -> package name
 # This is more maintainable than a case statement
-# Requires Bash 4+
+#
 declare -Ar PKG_HINT=(
     [updpkgsums]=pacman-contrib
     [makepkg]=base-devel
