@@ -66,6 +66,18 @@ else
     COL_red="$RED"; COL_green="$GREEN"; COL_yellow="$YELLOW"
 fi
 
+# Helper to set signature extension and GPG armor option
+set_signature_ext() {
+    # Sets SIGNATURE_EXT and GPG_ARMOR_OPT globals based on ascii_armor
+    if [[ ${ascii_armor:-0} -eq 1 ]]; then
+        SIGNATURE_EXT=".asc"
+        GPG_ARMOR_OPT="--armor"
+    else
+        SIGNATURE_EXT=".sig"
+        GPG_ARMOR_OPT=""
+    fi
+}
+
 color_echo() {
     local color_name="$1"
     shift
@@ -423,17 +435,9 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             err "Error: No GPG secret key found. Please generate or import a GPG key before signing."
             exit 1
         fi
-        # Set signature file extension based on ASCII_ARMOR setting
-        local SIGNATURE_EXT GPG_ARMOR_OPT
-        if [[ $ascii_armor -eq 1 ]]; then
-            SIGNATURE_EXT=".asc"
-            GPG_ARMOR_OPT="--armor"
-            log "[aur] Using ASCII-armored signatures (.asc)"
-        else
-            SIGNATURE_EXT=".sig"
-            GPG_ARMOR_OPT=""
-            log "[aur] Using binary signatures (.sig)"
-        fi
+        # Set signature file extension and armor option
+        set_signature_ext
+        log "[aur] Using $([[ $ascii_armor -eq 1 ]] && echo 'ASCII-armored signatures (.asc)' || echo 'binary signatures (.sig)')"
         # GPG key selection logic
         GPG_KEY=""
         if [[ -n "$GPG_KEY_ID" ]]; then
@@ -538,7 +542,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         ' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
         log "[aur] Updated source line in PKGBUILD (handles multiline arrays)."
         # Check if the tarball exists on GitHub before running updpkgsums
-        local SIGNATURE_EXT
+        set_signature_ext
         TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
         if ! curl --head --silent --fail --location "$TARBALL_URL" > /dev/null; then
             warn "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
@@ -554,12 +558,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         prompt "Do you want to upload the tarball and signature to GitHub releases automatically? [y/N] " upload_choice n
                     fi
                     if [[ "$upload_choice" =~ ^[Yy]$ ]]; then
-                        # Set signature file extension based on ASCII_ARMOR setting
-                        if [[ $ascii_armor -eq 1 ]]; then
-                            SIGNATURE_EXT=".asc"
-                        else
-                            SIGNATURE_EXT=".sig"
-                        fi
+                        set_signature_ext
                         log "[aur] Uploading ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to GitHub release ${PKGVER}..."
                         # Upload tarball
                         if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL" --repo "${GH_USER}/${PKGNAME}"; then
@@ -601,12 +600,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         if command -v gh >/dev/null 2>&1; then
             echo "Assets have been automatically uploaded to GitHub release ${PKGVER}."
         else
-            local SIGNATURE_EXT
-            if [[ $ascii_armor -eq 1 ]]; then
-                SIGNATURE_EXT=".asc"
-            else
-                SIGNATURE_EXT=".sig"
-            fi
+            set_signature_ext
             echo "Now push the git tag and upload ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to the GitHub release page."
         fi
         echo "Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package."
