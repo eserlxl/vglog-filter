@@ -40,6 +40,41 @@ if ((BASH_VERSINFO[0] < 4)); then
     exit 1
 fi
 
+# --- Color Setup ---
+# Group color variable definitions and helpers at the top
+init_colors() {
+    # Color variables are initialized once here and memoized for all color_echo calls
+    HAVE_TPUT=0
+    if command -v tput >/dev/null 2>&1; then
+        HAVE_TPUT=1
+    fi
+    if (( color_enabled )); then
+        if (( HAVE_TPUT )) && [[ -t 1 ]]; then
+            RED="$(tput setaf 1)$(tput bold)"
+            GREEN="$(tput setaf 2)$(tput bold)"
+            YELLOW="$(tput setaf 3)$(tput bold)"
+            RESET="$(tput sgr0)"
+        else
+            if [[ -n "${BASH_VERSION:-}" ]]; then
+                RED='\e[1;31m'
+                GREEN='\e[1;32m'
+                YELLOW='\e[1;33m'
+                RESET='\e[0m'
+            else
+                RED='\033[1;31m'
+                GREEN='\033[1;32m'
+                YELLOW='\033[1;33m'
+                RESET='\033[0m'
+            fi
+        fi
+    else
+        RED=''
+        GREEN=''
+        YELLOW=''
+        RESET=''
+    fi
+}
+
 # Enable debug tracing if DEBUG=1
 if [[ "${DEBUG:-0}" == 1 ]]; then
     set -x
