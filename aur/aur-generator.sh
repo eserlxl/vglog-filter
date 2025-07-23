@@ -412,8 +412,8 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             err "Error: No GPG secret key found. Please generate or import a GPG key before signing."
             exit 1
         fi
-        
         # Set signature file extension based on ASCII_ARMOR setting
+        local SIGNATURE_EXT GPG_ARMOR_OPT
         if [[ $ascii_armor -eq 1 ]]; then
             SIGNATURE_EXT=".asc"
             GPG_ARMOR_OPT="--armor"
@@ -423,7 +423,6 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             GPG_ARMOR_OPT=""
             log "[aur] Using binary signatures (.sig)"
         fi
-        
         # GPG key selection logic
         GPG_KEY=""
         if [[ -n "$GPG_KEY_ID" ]]; then
@@ -515,6 +514,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         ' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
         log "[aur] Updated source line in PKGBUILD (handles multiline arrays)."
         # Check if the tarball exists on GitHub before running updpkgsums
+        local SIGNATURE_EXT
         TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
         if ! curl --head --silent --fail --location "$TARBALL_URL" > /dev/null; then
             warn "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
@@ -536,7 +536,6 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         else
                             SIGNATURE_EXT=".sig"
                         fi
-                        
                         log "[aur] Uploading ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to GitHub release ${PKGVER}..."
                         # Upload tarball
                         if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL" --repo "eserlxl/${PKGNAME}"; then
@@ -578,7 +577,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         if command -v gh >/dev/null 2>&1; then
             echo "Assets have been automatically uploaded to GitHub release ${PKGVER}."
         else
-            # Set signature file extension based on ASCII_ARMOR setting
+            local SIGNATURE_EXT
             if [[ $ascii_armor -eq 1 ]]; then
                 SIGNATURE_EXT=".asc"
             else
