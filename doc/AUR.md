@@ -235,5 +235,15 @@ The script supports several environment variables for automation:
 - Clear error messages with actionable instructions.
 - Test mode provides detailed error reporting for all modes.
 
+## Argument Parsing: Why We Use 'eval set --'
+
+The script uses GNU getopt for robust option parsing. To correctly handle quoted arguments and avoid subtle bugs (such as modes being passed with extra quotes), we use:
+
+```bash
+eval set -- "$getopt_output"
+```
+
+This is the recommended approach (see: https://mywiki.wooledge.org/BashFAQ/035) because it ensures that all arguments are split and quoted as the user intended, even if they contain spaces or special characters. Avoid using array-based splitting (e.g., `read -ra`) on getopt output, as it can introduce quoting bugs and break mode detection. This fix was introduced after a bug where the mode was parsed as `'lint'` (with quotes) instead of `lint`, causing the script to reject valid modes.
+
 ---
-For more details, see the comments in `aur/aur-generator.sh` or the [BUILD.md](BUILD.md) documentation.
+For more details, see the comments in `
