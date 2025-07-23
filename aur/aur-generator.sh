@@ -367,6 +367,10 @@ ascii_armor=${ASCII_ARMOR_DEFAULT:-0}
 # If getopt fails (e.g., due to an unknown flag), set -e does not abort inside $(),
 # so we must check the status explicitly to avoid silent bad-option handling.
 # Temporarily disable ERR trap and set -e for getopt
+# --- GNU getopt check (fail gracefully if not present) ---
+command -v getopt >/dev/null 2>&1 && getopt -T >/dev/null 2>&1 || 
+    err "GNU getopt required (util-linux)."
+# --- End GNU getopt check ---
 set +e
 trap - ERR
 getopt_output=$(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help,usage,no-wait -- "$@")
