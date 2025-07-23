@@ -17,9 +17,12 @@
 
 # --- Constants (grouped at top, all readonly) ---
 readonly PKGNAME="vglog-filter"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly SCRIPT_NAME="$(basename "$0")"
-readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_NAME
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+readonly PROJECT_ROOT
 # Determine GH_USER: environment > PKGBUILD.0 url > fallback
 if [[ -z "${GH_USER:-}" ]]; then
     PKGBUILD0_URL=$(awk -F/ '/^url="https:\/\/github.com\// {print $5}' "$SCRIPT_DIR/PKGBUILD.0")
@@ -611,7 +614,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             else
                 TAR_MTIME="--mtime=@${COMMIT_EPOCH}"
             fi
-            tar $TAR_MTIME -cf - -C "$OUTDIR" "${PKGNAME}-${PKGVER}" | gzip -n >| "$OUTDIR/$TARBALL"
+            tar "$TAR_MTIME" -cf - -C "$OUTDIR" "${PKGNAME}-${PKGVER}" | gzip -n >| "$OUTDIR/$TARBALL"
             rm -rf "$OUTDIR/${PKGNAME}-${PKGVER}" "$OUTDIR/$TARBALL.tmp.tar"
         )
         log "Created $OUTDIR/$TARBALL using $GIT_REF (tar --mtime fallback for reproducibility)."
@@ -757,7 +760,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         asset_exists=1
         if command -v gh >/dev/null 2>&1; then
             # Use gh release view --json assets and jq for robust asset detection
-            if ! gh release view "$PKGVER" --json assets 2>/dev/null | jq -e '.assets[].name == "'$TARBALL'"' >/dev/null; then
+            if ! gh release view "$PKGVER" --json assets 2>/dev/null | jq -e '.assets[].name == "'"$TARBALL"'"' >/dev/null; then
                 asset_exists=0
             fi
         else
@@ -772,7 +775,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             asset_exists=1
             if command -v gh >/dev/null 2>&1; then
                 # Use gh release view --json assets and jq for robust asset detection
-                if ! gh release view "$PKGVER" --json assets 2>/dev/null | jq -e '.assets[].name == "'$TARBALL'"' >/dev/null; then
+                if ! gh release view "$PKGVER" --json assets 2>/dev/null | jq -e '.assets[].name == "'"$TARBALL"'"' >/dev/null; then
                     asset_exists=0
                 fi
             else
@@ -877,7 +880,7 @@ cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
 log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
 # Set validpgpkeys if missing
 if [[ -n "${GPG_KEY_ID:-}" ]]; then
-    grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || echo "validpgpkeys=('${GPG_KEY_ID}')" >>| "$PKGBUILD"
+    grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || echo "validpgpkeys=('${GPG_KEY_ID}')" >> "$PKGBUILD"
 fi
 # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
 # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
