@@ -783,21 +783,18 @@ cd "$SCRIPT_DIR" || exit 1
 if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     if [[ "$MODE" == "aur" ]]; then
         # --- Begin flock-protected critical section for pkgrel bump ---
-        # Remove lockfile if it exists to avoid noclobber errors
         LOCKFILE="$SCRIPT_DIR/.aur-generator.lock"
-        rm -f "$LOCKFILE"
-        # Use exclusive flock to ensure only one process can bump pkgrel at a time.
-        # The lockfile is not written to, but exclusive lock prevents race conditions.
         (
             set -euo pipefail  # Ensure require and all commands fail early in flock-protected critical section
-            flock 200
+            exec 200>"$LOCKFILE"
+            flock -n 200 || err "[aur] Another process is already updating PKGBUILD. Aborting."
             OLD_PKGVER=""
             OLD_PKGREL=""
             cp -f "$PKGBUILD0" "$PKGBUILD"
             log "[aur] PKGBUILD.0 copied to PKGBUILD. (locked)"
             if [[ -s "$PKGBUILD" ]]; then
                 cp "$PKGBUILD" "$PKGBUILD.bak"
-                trap 'rm -f "$PKGBUILD.bak"' RETURN
+                trap 'rm -f "$PKGBUILD.bak"' RETURN INT TERM
                 OLD_PKGVER=$(awk -F= '/^[[:space:]]*pkgver[[:space:]]*=/ {print $2}' "$PKGBUILD.bak" | tr -d "\"'[:space:]")
                 OLD_PKGREL=$(awk -F= '/^[[:space:]]*pkgrel[[:space:]]*=/ {print $2}' "$PKGBUILD.bak" | tr -d "\"'[:space:]")
             fi
@@ -817,8 +814,8 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             fi
             # Update pkgrel in the new PKGBUILD
             awk -v new_pkgrel="$NEW_PKGREL" 'BEGIN{done=0} /^[[:space:]]*pkgrel[[:space:]]*=/ && !done {print "pkgrel=" new_pkgrel; done=1; next} {print}' "$PKGBUILD" >| "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
-            trap - RETURN
-        ) 200>"$LOCKFILE"
+            trap - RETURN INT TERM
+        )
         # --- End flock-protected critical section ---
     fi
     if [[ "$MODE" == "aur" ]]; then
