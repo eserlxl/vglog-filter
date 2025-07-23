@@ -328,9 +328,17 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     
     # Use git archive to create the release tarball, including only tracked files
     # This avoids hand-maintaining exclude lists by respecting .gitignore
-    git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$GIT_REF" | \
+    # For reproducibility: set mtime using SOURCE_DATE_EPOCH if available, else use a fixed date
+    if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
+        ARCHIVE_MTIME="--mtime=@$SOURCE_DATE_EPOCH"
+        log "[$MODE] Using SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH for tarball mtime."
+    else
+        ARCHIVE_MTIME="--mtime=UTC 2020-01-01 00:00:00"
+        log "[$MODE] Using static mtime for tarball: UTC 2020-01-01 00:00:00."
+    fi
+    git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" $ARCHIVE_MTIME "$GIT_REF" | \
         gzip -n > "$OUTDIR/$TARBALL"
-    log "Created $OUTDIR/$TARBALL using $GIT_REF"
+    log "Created $OUTDIR/$TARBALL using $GIT_REF with reproducible mtime."
 
     # Create GPG signature for aur mode only
     if [[ "$MODE" == "aur" ]]; then
