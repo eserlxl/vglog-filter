@@ -426,6 +426,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
                 warn "$((i+1)). ${KEYS[$i]} ($USER)" >&2
             done
             prompt "Select a key [1-${#KEYS[@]}]: " choice 1
+            # Ensure choice is set to a default if empty
             # shellcheck disable=SC2154
             if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#KEYS[@]} )); then
                 err "Invalid selection."
