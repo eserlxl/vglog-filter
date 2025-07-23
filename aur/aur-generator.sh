@@ -253,10 +253,10 @@ install_pkg() {
                 prompt "Do you want to run makepkg -si now? [y/N] " run_makepkg n
             fi
             if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
-                makepkg $makepkg_opts
+                makepkg "$makepkg_opts"
             fi
         else
-            makepkg $makepkg_opts
+            makepkg "$makepkg_opts"
         fi
     fi
 }
@@ -300,11 +300,11 @@ getopt_status=$?
 if (( getopt_status != 0 )); then
     err "Failed to parse options."; usage; exit 1
 fi
-# Use eval set -- for proper argument parsing
-# if ! read -ra PARSED_OPTS <<< "$getopt_output"; then
-#     err "Failed to parse options."; usage; exit 1
-# fi
-# set -- "${PARSED_OPTS[@]}"
+# Use eval set -- for proper argument parsing from getopt output
+# This handles quoted arguments correctly and avoids issues with array splitting
+# See: https://mywiki.wooledge.org/BashFAQ/035
+# shellcheck disable=SC2086
+# (No longer using read/array idiom)
 eval set -- "$getopt_output"
 # Set color_enabled default from environment, will be overridden by CLI flags
 color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
@@ -524,7 +524,6 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     GIT_VERSION=$(git --version | awk '{print $3}')
     GIT_VERSION_MAJOR=$(echo "$GIT_VERSION" | cut -d. -f1)
     GIT_VERSION_MINOR=$(echo "$GIT_VERSION" | cut -d. -f2)
-    GIT_VERSION_PATCH=$(echo "$GIT_VERSION" | cut -d. -f3)
     GIT_MTIME_SUPPORTED=0
     if (( GIT_VERSION_MAJOR > 2 )) || { (( GIT_VERSION_MAJOR == 2 )) && (( GIT_VERSION_MINOR > 31 )); }; then
         GIT_MTIME_SUPPORTED=1
