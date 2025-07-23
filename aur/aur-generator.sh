@@ -253,12 +253,12 @@ ascii_armor=${ASCII_ARMOR:-0}
 
 # Use getopt for unified short and long option parsing
 # This allows for robust handling of both short (-n) and long (--no-color) options
-if ! PARSED_OPTS=$(getopt -o nadh --long no-color,ascii-armor,dry-run,help -- "$@" ); then
+if ! PARSED_OPTS=( $(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help -- "$@" ) ); then
     err "Failed to parse options."; usage; exit 1
 fi
 # Note: set -- resets positional parameters to the parsed result
-# Use quoted eval to avoid word-splitting hazard (see shell scripting best practices)
-eval "set -- $PARSED_OPTS"
+# Use array-safe idiom to avoid word-splitting hazard (see shell scripting best practices)
+set -- "${PARSED_OPTS[@]}"
 while true; do
     case "$1" in
         -n|--no-color)
