@@ -52,9 +52,10 @@ usage() {
     echo "  -n, --no-color      Disable color output"
     echo "  -a, --ascii-armor   Use ASCII-armored GPG signatures (.asc)"
     echo "  -d, --dry-run       Dry run (no changes, for testing)"
-    echo "      --help, -h      Show minimal usage and exit"
+    echo "  -h, --help          Show minimal usage and exit"
     echo
-    echo "For detailed documentation, see doc/USAGE.md."
+    echo "All options must appear before the mode."
+    echo "For full documentation, see doc/AUR.md."
 }
 
 # Color variables (set once if tput is available)
