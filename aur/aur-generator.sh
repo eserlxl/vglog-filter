@@ -15,7 +15,8 @@ if ((BASH_VERSINFO[0] < 4)); then
 fi
 
 # Ensure GPG pinentry works in CI/sudo/non-interactive shells
-export GPG_TTY=$(tty)  # Needed for GPG signing to work reliably (pinentry) in CI/sudo
+GPG_TTY=$(tty)  # Needed for GPG signing to work reliably (pinentry) in CI/sudo
+export GPG_TTY
 
 # --- Global cleanup for CI/test temp dirs ---
 TEMP_DIRS=()
@@ -273,7 +274,8 @@ ascii_armor=${ASCII_ARMOR:-0}
 
 # Use getopt for unified short and long option parsing
 # This allows for robust handling of both short (-n) and long (--no-color) options
-if ! PARSED_OPTS=( $(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help -- "$@" ) ); then
+getopt_output=$(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help -- "$@" )
+if ! read -ra PARSED_OPTS <<< "$getopt_output"; then
     err "Failed to parse options."; usage; exit 1
 fi
 # Note: set -- resets positional parameters to the parsed result
