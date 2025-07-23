@@ -356,6 +356,7 @@ install_pkg() {
 # Initialize variables from environment or defaults before flag parsing
 dry_run=${DRY_RUN:-0}
 ascii_armor=${ASCII_ARMOR_DEFAULT:-0}
+no_wait=0
 # color_enabled=${COLOR:-1}  # <-- Remove this line, already set at top
 
 # Use getopt for unified short and long option parsing
