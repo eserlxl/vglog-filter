@@ -630,6 +630,10 @@ esac
 # Extract pkgver from PKGBUILD.0 without sourcing
 # NOTE: PKGBUILD.0 is always a static template with a simple pkgver=... assignment.
 # Dynamic or function-based pkgver is not supported or needed for this workflow.
+if [[ ! -f "$PKGBUILD0" ]]; then
+    err "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
+    exit 1
+fi
 PKGVER_LINE=$(awk -F= '/^[[:space:]]*pkgver[[:space:]]*=/ {print $2}' "$PKGBUILD0")
 if [[ "$PKGVER_LINE" =~ [\$\`\(\)] ]]; then
     err "Dynamic pkgver assignment detected in $PKGBUILD0. Only static assignments are supported."
@@ -648,10 +652,6 @@ readonly OUTDIR
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
 SRCINFO="$SCRIPT_DIR/.SRCINFO"
 export PKGBUILD0 PKGBUILD SRCINFO OUTDIR
-if [[ ! -f "$PKGBUILD0" ]]; then
-    err "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
-    exit 1
-fi
 
 # Only create the tarball for aur and local modes
 if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
