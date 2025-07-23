@@ -916,7 +916,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         log "[aur] Set tarball URL in source array in PKGBUILD (single authoritative update)."
         # Ensure b2sums array is present (prevents updpkgsums from defaulting to sha256sums)
         if ! grep -q '^b2sums=' "$PKGBUILD"; then
-            printf 'b2sums=(\'SKIP\')\n' >> "$PKGBUILD"
+            printf "b2sums=('SKIP')\n" >> "$PKGBUILD"
             log "[aur] Added missing b2sums=('SKIP') to PKGBUILD."
         fi
         # Check if the tarball exists on GitHub before running updpkgsums
