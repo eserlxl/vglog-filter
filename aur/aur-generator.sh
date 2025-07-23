@@ -41,7 +41,9 @@ prompt() {
             return 1
         fi
     fi
-    read -rp "$prompt_text" "$var_name"
+    local input
+    read -rp "$prompt_text" input
+    eval "$var_name=\"$input\""
 }
 
 # Color helper function
