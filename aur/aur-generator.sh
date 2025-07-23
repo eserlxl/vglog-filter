@@ -33,7 +33,8 @@ set -o noclobber  # Prevent accidental file overwrite with > redirection
 # --- Tiny Helper Functions (moved to top for trap consistency) ---
 err() {
     trap - ERR
-    color_echo red "$*" >&2;
+    color_echo red "$*" >&2
+    trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 }
 warn() { color_echo yellow "$*" >&2; }
 log() { color_echo green "$*"; }
