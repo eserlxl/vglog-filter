@@ -64,7 +64,10 @@ color_echo() {
 
 log() { color_echo green "$*"; }
 warn() { color_echo yellow "$*" >&2; }
-err() { color_echo red "$*" >&2; }
+err() {
+    trap - ERR
+    color_echo red "$*" >&2;
+}
 
 require() {
     local t missing=()
