@@ -248,6 +248,7 @@ case "$MODE" in
             
             # Create a temporary directory for this test
             TEMP_DIR=$(mktemp -d)
+            trap 'rm -rf "$TEMP_DIR"' EXIT
             cd "$TEMP_DIR"
             
             # Set up test environment
@@ -273,7 +274,7 @@ case "$MODE" in
             
             # Clean up
             cd "$SCRIPT_DIR"
-            rm -rf "$TEMP_DIR"
+            # Manual rm -rf "$TEMP_DIR" is now handled by trap
         done
         
         # Report results
