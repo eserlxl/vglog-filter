@@ -394,8 +394,12 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         # Use a fixed mtime for reproducible builds (see https://reproducible-builds.org/docs/source-date-epoch/)
         log "[$MODE] Using static mtime for tarball: UTC 2020-01-01 00:00:00."
     fi
-    git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$ARCHIVE_MTIME" "$GIT_REF" | \
-        gzip -n > "$OUTDIR/$TARBALL"
+    # Disable ERR trap in this subshell to avoid duplicate error messages from pipeline subshells (see Bash pipeline/trap behavior)
+    (
+        trap '' ERR
+        git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$ARCHIVE_MTIME" "$GIT_REF" | \
+            gzip -n > "$OUTDIR/$TARBALL"
+    )
     log "Created $OUTDIR/$TARBALL using $GIT_REF with reproducible mtime."
 
     # Create GPG signature for aur mode only
