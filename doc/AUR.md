@@ -25,7 +25,7 @@
 
 ### Options
 
-- **`--no-color`, `-n`**: Disable colored output (for accessibility or when redirecting output). You can also set the `NO_COLOR` environment variable to any value to disable color.
+- **`--no-color`, `-n`**: Disable colored output (for accessibility or when redirecting output). You can also set the `no_color` environment variable to any value to disable color.
 - **`--ascii-armor`, `-a`**: Use ASCII-armored signatures (.asc) instead of binary signatures (.sig) for GPG signing. Some AUR helpers (like aurutils) prefer ASCII-armored signatures.
 - **`--dry-run`, `-d`**: Run all steps except the final `makepkg -si` (useful for CI/testing).
 
@@ -47,9 +47,9 @@ You can disable colored output in two ways:
   ```sh
   ./aur-generator.sh --no-color aur
   ```
-- By setting the `NO_COLOR` environment variable to any value (including empty):
+- By setting the `no_color` environment variable to any value (including empty):
   ```sh
-  NO_COLOR= ./aur-generator.sh aur
+  no_color= ./aur-generator.sh aur
   ```
   This is useful for CI, automation, or when redirecting output to files.
 
@@ -73,10 +73,10 @@ This will:
 
 - For `aur` mode, a GPG secret key is required to sign the release tarball.
 - By default, the script will prompt you to select a GPG key from your available secret keys.
-- **To skip the interactive menu and use a specific key, set the `GPG_KEY_ID` environment variable:**
+- **To skip the interactive menu and use a specific key, set the `gpg_key_id` environment variable:**
 
   ```sh
-  GPG_KEY_ID=ABCDEF ./aur-generator.sh aur
+  gpg_key_id=ABCDEF ./aur-generator.sh aur
   ```
   Replace `ABCDEF` with your GPG key's ID or fingerprint. This is useful for automation or CI workflows.
 
@@ -96,29 +96,35 @@ This will:
 
 - If GitHub CLI (`gh`) is installed, the script can automatically upload missing release assets to GitHub releases.
 - When a release asset is not found, the script will offer to upload the tarball and signature automatically.
-- **To skip the automatic upload prompt, set the `AUTO` environment variable:**
+- **To skip the automatic upload prompt, set the `auto` environment variable:**
 
   ```sh
-  AUTO=y ./aur-generator.sh aur
+  auto=y ./aur-generator.sh aur
   ```
   This is useful for automation or CI workflows where you want to skip interactive prompts.
 - If GitHub CLI is not installed, the script will provide clear instructions for manual upload.
 
 ### CI/Automation Support
 
-- Set `CI=1` to skip interactive prompts in `aur` mode (automatically skips `makepkg -si` prompt).
-- Set `AUTO=y` to skip the GitHub asset upload prompt.
-- Set `GPG_KEY_ID` to avoid GPG key selection prompts.
+- Set `ci=1` to skip interactive prompts in `aur` mode (automatically skips `makepkg -si` prompt).
+- Set `auto=y` to skip the GitHub asset upload prompt.
+- Set `gpg_key_id` to avoid GPG key selection prompts.
 - Use `--dry-run` to test without installing packages (must be before the mode).
 
 ### Environment Variables
 
 The script supports several environment variables for automation:
 
-- **`NO_COLOR`**: Set to any value to disable colored output (alternative to `--no-color` option)
-- **`GPG_KEY_ID`**: Set to your GPG key ID to skip the interactive key selection menu
-- **`AUTO=y`**: Skip the GitHub asset upload prompt in `aur` mode
-- **`CI=1`**: Skip interactive prompts in `aur` mode (useful for CI/CD pipelines)
+- **`no_color`**: Set to any value to disable colored output (alternative to `--no-color` option)
+- **`gpg_key_id`**: Set to your GPG key ID to skip the interactive key selection menu
+- **`auto`**: Skip the GitHub asset upload prompt in `aur` mode
+- **`ci`**: Skip interactive prompts in `aur` mode (useful for CI/CD pipelines)
+
+## Variable Naming Conventions
+
+- Local, mutable variables use lowercase (e.g., `dry_run`, `ascii_armor`, `color_enabled`).
+- ALL-CAPS is reserved for readonly constants and exported variables (e.g., `PKGNAME`, `PROJECT_ROOT`).
+- This helps quickly distinguish between constants/globals and local, mutable state.
 
 ## How It Works
 
@@ -139,7 +145,7 @@ The script supports several environment variables for automation:
 
 ### GPG Signing (aur mode only)
 - Checks for available GPG secret keys.
-- Prompts for key selection or uses `GPG_KEY_ID` environment variable.
+- Prompts for key selection or uses `gpg_key_id` environment variable.
 - Creates detached signature for the tarball (binary .sig by default, ASCII-armored .asc with `--ascii-armor`).
 - In test mode, creates dummy signature files.
 
@@ -150,7 +156,7 @@ The script supports several environment variables for automation:
 - Verifies upload success before proceeding.
 
 ### Installation
-- For `aur` mode: Prompts before running `makepkg -si` (unless `CI=1` or `AUTO=y`).
+- For `aur` mode: Prompts before running `makepkg -si` (unless `ci=1` or `auto=y`).
 - For other modes: Automatically runs `makepkg -si`.
 - Respects `--dry-run` flag to skip installation (must be before the mode).
 
@@ -173,9 +179,9 @@ The script supports several environment variables for automation:
 - Always update `PKGVER` in `PKGBUILD.0` for new releases.
 - The script expects `PKGBUILD.0` to exist and be up to date.
 - The script will fail if required tools or the template are missing.
-- For CI or automation, set `GPG_KEY_ID` to avoid interactive prompts.
-- For CI or automation with automatic asset upload, set `AUTO=y` to skip upload prompts.
-- For CI environments, set `CI=1` to skip all interactive prompts.
+- For CI or automation, set `gpg_key_id` to avoid interactive prompts.
+- For CI or automation with automatic asset upload, set `auto=y` to skip upload prompts.
+- For CI environments, set `ci=1` to skip all interactive prompts.
 - Use `./aur-generator.sh test` to verify all modes work correctly before making changes or releases.
 - The script automatically handles both 'v' and non-'v' prefixed GitHub release URLs.
 - VCS packages (`aur-git` mode) automatically set `sha256sums=('SKIP')` and add `validpgpkeys`.

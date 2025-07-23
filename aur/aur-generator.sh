@@ -12,13 +12,13 @@ set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
 trap 'err "[FATAL] Error at line $LINENO: $BASH_COMMAND"' ERR
 
 # --- Config / Constants ---
-readonly PKGNAME="vglog-filter"
+declare -r PKGNAME="vglog-filter"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly SCRIPT_DIR
+declare -r SCRIPT_DIR
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-readonly PROJECT_ROOT
+declare -r PROJECT_ROOT
 # VALID_MODES is used for validation in the usage function and mode checking
-VALID_MODES=(local aur aur-git clean test)
+declare -a VALID_MODES=(local aur aur-git clean test)
 
 # --- Functions ---
 # Color helper function
@@ -26,7 +26,7 @@ color_echo() {
     local color_code="$1"
     shift
     local msg="$*"
-    if (( COLOR )); then
+    if (( color_enabled )); then
         printf '\e[%sm%s\e[0m\n' "$color_code" "$msg"
     else
         printf '%s\n' "$msg"
@@ -82,7 +82,7 @@ generate_srcinfo() {
 install_pkg() {
     local mode="$1"
     local run_makepkg=n  # Always initialize to avoid set -u errors
-    if [[ $DRY_RUN -eq 1 ]]; then
+    if [[ $dry_run -eq 1 ]]; then
         log "[$mode] --dry-run: Skipping makepkg -si. All required steps completed successfully."
     else
         if [[ "$mode" == "aur" ]]; then
@@ -137,18 +137,18 @@ function usage() {
 
 # --- Main Logic ---
 # Initialize variables from environment or defaults before flag parsing
-DRY_RUN=${DRY_RUN:-0}
-ASCII_ARMOR=${ASCII_ARMOR:-0}
-COLOR=${COLOR:-1}
+dry_run=${DRY_RUN:-0}
+ascii_armor=${ASCII_ARMOR:-0}
+color_enabled=${COLOR:-1}
 while getopts ":nad-:" opt; do
     case "$opt" in
-        n) COLOR=0 ;;
-        a) ASCII_ARMOR=1 ;;
-        d) DRY_RUN=1 ;;
+        n) color_enabled=0 ;;
+        a) ascii_armor=1 ;;
+        d) dry_run=1 ;;
         -) case "${OPTARG}" in
-               no-color) COLOR=0 ;;
-               ascii-armor) ASCII_ARMOR=1 ;;
-               dry-run) DRY_RUN=1 ;;
+               no-color) color_enabled=0 ;;
+               ascii-armor) ascii_armor=1 ;;
+               dry-run) dry_run=1 ;;
                *) err "Unknown option --${OPTARG}"; usage ;;
            esac ;;
         \?) err "Unknown option -$OPTARG"; usage ;;
@@ -273,7 +273,7 @@ esac
 
 # Only define PKGVER and PKGVER-dependent variables for non-clean modes
 PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
-readonly PKGBUILD0
+declare -r PKGBUILD0
 if [[ ! -f "$PKGBUILD0" ]]; then
     err "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
     exit 1
@@ -291,11 +291,11 @@ if [[ -z "$PKGVER" ]]; then
     err "Error: Could not extract static pkgver from $PKGBUILD0"
     exit 1
 fi
-readonly PKGVER
+declare -r PKGVER
 TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
-readonly TARBALL
+declare -r TARBALL
 OUTDIR="$SCRIPT_DIR"
-readonly OUTDIR
+declare -r OUTDIR
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
 SRCINFO="$SCRIPT_DIR/.SRCINFO"
 
@@ -330,7 +330,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         fi
         
         # Set signature file extension based on ASCII_ARMOR setting
-        if [[ $ASCII_ARMOR -eq 1 ]]; then
+        if [[ $ascii_armor -eq 1 ]]; then
             SIGNATURE_EXT=".asc"
             GPG_ARMOR_OPT="--armor"
             log "[aur] Using ASCII-armored signatures (.asc)"
@@ -411,7 +411,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                 fi
                     if [[ "$upload_choice" =~ ^[Yy]$ ]]; then
                         # Set signature file extension based on ASCII_ARMOR setting
-                        if [[ $ASCII_ARMOR -eq 1 ]]; then
+                        if [[ $ascii_armor -eq 1 ]]; then
                             SIGNATURE_EXT=".asc"
                         else
                             SIGNATURE_EXT=".sig"
@@ -459,7 +459,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             echo "Assets have been automatically uploaded to GitHub release ${PKGVER}."
         else
             # Set signature file extension based on ASCII_ARMOR setting
-            if [[ $ASCII_ARMOR -eq 1 ]]; then
+            if [[ $ascii_armor -eq 1 ]]; then
                 SIGNATURE_EXT=".asc"
             else
                 SIGNATURE_EXT=".sig"
