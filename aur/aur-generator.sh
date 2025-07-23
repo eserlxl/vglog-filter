@@ -185,15 +185,32 @@ if [[ "$valid_mode" == "false" ]]; then
     usage
 fi
 
+# --- Early dependency checks: fail fast if required tools are missing ---
+case "$MODE" in
+    local)
+        # local mode requires: makepkg, updpkgsums, curl
+        require makepkg updpkgsums curl
+        ;;
+    aur)
+        # aur mode requires: makepkg, updpkgsums, curl, gpg
+        require makepkg updpkgsums curl gpg
+        ;;
+    aur-git)
+        # aur-git mode requires: makepkg
+        require makepkg
+        ;;
+    # clean and test modes do not require special tools
+esac
+
 log "Running in $MODE mode"
 case "$MODE" in
     local)
         log "[local] Build and install from local tarball."
-        require makepkg updpkgsums curl
+        # require call moved above
         ;;
     aur)
         log "[aur] Prepare for AUR upload: creates tarball, GPG signature, and PKGBUILD for release."
-        require makepkg updpkgsums curl gpg
+        # require call moved above
         # Fail early in CI if AUTO=y but gh is not installed
         if [[ "${AUTO:-}" == "y" ]] && ! command -v gh >/dev/null 2>&1; then
             err "[aur] ERROR: AUTO=y is set but GitHub CLI (gh) is not installed. Cannot upload assets automatically in CI. Please install gh or unset AUTO."
@@ -206,7 +223,7 @@ case "$MODE" in
         ;;
     aur-git)
         log "[aur-git] Prepare PKGBUILD for VCS (git) package. No tarball is created."
-        require makepkg
+        # require call moved above
         ;;
     clean)
         log "[clean] Remove generated files and directories."
