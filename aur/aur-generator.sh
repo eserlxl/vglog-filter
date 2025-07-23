@@ -492,52 +492,49 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         install_pkg "$MODE"
         exit 0
     fi
-elif [[ "$MODE" == "aur-git" ]]; then
-    # Generate PKGBUILD.git from PKGBUILD.0 using a single awk pass
-    awk '
-        BEGIN { sums = "sha256sums=(\'SKIP\')" }
-        /^pkgname=/ {
-            print "pkgname=vglog-filter-git"; next
-        }
-        /^source=/ {
-            print "source=(\"git+https://github.com/eserlxl/vglog-filter.git#branch=main\")";
-            print sums;
-            next
-        }
-        /^b2sums=/ || /^sha256sums=/ { next }
-        { gsub(/\${pkgname}-\${pkgver}|\$pkgname-\$pkgver/, "${pkgname%-git}"); print }
-    ' "$PKGBUILD0" > "$SCRIPT_DIR/PKGBUILD.git"
-    # Insert pkgver() as before if missing
-    if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
-        awk -v pkgver_func='pkgver() {
+fi
+
+awk '
+    BEGIN { sums = "sha256sums=(\'SKIP\')" }
+    /^pkgname=/ {
+        print "pkgname=vglog-filter-git"; next
+    }
+    /^source=/ {
+        print "source=(\"git+https://github.com/eserlxl/vglog-filter.git#branch=main\")";
+        print sums;
+        next
+    }
+    /^b2sums=/ || /^sha256sums=/ { next }
+    { gsub(/\${pkgname}-\${pkgver}|\$pkgname-\$pkgver/, "${pkgname%-git}"); print }
+' "$PKGBUILD0" > "$SCRIPT_DIR/PKGBUILD.git"
+# Insert pkgver() as before if missing
+if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
+    awk -v pkgver_func='pkgver() {
     cd "$srcdir/${pkgname%-git}"
     git describe --long --tags 2>/dev/null | sed "s/^v//;s/-/./g" || \
     printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }' '
-            /^source=/ {
-                print;
-                print pkgver_func;
-                next
-            }
-            { print }
-        ' "$SCRIPT_DIR/PKGBUILD.git" > "$SCRIPT_DIR/PKGBUILD.git.tmp" && mv "$SCRIPT_DIR/PKGBUILD.git.tmp" "$SCRIPT_DIR/PKGBUILD.git"
-    fi
-    PKGBUILD_TEMPLATE="$SCRIPT_DIR/PKGBUILD.git"
-    cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
-    log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
-    # Set validpgpkeys if missing
-    if ! grep -q '^validpgpkeys=' "$PKGBUILD"; then
-        if [[ -n "${GPG_KEY_ID:-}" ]]; then
-            echo "validpgpkeys=('$GPG_KEY_ID')" >> "$PKGBUILD"
-        fi
-    fi
-    # Check for required tools
-    require makepkg
-    # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
-    # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
-    generate_srcinfo
-    install_pkg "aur-git"
-    exit 0
-else
-    usage
+        /^source=/ {
+            print;
+            print pkgver_func;
+            next
+        }
+        { print }
+    ' "$SCRIPT_DIR/PKGBUILD.git" > "$SCRIPT_DIR/PKGBUILD.git.tmp" && mv "$SCRIPT_DIR/PKGBUILD.git.tmp" "$SCRIPT_DIR/PKGBUILD.git"
 fi
+PKGBUILD_TEMPLATE="$SCRIPT_DIR/PKGBUILD.git"
+cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
+log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
+# Set validpgpkeys if missing
+if ! grep -q '^validpgpkeys=' "$PKGBUILD"; then
+    if [[ -n "${GPG_KEY_ID:-}" ]]; then
+        echo "validpgpkeys=('$GPG_KEY_ID')" >> "$PKGBUILD"
+    fi
+fi
+# Check for required tools
+require makepkg
+# Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
+# and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
+generate_srcinfo
+install_pkg "aur-git"
+exit 0
