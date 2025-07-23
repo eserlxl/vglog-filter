@@ -757,8 +757,6 @@ log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
 if [[ -n "${GPG_KEY_ID:-}" ]]; then
     grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || echo "validpgpkeys=('${GPG_KEY_ID}')" >> "$PKGBUILD"
 fi
-# Check for required tools
-require makepkg || exit 1
 # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
 # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
 generate_srcinfo
