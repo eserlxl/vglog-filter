@@ -17,6 +17,8 @@ trap 'err "[FATAL] ${BASH_SOURCE[1]}:${BASH_LINENO[0]}: $BASH_COMMAND"' ERR
 declare -r PKGNAME="vglog-filter"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 declare -r SCRIPT_DIR
+SCRIPT_NAME=$(basename "$0")
+declare -r SCRIPT_NAME
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 declare -r PROJECT_ROOT
 # VALID_MODES is used for validation in the usage function and mode checking
@@ -299,7 +301,7 @@ case "$MODE" in
             log "--- Testing $test_mode mode ---"
             # Always run clean before each test
             log "[test] Running clean before $test_mode test..."
-            if ! bash "$SCRIPT_DIR/aur-generator.sh" clean > /dev/null 2>&1; then
+            if ! bash "$SCRIPT_DIR/$SCRIPT_NAME" clean > /dev/null 2>&1; then
                 warn "[test] Warning: Clean failed for $test_mode test, but continuing..."
             fi
             # Create a temporary directory for this test
@@ -312,7 +314,7 @@ case "$MODE" in
             if [[ "$test_mode" == "aur" ]]; then
                 export GPG_KEY_ID="TEST_KEY_FOR_DRY_RUN"
             fi
-            if bash "$SCRIPT_DIR/aur-generator.sh" --dry-run "$test_mode" > "$TEMP_DIR/test_output.log" 2>&1; then
+            if bash "$SCRIPT_DIR/$SCRIPT_NAME" --dry-run "$test_mode" > "$TEMP_DIR/test_output.log" 2>&1; then
                 log "[test] ✓ $test_mode mode passed"
             else
                 err "[test] ✗ $test_mode mode failed"
