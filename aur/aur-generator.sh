@@ -149,6 +149,7 @@ trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 usage() {
     printf 'Usage: %s [OPTIONS] MODE\n' "$SCRIPT_NAME"
     printf 'Modes: local | aur | aur-git | clean | test | lint\n'
+    printf 'Options: --no-wait (skip post-upload wait, for CI/advanced users)\n'
 }
 
 # Helper to check for interactive terminal
@@ -175,6 +176,7 @@ help() {
     printf '  -n, --no-color      Disable color output\n'
     printf '  -a, --ascii-armor   Use ASCII-armored GPG signatures (.asc)\n'
     printf '  -d, --dry-run       Dry run (no changes, for testing)\n'
+    printf '  --no-wait          Skip post-upload wait for asset availability (for CI/advanced users, or set NO_WAIT=1)\n'
     printf '  -h, --help          Show detailed help and exit\n'
     printf '  --usage             Show minimal usage and exit\n'
     printf '\n'
@@ -354,7 +356,7 @@ ascii_armor=${ASCII_ARMOR_DEFAULT:-0}
 # Temporarily disable ERR trap and set -e for getopt
 set +e
 trap - ERR
-getopt_output=$(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help,usage -- "$@")
+getopt_output=$(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help,usage,no-wait -- "$@")
 getopt_status=$?
 # Restore ERR trap and set -e
 trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
@@ -380,6 +382,8 @@ while true; do
             ascii_armor=1; shift ;;
         -d|--dry-run)
             dry_run=1; shift ;;
+        --no-wait)
+            no_wait=1; shift ;;
         -h|--help)
             help; exit 0 ;;
         --usage)
@@ -877,23 +881,35 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         gh_upload_or_exit "$OUTDIR/$TARBALL" "${GH_USER}/${PKGNAME}" "${PKGVER}"
                         # Upload signature
                         gh_upload_or_exit "$OUTDIR/$TARBALL$SIGNATURE_EXT" "${GH_USER}/${PKGNAME}" "${PKGVER}"
-                        # Wait/retry for asset availability
-                        echo "[aur] Waiting for GitHub to propagate the uploaded asset (this may take a few seconds due to CDN delay)..." >&2
-                        RETRIES=5
-                        DELAY=3
-                        for ((i=1; i<=RETRIES; i++)); do
-                            if curl -I -L -f --silent "$TARBALL_URL" > /dev/null; then
-                                log "[aur] Asset is now available on GitHub (after $i attempt(s))."
-                                break
-                            else
-                                if (( i < RETRIES )); then
-                                    echo "[aur] Asset not available yet (attempt $i/$RETRIES). Waiting $DELAY seconds..." >&2
-                                    sleep $DELAY
+                        if (( no_wait )); then
+                            echo "[aur] --no-wait flag set: Skipping post-upload wait for asset availability. (CI/advanced mode)" >&2
+                        else
+                            echo "[aur] Waiting for GitHub to propagate the uploaded asset (this may take some time due to CDN delay)..." >&2
+                            RETRIES=6
+                            DELAYS=(10 20 30 40 50 60)
+                            total_wait=0
+                            for ((i=1; i<=RETRIES; i++)); do
+                                DELAY=${DELAYS[$((i-1))]}
+                                if curl -I -L -f --silent "$TARBALL_URL" > /dev/null; then
+                                    log "[aur] Asset is now available on GitHub (after $i attempt(s))."
+                                    if (( total_wait > 0 )); then
+                                        echo "[aur] Total wait time: ${total_wait} seconds." >&2
+                                    fi
+                                    break
                                 else
-                                    warn "[aur] Asset still not available after $RETRIES attempts. This is normal if GitHub CDN is slow. makepkg will retry download for checksum generation."
+                                    if (( i < RETRIES )); then
+                                        echo "[aur] Asset not available yet (attempt $i/$RETRIES). Waiting $DELAY seconds..." >&2
+                                        sleep $DELAY
+                                        total_wait=$((total_wait + DELAY))
+                                    else
+                                        warn "[aur] Asset still not available after $RETRIES attempts. This is normal if GitHub CDN is slow."
+                                        echo "[aur] Please check the asset URL in your browser: $TARBALL_URL" >&2
+                                        echo "If the asset is available, you can continue. If not, wait a bit longer and refresh the page." >&2
+                                        prompt "Press Enter to continue when the asset is available (or Ctrl+C to abort)..." _
+                                    fi
                                 fi
-                            fi
-                        done
+                            done
+                        fi
                         echo "[aur] Note: After upload, makepkg will attempt to download the asset to generate checksums. If you see a download error, wait a few seconds and retry. This is normal due to GitHub CDN propagation." >&2
                     else
                         err "[aur] Release asset not found and automatic upload declined. Aborting."
