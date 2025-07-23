@@ -193,6 +193,11 @@ generate_srcinfo() {
 install_pkg() {
     local mode="$1"
     local run_makepkg=n  # Always initialize to avoid set -u errors
+    # Add --noconfirm in CI or if PKG_NOCONFIRM=1 to avoid hangs in non-interactive environments
+    local makepkg_opts="-si"
+    if [[ ${CI:-0} == 1 || ${PKG_NOCONFIRM:-0} == 1 ]]; then
+        makepkg_opts="-si --noconfirm"
+    fi
     if [[ $dry_run -eq 1 ]]; then
         log "[$mode] --dry-run: Skipping makepkg -si. All required steps completed successfully."
     else
@@ -203,10 +208,10 @@ install_pkg() {
                 prompt "Do you want to run makepkg -si now? [y/N] " run_makepkg n
             fi
             if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
-                makepkg -si
+                makepkg $makepkg_opts
             fi
         else
-            makepkg -si
+            makepkg $makepkg_opts
         fi
     fi
 }
