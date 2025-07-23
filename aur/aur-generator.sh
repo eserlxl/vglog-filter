@@ -504,6 +504,10 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
                 USER=$(gpg --list-secret-keys "${KEYS[$i]}" | grep uid | head -n1 | sed 's/.*] //')
                 warn "$((i+1)). ${KEYS[$i]} ($USER)" >&2
             done
+            if ! [ -t 0 ]; then
+                err "No interactive terminal: please set GPG_KEY_ID in headless mode."
+                exit 1
+            fi
             prompt "Select a key [1-${#KEYS[@]}]: " choice 1
             # Ensure choice is set to a default if empty
             # shellcheck disable=SC2154
