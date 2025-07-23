@@ -226,25 +226,16 @@ set_signature_ext() {
 update_source_array_in_pkgbuild() {
     local pkgbuild_file="$1"
     local tarball_url="$2"
-    # Use awk to robustly update the first entry in source=(), preserving extras and multiline arrays
+    # Replace the entire source array with just the tarball URL
     awk -v newurl="$tarball_url" '
-        BEGIN { in_source=0; replaced=0 }
+        BEGIN { in_source=0 }
         /^source=\(/ {
-            in_source=1; printf "%s\n", $0; next
+            in_source=1; print "source=(\"" newurl "\")"; next
         }
         in_source && /\)/ {
-            in_source=0;
-            if (!replaced) {
-                # If no source lines were found, insert the new one
-                printf "    \"%s\"\n", newurl
-                replaced=1
-            }
-            print $0; next
+            in_source=0; next
         }
-        in_source && !replaced {
-            # Replace the first source entry
-            print "    \"" newurl "\""; replaced=1; next
-        }
+        in_source { next }
         { print $0 }
     ' "$pkgbuild_file" > "$pkgbuild_file.tmp" && mv "$pkgbuild_file.tmp" "$pkgbuild_file"
 }
@@ -895,9 +886,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         if command -v gh >/dev/null 2>&1; then
             if gh release view "$PKGVER" --json assets >/dev/null 2>&1; then
                 ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
-                if [[ $ASSET_LIST_OUTPUT == *"$TARBALL"* ]]; then
-                    asset_exists=1
-                else
+                if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^$TARBALL$"; then
                     asset_exists=0
                 fi
             else
@@ -916,9 +905,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             if command -v gh >/dev/null 2>&1; then
                 if gh release view "$PKGVER" --json assets >/dev/null 2>&1; then
                     ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
-                    if [[ $ASSET_LIST_OUTPUT == *"$TARBALL"* ]]; then
-                        asset_exists=1
-                    else
+                    if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^$TARBALL$"; then
                         asset_exists=0
                     fi
                 else
@@ -1006,7 +993,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                 ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
                 echo "[DEBUG] gh release view output for $PKGVER:" >&2
                 echo "$ASSET_LIST_OUTPUT" >&2
-                if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
+                if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^$TARBALL$"; then
                     asset_exists=0
                 fi
                 echo "[DEBUG] asset_exists after gh/jq check: $asset_exists" >&2
@@ -1032,7 +1019,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                     ASSET_LIST_OUTPUT=$(gh release view "$PKGVER" --json assets | jq -r '.assets[].name')
                     echo "[DEBUG] gh release view output for $PKGVER:" >&2
                     echo "$ASSET_LIST_OUTPUT" >&2
-                    if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^\s*\"$TARBALL\"\s*$"; then
+                    if ! echo "$ASSET_LIST_OUTPUT" | grep -q "^$TARBALL$"; then
                         asset_exists=0
                     fi
                     echo "[DEBUG] asset_exists after gh/jq check: $asset_exists" >&2
