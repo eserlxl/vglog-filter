@@ -266,7 +266,7 @@ case "$MODE" in
             # Create a temporary directory for this test
             TEMP_DIR=$(mktemp -d)
             TEMP_DIRS+=("$TEMP_DIR")
-            cd "$TEMP_DIR"
+            cd "$TEMP_DIR" || exit 1
             # Set up test environment
             export CI=1  # Skip prompts
             # For aur mode, set a dummy GPG key to avoid prompts
@@ -286,7 +286,7 @@ case "$MODE" in
                 fi
             fi
             # Clean up
-            cd "$SCRIPT_DIR"
+            cd "$SCRIPT_DIR" || exit 1
             # Manual rm -rf "$TEMP_DIR" is now handled by the outer trap
         done
         # Report results
@@ -330,7 +330,7 @@ SRCINFO="$SCRIPT_DIR/.SRCINFO"
 
 # Only create the tarball for aur and local modes
 if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
-    cd "$PROJECT_ROOT"
+    cd "$PROJECT_ROOT" || exit 1
     # Determine the git reference to use for archiving
     # Try to use the tag that matches pkgver first, fall back to HEAD if tag doesn't exist
     GIT_REF="HEAD"
@@ -427,7 +427,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     fi
 fi
 
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR" || exit 1
 
 if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
