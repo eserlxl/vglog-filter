@@ -10,6 +10,7 @@ set -euo pipefail
 set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
 
 # Trap errors and print a helpful message with line number and command
+# Note: set -E implies errtrace in Bash >=4.4, but older Bash may not propagate ERR trap into all subshells.
 trap 'err "[FATAL] Error at line $LINENO: $BASH_COMMAND"' ERR
 
 # --- Config / Constants ---
@@ -57,10 +58,16 @@ warn() { color_echo "1;33" "$*" >&2; }
 err() { color_echo "1;31" "$*" >&2; }
 
 require() {
-    local t
+    local t missing=()
     for t in "$@"; do
-        command -v "$t" >/dev/null || { err "Missing $t"; exit 1; }
+        if ! command -v "$t" >/dev/null; then
+            missing+=("$t")
+        fi
     done
+    if (( ${#missing[@]} )); then
+        err "Missing required tool(s): ${missing[*]}"
+        exit 1
+    fi
 }
 
 # Prompt helper function that auto-skips when CI is set
