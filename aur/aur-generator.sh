@@ -233,7 +233,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 declare -r PROJECT_ROOT
 # Determine GH_USER: environment > PKGBUILD.0 url > fallback
 if [[ -z "${GH_USER:-}" ]]; then
-    PKGBUILD0_URL=$(awk -F'="' '/^url="https:\/\/github.com\// {print $2}' "$SCRIPT_DIR/PKGBUILD.0" | cut -d'/' -f4)
+    PKGBUILD0_URL=$(awk -F/ '/^url="https:\/\/github.com\// {print $5}' "$SCRIPT_DIR/PKGBUILD.0")
     if [[ -n "$PKGBUILD0_URL" ]]; then
         GH_USER="$PKGBUILD0_URL"
     else
