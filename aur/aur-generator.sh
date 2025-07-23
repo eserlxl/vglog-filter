@@ -227,7 +227,7 @@ update_checksums() {
 }
 generate_srcinfo() {
     if command -v makepkg >/dev/null 2>&1; then
-        makepkg --printsrcinfo > .SRCINFO
+        makepkg --printsrcinfo >| .SRCINFO
         log "[generate_srcinfo] Updated .SRCINFO with makepkg --printsrcinfo."
     elif command -v mksrcinfo >/dev/null 2>&1; then
         warn "[generate_srcinfo] Warning: Falling back to deprecated mksrcinfo. Please update pacman/makepkg to use makepkg --printsrcinfo. Support for mksrcinfo will be removed in the future."
@@ -427,7 +427,7 @@ case "$MODE" in
             if [[ "$test_mode" == "aur" ]]; then
                 export GPG_KEY_ID="TEST_KEY_FOR_DRY_RUN"
             fi
-            if bash "$SCRIPT_DIR/$SCRIPT_NAME" --dry-run "$test_mode" > "$TEST_LOG_FILE" 2>&1; then
+            if bash "$SCRIPT_DIR/$SCRIPT_NAME" --dry-run "$test_mode" >| "$TEST_LOG_FILE" 2>&1; then
                 log "[test] ✓ $test_mode mode passed"
             else
                 err "[test] ✗ $test_mode mode failed"
@@ -543,7 +543,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             unset CI
             trap '' ERR
             git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$ARCHIVE_MTIME" "$GIT_REF" | \
-                gzip -n > "$OUTDIR/$TARBALL"
+                gzip -n >| "$OUTDIR/$TARBALL"
         )
         log "Created $OUTDIR/$TARBALL using $GIT_REF with reproducible mtime."
     else
@@ -551,8 +551,8 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             set -euo pipefail
             unset CI
             trap '' ERR
-            git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$GIT_REF" > "$OUTDIR/$TARBALL.tmp.tar"
-            gzip -n < "$OUTDIR/$TARBALL.tmp.tar" > "$OUTDIR/$TARBALL"
+            git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$GIT_REF" >| "$OUTDIR/$TARBALL.tmp.tar"
+            gzip -n < "$OUTDIR/$TARBALL.tmp.tar" >| "$OUTDIR/$TARBALL"
             rm -f "$OUTDIR/$TARBALL.tmp.tar"
             # Set mtime on the tarball if possible
             if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
@@ -661,7 +661,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                 log "[aur] No previous PKGBUILD found, setting pkgrel to 1. (locked)"
             fi
             # Update pkgrel in the new PKGBUILD
-            awk -v new_pkgrel="$NEW_PKGREL" 'BEGIN{done=0} /^[[:space:]]*pkgrel[[:space:]]*=/ && !done {print "pkgrel=" new_pkgrel; done=1; next} {print}' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
+            awk -v new_pkgrel="$NEW_PKGREL" 'BEGIN{done=0} /^[[:space:]]*pkgrel[[:space:]]*=/ && !done {print "pkgrel=" new_pkgrel; done=1; next} {print}' "$PKGBUILD" >| "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
             trap - RETURN
         ) 200>"$LOCKFILE"
         # --- End flock-protected critical section ---
@@ -698,7 +698,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                 next
             }
             { print }
-        ' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
+        ' "$PKGBUILD" >| "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
         log "[aur] Appended tarball URL to source array in PKGBUILD (preserves extra sources and comments)."
         # Check if the tarball exists on GitHub before running updpkgsums
         asset_exists=1
@@ -796,7 +796,7 @@ awk -v gh_user="$GH_USER" -v pkgname_short="${PKGNAME%-git}" '
     }
     /^b2sums=/ || /^sha256sums=/ { next }
     { gsub(/\${pkgname}-\${pkgver}|\$pkgname-\$pkgver/, pkgname_short); print }
-' "$PKGBUILD0" > "$SCRIPT_DIR/PKGBUILD.git"
+' "$PKGBUILD0" >| "$SCRIPT_DIR/PKGBUILD.git"
 # Insert pkgver() as before if missing
 if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
     awk -v pkgver_func='pkgver() {
@@ -810,21 +810,21 @@ if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
             next
         }
         { print }
-    ' "$SCRIPT_DIR/PKGBUILD.git" > "$SCRIPT_DIR/PKGBUILD.git.tmp" && mv "$SCRIPT_DIR/PKGBUILD.git.tmp" "$SCRIPT_DIR/PKGBUILD.git"
+    ' "$SCRIPT_DIR/PKGBUILD.git" >| "$SCRIPT_DIR/PKGBUILD.git.tmp" && mv "$SCRIPT_DIR/PKGBUILD.git.tmp" "$SCRIPT_DIR/PKGBUILD.git"
 fi
 PKGBUILD_TEMPLATE="$SCRIPT_DIR/PKGBUILD.git"
 # Inject makedepends=(git) if missing or incomplete
 if ! grep -q '^makedepends=.*git' "$PKGBUILD_TEMPLATE"; then
     awk 'BEGIN{done=0} \
         /^pkgname=/ && !done {print; print "makedepends=(git)"; done=1; next} \
-        {print}' "$PKGBUILD_TEMPLATE" > "$PKGBUILD_TEMPLATE.tmp" && mv "$PKGBUILD_TEMPLATE.tmp" "$PKGBUILD_TEMPLATE"
+        {print}' "$PKGBUILD_TEMPLATE" >| "$PKGBUILD_TEMPLATE.tmp" && mv "$PKGBUILD_TEMPLATE.tmp" "$PKGBUILD_TEMPLATE"
     log "[aur-git] Injected makedepends=(git) into PKGBUILD.git."
 fi
 cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
 log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
 # Set validpgpkeys if missing
 if [[ -n "${GPG_KEY_ID:-}" ]]; then
-    grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || echo "validpgpkeys=('${GPG_KEY_ID}')" >> "$PKGBUILD"
+    grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || echo "validpgpkeys=('${GPG_KEY_ID}')" >>| "$PKGBUILD"
 fi
 # Do NOT run updpkgsums for VCS (git) packages, as checksums must be SKIP
 # and updpkgsums would overwrite them with real sums, breaking the PKGBUILD.
