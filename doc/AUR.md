@@ -6,6 +6,7 @@
 - **Location:** `aur/aur-generator.sh`
 - **Purpose:** Automates tarball creation, PKGBUILD and .SRCINFO updates, and AUR packaging tasks for vglog-filter.
 - **License:** GPLv3 or later (see LICENSE)
+- **Platform:** The script is designed for GNU/Linux environments and does not aim to support macOS/BSD. It requires GNU getopt (util-linux) and will not work with BSD/macOS getopt implementations.
 
 ## Usage
 
@@ -172,6 +173,7 @@ The script supports several environment variables for automation:
 - `makepkg` (from `pacman`)
 - `updpkgsums` (from `pacman-contrib`)
 - `curl` (for checking GitHub assets)
+- `getopt` (GNU version from util-linux; the script will not work with BSD/macOS getopt)
 
 > **Warning:** `pacman-contrib` is not included in the `base-devel` group on Arch Linux. You must install it separately, or you will get a `updpkgsums: command not found` error when building or packaging.
 

@@ -5,6 +5,8 @@
 # This file is part of vglog-filter and is licensed under
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
+# NOTE: This script requires GNU getopt (util-linux) and is not compatible with macOS/BSD systems.
+# The script is designed for GNU/Linux environments and does not aim to support macOS/BSD.
 color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo ${COLOR:-1})
 # Disable color if Bash version is less than 4 (associative arrays unsupported)
 if [[ -v BASH_VERSION && ${BASH_VERSINFO[0]} -lt 4 ]]; then
