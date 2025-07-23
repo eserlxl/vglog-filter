@@ -124,6 +124,7 @@ gh_upload_or_exit() {
     local tag="$3"
     if ! gh release upload "$tag" "$file" --repo "$repo" --clobber; then
         err "[aur] Failed to upload $file to GitHub release $tag"
+        # shellcheck disable=SC2317
         exit 1
     fi
 }
@@ -243,10 +244,14 @@ require() {
         fi
     done
     if (( ${#missing[@]} )); then
+        # shellcheck disable=SC2317
         err "Missing required tool(s): $(IFS=, ; echo "${missing[*]}")"
+        # shellcheck disable=SC2317
         for t in "${missing[@]}"; do
+            # shellcheck disable=SC2317
             hint "$t"
         done
+        # shellcheck disable=SC2317
         return 1
     fi
 }
@@ -386,7 +391,12 @@ while true; do
         --)
             shift; break ;;
         *)
-            err "Unknown option: $1"; help; exit 1 ;;
+            # shellcheck disable=SC2317
+            err "Unknown option: $1"; 
+            # shellcheck disable=SC2317
+            help; 
+            # shellcheck disable=SC2317
+            exit 1 ;;
     esac
     # No need to call init_colors here
     # We'll call it once after all flags are parsed
@@ -399,13 +409,19 @@ done
 
 MODE=${1:-}
 if [[ -z $MODE ]]; then
-    usage; exit 1
+    # shellcheck disable=SC2317
+    usage
+    # shellcheck disable=SC2317
+    exit 1
 fi
 
 # Validate mode using is_valid_mode function
 if ! is_valid_mode "$MODE"; then
     err "Unknown mode: $MODE"
-    usage; exit 1
+    # shellcheck disable=SC2317
+    usage
+    # shellcheck disable=SC2317
+    exit 1
 fi
 
 # --- Early dependency checks: fail fast if required tools are missing ---
@@ -446,6 +462,7 @@ case "$MODE" in
         # Fail early in CI if AUTO=y but gh is not installed
         if [[ "${AUTO:-}" == "y" ]] && ! command -v gh >/dev/null 2>&1; then
             err "[aur] ERROR: AUTO=y is set but GitHub CLI (gh) is not installed. Cannot upload assets automatically in CI. Please install gh or unset AUTO."
+            # shellcheck disable=SC2317
             exit 1
         fi
         # Check for optional GitHub CLI
@@ -509,7 +526,9 @@ case "$MODE" in
                 if [[ -f "$GOLDEN_FILE" ]]; then
                     if ! diff -u <(tail -n +2 "$GOLDEN_FILE") "$GENERATED_PKG" > "$SCRIPT_DIR/diff-$test_mode.log"; then
                         err "[test] ✗ $test_mode PKGBUILD does not match golden file! See $SCRIPT_DIR/diff-$test_mode.log"
+                        # shellcheck disable=SC2317
                         cat "$SCRIPT_DIR/diff-$test_mode.log" >&2
+                        # shellcheck disable=SC2317
                         TEST_ERRORS=$((TEST_ERRORS + 1))
                     else
                         log "[test] ✓ $test_mode PKGBUILD matches golden file."
@@ -520,8 +539,11 @@ case "$MODE" in
                 # --- End golden PKGBUILD diff ---
             else
                 err "[test] ✗ $test_mode mode failed"
+                # shellcheck disable=SC2317
                 TEST_ERRORS=$((TEST_ERRORS + 1))
+                # shellcheck disable=SC2317
                 warn "Error output for $test_mode is in: $TEST_LOG_FILE"
+                # shellcheck disable=SC2317
                 cat "$TEST_LOG_FILE" >&2
             fi
             # Restore previous CI value
@@ -558,7 +580,9 @@ case "$MODE" in
             log "[test] Testing invalid args: $invalid_args_str"
             if bash "$SCRIPT_DIR/$SCRIPT_NAME" "${invalid_args[@]}" >"$TEST_LOG_FILE" 2>&1; then
                 err "[test] ✗ Invalid args '$invalid_args_str' did NOT fail as expected!"
+                # shellcheck disable=SC2317
                 TEST_ERRORS=$((TEST_ERRORS + 1))
+                # shellcheck disable=SC2317
                 cat "$TEST_LOG_FILE" >&2
             else
                 log "[test] ✓ Invalid args '$invalid_args_str' failed as expected."
@@ -570,6 +594,7 @@ case "$MODE" in
             log "[test] ✓ All test modes passed successfully!"
         else
             err "[test] ✗ $TEST_ERRORS test mode(s) failed"
+            # shellcheck disable=SC2317
             exit 1
         fi
         exit 0
@@ -590,6 +615,7 @@ case "$MODE" in
             exit 0
         else
             err "[lint] ✗ Lint checks failed."
+            # shellcheck disable=SC2317
             exit 1
         fi
         ;;
@@ -636,16 +662,19 @@ esac
 # Dynamic or function-based pkgver is not supported or needed for this workflow.
 if [[ ! -f "$PKGBUILD0" ]]; then
     err "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
+    # shellcheck disable=SC2317
     exit 1
 fi
 PKGVER_LINE=$(awk -F= '/^[[:space:]]*pkgver[[:space:]]*=/ {print $2}' "$PKGBUILD0")
 if [[ "$PKGVER_LINE" =~ [\$\`\(\)] ]]; then
     err "Dynamic pkgver assignment detected in $PKGBUILD0. Only static assignments are supported."
+    # shellcheck disable=SC2317
     exit 1
 fi
 PKGVER=$(echo "$PKGVER_LINE" | tr -d "\"'[:space:]")
 if [[ -z "$PKGVER" ]]; then
     err "Error: Could not extract static pkgver from $PKGBUILD0"
+    # shellcheck disable=SC2317
     exit 1
 fi
 readonly PKGVER
@@ -727,6 +756,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         # Check for GPG secret key before signing
         if ! gpg --list-secret-keys --with-colons | grep -q '^sec:'; then
             err "Error: No GPG secret key found. Please generate or import a GPG key before signing."
+            # shellcheck disable=SC2317
             exit 1
         fi
         # Set signature file extension and armor option
@@ -747,6 +777,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             mapfile -t KEYS < <(gpg --list-secret-keys --with-colons | awk -F: '/^sec/ {print $5}')
             if [[ ${#KEYS[@]} -eq 0 ]]; then
                 err "No GPG secret keys found."
+                # shellcheck disable=SC2317
                 exit 1
             fi
             warn "Available GPG secret keys:" >&2
@@ -756,6 +787,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             done
             if ! have_tty; then
                 err "No interactive terminal: please set GPG_KEY_ID in headless mode."
+                # shellcheck disable=SC2317
                 exit 1
             fi
             # Default is always supplied to prompt; variable will always be set, even in CI/headless mode.
@@ -764,6 +796,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             # shellcheck disable=SC2154
             if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#KEYS[@]} )); then
                 err "Invalid selection."
+                # shellcheck disable=SC2317
                 exit 1
             fi
             GPG_KEY="${KEYS[$((choice-1))]}"
@@ -917,13 +950,18 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         echo "[aur] Note: After upload, makepkg will attempt to download the asset to generate checksums. If you see a download error, wait a few seconds and retry. This is normal due to GitHub CDN propagation." >&2
                     else
                         err "[aur] Release asset not found and automatic upload declined. Aborting."
+                        # shellcheck disable=SC2317
                         echo "After uploading the tarball manually, run: makepkg -g >> PKGBUILD to update checksums."
+                        # shellcheck disable=SC2317
                         exit 1
                     fi
                 else
                     err "[aur] ERROR: Release asset not found at either location. GitHub CLI (gh) not available for automatic upload."
+                    # shellcheck disable=SC2317
                     echo "Please install GitHub CLI (gh) or manually upload ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to the GitHub release page."
+                    # shellcheck disable=SC2317
                     echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
+                    # shellcheck disable=SC2317
                     exit 1
                 fi
             fi
@@ -1029,13 +1067,18 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         echo "[aur] Note: After upload, makepkg will attempt to download the asset to generate checksums. If you see a download error, wait a few seconds and retry. This is normal due to GitHub CDN propagation." >&2
                     else
                         err "[aur] Release asset not found and automatic upload declined. Aborting."
+                        # shellcheck disable=SC2317
                         echo "After uploading the tarball manually, run: makepkg -g >> PKGBUILD to update checksums."
+                        # shellcheck disable=SC2317
                         exit 1
                     fi
                 else
                     err "[aur] ERROR: Release asset not found at either location. GitHub CLI (gh) not available for automatic upload."
+                    # shellcheck disable=SC2317
                     echo "Please install GitHub CLI (gh) or manually upload ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to the GitHub release page."
+                    # shellcheck disable=SC2317
                     echo "After uploading the tarball, run: makepkg -g >> PKGBUILD to update checksums."
+                    # shellcheck disable=SC2317
                     exit 1
                 fi
             fi
