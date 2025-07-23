@@ -77,7 +77,7 @@ generate_srcinfo() {
 install_pkg() {
     local mode="$1"
     if [[ $DRY_RUN -eq 1 ]]; then
-        log "[$mode] --dry-run: Skipping makepkg -si. All previous steps completed successfully."
+        log "[$mode] --dry-run: Skipping makepkg -si. All required steps completed successfully."
     else
         if [[ "$mode" == "aur" ]]; then
                     if [[ "${AUTO:-}" == "y" ]]; then
