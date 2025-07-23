@@ -40,6 +40,11 @@ if ((BASH_VERSINFO[0] < 4)); then
     exit 1
 fi
 
+# Enable debug tracing if DEBUG=1
+if [[ "${DEBUG:-0}" == 1 ]]; then
+    set -x
+fi
+
 # Ensure GPG pinentry works in CI/sudo/non-interactive shells
 GPG_TTY=$(tty)  # Needed for GPG signing to work reliably (pinentry) in CI/sudo
 export GPG_TTY
@@ -567,7 +572,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         GIT_MTIME_SUPPORTED=1
     fi
     if (( ! GIT_MTIME_SUPPORTED )); then
-        warn "[aur-generator] Your git version ($GIT_VERSION) does not support 'git archive --mtime'. For fully reproducible tarballs, upgrade to git ≥ 2.32.0. Falling back to manual mtime setting."
+        warn "[aur-generator] Your git version ($GIT_VERSION) does not support 'git archive --mtime'. For fully reproducible tarballs, upgrade to git ≥ 2.32.0. Falling back to tar --mtime for reproducibility."
     fi
     if (( GIT_MTIME_SUPPORTED )); then
         (
@@ -583,17 +588,18 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             set -euo pipefail
             unset CI
             trap '' ERR
+            # Use tar --mtime for reproducible tarballs on old git
             git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$GIT_REF" >| "$OUTDIR/$TARBALL.tmp.tar"
-            gzip -n < "$OUTDIR/$TARBALL.tmp.tar" >| "$OUTDIR/$TARBALL"
-            rm -f "$OUTDIR/$TARBALL.tmp.tar"
-            # Set mtime on the tarball if possible
+            TAR_MTIME=""
             if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
-                touch -d "@${SOURCE_DATE_EPOCH}" "$OUTDIR/$TARBALL"
+                TAR_MTIME="--mtime=@${SOURCE_DATE_EPOCH}"
             else
-                touch -d "@${COMMIT_EPOCH}" "$OUTDIR/$TARBALL"
+                TAR_MTIME="--mtime=@${COMMIT_EPOCH}"
             fi
+            tar $TAR_MTIME -cf - -C "$OUTDIR" "${PKGNAME}-${PKGVER}" | gzip -n >| "$OUTDIR/$TARBALL"
+            rm -rf "$OUTDIR/${PKGNAME}-${PKGVER}" "$OUTDIR/$TARBALL.tmp.tar"
         )
-        log "Created $OUTDIR/$TARBALL using $GIT_REF (fallback: no --mtime in git archive, set mtime on tarball)."
+        log "Created $OUTDIR/$TARBALL using $GIT_REF (tar --mtime fallback for reproducibility)."
     fi
 
     # Create GPG signature for aur mode only
@@ -803,7 +809,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             echo "Assets have been automatically uploaded to GitHub release ${PKGVER}."
         else
             set_signature_ext
-            echo "Now push the git tag and upload ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to the GitHub release page."
+            printf 'Now push the git tag and upload %q and %q to the GitHub release page.\n' "$OUTDIR/$TARBALL" "$OUTDIR/$TARBALL$SIGNATURE_EXT"
         fi
         echo "Then, copy the generated PKGBUILD and .SRCINFO to your local AUR git repository, commit, and push to update the AUR package."
         install_pkg "aur"
