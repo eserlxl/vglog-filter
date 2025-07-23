@@ -281,9 +281,14 @@ fi
 # Extract pkgver from PKGBUILD.0 without sourcing
 # NOTE: PKGBUILD.0 is always a static template with a simple pkgver=... assignment.
 # Dynamic or function-based pkgver is not supported or needed for this workflow.
-PKGVER=$(awk -F= '/^[[:space:]]*pkgver[[:space:]]*=/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' "$PKGBUILD0" | tr -d "\"'")
+PKGVER_LINE=$(awk -F= '/^[[:space:]]*pkgver[[:space:]]*=/ {print $2}' "$PKGBUILD0")
+if [[ "$PKGVER_LINE" =~ [\$\`\(\)] ]]; then
+    err "Dynamic pkgver assignment detected in $PKGBUILD0. Only static assignments are supported."
+    exit 1
+fi
+PKGVER=$(echo "$PKGVER_LINE" | tr -d "\"'[:space:]")
 if [[ -z "$PKGVER" ]]; then
-    err "Error: Could not extract pkgver from $PKGBUILD0"
+    err "Error: Could not extract static pkgver from $PKGBUILD0"
     exit 1
 fi
 readonly PKGVER
