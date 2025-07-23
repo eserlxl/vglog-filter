@@ -5,6 +5,12 @@
 # This file is part of vglog-filter and is licensed under
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
+#
+# Modes summary:
+#   local   - Build/install from a local tarball for testing.
+#   aur     - Prepare a signed release tarball and PKGBUILD for AUR upload.
+#   aur-git - Generate a PKGBUILD for the -git (VCS) AUR package.
+# See doc/AUR.md for full details on each mode and workflow.
 # NOTE: This script requires GNU getopt (util-linux) and is not compatible with macOS/BSD systems.
 # The script is designed for GNU/Linux environments and does not aim to support macOS/BSD.
 
