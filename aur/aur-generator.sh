@@ -45,7 +45,7 @@ color_echo() {
             "1;31") printf "%b%s%b\n" "$RED" "$msg" "$RESET" ;;
             "1;32") printf "%b%s%b\n" "$GREEN" "$msg" "$RESET" ;;
             "1;33") printf "%b%s%b\n" "$YELLOW" "$msg" "$RESET" ;;
-            *) printf '%s\n' "$msg" ;;
+            *) printf '%s%s%s\n' "${RESET:-}" "$msg" "${RESET:-}" ;;
         esac
     else
         printf '%s\n' "$msg"
