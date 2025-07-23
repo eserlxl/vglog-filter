@@ -67,24 +67,24 @@ trap 'err "[FATAL]  [36m${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND [0m"' ERR
 # --- Functions ---
 # Minimal help for scripts/AUR helpers
 help() {
-    echo "Usage: $SCRIPT_NAME [OPTIONS] MODE"
-    echo "Modes: local | aur | aur-git | clean | test"
+    printf 'Usage: %s [OPTIONS] MODE\n' "$SCRIPT_NAME"
+    printf 'Modes: local | aur | aur-git | clean | test\n'
 }
 
 # Full usage (detailed help)
 usage() {
     help
-    echo
-    echo "Options:"
-    echo "  -n, --no-color      Disable color output"
-    echo "  -a, --ascii-armor   Use ASCII-armored GPG signatures (.asc)"
-    echo "  -d, --dry-run       Dry run (no changes, for testing)"
-    echo "  -h, --help          Show minimal usage and exit"
-    echo
-    echo "All options must appear before the mode."
-    echo "For full documentation, see doc/AUR.md."
-    echo
-    echo "If a required tool is missing, a hint will be printed with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums)."
+    printf '\n'
+    printf 'Options:\n'
+    printf '  -n, --no-color      Disable color output\n'
+    printf '  -a, --ascii-armor   Use ASCII-armored GPG signatures (.asc)\n'
+    printf '  -d, --dry-run       Dry run (no changes, for testing)\n'
+    printf '  -h, --help          Show minimal usage and exit\n'
+    printf '\n'
+    printf 'All options must appear before the mode.\n'
+    printf 'For full documentation, see doc/AUR.md.\n'
+    printf '\n'
+    printf 'If a required tool is missing, a hint will be printed with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums).\n'
 }
 
 # Helper to set signature extension and GPG armor option
@@ -224,13 +224,13 @@ install_pkg() {
 }
 
 # --- Config / Constants ---
-declare -r PKGNAME="vglog-filter"
+readonly PKGNAME="vglog-filter"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-declare -r SCRIPT_DIR
+readonly SCRIPT_DIR
 SCRIPT_NAME=$(basename "$0")
-declare -r SCRIPT_NAME
+readonly SCRIPT_NAME
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-declare -r PROJECT_ROOT
+readonly PROJECT_ROOT
 # Determine GH_USER: environment > PKGBUILD.0 url > fallback
 if [[ -z "${GH_USER:-}" ]]; then
     PKGBUILD0_URL=$(awk -F/ '/^url="https:\/\/github.com\// {print $5}' "$SCRIPT_DIR/PKGBUILD.0")
@@ -241,10 +241,10 @@ if [[ -z "${GH_USER:-}" ]]; then
         warn "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'."
     fi
 fi
-declare -r GH_USER
+readonly GH_USER
 # VALID_MODES is used for validation in the usage function and mode checking
 # shellcheck disable=SC2034
-declare -a VALID_MODES=(local aur aur-git clean test)
+readonly -a VALID_MODES=(local aur aur-git clean test)
 
 # --- Main Logic ---
 # Initialize variables from environment or defaults before flag parsing
@@ -398,7 +398,7 @@ esac
 
 # Only define PKGVER and PKGVER-dependent variables for non-clean modes
 PKGBUILD0="$SCRIPT_DIR/PKGBUILD.0"
-declare -r PKGBUILD0
+readonly PKGBUILD0
 if [[ ! -f "$PKGBUILD0" ]]; then
     err "Error: $PKGBUILD0 not found. Please create it from your original PKGBUILD."
     exit 1
@@ -416,11 +416,11 @@ if [[ -z "$PKGVER" ]]; then
     err "Error: Could not extract static pkgver from $PKGBUILD0"
     exit 1
 fi
-declare -r PKGVER
+readonly PKGVER
 TARBALL="${PKGNAME}-${PKGVER}.tar.gz"
-declare -r TARBALL
+readonly TARBALL
 OUTDIR="$SCRIPT_DIR"
-declare -r OUTDIR
+readonly OUTDIR
 PKGBUILD="$SCRIPT_DIR/PKGBUILD"
 SRCINFO="$SCRIPT_DIR/.SRCINFO"
 
@@ -689,7 +689,7 @@ cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
 log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
 # Set validpgpkeys if missing
 if [[ -n "${GPG_KEY_ID:-}" ]]; then
-    grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || echo "validpgpkeys=('$GPG_KEY_ID')" >> "$PKGBUILD"
+    grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || echo "validpgpkeys=('${GPG_KEY_ID}')" >> "$PKGBUILD"
 fi
 # Check for required tools
 require makepkg || exit 1
