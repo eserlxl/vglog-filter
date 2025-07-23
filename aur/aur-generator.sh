@@ -27,7 +27,18 @@ color_echo() {
     shift
     local msg="$*"
     if (( color_enabled )); then
-        printf '\e[%sm%s\e[0m\n' "$color_code" "$msg"
+        if command -v tput >/dev/null 2>&1; then
+            case "$color_code" in
+                "1;31") tput setaf 1; tput bold ;; # Red bold
+                "1;32") tput setaf 2; tput bold ;; # Green bold
+                "1;33") tput setaf 3; tput bold ;; # Yellow bold
+                *) tput sgr0 ;;
+            esac
+            printf '%s\n' "$msg"
+            tput sgr0
+        else
+            printf '\e[%sm%s\e[0m\n' "$color_code" "$msg"
+        fi
     else
         printf '%s\n' "$msg"
     fi
