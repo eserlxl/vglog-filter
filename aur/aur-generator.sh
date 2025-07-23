@@ -343,7 +343,7 @@ if ! command -v getopt >/dev/null 2>&1; then
     err "GNU getopt required (util-linux)."
 fi
 # Check for GNU-style long option support
-if ! output=$(getopt --long test -- "Test" 2>/dev/null) || [[ "$output" != *"Test"* ]]; then
+if ! output=$(getopt -o nadh --long test -- "Test" 2>/dev/null) || [[ "$output" != *"Test"* ]]; then
     err "GNU getopt required (util-linux)."
 fi
 # --- End GNU getopt check ---
