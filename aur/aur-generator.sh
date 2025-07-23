@@ -877,13 +877,24 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         gh_upload_or_exit "$OUTDIR/$TARBALL" "${GH_USER}/${PKGNAME}" "${PKGVER}"
                         # Upload signature
                         gh_upload_or_exit "$OUTDIR/$TARBALL$SIGNATURE_EXT" "${GH_USER}/${PKGNAME}" "${PKGVER}"
-                        # Verify the upload was successful
-                        sleep 2  # Give GitHub a moment to process
-                        if curl -I -L -f --silent --retry 3 --retry-delay 2 --retry-all-errors "$TARBALL_URL" > /dev/null; then
-                            log "[aur] Asset upload verified successfully."
-                        else
-                            warn "[aur] Asset upload may not be immediately available. Continuing anyway..."
-                        fi
+                        # Wait/retry for asset availability
+                        echo "[aur] Waiting for GitHub to propagate the uploaded asset (this may take a few seconds due to CDN delay)..." >&2
+                        RETRIES=5
+                        DELAY=3
+                        for ((i=1; i<=RETRIES; i++)); do
+                            if curl -I -L -f --silent "$TARBALL_URL" > /dev/null; then
+                                log "[aur] Asset is now available on GitHub (after $i attempt(s))."
+                                break
+                            else
+                                if (( i < RETRIES )); then
+                                    echo "[aur] Asset not available yet (attempt $i/$RETRIES). Waiting $DELAY seconds..." >&2
+                                    sleep $DELAY
+                                else
+                                    warn "[aur] Asset still not available after $RETRIES attempts. This is normal if GitHub CDN is slow. makepkg will retry download for checksum generation."
+                                fi
+                            fi
+                        done
+                        echo "[aur] Note: After upload, makepkg will attempt to download the asset to generate checksums. If you see a download error, wait a few seconds and retry. This is normal due to GitHub CDN propagation." >&2
                     else
                         err "[aur] Release asset not found and automatic upload declined. Aborting."
                         echo "After uploading the tarball manually, run: makepkg -g >> PKGBUILD to update checksums."
