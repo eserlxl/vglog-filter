@@ -495,7 +495,10 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
             BEGIN { in_source=0 }
             /^source=\(/ { in_source=1; print new_source; next }
             in_source && /\)/ { in_source=0; next }
-            in_source { next }
+            in_source {
+                if ($0 ~ /^[[:space:]]*#/) print; # preserve comments
+                next
+            }
             { print }
         ' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
         log "[aur] Updated source line in PKGBUILD (handles multiline arrays)."
