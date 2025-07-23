@@ -5,6 +5,7 @@
 # This file is part of vglog-filter and is licensed under
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
+color_enabled=${COLOR:-1}
 set -euo pipefail
 set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
 
@@ -159,7 +160,7 @@ function usage() {
 # Initialize variables from environment or defaults before flag parsing
 dry_run=${DRY_RUN:-0}
 ascii_armor=${ASCII_ARMOR:-0}
-color_enabled=${COLOR:-1}
+# color_enabled=${COLOR:-1}  # <-- Remove this line, already set at top
 
 # Use getopt for unified short and long option parsing
 # This allows for robust handling of both short (-n) and long (--no-color) options
