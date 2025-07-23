@@ -75,16 +75,10 @@ else
     YELLOW='\e[1;33m'
     RESET='\e[0m'
 fi
-# Use associative array for color codes
-# shellcheck disable=SC2034
-if declare -A test_assoc 2>/dev/null; then
-    declare -A COL=([
-        red]="$RED" [green]="$GREEN" [yellow]="$YELLOW"
-    )
-else
-    # Fallback for non-Bash 4 (should not happen, but for safety)
-    COL_red="$RED"; COL_green="$GREEN"; COL_yellow="$YELLOW"
-fi
+# Use associative array for color codes (Bash >= 4 is required at script start)
+declare -A COL=(
+    [red]="$RED" [green]="$GREEN" [yellow]="$YELLOW"
+)
 
 # Helper to set signature extension and GPG armor option
 set_signature_ext() {
@@ -103,11 +97,7 @@ color_echo() {
     shift
     local msg="$*"
     if (( color_enabled )); then
-        if declare -p COL &>/dev/null && [[ -n "${COL[$color_name]:-}" ]]; then
-            printf '%b%s%b\n' "${COL[$color_name]}" "$msg" "$RESET"
-        else
-            printf '%s%s%s\n' "${RESET:-}" "$msg" "${RESET:-}"
-        fi
+        printf '%b%s%b\n' "${COL[$color_name]}" "$msg" "$RESET"
     else
         printf '%s\n' "$msg"
     fi
