@@ -5,7 +5,7 @@
 # This file is part of vglog-filter and is licensed under
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
-color_enabled=${COLOR:-1}
+color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo ${COLOR:-1})
 set -euo pipefail
 set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
 
