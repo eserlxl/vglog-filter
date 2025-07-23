@@ -27,10 +27,7 @@ cleanup() {
 trap 'cleanup' EXIT
 
 color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
-# Disable color if Bash version is less than 4 (associative arrays unsupported)
-if [[ -v BASH_VERSION && ${BASH_VERSINFO[0]} -lt 4 ]]; then
-    color_enabled=0
-fi
+# Remove unreachable Bash version check for color_enabled
 set -euo pipefail
 set -E  # Ensure ERR trap is inherited by functions and subshells (see below)
 
