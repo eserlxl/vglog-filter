@@ -485,7 +485,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         fi
         # Update pkgrel in the new PKGBUILD
         awk -v new_pkgrel="$NEW_PKGREL" 'BEGIN{done=0} /^[[:space:]]*pkgrel[[:space:]]*=/ && !done {print "pkgrel=" new_pkgrel; done=1; next} {print}' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
-        trap - RETURN
+        trap -p RETURN &>/dev/null && trap - RETURN
     fi
     if [[ "$MODE" == "aur" ]]; then
         # Fix: Replace source=() with correct URL, robustly handling multiline arrays
