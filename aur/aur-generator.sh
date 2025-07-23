@@ -9,9 +9,12 @@ set -euo pipefail
 
 # --- Config / Constants ---
 readonly PKGNAME="vglog-filter"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+readonly PROJECT_ROOT
 COLOR=1
+# VALID_MODES is used for validation in the usage function and mode checking
 VALID_MODES=(local aur aur-git clean test)
 
 # --- Functions ---
@@ -138,6 +141,21 @@ if [[ $# -eq 2 ]]; then
             ;;
     esac
 fi
+
+# Validate mode against VALID_MODES array
+valid_mode=false
+for valid_mode_name in "${VALID_MODES[@]}"; do
+    if [[ "$MODE" == "$valid_mode_name" ]]; then
+        valid_mode=true
+        break
+    fi
+done
+
+if [[ "$valid_mode" == "false" ]]; then
+    err "Unknown mode: $MODE"
+    usage
+fi
+
 log "Running in $MODE mode"
 case "$MODE" in
     local)
@@ -230,10 +248,6 @@ case "$MODE" in
             exit 1
         fi
         exit 0
-        ;;
-    *)
-        err "Unknown mode: $MODE"
-        usage
         ;;
 esac
 
