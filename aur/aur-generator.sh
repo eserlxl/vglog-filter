@@ -455,9 +455,10 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         ARCHIVE_MTIME="--mtime=@$SOURCE_DATE_EPOCH"
         log "[$MODE] Using SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH for tarball mtime."
     else
-        ARCHIVE_MTIME='--mtime=UTC 2020-01-01 00:00:00'
-        # Use a fixed mtime for reproducible builds (see https://reproducible-builds.org/docs/source-date-epoch/)
-        log "[$MODE] Using static mtime for tarball: UTC 2020-01-01 00:00:00."
+        # Use the commit date of GIT_REF for reproducible, traceable mtime
+        COMMIT_EPOCH=$(git show -s --format=%ct "$GIT_REF")
+        ARCHIVE_MTIME="--mtime=@$COMMIT_EPOCH"
+        log "[$MODE] Using commit date (epoch $COMMIT_EPOCH) of $GIT_REF for tarball mtime."
     fi
     # Disable ERR trap in this subshell to avoid duplicate error messages from pipeline subshells (see Bash pipeline/trap behavior)
     (
