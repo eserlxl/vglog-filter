@@ -21,7 +21,7 @@ VALID_MODES=(local aur aur-git clean test)
 require() {
     local t
     for t in "$@"; do
-        command -v "$t" >/dev/null || { echo "Missing $t"; exit 1; }
+        command -v "$t" >/dev/null || { err "Missing $t"; exit 1; }
     done
 }
 
