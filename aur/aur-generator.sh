@@ -290,7 +290,6 @@ case "$MODE" in
             if [[ "$test_mode" == "aur" ]]; then
                 export GPG_KEY_ID="TEST_KEY_FOR_DRY_RUN"
             fi
-            # Run the test mode (rely only on --dry-run flag, do not export DRY_RUN)
             # shellcheck disable=SC2154
             trap 'for d in "${TEMP_DIRS[@]}"; do rm -rf "$d"; done' EXIT
             if bash "$SCRIPT_DIR/aur-generator.sh" "$test_mode" --dry-run > "$TEMP_DIR/test_output.log" 2>&1; then
