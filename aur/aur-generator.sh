@@ -16,8 +16,9 @@ fi
 
 # --- Global cleanup for CI/test temp dirs ---
 TEMP_DIRS=()
+# shellcheck disable=SC2317
 cleanup() {
-    if ((  {#TEMP_DIRS[@]} )); then
+    if ((  ${#TEMP_DIRS[@]} )); then
         for d in "${TEMP_DIRS[@]}"; do
             [[ -d "$d" ]] && rm -rf "$d"
         done
