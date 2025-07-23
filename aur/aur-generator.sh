@@ -598,11 +598,11 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         # Check if the tarball exists on GitHub before running updpkgsums
         set_signature_ext
         TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
-        if ! curl -I -L -f --silent "$TARBALL_URL" > /dev/null; then
+        if ! curl -I -L -f --silent --retry 3 --retry-delay 2 "$TARBALL_URL" > /dev/null; then
             warn "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
             sed -i "s|source=(\".*\")|source=(\"https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
             TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
-            if ! curl -I -L -f --silent "$TARBALL_URL" > /dev/null; then
+            if ! curl -I -L -f --silent --retry 3 --retry-delay 2 "$TARBALL_URL" > /dev/null; then
                 # Asset not found - offer to upload automatically if gh CLI is available
                 if command -v gh >/dev/null 2>&1; then
                     warn "[aur] Release asset not found. GitHub CLI (gh) detected."
@@ -615,22 +615,12 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         set_signature_ext
                         log "[aur] Uploading ${TARBALL} and ${TARBALL}${SIGNATURE_EXT} to GitHub release ${PKGVER}..."
                         # Upload tarball
-                        if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL" --repo "${GH_USER}/${PKGNAME}"; then
-                            log "[aur] Successfully uploaded ${TARBALL}"
-                        else
-                            err "[aur] Failed to upload ${TARBALL}"
-                            exit 1
-                        fi
+                        gh_upload_or_exit "$OUTDIR/$TARBALL" "${GH_USER}/${PKGNAME}" "${PKGVER}"
                         # Upload signature
-                        if gh release upload "${PKGVER}" "$OUTDIR/$TARBALL$SIGNATURE_EXT" --repo "${GH_USER}/${PKGNAME}"; then
-                            log "[aur] Successfully uploaded ${TARBALL}${SIGNATURE_EXT}"
-                        else
-                            err "[aur] Failed to upload ${TARBALL}${SIGNATURE_EXT}"
-                            exit 1
-                        fi
+                        gh_upload_or_exit "$OUTDIR/$TARBALL$SIGNATURE_EXT" "${GH_USER}/${PKGNAME}" "${PKGVER}"
                         # Verify the upload was successful
                         sleep 2  # Give GitHub a moment to process
-                        if curl -I -L -f --silent "$TARBALL_URL" > /dev/null; then
+                        if curl -I -L -f --silent --retry 3 --retry-delay 2 "$TARBALL_URL" > /dev/null; then
                             log "[aur] Asset upload verified successfully."
                         else
                             warn "[aur] Asset upload may not be immediately available. Continuing anyway..."
