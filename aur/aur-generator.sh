@@ -15,6 +15,25 @@
 # NOTE: This script requires GNU getopt (util-linux) and is not compatible with macOS/BSD systems.
 # The script is designed for GNU/Linux environments and does not aim to support macOS/BSD.
 
+# --- Constants (grouped at top, all readonly) ---
+readonly PKGNAME="vglog-filter"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_NAME="$(basename "$0")"
+readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Determine GH_USER: environment > PKGBUILD.0 url > fallback
+if [[ -z "${GH_USER:-}" ]]; then
+    PKGBUILD0_URL=$(awk -F/ '/^url="https:\/\/github.com\// {print $5}' "$SCRIPT_DIR/PKGBUILD.0")
+    if [[ -n "$PKGBUILD0_URL" ]]; then
+        GH_USER="$PKGBUILD0_URL"
+    else
+        GH_USER="eserlxl"
+        # warn is not available yet, so use echo
+        echo "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'." >&2
+    fi
+fi
+readonly GH_USER
+readonly -a VALID_MODES=(local aur aur-git clean test lint)
+
 # Require Bash >= 4 early, before using any Bash 4+ features
 if ((BASH_VERSINFO[0] < 4)); then
     echo "Bash ≥ 4 required" >&2
@@ -115,6 +134,7 @@ set_signature_ext() {
 # --- Color Setup ---
 # Group color variable definitions and helpers at the top
 init_colors() {
+    # Color variables are initialized once here and memoized for all color_echo calls
     HAVE_TPUT=0
     if command -v tput >/dev/null 2>&1; then
         HAVE_TPUT=1
@@ -147,6 +167,7 @@ init_colors() {
 }
 
 color_echo() {
+    # Uses memoized color variables set by init_colors; does not recompute them
     local color_name="$1"
     shift
     local msg="$*"
@@ -265,27 +286,23 @@ install_pkg() {
 }
 
 # --- Config / Constants ---
-readonly PKGNAME="vglog-filter"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly SCRIPT_DIR
-SCRIPT_NAME=$(basename "$0")
-readonly SCRIPT_NAME
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-readonly PROJECT_ROOT
+# These are now grouped at the top of the script
+# readonly PKGNAME="vglog-filter"
+# readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# readonly SCRIPT_NAME="$(basename "$0")"
+# readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Determine GH_USER: environment > PKGBUILD.0 url > fallback
-if [[ -z "${GH_USER:-}" ]]; then
-    PKGBUILD0_URL=$(awk -F/ '/^url="https:\/\/github.com\// {print $5}' "$SCRIPT_DIR/PKGBUILD.0")
-    if [[ -n "$PKGBUILD0_URL" ]]; then
-        GH_USER="$PKGBUILD0_URL"
-    else
-        GH_USER="eserlxl"
-        warn "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'."
-    fi
-fi
-readonly GH_USER
-# VALID_MODES is used for validation in the usage function and mode checking
-# shellcheck disable=SC2034
-readonly -a VALID_MODES=(local aur aur-git clean test lint)
+# if [[ -z "${GH_USER:-}" ]]; then
+#     PKGBUILD0_URL=$(awk -F/ '/^url="https:\/\/github.com\// {print $5}' "$SCRIPT_DIR/PKGBUILD.0")
+#     if [[ -n "$PKGBUILD0_URL" ]]; then
+#         GH_USER="$PKGBUILD0_URL"
+#     else
+#         GH_USER="eserlxl"
+#         warn "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'."
+#     fi
+# fi
+# readonly GH_USER
+# readonly -a VALID_MODES=(local aur aur-git clean test lint)
 
 # --- Main Logic ---
 # Initialize variables from environment or defaults before flag parsing
@@ -429,6 +446,21 @@ case "$MODE" in
             fi
             if bash "$SCRIPT_DIR/$SCRIPT_NAME" --dry-run "$test_mode" >| "$TEST_LOG_FILE" 2>&1; then
                 log "[test] ✓ $test_mode mode passed"
+                # --- Begin golden PKGBUILD diff ---
+                GOLDEN_FILE="$PROJECT_ROOT/test/fixtures/PKGBUILD.$test_mode.golden"
+                GENERATED_PKG="$SCRIPT_DIR/PKGBUILD"
+                if [[ -f "$GOLDEN_FILE" ]]; then
+                    if ! diff -u "$GOLDEN_FILE" "$GENERATED_PKG" > "$SCRIPT_DIR/diff-$test_mode.log"; then
+                        err "[test] ✗ $test_mode PKGBUILD does not match golden file! See $SCRIPT_DIR/diff-$test_mode.log"
+                        cat "$SCRIPT_DIR/diff-$test_mode.log" >&2
+                        TEST_ERRORS=$((TEST_ERRORS + 1))
+                    else
+                        log "[test] ✓ $test_mode PKGBUILD matches golden file."
+                    fi
+                else
+                    warn "[test] Golden file $GOLDEN_FILE not found. Skipping PKGBUILD diff for $test_mode."
+                fi
+                # --- End golden PKGBUILD diff ---
             else
                 err "[test] ✗ $test_mode mode failed"
                 TEST_ERRORS=$((TEST_ERRORS + 1))
