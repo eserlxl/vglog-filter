@@ -555,6 +555,13 @@ if ! grep -q '^pkgver()' "$SCRIPT_DIR/PKGBUILD.git"; then
     ' "$SCRIPT_DIR/PKGBUILD.git" > "$SCRIPT_DIR/PKGBUILD.git.tmp" && mv "$SCRIPT_DIR/PKGBUILD.git.tmp" "$SCRIPT_DIR/PKGBUILD.git"
 fi
 PKGBUILD_TEMPLATE="$SCRIPT_DIR/PKGBUILD.git"
+# Inject makedepends=(git) if missing or incomplete
+if ! grep -q '^makedepends=.*git' "$PKGBUILD_TEMPLATE"; then
+    awk 'BEGIN{done=0} \
+        /^pkgname=/ && !done {print; print "makedepends=(git)"; done=1; next} \
+        {print}' "$PKGBUILD_TEMPLATE" > "$PKGBUILD_TEMPLATE.tmp" && mv "$PKGBUILD_TEMPLATE.tmp" "$PKGBUILD_TEMPLATE"
+    log "[aur-git] Injected makedepends=(git) into PKGBUILD.git."
+fi
 cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
 log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
 # Set validpgpkeys if missing
