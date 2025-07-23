@@ -2,11 +2,13 @@
 
 `aur-generator.sh` is a utility script for automating the creation and maintenance of Arch Linux AUR packaging files for the vglog-filter project. It streamlines the process of generating tarballs, updating PKGBUILD and .SRCINFO files, and preparing the package for local testing or AUR submission.
 
+> **Important:** This script is **only for GNU/Linux systems**. It will not work on BSD, macOS, or other non-GNU platforms. It requires GNU getopt (from util-linux) and other GNU-specific tools. Attempting to run it on non-GNU systems will result in a clear error message and immediate exit.
+
 ## Overview
 - **Location:** `aur/aur-generator.sh`
 - **Purpose:** Automates tarball creation, PKGBUILD and .SRCINFO updates, and AUR packaging tasks for vglog-filter.
 - **License:** GPLv3 or later (see LICENSE)
-- **Platform:** The script is designed for GNU/Linux environments and does not aim to support macOS/BSD. It requires GNU getopt (util-linux) and will not work with BSD/macOS getopt implementations.
+- **Platform:** The script is designed for **GNU/Linux environments only** and does not aim to support macOS, BSD, or any non-GNU system. It requires GNU getopt (util-linux) and will not work with BSD/macOS getopt implementations.
 - **Bash Version:** The script requires **Bash version 4 or newer**. It will exit with an error if run on an older version.
 - **Tool Hints:** If a required tool is missing, the script will print a hint with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums).
 
@@ -213,7 +215,7 @@ The script supports several environment variables for automation:
 - `makepkg` (from `pacman`)
 - `updpkgsums` (from `pacman-contrib`)
 - `curl` (for checking GitHub assets)
-- `getopt` (GNU version from util-linux; the script will not work with BSD/macOS getopt)
+- `getopt` (**GNU version from util-linux; BSD/macOS getopt is NOT supported. This script is only for GNU/Linux.**)
 - **Tool Hints:** If a required tool is missing, the script will print a hint with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums).
 
 > **Warning:** `pacman-contrib` is not included in the `base-devel` group on Arch Linux. You must install it separately, or you will get a `updpkgsums: command not found` error when building or packaging.
