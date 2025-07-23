@@ -42,8 +42,6 @@ trap 'err "[FATAL] ${BASH_SOURCE[1]}:${BASH_LINENO[0]}: $BASH_COMMAND"' ERR
 help() {
     echo "Usage: $SCRIPT_NAME [OPTIONS] MODE"
     echo "Modes: local | aur | aur-git | clean | test"
-    echo ""
-    echo "If a required tool is missing, a hint will be printed with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums)."
 }
 
 # Full usage (detailed help)
