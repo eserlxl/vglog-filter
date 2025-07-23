@@ -489,6 +489,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
     fi
     # Disable ERR trap in this subshell to avoid duplicate error messages from pipeline subshells (see Bash pipeline/trap behavior)
     (
+        set -euo pipefail  # Ensure require and all commands fail early in CI and subshells
         unset CI
         trap '' ERR
         git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$ARCHIVE_MTIME" "$GIT_REF" | \
@@ -568,6 +569,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         # The lockfile is not written to, but exclusive lock prevents race conditions.
         LOCKFILE="$SCRIPT_DIR/PKGBUILD.lock"
         (
+            set -euo pipefail  # Ensure require and all commands fail early in flock-protected critical section
             flock 200
             OLD_PKGVER=""
             OLD_PKGREL=""
