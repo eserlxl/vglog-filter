@@ -360,7 +360,8 @@ case "$MODE" in
             rm -f -- "${files[@]}"
         fi
         rm -f "$PKGBUILD" "$SRCINFO"
-        rm -rf "$SCRIPT_DIR/src" "$SCRIPT_DIR/pkg"
+        # Remove all build directories matching ${PKGNAME}-* (for split package support)
+        find "$SCRIPT_DIR" -maxdepth 1 -type d -name "${PKGNAME}-*" -exec rm -r {} +
         rm -f "$SCRIPT_DIR"/*.pkg.tar.*
         shopt -u nullglob
         log "Clean complete."
