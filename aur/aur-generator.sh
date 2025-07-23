@@ -46,8 +46,6 @@ gh_upload_or_exit() {
     local tag="$3"
     if ! gh release upload "$tag" "$file" --repo "$repo" --clobber; then
         err "[aur] Failed to upload $file to GitHub release $tag"
-        # shellcheck disable=SC2317
-        exit 1
     fi
 }
 # Tool-to-package mapping for Arch Linux hints
@@ -90,12 +88,12 @@ if [[ -z "${GH_USER:-}" ]]; then
 fi
 # Robustness: Detect if GH_USER is the same as PKGNAME (likely a mistake)
 if [[ "$GH_USER" == "$PKGNAME" ]]; then
-    err "[aur-generator] ERROR: Detected GH_USER='$GH_USER' (same as PKGNAME). This usually means the url field in PKGBUILD.0 is wrong." >&2
-    err "[aur-generator] Please set the url field in PKGBUILD.0 to your real GitHub repo, e.g.:" >&2
-    err "[aur-generator]     url=\"https://github.com/<yourusername>/$PKGNAME\"" >&2
-    err "[aur-generator] Detected url line:" >&2
+    echo "[aur-generator] ERROR: Detected GH_USER='$GH_USER' (same as PKGNAME). This usually means the url field in PKGBUILD.0 is wrong." >&2
+    echo "[aur-generator] Please set the url field in PKGBUILD.0 to your real GitHub repo, e.g.:" >&2
+    echo "[aur-generator]     url=\"https://github.com/<yourusername>/$PKGNAME\"" >&2
+    echo "[aur-generator] Detected url line:" >&2
     grep '^url=' "$SCRIPT_DIR/PKGBUILD.0" >&2
-    exit 1
+    err "[aur-generator] Aborting due to invalid GH_USER configuration."
 fi
 readonly GH_USER
 readonly -a VALID_MODES=(local aur aur-git clean test lint golden)
@@ -103,7 +101,6 @@ readonly -a VALID_MODES=(local aur aur-git clean test lint golden)
 # Require Bash >= 4 early, before using any Bash 4+ features
 if ((BASH_VERSINFO[0] < 4)); then
     err "Bash ≥ 4 required" >&2
-    exit 1
 fi
 
 # --- Color Setup ---
@@ -265,15 +262,7 @@ require() {
         fi
     done
     if (( ${#missing[@]} )); then
-        # shellcheck disable=SC2317
         err "Missing required tool(s): $(IFS=, ; echo "${missing[*]}")"
-        # shellcheck disable=SC2317
-        for t in "${missing[@]}"; do
-            # shellcheck disable=SC2317
-            hint "$t"
-        done
-        # shellcheck disable=SC2317
-        return 1
     fi
 }
 
