@@ -26,6 +26,23 @@ require() {
     done
 }
 
+# Prompt helper function that auto-skips when CI is set
+prompt() {
+    local prompt_text="$1"
+    local default_value="${2:-n}"  # Default to 'n' for safety
+    local var_name="$3"
+    
+    if [[ "${CI:-}" == 1 ]]; then
+        # In CI mode, use default value and log the action
+        eval "$var_name=\"$default_value\""
+        log "[CI] Auto-selected '$default_value' for: $prompt_text"
+        return 0
+    fi
+    
+    # Normal interactive mode
+    read -rp "$prompt_text" "$var_name"
+}
+
 # Color helper function
 color_echo() {
     local color_code="$1"
@@ -63,11 +80,11 @@ install_pkg() {
         log "[$mode] --dry-run: Skipping makepkg -si. All previous steps completed successfully."
     else
         if [[ "$mode" == "aur" ]]; then
-            if [[ "${CI:-}" == 1 || "${AUTO:-}" == "y" ]]; then
-                run_makepkg=n
-            else
-                read -rp "Do you want to run makepkg -si now? [y/N] " run_makepkg
-            fi
+                    if [[ "${AUTO:-}" == "y" ]]; then
+            run_makepkg=n
+        else
+            prompt "Do you want to run makepkg -si now? [y/N] " "n" "run_makepkg"
+        fi
             if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
                 makepkg -si
             fi
@@ -348,7 +365,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
                 USER=$(gpg --list-secret-keys "${KEYS[$i]}" | grep uid | head -n1 | sed 's/.*] //')
                 warn "$((i+1)). ${KEYS[$i]} ($USER)" >&2
             done
-            read -rp "Select a key [1-${#KEYS[@]}]: " choice
+            prompt "Select a key [1-${#KEYS[@]}]: " "1" "choice"
             if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#KEYS[@]} )); then
                 err "Invalid selection."
                 exit 1
@@ -388,11 +405,11 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                 # Asset not found - offer to upload automatically if gh CLI is available
                 if command -v gh >/dev/null 2>&1; then
                     warn "[aur] Release asset not found. GitHub CLI (gh) detected."
-                    if [[ "${CI:-}" == 1 || "${AUTO:-}" == "y" ]]; then
-                        upload_choice="y"
-                    else
-                        read -rp "Do you want to upload the tarball and signature to GitHub releases automatically? [y/N] " upload_choice
-                    fi
+                                    if [[ "${AUTO:-}" == "y" ]]; then
+                    upload_choice="y"
+                else
+                    prompt "Do you want to upload the tarball and signature to GitHub releases automatically? [y/N] " "n" "upload_choice"
+                fi
                     if [[ "$upload_choice" =~ ^[Yy]$ ]]; then
                         # Set signature file extension based on ASCII_ARMOR setting
                         if [[ $ASCII_ARMOR -eq 1 ]]; then
