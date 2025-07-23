@@ -495,7 +495,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
 fi
 
 awk '
-    BEGIN { sums = "sha256sums=(\'SKIP\')" }
+    BEGIN { sums = "sha256sums=('SKIP')" }
     /^pkgname=/ {
         print "pkgname=vglog-filter-git"; next
     }
