@@ -165,6 +165,9 @@ require() {
 }
 
 # Prompt helper function that auto-skips when CI is set
+# If CI=1 and default_value is provided, assigns it and returns 0 (success)
+# If CI=1 and default_value is empty, skips prompt and returns 1 (caller may check this)
+# This shortcut is relied upon in some code paths; see usage for details
 prompt() {
     local prompt_text="$1"
     local var_name="$2"
