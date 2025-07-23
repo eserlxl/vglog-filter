@@ -105,105 +105,136 @@ fi
 
 # --- Color Setup ---
 # Group color variable definitions and helpers at the top
-# init_colors moved to top
-
-# Replace all color_echo calls with log, warn, or err as appropriate
-hint() {
-    local tool="$1"
-    local pkg="${PKG_HINT[$tool]:-}"
-    if [[ -n "$pkg" ]]; then
-        warn "Hint: Install with 'pacman -S $pkg' (Arch Linux)"
+init_colors() {
+    # Color variables are initialized once here and memoized for all color_echo calls
+    HAVE_TPUT=0
+    if command -v tput >/dev/null 2>&1; then
+        HAVE_TPUT=1
+    fi
+    if (( color_enabled )); then
+        if (( HAVE_TPUT )) && [[ -t 1 ]]; then
+            RED="$(tput setaf 1)$(tput bold)"
+            GREEN="$(tput setaf 2)$(tput bold)"
+            YELLOW="$(tput setaf 3)$(tput bold)"
+            RESET="$(tput sgr0)"
+        else
+            if [[ -n "${BASH_VERSION:-}" ]]; then
+                RED='\e[1;31m'
+                GREEN='\e[1;32m'
+                YELLOW='\e[1;33m'
+                RESET='\e[0m'
+            else
+                RED='\033[1;31m'
+                GREEN='\033[1;32m'
+                YELLOW='\033[1;33m'
+                RESET='\033[0m'
+            fi
+        fi
     else
-        warn "Hint: Install '$tool' using your package manager (e.g., pacman -S $tool)"
+        RED=''
+        GREEN=''
+        YELLOW=''
+        RESET=''
     fi
 }
 
-require() {
-    local t
-    local -a missing=()
-    for t in "$@"; do
-        if ! command -v "$t" >/dev/null; then
-            missing+=("$t")
+# --- Cleanup lingering lock and test log files at script start ---
+cleanup_test_logs() {
+    # Remove all test and diff log files before running tests or any mode
+    rm -f "$SCRIPT_DIR"/test-*.log
+    rm -f "$SCRIPT_DIR"/diff-*.log
+    rm -f "$SCRIPT_DIR"/.aur-generator.lock
+}
+cleanup_test_logs
+
+# Enable debug tracing if DEBUG=1
+if [[ "${DEBUG:-0}" == 1 ]]; then
+    set -x
+fi
+
+# Ensure GPG pinentry works in CI/sudo/non-interactive shells
+GPG_TTY=$(tty)  # Needed for GPG signing to work reliably (pinentry) in CI/sudo
+export GPG_TTY
+
+# color_enabled is set from env or default, but will be overridden by CLI options below
+set -euo pipefail
+color_enabled=${COLOR:-1}  # safe default, must be set before any error handling
+set -o noclobber  # Prevent accidental file overwrite with > redirection
+
+# --- Functions ---
+# Minimal help for scripts/AUR helpers
+usage() {
+    printf 'Usage: %s [OPTIONS] MODE\n' "$SCRIPT_NAME"
+    printf 'Modes: local | aur | aur-git | clean | test | lint | golden\n'
+    printf 'Options: --no-wait (skip post-upload wait, for CI/advanced users)\n'
+}
+
+# Helper to check for interactive terminal
+have_tty() {
+    [[ -t 0 ]]
+}
+
+# Function to check if a mode is valid
+is_valid_mode() {
+    local mode="$1"
+    for valid_mode_name in "${VALID_MODES[@]}"; do
+        if [[ "$mode" == "$valid_mode_name" ]]; then
+            return 0
         fi
     done
-    if (( ${#missing[@]} )); then
-        err "Missing required tool(s): $(IFS=, ; echo "${missing[*]}")"
+    return 1
+}
+
+# Full usage (detailed help)
+help() {
+    usage
+    printf '\n'
+    printf 'Options:\n'
+    printf '  -n, --no-color      Disable color output\n'
+    printf '  -a, --ascii-armor   Use ASCII-armored GPG signatures (.asc)\n'
+    printf '  -d, --dry-run       Dry run (no changes, for testing)\n'
+    printf '  --no-wait           Skip post-upload wait for asset availability (for CI/advanced users, or set NO_WAIT=1)\n'
+    printf '  -h, --help          Show detailed help and exit\n'
+    printf '  --usage             Show minimal usage and exit\n'
+    printf '\n'
+    printf 'All options must appear before the mode.\n'
+    printf 'For full documentation, see doc/AUR.md.\n'
+    printf '\n'
+    printf 'If a required tool is missing, a hint will be printed with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums).\n'
+    printf '\n'
+    printf 'The lint mode runs shellcheck and bash -n on this script for quick CI/self-test.\n'
+    printf '\n'
+    printf 'The golden mode regenerates golden PKGBUILD files for test/fixtures/.\n'
+}
+
+# Helper to set signature extension and GPG armor option
+set_signature_ext() {
+    # Sets SIGNATURE_EXT and GPG_ARMOR_OPT globals based on ascii_armor
+    if [[ ${ascii_armor:-0} -eq 1 ]]; then
+        SIGNATURE_EXT=".asc"
+        GPG_ARMOR_OPT="--armor"
+    else
+        SIGNATURE_EXT=".sig"
+        GPG_ARMOR_OPT=""
     fi
 }
 
-# Prompt helper function that auto-skips when CI is set
-# If CI=1 and default_value is provided, assigns it and returns 0 (success)
-# If CI=1 and default_value is empty, skips prompt and returns 1 (caller may check this)
-# This shortcut is relied upon in some code paths; see usage for details
-prompt() {
-    local prompt_text="$1"
-    local var_name="$2"
-    local default_value="${3:-}"
-    if [[ ${CI:-0} == 1 ]]; then
-        if [[ -n "$default_value" ]]; then
-            eval "$var_name=\"$default_value\""
-            log "[CI] Auto-selected '$default_value' for: $prompt_text"
-            return 0
-        else
-            log "[CI] Skipping prompt: $prompt_text"
-            return 1
-        fi
-    fi
-    if ! have_tty; then
-        warn "[prompt] No interactive terminal available for: $prompt_text. Skipping prompt."
-        if [[ -n "$default_value" ]]; then
-            eval "$var_name=\"$default_value\""
-            return 0
-        else
-            return 1
-        fi
-    fi
-    local input
-    read -rp "$prompt_text" input
-    eval "$var_name=\"$input\""
-}
-
-update_checksums() {
-    updpkgsums
-    log "[update_checksums] Ran updpkgsums (b2sums updated)."
-}
-generate_srcinfo() {
-    if command -v makepkg >/dev/null 2>&1; then
-        makepkg --printsrcinfo >| .SRCINFO
-        log "[generate_srcinfo] Updated .SRCINFO with makepkg --printsrcinfo."
-    elif command -v mksrcinfo >/dev/null 2>&1; then
-        warn "[generate_srcinfo] Warning: Falling back to deprecated mksrcinfo. Please update pacman/makepkg to use makepkg --printsrcinfo. Support for mksrcinfo will be removed in the future."
-        mksrcinfo
-        log "[generate_srcinfo] Updated .SRCINFO with mksrcinfo (deprecated, please update your tools)."
-    else
-        warn "Warning: Could not update .SRCINFO (makepkg --printsrcinfo/mksrcinfo not found)."
-    fi
-}
-install_pkg() {
-    local mode="$1"
-    local run_makepkg=n  # Always initialize to avoid set -u errors
-    # Add --noconfirm in CI or if PKG_NOCONFIRM=1 to avoid hangs in non-interactive environments
-    local makepkg_opts="-si"
-    if [[ ${CI:-0} == 1 || ${PKG_NOCONFIRM:-0} == 1 ]]; then
-        makepkg_opts="-si --noconfirm"
-    fi
-    if [[ $dry_run -eq 1 ]]; then
-        log "[$mode] --dry-run: Skipping makepkg -si. All required steps completed successfully."
-    else
-        if [[ "$mode" == "aur" ]]; then
-            if [[ "${AUTO:-}" == "y" ]]; then
-                run_makepkg=n
-            else
-                # Default is always supplied to prompt; variable will always be set, even in CI/headless mode.
-                prompt "Do you want to run makepkg -si now? [y/N] " run_makepkg n
-            fi
-            if [[ "$run_makepkg" =~ ^[Yy]$ ]]; then
-                makepkg "$makepkg_opts"
-            fi
-        else
-            makepkg "$makepkg_opts"
-        fi
-    fi
+# Helper to update the source array in PKGBUILD with a new tarball URL, preserving extra sources
+update_source_array_in_pkgbuild() {
+    local pkgbuild_file="$1"
+    local tarball_url="$2"
+    # Replace the entire source array with just the tarball URL
+    awk -v newurl="$tarball_url" '
+        BEGIN { in_source=0 }
+        /^source=\(/ {
+            in_source=1; print "source=(\"" newurl "\")"; next
+        }
+        in_source && /\)/ {
+            in_source=0; next
+        }
+        in_source { next }
+        { print $0 }
+    ' "$pkgbuild_file" > "$pkgbuild_file.tmp" && mv "$pkgbuild_file.tmp" "$pkgbuild_file"
 }
 
 # --- Main Logic ---
