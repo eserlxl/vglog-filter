@@ -325,8 +325,14 @@ ascii_armor=${ASCII_ARMOR_DEFAULT:-0}
 # IMPORTANT: Always check the exit code of getopt before using its output.
 # If getopt fails (e.g., due to an unknown flag), set -e does not abort inside $(),
 # so we must check the status explicitly to avoid silent bad-option handling.
+# Temporarily disable ERR trap and set -e for getopt
+set +e
+trap - ERR
 getopt_output=$(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help,usage -- "$@")
 getopt_status=$?
+# Restore ERR trap and set -e
+trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
+set -e
 if (( getopt_status != 0 )); then
     echo "Error: Failed to parse options." >&2
     help
