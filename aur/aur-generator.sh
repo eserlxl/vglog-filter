@@ -565,10 +565,8 @@ fi
 cp -f "$PKGBUILD_TEMPLATE" "$PKGBUILD"
 log "[aur-git] PKGBUILD.git generated and copied to PKGBUILD."
 # Set validpgpkeys if missing
-if ! grep -q '^validpgpkeys=' "$PKGBUILD"; then
-    if [[ -n "${GPG_KEY_ID:-}" ]]; then
-        echo "validpgpkeys=('$GPG_KEY_ID')" >> "$PKGBUILD"
-    fi
+if [[ -n "${GPG_KEY_ID:-}" ]]; then
+    grep -q "^validpgpkeys=('${GPG_KEY_ID}')" "$PKGBUILD" || echo "validpgpkeys=('$GPG_KEY_ID')" >> "$PKGBUILD"
 fi
 # Check for required tools
 require makepkg
