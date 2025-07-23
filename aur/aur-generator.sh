@@ -115,6 +115,36 @@ err() {
     color_echo red "$*" >&2;
 }
 
+hint() {
+    local tool="$1"
+    case "$tool" in
+        updpkgsums)
+            warn "Hint: Install with 'pacman -S pacman-contrib' (Arch Linux)"
+            ;;
+        makepkg)
+            warn "Hint: Install with 'pacman -S base-devel' (Arch Linux)"
+            ;;
+        curl)
+            warn "Hint: Install with 'pacman -S curl' (Arch Linux)"
+            ;;
+        gpg)
+            warn "Hint: Install with 'pacman -S gnupg' (Arch Linux)"
+            ;;
+        gh)
+            warn "Hint: Install with 'pacman -S github-cli' (Arch Linux)"
+            ;;
+        flock)
+            warn "Hint: Install with 'pacman -S util-linux' (Arch Linux)"
+            ;;
+        awk)
+            warn "Hint: Install with 'pacman -S gawk' (Arch Linux)"
+            ;;
+        *)
+            warn "Hint: Install '$tool' using your package manager (e.g., pacman -S $tool)"
+            ;;
+    esac
+}
+
 require() {
     local t missing=()
     for t in "$@"; do
@@ -124,6 +154,9 @@ require() {
     done
     if (( ${#missing[@]} )); then
         err "Missing required tool(s): $(IFS=, ; echo "${missing[*]}")"
+        for t in "${missing[@]}"; do
+            hint "$t"
+        done
         exit 1
     fi
 }
