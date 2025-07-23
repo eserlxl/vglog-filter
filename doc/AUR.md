@@ -25,7 +25,7 @@
   This prints:
   ```
   Usage: aur-generator.sh [OPTIONS] MODE
-  Modes: local | aur | aur-git | clean | test
+  Modes: local | aur | aur-git | clean | test | lint
   ```
 
 > **Note:** All flags/options must appear before the mode. For example: `./aur-generator.sh -n --dry-run aur`. Flags after the mode are not supported.
@@ -39,6 +39,11 @@
 - **`aur-git`**: Generate a PKGBUILD for the -git (VCS) AUR package. Sets the source to the git repository, sets `sha256sums=('SKIP')`, adds `validpgpkeys`, and optionally runs `makepkg -si`. No tarball is created or signed.
 - **`clean`**: Remove all generated files and directories in the `aur/` folder, including tarballs, signatures, PKGBUILD, .SRCINFO, and build artifacts.
 - **`test`**: Run all modes (local, aur, aur-git) in dry-run mode to check for errors and report results. Useful for verifying all modes work correctly without performing actual operations.
+- **`lint`**: Run `shellcheck` and `bash -n` on `aur-generator.sh` itself. This is a quick self-test/linting mode for CI or local development. Exits with nonzero status if any check fails. Example:
+  ```sh
+  ./aur-generator.sh lint
+  ```
+  This will run both tools and print a summary. If `shellcheck` is not installed, it will be skipped with a warning.
 
 ### Options
 

@@ -94,6 +94,8 @@ usage() {
     printf 'For full documentation, see doc/AUR.md.\n'
     printf '\n'
     printf 'If a required tool is missing, a hint will be printed with an installation suggestion (e.g., pacman -S pacman-contrib for updpkgsums).\n'
+    printf '\n'
+    printf 'The lint mode runs shellcheck and bash -n on this script for quick CI/self-test.\n'
 }
 
 # Helper to set signature extension and GPG armor option
