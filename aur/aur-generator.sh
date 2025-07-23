@@ -14,6 +14,17 @@ if [[ -v BASH_VERSINFO && ${BASH_VERSINFO[0]} -lt 4 ]]; then
     exit 1
 fi
 
+# --- Global cleanup for CI/test temp dirs ---
+TEMP_DIRS=()
+cleanup() {
+    if ((  {#TEMP_DIRS[@]} )); then
+        for d in "${TEMP_DIRS[@]}"; do
+            [[ -d "$d" ]] && rm -rf "$d"
+        done
+    fi
+}
+trap 'cleanup' EXIT
+
 color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
 # Disable color if Bash version is less than 4 (associative arrays unsupported)
 if [[ -v BASH_VERSION && ${BASH_VERSINFO[0]} -lt 4 ]]; then
@@ -291,10 +302,9 @@ case "$MODE" in
     test)
         log "[test] Running all modes in dry-run mode to check for errors."
         TEST_ERRORS=0
-        TEMP_DIRS=()
         # Run the test mode (rely only on --dry-run flag, do not export DRY_RUN)
         # shellcheck disable=SC2154
-        trap 'for d in "${TEMP_DIRS[@]}"; do rm -rf "$d"; done' EXIT
+        # trap 'for d in "${TEMP_DIRS[@]}"; do rm -rf "$d"; done' EXIT  # Now handled globally
         # Test each mode
         for test_mode in local aur aur-git; do
             log "--- Testing $test_mode mode ---"
