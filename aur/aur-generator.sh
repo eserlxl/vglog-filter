@@ -427,9 +427,15 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
     cp -f "$PKGBUILD0" "$PKGBUILD"
     log "[$MODE] PKGBUILD.0 copied to PKGBUILD."
     if [[ "$MODE" == "aur" ]]; then
-        # Fix: Try correct link first, fallback to old 'v' link if needed
-        sed -E -i "s|^([[:space:]]*source=\([^)]*\))([[:space:]]*#.*)?$|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")\2|" "$PKGBUILD"
-        log "[aur] Updated source line in PKGBUILD (no 'v' before version)."
+        # Fix: Replace source=() with correct URL, robustly handling multiline arrays
+        awk -v new_source="source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}\")" '
+            BEGIN { in_source=0 }
+            /^source=\(/ { in_source=1; print new_source; next }
+            in_source && /\)/ { in_source=0; next }
+            in_source { next }
+            { print }
+        ' "$PKGBUILD" > "$PKGBUILD.tmp" && mv "$PKGBUILD.tmp" "$PKGBUILD"
+        log "[aur] Updated source line in PKGBUILD (handles multiline arrays)."
         # Check if the tarball exists on GitHub before running updpkgsums
         TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
         if ! curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
