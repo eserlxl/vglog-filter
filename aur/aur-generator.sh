@@ -323,25 +323,6 @@ install_pkg() {
     fi
 }
 
-# --- Config / Constants ---
-# These are now grouped at the top of the script
-# readonly PKGNAME="vglog-filter"
-# readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# readonly SCRIPT_NAME="$(basename "$0")"
-# readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-# Determine GH_USER: environment > PKGBUILD.0 url > fallback
-# if [[ -z "${GH_USER:-}" ]]; then
-#     PKGBUILD0_URL=$(awk -F/ '/^url="https:\/\/github.com\// {print $5}' "$SCRIPT_DIR/PKGBUILD.0")
-#     if [[ -n "$PKGBUILD0_URL" ]]; then
-#         GH_USER="$PKGBUILD0_URL"
-#     else
-#         GH_USER="eserlxl"
-#         warn "[aur-generator] Could not parse GitHub user/org from PKGBUILD.0 url field, defaulting to 'eserlxl'."
-#     fi
-# fi
-# readonly GH_USER
-# readonly -a VALID_MODES=(local aur aur-git clean test lint)
-
 # --- Main Logic ---
 # Initialize variables from environment or defaults before flag parsing
 dry_run=${DRY_RUN:-0}
@@ -355,8 +336,13 @@ ascii_armor=${ASCII_ARMOR_DEFAULT:-0}
 # so we must check the status explicitly to avoid silent bad-option handling.
 # Temporarily disable ERR trap and set -e for getopt
 # --- GNU getopt check (fail gracefully if not present) ---
-command -v getopt >/dev/null 2>&1 && getopt -T >/dev/null 2>&1 || 
+if ! command -v getopt >/dev/null 2>&1; then
     err "GNU getopt required (util-linux)."
+fi
+# Check for GNU-style long option support
+if ! output=$(getopt --long test -- "Test" 2>/dev/null) || [[ "$output" != *"Test"* ]]; then
+    err "GNU getopt required (util-linux)."
+fi
 # --- End GNU getopt check ---
 # WARNING: The ERR trap is disabled below for getopt parsing. If you add code after getopt_output=... and before the trap is restored,
 # errors will not trigger the custom ERR trap (though set -e is still active). If you add more code here, consider re-enabling the trap earlier.
