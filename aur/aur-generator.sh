@@ -474,7 +474,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
             set -euo pipefail
             unset CI
             trap '' ERR
-            git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" $ARCHIVE_MTIME "$GIT_REF" | \
+            git -C "$PROJECT_ROOT" archive --format=tar --prefix="${PKGNAME}-${PKGVER}/" "$ARCHIVE_MTIME" "$GIT_REF" | \
                 gzip -n > "$OUTDIR/$TARBALL"
         )
         log "Created $OUTDIR/$TARBALL using $GIT_REF with reproducible mtime."
