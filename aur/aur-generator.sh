@@ -50,9 +50,9 @@ GPG_TTY=$(tty)  # Needed for GPG signing to work reliably (pinentry) in CI/sudo
 export GPG_TTY
 
 # color_enabled is set from env or default, but will be overridden by CLI options below
-# Remove unreachable Bash version check for color_enabled
 set -euo pipefail
 color_enabled=${COLOR:-1}  # safe default, must be set before any error handling
+init_colors
 set -o noclobber  # Prevent accidental file overwrite with > redirection
 # --- Tiny Helper Functions (moved to top for trap consistency) ---
 err() {
@@ -85,7 +85,7 @@ trap 'err "[FATAL] ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 
 # --- Functions ---
 # Minimal help for scripts/AUR helpers
-help() {
+usage() {
     printf 'Usage: %s [OPTIONS] MODE\n' "$SCRIPT_NAME"
     printf 'Modes: local | aur | aur-git | clean | test | lint\n'
 }
@@ -107,14 +107,15 @@ is_valid_mode() {
 }
 
 # Full usage (detailed help)
-usage() {
-    help
+help() {
+    usage
     printf '\n'
     printf 'Options:\n'
     printf '  -n, --no-color      Disable color output\n'
     printf '  -a, --ascii-armor   Use ASCII-armored GPG signatures (.asc)\n'
     printf '  -d, --dry-run       Dry run (no changes, for testing)\n'
-    printf '  -h, --help          Show minimal usage and exit\n'
+    printf '  -h, --help          Show detailed help and exit\n'
+    printf '  --usage             Show minimal usage and exit\n'
     printf '\n'
     printf 'All options must appear before the mode.\n'
     printf 'For full documentation, see doc/AUR.md.\n'
@@ -138,38 +139,7 @@ set_signature_ext() {
 
 # --- Color Setup ---
 # Group color variable definitions and helpers at the top
-init_colors() {
-    # Color variables are initialized once here and memoized for all color_echo calls
-    HAVE_TPUT=0
-    if command -v tput >/dev/null 2>&1; then
-        HAVE_TPUT=1
-    fi
-    if (( color_enabled )); then
-        if (( HAVE_TPUT )) && [[ -t 1 ]]; then
-            RED="$(tput setaf 1)$(tput bold)"
-            GREEN="$(tput setaf 2)$(tput bold)"
-            YELLOW="$(tput setaf 3)$(tput bold)"
-            RESET="$(tput sgr0)"
-        else
-            if [[ -n "${BASH_VERSION:-}" ]]; then
-                RED='\e[1;31m'
-                GREEN='\e[1;32m'
-                YELLOW='\e[1;33m'
-                RESET='\e[0m'
-            else
-                RED='\033[1;31m'
-                GREEN='\033[1;32m'
-                YELLOW='\033[1;33m'
-                RESET='\033[0m'
-            fi
-        fi
-    else
-        RED=''
-        GREEN=''
-        YELLOW=''
-        RESET=''
-    fi
-}
+# init_colors moved to top
 
 color_echo() {
     # Uses memoized color variables set by init_colors; does not recompute them
@@ -320,10 +290,10 @@ ascii_armor=${ASCII_ARMOR_DEFAULT:-0}
 # IMPORTANT: Always check the exit code of getopt before using its output.
 # If getopt fails (e.g., due to an unknown flag), set -e does not abort inside $(),
 # so we must check the status explicitly to avoid silent bad-option handling.
-getopt_output=$(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help -- "$@")
+getopt_output=$(getopt --shell bash -o nadh --long no-color,ascii-armor,dry-run,help,usage -- "$@")
 getopt_status=$?
 if (( getopt_status != 0 )); then
-    err "Failed to parse options."; usage; exit 1
+    err "Failed to parse options."; help; exit 1
 fi
 # Use eval set -- for proper argument parsing from getopt output
 # This handles quoted arguments correctly and avoids issues with array splitting
@@ -343,14 +313,16 @@ while true; do
             dry_run=1; shift ;;
         -h|--help)
             help; exit 0 ;;
+        --usage)
+            usage; exit 0 ;;
         --)
             shift; break ;;
         *)
-            err "Unknown option: $1"; usage; exit 1 ;;
+            err "Unknown option: $1"; help; exit 1 ;;
     esac
 done
 # Initialize color variables after color_enabled is set
-init_colors
+# init_colors # Moved to top
 
 MODE=${1:-}
 if [[ -z $MODE ]]; then

@@ -18,7 +18,7 @@
 
 - To print a minimal usage line (for scripts/AUR helpers):
   ```sh
-  ./aur-generator.sh --help
+  ./aur-generator.sh --usage
   # or
   ./aur-generator.sh -h
   ```
@@ -27,6 +27,12 @@
   Usage: aur-generator.sh [OPTIONS] MODE
   Modes: local | aur | aur-git | clean | test | lint
   ```
+
+- To print detailed help (options, documentation pointers, etc.):
+  ```sh
+  ./aur-generator.sh --help
+  ```
+  This prints a detailed help message including options and documentation pointers.
 
 > **Note:** All flags/options must appear before the mode. For example: `./aur-generator.sh -n --dry-run aur`. Flags after the mode are not supported.
 > 
@@ -50,7 +56,8 @@
 - **`--no-color`, `-n`**: Disable colored output (for accessibility or when redirecting output). You can also set the `NO_COLOR` environment variable to any value to disable color.
 - **`--ascii-armor`, `-a`**: Use ASCII-armored signatures (.asc) instead of binary signatures (.sig) for GPG signing. Some AUR helpers (like aurutils) prefer ASCII-armored signatures.
 - **`--dry-run`, `-d`**: Run all steps except the final `makepkg -si` (useful for CI/testing). Can also be enabled by setting the `DRY_RUN=1` environment variable.
-- **`--help`, `-h`**: Print a minimal usage line and exit (no color, no extra text; suitable for scripts/AUR helpers).
+- **`--help`, `-h`**: Print detailed help and exit (includes options, documentation pointers, etc.).
+- **`--usage`**: Print a minimal usage line and exit (no color, no extra text; suitable for scripts/AUR helpers).
 
 > **Important:** All options/flags must be specified before the mode. For example:
 > ```sh
