@@ -18,6 +18,7 @@ declare -r SCRIPT_DIR
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 declare -r PROJECT_ROOT
 # VALID_MODES is used for validation in the usage function and mode checking
+# shellcheck disable=SC2034
 declare -a VALID_MODES=(local aur aur-git clean test)
 
 # --- Functions ---
