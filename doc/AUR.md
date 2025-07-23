@@ -132,6 +132,9 @@ This will:
 - Set `GPG_KEY_ID` to avoid GPG key selection prompts.
 - Use `--dry-run` to test without installing packages (must be before the mode).
 
+> **Prompt Skipping in CI:**
+> When `CI=1` is set, all interactive prompts are skipped. If a prompt has a default value, it is automatically selected. If no default is provided, the prompt is skipped and the function returns a non-zero exit code (1), which may be checked by the script to determine how to proceed. This shortcut is relied upon in some automation code paths.
+
 ### Environment Variables
 
 The script supports several environment variables for automation:
