@@ -70,6 +70,17 @@ help() {
     printf 'Modes: local | aur | aur-git | clean | test\n'
 }
 
+# Function to check if a mode is valid
+is_valid_mode() {
+    local mode="$1"
+    for valid_mode_name in "${VALID_MODES[@]}"; do
+        if [[ "$mode" == "$valid_mode_name" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Full usage (detailed help)
 usage() {
     help
@@ -285,16 +296,8 @@ if [[ -z $MODE ]]; then
     usage; exit 1
 fi
 
-# Validate mode against VALID_MODES array
-valid_mode=false
-for valid_mode_name in "${VALID_MODES[@]}"; do
-    if [[ "$MODE" == "$valid_mode_name" ]]; then
-        valid_mode=true
-        break
-    fi
-done
-
-if [[ "$valid_mode" == "false" ]]; then
+# Validate mode using is_valid_mode function
+if ! is_valid_mode "$MODE"; then
     err "Unknown mode: $MODE"
     usage; exit 1
 fi
