@@ -505,11 +505,11 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         log "[aur] Updated source line in PKGBUILD (handles multiline arrays)."
         # Check if the tarball exists on GitHub before running updpkgsums
         TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
-        if ! curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
+        if ! curl --head --silent --fail --location "$TARBALL_URL" > /dev/null; then
             warn "[aur] WARNING: Release asset not found at $TARBALL_URL. Trying fallback with 'v' prefix."
             sed -i "s|source=(\".*\")|source=(\"https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}\")|" "$PKGBUILD"
             TARBALL_URL="https://github.com/eserlxl/${PKGNAME}/releases/download/v${PKGVER}/${TARBALL}"
-            if ! curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
+            if ! curl --head --silent --fail --location "$TARBALL_URL" > /dev/null; then
                 # Asset not found - offer to upload automatically if gh CLI is available
                 if command -v gh >/dev/null 2>&1; then
                     warn "[aur] Release asset not found. GitHub CLI (gh) detected."
@@ -543,7 +543,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                         fi
                         # Verify the upload was successful
                         sleep 2  # Give GitHub a moment to process
-                        if curl --head --silent --fail "$TARBALL_URL" > /dev/null; then
+                        if curl --head --silent --fail --location "$TARBALL_URL" > /dev/null; then
                             log "[aur] Asset upload verified successfully."
                         else
                             warn "[aur] Asset upload may not be immediately available. Continuing anyway..."
