@@ -555,17 +555,19 @@ case "$MODE" in
             "-n -a -X lint"
             "-d --usagex test"
         )
-        for invalid_args in "${INVALID_ARGS_LIST[@]}"; do
-            TEST_LOG_FILE="$SCRIPT_DIR/test-invalid-$(echo "$invalid_args" | tr ' /' '__').log"
-            log "[test] Testing invalid args: $invalid_args"
-            if bash "$SCRIPT_DIR/$SCRIPT_NAME" $invalid_args >"$TEST_LOG_FILE" 2>&1; then
-                err "[test] ✗ Invalid args '$invalid_args' did NOT fail as expected!"
+        for invalid_args_str in "${INVALID_ARGS_LIST[@]}"; do
+            # Convert the string to an array for safe argument passing
+            read -r -a invalid_args <<< "$invalid_args_str"
+            TEST_LOG_FILE="$SCRIPT_DIR/test-invalid-$(echo "$invalid_args_str" | tr ' /' '__').log"
+            log "[test] Testing invalid args: $invalid_args_str"
+            if bash "$SCRIPT_DIR/$SCRIPT_NAME" "${invalid_args[@]}" >"$TEST_LOG_FILE" 2>&1; then
+                err "[test] ✗ Invalid args '$invalid_args_str' did NOT fail as expected!"
                 TEST_ERRORS=$((TEST_ERRORS + 1))
                 cat "$TEST_LOG_FILE" >&2
             else
-                log "[test] ✓ Invalid args '$invalid_args' failed as expected."
+                log "[test] ✓ Invalid args '$invalid_args_str' failed as expected."
             fi
-            log "[test] Log for invalid args '$invalid_args': $TEST_LOG_FILE"
+            log "[test] Log for invalid args '$invalid_args_str': $TEST_LOG_FILE"
         done
         # Report results
         if [[ $TEST_ERRORS -eq 0 ]]; then
@@ -830,7 +832,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
         set_signature_ext
         TARBALL_URL="https://github.com/${GH_USER}/${PKGNAME}/releases/download/${PKGVER}/${TARBALL}"
         # Remove any stray quotes from GH_USER or PKGNAME
-        TARBALL_URL=$(echo "$TARBALL_URL" | sed 's/"//g')
+        TARBALL_URL="${TARBALL_URL//\"/}"
         awk -v tarball_url="$TARBALL_URL" '
             BEGIN { in_source=0; new_source_line=""; }
             /^source=\(/ {
@@ -937,7 +939,7 @@ if [[ "$MODE" == "local" || "$MODE" == "aur" ]]; then
                                 else
                                     if (( i < RETRIES )); then
                                         echo "[aur] Asset not available yet (attempt $i/$RETRIES). Waiting $DELAY seconds..." >&2
-                                        sleep $DELAY
+                                        sleep "$DELAY"
                                         total_wait=$((total_wait + DELAY))
                                     else
                                         warn "[aur] Asset still not available after $RETRIES attempts. This is normal if GitHub CDN is slow."
