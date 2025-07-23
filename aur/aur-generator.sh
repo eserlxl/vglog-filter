@@ -526,7 +526,7 @@ fi
 
 # shellcheck disable=SC2026
 awk '
-    BEGIN { sums = "sha256sums=('SKIP')" }
+    BEGIN { sums = "b2sums=('SKIP')" }
     /^pkgname=/ {
         print "pkgname=vglog-filter-git"; next
     }
