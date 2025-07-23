@@ -131,6 +131,7 @@ The script supports several environment variables for automation:
 ### Tarball Creation
 - Creates a new source tarball from the project root using `git archive`, excluding build and VCS files (except in `aur-git` mode).
 - Uses `git archive` to respect `.gitignore` and only include tracked files.
+- **Note:** `git archive` does _not_ include the contents of git submodules. If you ever add submodules to this project, the generated tarball will _not_ contain their files—only the main repository's files. You will need to update the packaging process to include submodule contents if submodules are introduced. See the [git-archive documentation](https://git-scm.com/docs/git-archive#_limitations) for details.
 
 ### PKGBUILD Generation
 - Copies and updates PKGBUILD from the template file (`PKGBUILD.0`).
