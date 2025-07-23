@@ -24,14 +24,12 @@ vglog-filter addresses these issues by:
 
 ## Installation & Prerequisites
 
-- **Dependencies**: Requires a C++17-compatible compiler, CMake (version 3.10 or newer recommended), and `pacman-contrib` (for the `updpkgsums` tool used in AUR packaging).
+- **Dependencies**: Requires a C++17-compatible compiler, CMake (version 3.10 or newer recommended).
 - **Supported platforms**: Linux (tested), should work on other POSIX systems with minimal changes.
-
-> **Note:** `pacman-contrib` is not included in the `base-devel` group on Arch Linux. You must install it separately, or you will get a `updpkgsums: command not found` error when building or packaging.
 
 Clone the repository and ensure you have the necessary build tools installed:
 ```sh
-sudo pacman -S base-devel cmake gcc pacman-contrib   # Arch Linux example (pacman-contrib is required for updpkgsums)
+sudo pacman -S base-devel cmake gcc   # Arch Linux example
 # or
 sudo apt-get install build-essential cmake   # Debian/Ubuntu example
 ```
