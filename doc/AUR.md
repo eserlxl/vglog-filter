@@ -30,12 +30,13 @@
 
 - **`--no-color`, `-n`**: Disable colored output (for accessibility or when redirecting output). You can also set the `NO_COLOR` environment variable to any value to disable color.
 - **`--ascii-armor`, `-a`**: Use ASCII-armored signatures (.asc) instead of binary signatures (.sig) for GPG signing. Some AUR helpers (like aurutils) prefer ASCII-armored signatures.
-- **`--dry-run`, `-d`**: Run all steps except the final `makepkg -si` (useful for CI/testing).
+- **`--dry-run`, `-d`**: Run all steps except the final `makepkg -si` (useful for CI/testing). Can also be enabled by setting the `DRY_RUN=1` environment variable.
 
 > **Important:** All options/flags must be specified before the mode. For example:
 > ```sh
 > ./aur-generator.sh --no-color --ascii-armor --dry-run aur
 > ./aur-generator.sh -n -a -d aur
+> DRY_RUN=1 ./aur-generator.sh aur
 > ```
 > The following is **not** supported:
 > ```sh
@@ -124,6 +125,7 @@ The script supports several environment variables for automation:
 - **`GPG_KEY_ID`**: Set to your GPG key ID to skip the interactive key selection menu
 - **`AUTO`**: Skip the GitHub asset upload prompt in `aur` mode
 - **`CI`**: Skip interactive prompts in `aur` mode (useful for CI/CD pipelines)
+- **`DRY_RUN`**: Set to `1` to enable dry-run mode (alternative to `--dry-run`/`-d` flag)
 
 ## Variable Naming Conventions
 

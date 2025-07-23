@@ -183,6 +183,7 @@ function usage() {
     log "  --no-color, -n     Disable colored output (also supported via NO_COLOR env variable)"
     log "  --ascii-armor, -a  Use ASCII-armored signatures (.asc) instead of binary (.sig) for GPG signing"
     log "  --dry-run, -d      Run all steps except the final makepkg -si (for CI/testing)"
+    log "                   (can also be set via DRY_RUN=1 environment variable)"
     printf '\n'
     log "Notes:"
     log "- All options must appear before the mode (e.g., $0 -n --dry-run aur)."
@@ -196,6 +197,7 @@ function usage() {
     log "- To disable colored output, set NO_COLOR=1 or use --no-color/-n."
     log "- To use ASCII-armored signatures (.asc), use --ascii-armor/-a (some AUR helpers prefer this format)."
     log "- To test the script without running makepkg -si, add --dry-run or -d as a flag before the mode."
+    log "  Alternatively, set DRY_RUN=1 in the environment to enable dry-run mode."
     log "- If GitHub CLI (gh) is installed, the script can automatically upload missing release assets."
     log "- To skip the automatic upload prompt in 'aur' mode, set AUTO=y:"
     log "    AUTO=y ./aur-generator.sh aur"
