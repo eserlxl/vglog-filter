@@ -21,6 +21,22 @@ readonly PROJECT_ROOT
 VALID_MODES=(local aur aur-git clean test)
 
 # --- Functions ---
+# Color helper function
+color_echo() {
+    local color_code="$1"
+    shift
+    local msg="$*"
+    if (( COLOR )); then
+        printf '\e[%sm%s\e[0m\n' "$color_code" "$msg"
+    else
+        printf '%s\n' "$msg"
+    fi
+}
+
+log() { color_echo "1;32" "$*"; }
+warn() { color_echo "1;33" "$*" >&2; }
+err() { color_echo "1;31" "$*" >&2; }
+
 require() {
     local t
     for t in "$@"; do
@@ -47,22 +63,6 @@ prompt() {
     read -rp "$prompt_text" input
     eval "$var_name=\"$input\""
 }
-
-# Color helper function
-color_echo() {
-    local color_code="$1"
-    shift
-    local msg="$*"
-    if (( COLOR )); then
-        printf '\e[%sm%s\e[0m\n' "$color_code" "$msg"
-    else
-        printf '%s\n' "$msg"
-    fi
-}
-
-log() { color_echo "1;32" "$*"; }
-warn() { color_echo "1;33" "$*" >&2; }
-err() { color_echo "1;31" "$*" >&2; }
 
 update_checksums() {
     updpkgsums
