@@ -18,18 +18,6 @@ fi
 GPG_TTY=$(tty)  # Needed for GPG signing to work reliably (pinentry) in CI/sudo
 export GPG_TTY
 
-# --- Global cleanup for CI/test temp dirs ---
-TEMP_DIRS=()
-# shellcheck disable=SC2317
-cleanup() {
-    if ((  ${#TEMP_DIRS[@]} )); then
-        for d in "${TEMP_DIRS[@]}"; do
-            [[ -d "$d" ]] && rm -rf "$d"
-        done
-    fi
-}
-trap 'cleanup' EXIT
-
 # color_enabled is set from env or default, but will be overridden by CLI options below
 color_enabled=$([[ ${NO_COLOR:-0} == 1 ]] && echo 0 || echo "${COLOR:-1}")
 # Remove unreachable Bash version check for color_enabled
