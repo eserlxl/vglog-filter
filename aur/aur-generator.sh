@@ -389,7 +389,7 @@ if [[ "$MODE" == "aur" || "$MODE" == "local" ]]; then
         ARCHIVE_MTIME="--mtime=@$SOURCE_DATE_EPOCH"
         log "[$MODE] Using SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH for tarball mtime."
     else
-        ARCHIVE_MTIME="--mtime=UTC 2020-01-01 00:00:00"
+        ARCHIVE_MTIME='--mtime="UTC 2020-01-01 00:00:00"'
         # Use a fixed mtime for reproducible builds (see https://reproducible-builds.org/docs/source-date-epoch/)
         log "[$MODE] Using static mtime for tarball: UTC 2020-01-01 00:00:00."
     fi
