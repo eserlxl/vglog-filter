@@ -94,7 +94,6 @@ Comprehensive documentation is available in the [`doc/`](doc/) folder:
 - [FAQ.md](doc/FAQ.md): Frequently asked questions
 - [ADVANCED.md](doc/ADVANCED.md): Advanced filtering, signature depth, marker customization, and deduplication logic
 - [BUILD.md](doc/BUILD.md): Build script and configuration options
-- [AUR.md](doc/AUR.md): AUR packaging automation and instructions for Arch Linux (see `aur/aur-generator.sh`)
 
 ## Contributing
 
