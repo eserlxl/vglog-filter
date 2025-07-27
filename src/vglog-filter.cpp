@@ -69,35 +69,81 @@ Str regex_replace_all(const Str& src, const std::regex& re, const Str& repl)
 
 // ---------- canonicalisation ------------------------------------------------
 
-// Static regex objects to avoid recompilation
-static const std::regex re_addr(R"(0x[0-9a-fA-F]+)");
-static const std::regex re_line(R"(:[0-9]+)");
-static const std::regex re_array(R"(\[[0-9]+\])");
-static const std::regex re_template(R"(<[^>]*>)");
-static const std::regex re_ws(R"([ \t\v\f\r\n]+)");
+// Function-local static regex objects to avoid recompilation and initialization issues
+static const std::regex& get_re_addr() {
+    static const std::regex re(R"(0x[0-9a-fA-F]+)");
+    return re;
+}
+
+static const std::regex& get_re_line() {
+    static const std::regex re(R"(:[0-9]+)");
+    return re;
+}
+
+static const std::regex& get_re_array() {
+    static const std::regex re(R"(\[[0-9]+\])");
+    return re;
+}
+
+static const std::regex& get_re_template() {
+    static const std::regex re(R"(<[^>]*>)");
+    return re;
+}
+
+static const std::regex& get_re_ws() {
+    static const std::regex re(R"([ \t\v\f\r\n]+)");
+    return re;
+}
 
 Str canon(Str s)
 {
-    s = regex_replace_all(s, re_addr, "0xADDR");
-    s = regex_replace_all(s, re_line, ":LINE");
-    s = regex_replace_all(s, re_array, "[]");
-    s = regex_replace_all(s, re_template, "<T>");
-    s = regex_replace_all(s, re_ws, " ");
+    s = regex_replace_all(s, get_re_addr(), "0xADDR");
+    s = regex_replace_all(s, get_re_line(), ":LINE");
+    s = regex_replace_all(s, get_re_array(), "[]");
+    s = regex_replace_all(s, get_re_template(), "<T>");
+    s = regex_replace_all(s, get_re_ws(), " ");
     s = rtrim(s);
     return s;
 }
 
 // ---------- main dedupe engine ---------------------------------------------
 
-// Static regex objects for process function
-static const std::regex re_vg_line(R"(^==[0-9]+==)");
-static const std::regex re_prefix(R"(^==[0-9]+==[ \t\v\f\r\n]*)");
-static const std::regex re_start(
-    R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))");
-static const std::regex re_bytes_head(R"([0-9]+ bytes in [0-9]+ blocks)");
-static const std::regex re_at(R"(at : +)");
-static const std::regex re_by(R"(by : +)");
-static const std::regex re_q(R"(\?{3,})");
+// Function-local static regex objects for process function
+static const std::regex& get_re_vg_line() {
+    static const std::regex re(R"(^==[0-9]+==)");
+    return re;
+}
+
+static const std::regex& get_re_prefix() {
+    static const std::regex re(R"(^==[0-9]+==[ \t\v\f\r\n]*)");
+    return re;
+}
+
+static const std::regex& get_re_start() {
+    static const std::regex re(
+        R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))");
+    return re;
+}
+
+static const std::regex& get_re_bytes_head() {
+    static const std::regex re(R"([0-9]+ bytes in [0-9]+ blocks)");
+    return re;
+}
+
+static const std::regex& get_re_at() {
+    static const std::regex re(R"(at : +)");
+    return re;
+}
+
+static const std::regex& get_re_by() {
+    static const std::regex re(R"(by : +)");
+    return re;
+}
+
+static const std::regex& get_re_q() {
+    static const std::regex re(R"(\?{3,})");
+    return re;
+}
 
 void process(std::istream& in, const Options& opt)
 {
@@ -128,19 +174,19 @@ void process(std::istream& in, const Options& opt)
 
     Str line;
     while (std::getline(in, line)) {
-        if (!std::regex_search(line, re_vg_line)) continue;
+        if (!std::regex_search(line, get_re_vg_line())) continue;
         // strip "==PID== "
-        line = std::regex_replace(line, re_prefix, "");
-        if (std::regex_search(line, re_start)) {
+        line = std::regex_replace(line, get_re_prefix(), "");
+        if (std::regex_search(line, get_re_start())) {
             flush();
-            if (std::regex_search(line, re_bytes_head)) continue;
+            if (std::regex_search(line, get_re_bytes_head())) continue;
         }
         Str rawLine = line;
         if (opt.scrub_raw) {
-            rawLine = regex_replace_all(rawLine, re_addr, "");
-            rawLine = regex_replace_all(rawLine, re_at, "");
-            rawLine = regex_replace_all(rawLine, re_by, "");
-            rawLine = regex_replace_all(rawLine, re_q, "");
+            rawLine = regex_replace_all(rawLine, get_re_addr(), "");
+            rawLine = regex_replace_all(rawLine, get_re_at(), "");
+            rawLine = regex_replace_all(rawLine, get_re_by(), "");
+            rawLine = regex_replace_all(rawLine, get_re_q(), "");
         }
         if (trim(rawLine).empty()) continue;
         raw << rawLine << '\n';
