@@ -210,24 +210,36 @@ VecS read_file_lines(const Str& fname)
 
 Str get_version()
 {
-    std::ifstream version_file("/usr/share/vglog-filter/VERSION");
-    if (!version_file) {
-        return "unknown";
-    }
-    Str version;
-    std::getline(version_file, version);
-    // Remove any whitespace safely
-    if (!version.empty()) {
-        size_t start = version.find_first_not_of(" \t\r\n");
-        if (start != Str::npos) {
-            version.erase(0, start);
+    // Try multiple paths in order of preference
+    const std::vector<Str> paths = {
+        "./VERSION",                    // Local development
+        "../VERSION",                   // Build directory
+        "/usr/share/vglog-filter/VERSION", // System installation
+        "/usr/local/share/vglog-filter/VERSION" // Local installation
+    };
+    
+    for (const auto& path : paths) {
+        std::ifstream version_file(path);
+        if (version_file) {
+            Str version;
+            std::getline(version_file, version);
+            // Remove any whitespace safely
+            if (!version.empty()) {
+                size_t start = version.find_first_not_of(" \t\r\n");
+                if (start != Str::npos) {
+                    version.erase(0, start);
+                }
+                size_t end = version.find_last_not_of(" \t\r\n");
+                if (end != Str::npos) {
+                    version.erase(end + 1);
+                }
+            }
+            if (!version.empty()) {
+                return version;
+            }
         }
-        size_t end = version.find_last_not_of(" \t\r\n");
-        if (end != Str::npos) {
-            version.erase(end + 1);
-        }
     }
-    return version.empty() ? "unknown" : version;
+    return "unknown";
 }
 
 int main(int argc, char* argv[])
