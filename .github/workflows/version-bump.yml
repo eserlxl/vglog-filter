@@ -153,6 +153,57 @@ jobs:
         # Show current version
         echo "Current version: $(cat VERSION)"
         
+        # Generate detailed analysis message
+        ANALYSIS_MESSAGE=""
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # Manual trigger
+          if [ "${{ steps.version-analysis.outputs.bump_type }}" != "none" ]; then
+            ANALYSIS_MESSAGE="Manual version bump: ${{ steps.version-analysis.outputs.bump_type }} version"
+            if [ -n "${{ steps.version-analysis.outputs.release_notes }}" ]; then
+              ANALYSIS_MESSAGE="$ANALYSIS_MESSAGE
+
+Release notes: ${{ steps.version-analysis.outputs.release_notes }}"
+            fi
+          fi
+        else
+          # Automatic trigger - generate detailed analysis
+          echo "Generating detailed analysis for commit message..."
+          chmod +x ./dev-bin/semantic-version-analyzer
+          
+          # Get detailed analysis
+          ANALYSIS=$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || echo "")
+          
+          # Extract key metrics
+          NEW_SOURCE_FILES=$(echo "$ANALYSIS" | grep "New source files:" | awk '{print $4}' || echo "0")
+          NEW_TEST_FILES=$(echo "$ANALYSIS" | grep "New test files:" | awk '{print $4}' || echo "0")
+          NEW_DOC_FILES=$(echo "$ANALYSIS" | grep "New doc files:" | awk '{print $4}' || echo "0")
+          DELETED_FILES=$(echo "$ANALYSIS" | grep "Deleted files:" | awk '{print $3}' || echo "0")
+          MODIFIED_FILES=$(echo "$ANALYSIS" | grep "Modified files:" | awk '{print $3}' || echo "0")
+          DIFF_SIZE=$(echo "$ANALYSIS" | grep "Diff size:" | awk '{print $3}' || echo "0")
+          CLI_CHANGES=$(echo "$ANALYSIS" | grep "CLI interface changes:" | awk '{print $4}' || echo "false")
+          BREAKING_CLI=$(echo "$ANALYSIS" | grep "Breaking CLI changes:" | awk '{print $4}' || echo "false")
+          
+          # Build analysis message
+          ANALYSIS_MESSAGE="Auto-release triggered by significant changes:
+
+File Changes:
+- New source files: $NEW_SOURCE_FILES
+- New test files: $NEW_TEST_FILES  
+- New doc files: $NEW_DOC_FILES
+- Deleted files: $DELETED_FILES
+- Modified files: $MODIFIED_FILES
+- Total diff size: $DIFF_SIZE lines
+
+CLI Changes:
+- CLI interface changes: $CLI_CHANGES
+- Breaking CLI changes: $BREAKING_CLI
+
+Version Bump Type: ${{ steps.version-analysis.outputs.bump_type }}"
+        fi
+        
+        # Export analysis message for the script
+        export ANALYSIS_MESSAGE
+        
         # Bump version (without creating tag, let the release action handle it)
         ./dev-bin/bump-version ${{ steps.version-analysis.outputs.bump_type }} --commit
         
