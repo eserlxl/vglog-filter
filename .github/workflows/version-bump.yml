@@ -71,33 +71,33 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Check if semantic-version-analyzer exists and is executable
-          if [ ! -x ./dev-bin/semantic-version-analyzer ]; then
-            echo "semantic-version-analyzer not found or not executable"
-            exit 1
-          fi
+          require_analyzer() {
+            if [ ! -x ./dev-bin/semantic-version-analyzer ]; then
+              echo "semantic-version-analyzer not found or not executable at ./dev-bin/semantic-version-analyzer" >&2
+              exit 1
+            fi
+          }
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             BUMP_TYPE="${{ github.event.inputs.bump_type }}"
             RELEASE_NOTES="${{ github.event.inputs.release_notes }}"
             PRERELEASE="${{ github.event.inputs.prerelease }}"
             if [ "$BUMP_TYPE" = "auto" ]; then
+              require_analyzer
               BUMP_TYPE="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo none)"
             fi
           else
+            require_analyzer
             ANALYSIS="$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || true)"
 
-            # Find the previous tag or fall back to the first commit
             if LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null)"; then
               BASE="$LAST_TAG"
               RANGE="${LAST_TAG}..HEAD"
             else
-              BASE="$(git rev-list --max-parents=0 HEAD)"
-              # Include the first commit in the range by using ^..HEAD
-              RANGE="${BASE}^..HEAD"
+              ROOT="$(git rev-list --max-parents=0 HEAD)"
+              RANGE="${ROOT}^..HEAD"   # include the first commit
             fi
 
-            # Robust diff size (insertions + deletions)
             DIFF_SIZE="$(git diff --numstat $RANGE | awk '{ins+=$1; del+=$2} END{print (ins+0)+(del+0)}')"
             NEW_SOURCE_FILES="$(echo "$ANALYSIS" | awk -F': ' '/New source files:/ {print $2+0}')"
             NEW_TEST_FILES="$(echo  "$ANALYSIS" | awk -F': ' '/New test files:/  {print $2+0}')"
@@ -106,19 +106,17 @@ jobs:
             MODIFIED_FILES="$(echo  "$ANALYSIS" | awk -F': ' '/Modified files:/  {print $2+0}')"
 
             echo "Analysis:"
-            echo "  base: $BASE"
-            echo "  diff size: $DIFF_SIZE  (ins+del)"
+            echo "  base: ${BASE:-repo-root}"
+            echo "  diff size: $DIFF_SIZE (ins+del)"
             echo "  new src: $NEW_SOURCE_FILES, new tests: $NEW_TEST_FILES, new docs: $NEW_DOC_FILES, deleted: $DELETED_FILES, modified: $MODIFIED_FILES"
 
-            # Map to SemVer (example heuristic)
             if [ "$DELETED_FILES" -gt 0 ]; then
               BUMP_TYPE="major"
             elif [ "$NEW_SOURCE_FILES" -gt 0 ] || [ "$NEW_TEST_FILES" -gt 0 ]; then
-              # Feature-level changes
               if [ "$DIFF_SIZE" -ge 400 ]; then
                 BUMP_TYPE="minor"
               else
-                BUMP_TYPE="patch"   # small features/tweaks
+                BUMP_TYPE="patch"
               fi
             elif [ "$MODIFIED_FILES" -gt 0 ] || [ "$DIFF_SIZE" -gt 0 ]; then
               BUMP_TYPE="patch"
@@ -146,36 +144,23 @@ jobs:
       - name: Bump version
         if: steps.version-analysis.outputs.bump_type != 'none'
         run: |
+          set -euo pipefail
           echo "Bumping version type: ${{ steps.version-analysis.outputs.bump_type }}"
-          
-          # Check if bump-version script exists and is executable
-          if [ ! -x ./dev-bin/bump-version ]; then
-            echo "bump-version script not found or not executable"
-            exit 1
-          fi
-          
+          chmod +x ./dev-bin/bump-version
           echo "Current version: $(cat VERSION)"
-          
-          # Create analysis message for commit
-          ANALYSIS_MESSAGE="Version bump: ${{ steps.version-analysis.outputs.bump_type }}
-          
-          [skip ci] - Automated version bump to prevent CI loops
-          
-          Triggered by: ${{ github.event_name }}
-          Workflow run: ${{ github.run_id }}"
-          
-          # Export for the script to use
-          export ANALYSIS_MESSAGE
-          
+          # If your script supports a custom message, prefer adding [skip ci] here.
           ./dev-bin/bump-version ${{ steps.version-analysis.outputs.bump_type }} --commit
           NEW_VERSION=$(cat VERSION)
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          
-          # Fetch latest changes and rebase before pushing
           git fetch --tags origin main
           git pull --rebase origin main
-          
           git push origin main
+
+      - name: Create annotated tag
+        if: steps.version-analysis.outputs.bump_type != 'none'
+        run: |
+          git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
+          git push origin "v${NEW_VERSION}"
 
       - name: Create Release
         if: steps.version-analysis.outputs.bump_type != 'none'
