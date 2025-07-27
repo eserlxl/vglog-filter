@@ -21,6 +21,8 @@ vglog-filter addresses these issues by:
 - **Stack trace deduplication**: Groups identical errors for concise output.
 - **Log normalization**: Makes logs comparable across runs and systems.
 - **Easy integration**: Can be used as a standalone tool or in CI pipelines.
+- **Automated versioning**: Semantic versioning with automated bumping based on conventional commits.
+- **Comprehensive testing**: Multi-platform CI/CD with multiple build configurations.
 
 ## Installation & Prerequisites
 
@@ -86,6 +88,59 @@ You can also pipe output directly:
 valgrind --leak-check=full ./your_program 2>&1 | ./vglog-filter > filtered.log
 ```
 
+For detailed usage instructions, command-line options, and advanced filtering techniques, see the [Usage Guide](doc/USAGE.md).
+
+## Versioning System
+
+vglog-filter uses [Semantic Versioning](https://semver.org/) with automated version management:
+
+### Current Version
+The current version is stored in the `VERSION` file and displayed with:
+```sh
+./vglog-filter --version
+```
+
+### Automated Version Bumping
+The project uses GitHub Actions to automatically bump versions based on [Conventional Commits](https://www.conventionalcommits.org/):
+
+- **BREAKING CHANGE**: Triggers a **major** version bump
+- **feat**: Triggers a **minor** version bump  
+- **fix**: Triggers a **patch** version bump
+- **docs**, **style**, **refactor**, **perf**, **test**, **chore**: Triggers a **patch** version bump
+
+### Manual Version Management
+For manual version bumps, use the provided tools:
+
+```sh
+# Command-line version bump
+./dev-bin/bump-version [major|minor|patch] [--commit] [--tag]
+
+# Interactive version bump (Cursor IDE)
+./dev-bin/cursor-version-bump
+```
+
+## Testing & CI/CD
+
+The project includes comprehensive testing infrastructure:
+
+### GitHub Actions Workflows
+- **Build and Test**: Multi-platform testing with multiple build configurations
+- **Code Security**: Automated security analysis with CodeQL
+- **Shell Script Linting**: ShellCheck validation for all scripts
+- **Automated Versioning**: Semantic version bumping based on commit messages
+
+### Local Testing
+All build configurations are tested locally and in CI:
+- Default build
+- Performance build (optimized)
+- Debug build
+- Warnings build (extra compiler warnings)
+
+### Development Tools
+The `dev-bin/` directory contains development utilities:
+- `bump-version`: Command-line version management
+- `cursor-version-bump`: Interactive version bumping for Cursor IDE
+
 ## Documentation
 
 Comprehensive documentation is available in the [`doc/`](doc/) folder:
@@ -94,10 +149,17 @@ Comprehensive documentation is available in the [`doc/`](doc/) folder:
 - [FAQ.md](doc/FAQ.md): Frequently asked questions
 - [ADVANCED.md](doc/ADVANCED.md): Advanced filtering, signature depth, marker customization, and deduplication logic
 - [BUILD.md](doc/BUILD.md): Build script and configuration options
+- [VERSIONING.md](doc/VERSIONING.md): Versioning strategy and automated version management
 
 ## Contributing
 
 Contributions, bug reports, and feature requests are welcome! Please open an issue or submit a pull request.
+
+### Development Workflow
+1. Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for commit messages
+2. Use the provided version bumping tools for releases
+3. Ensure all tests pass before submitting pull requests
+4. Check the [CONTRIBUTING.md](.github/CONTRIBUTING.md) for detailed guidelines
 
 ## License
 
