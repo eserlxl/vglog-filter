@@ -7,12 +7,15 @@
 # See the LICENSE file in the project root for details.
 #
 # Version bump script for vglog-filter
-# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag]
+# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify]
 
 set -euo pipefail
 
 # Ensure consistent locale and behavior
 export LC_ALL=C
+
+# Set predictable file permissions
+umask 022
 
 # Colors
 RED='\033[0;31m'
@@ -25,6 +28,9 @@ RESET='\033[0m'
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 VERSION_FILE="$PROJECT_ROOT/VERSION"
+
+# Change to project root for git operations
+cd "$PROJECT_ROOT"
 
 # Trap to clean temp files on interrupt/exit
 trap 'rm -f "${VERSION_FILE}.tmp."* 2>/dev/null || true' INT TERM EXIT
@@ -53,10 +59,11 @@ COMMIT_MSG=""
 ALLOW_DIRTY=false
 ANNOTATED_TAG=true    # default to annotated tag
 SIGNED_TAG=false      # default to unsigned tag
+NO_VERIFY=false       # default to running hooks
 
 # Function to show usage
 usage() {
-    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag]"
+    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify]"
     echo ""
     echo "Bump the semantic version of vglog-filter"
     echo ""
@@ -73,6 +80,7 @@ usage() {
     echo "  --allow-dirty     Allow committing when other files are modified"
     echo "  --lightweight-tag Create a lightweight tag instead of annotated"
     echo "  --signed-tag      Create a signed tag (requires GPG key configured)"
+    echo "  --no-verify       Skip commit hooks (useful in CI environments)"
     echo ""
     echo "Environment Variables:"
     echo "  ANALYSIS_MESSAGE  Optional detailed analysis to include in commit message"
@@ -90,6 +98,7 @@ usage() {
     echo "  ANALYSIS_MESSAGE='...' $0 patch --commit  # Include analysis in commit"
     echo "  $0 patch --message 'Custom commit message' --commit  # Use custom message"
     echo "  $0 patch --signed-tag --tag # Create signed tag for provenance"
+    echo "  $0 patch --no-verify --commit # Skip commit hooks (useful in CI)"
     echo "  ANALYSIS_MESSAGE='Auto version bump (push)' $0 patch --commit --message 'chore(release): vX.Y.Z [skip ci]'  # CI usage"
     echo ""
     echo "Current version: $CURRENT_VERSION"
@@ -185,7 +194,7 @@ ${ANALYSIS_MESSAGE}"
             fi
         fi
         
-        git commit -m "$msg"
+        git commit ${NO_VERIFY:+--no-verify} -m "$msg"
         echo -e "${GREEN}Created commit${RESET}"
     else
         echo -e "${YELLOW}No changes to commit${RESET}"
@@ -258,6 +267,10 @@ while [[ $# -gt 0 ]]; do
             ANNOTATED_TAG=false  # signed tags are always annotated
             shift
             ;;
+        --no-verify)
+            NO_VERIFY=true
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -283,6 +296,19 @@ if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
         echo -e "${RED}Error: Not in a git repository${RESET}" >&2
         exit 1
     fi
+fi
+
+# Check for detached HEAD if committing or tagging
+if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
+    if ! git symbolic-ref -q HEAD >/dev/null; then
+        echo -e "${RED}Error:${RESET} detached HEAD; checkout a branch before committing/tagging." >&2
+        exit 1
+    fi
+fi
+
+# Check signed tag prerequisites
+if $SIGNED_TAG && ! git config --get user.signingkey >/dev/null; then
+    echo -e "${YELLOW}Warning:${RESET} --signed-tag requested but no user.signingkey is configured. Tag creation may fail." >&2
 fi
 
 # Safer dirty-tree guard using pathspec exclusion
