@@ -57,8 +57,9 @@ cmake-build-*/
 # VSCode
 .vscode/ 
 
-# Build directory
+# Build directories
 build/
+build-*/
 
 # Backups
 *.bak
