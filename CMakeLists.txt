@@ -40,6 +40,7 @@ add_executable(vglog-filter src/vglog-filter.cpp)
 if (BUILD_TESTS)
     add_executable(test_basic test/test_basic.cpp)
     target_compile_options(test_basic PRIVATE ${WARNING_FLAGS})
+    message(STATUS "Test target 'test_basic' added")
 endif()
     
 target_compile_options(vglog-filter PRIVATE ${OPT_FLAGS} ${WARNING_FLAGS})

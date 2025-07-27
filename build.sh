@@ -8,20 +8,23 @@
 #
 # vglog-filter build script
 #
-# Usage: ./build.sh [performance] [warnings] [debug] [clean]
+# Usage: ./build.sh [performance] [warnings] [debug] [clean] [tests]
 #
 # Modes:
 #   performance : Enables performance optimizations (disables debug mode if both are set)
 #   warnings    : Enables extra compiler warnings
 #   debug       : Enables debug mode (disables performance mode if both are set)
 #   clean       : Forces a clean build (removes all build artifacts)
+#   tests       : Builds and runs the test suite
 #
 # Notes:
 #   - 'performance' and 'debug' are mutually exclusive; enabling one disables the other.
 #   - You can combine 'warnings' with either mode.
 #   - 'clean' is useful for configuration changes or debugging build issues
+#   - 'tests' will build the test suite and run basic tests
 #   - Example: ./build.sh performance warnings
 #   - Example: ./build.sh debug clean
+#   - Example: ./build.sh tests
 
 set -euo pipefail
 
@@ -29,6 +32,8 @@ PERFORMANCE_BUILD=OFF
 WARNING_MODE=OFF
 DEBUG_MODE=OFF
 CLEAN_BUILD=OFF
+BUILD_TESTS=OFF
+RUN_TESTS=OFF
 
 # Track if any valid arguments were provided
 VALID_ARGS=false
@@ -49,6 +54,11 @@ for arg in "$@"; do
       ;;
     clean)
       CLEAN_BUILD=ON
+      VALID_ARGS=true
+      ;;
+    tests)
+      BUILD_TESTS=ON
+      RUN_TESTS=ON
       VALID_ARGS=true
       ;;
     *)
@@ -72,17 +82,38 @@ echo "  PERFORMANCE_BUILD = $PERFORMANCE_BUILD"
 echo "  WARNING_MODE     = $WARNING_MODE"
 echo "  DEBUG_MODE       = $DEBUG_MODE"
 echo "  CLEAN_BUILD      = $CLEAN_BUILD"
+echo "  BUILD_TESTS      = $BUILD_TESTS"
+echo "  RUN_TESTS        = $RUN_TESTS"
 
 # Show warning if no valid arguments were provided
 if [ "$VALID_ARGS" = "false" ] && [ $# -gt 0 ]; then
     echo "Warning: No valid build options specified. Using default configuration."
 fi
 
-cmake -DPERFORMANCE_BUILD=$PERFORMANCE_BUILD -DWARNING_MODE=$WARNING_MODE -DDEBUG_MODE=$DEBUG_MODE ..
+cmake -DPERFORMANCE_BUILD=$PERFORMANCE_BUILD -DWARNING_MODE=$WARNING_MODE -DDEBUG_MODE=$DEBUG_MODE -DBUILD_TESTS=$BUILD_TESTS ..
 
 if [ "$CLEAN_BUILD" = "ON" ]; then
   echo "Performing clean build..."
   make clean
 fi
 
-make -j"$(nproc)" 
+make -j"$(nproc)"
+
+# Run tests if requested
+if [ "$RUN_TESTS" = "ON" ]; then
+    echo "Running tests..."
+    if [ -f "build/test_basic" ]; then
+        ./build/test_basic
+        echo "Tests completed successfully!"
+    else
+        echo "Warning: Test executable not found. Tests may not have been built correctly."
+        echo "Attempting to build test manually..."
+        g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_basic.cpp -o test_basic
+        if [ -f "test_basic" ]; then
+            ./test_basic
+            echo "Tests completed successfully!"
+        else
+            echo "Error: Failed to build test executable."
+        fi
+    fi
+fi 
