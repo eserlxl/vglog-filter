@@ -23,7 +23,7 @@ vglog-filter is a fast and flexible tool designed to process and clean up Valgri
   - [Development Workflow](#development-workflow)
 - [License](#license)
 
-## Motivation [↑](#vglog-filter)
+## Motivation
 
 Valgrind is a powerful tool for detecting memory errors and leaks in C/C++ programs, but its logs can be overwhelming—especially for large projects or repeated test runs. Raw Valgrind logs often contain:
 - Repeated or redundant stack traces
@@ -35,7 +35,9 @@ vglog-filter addresses these issues by:
 - **Deduplicating stack traces**: Collapses repeated errors and stack traces to a single instance.
 - **Normalizing logs**: Replaces non-deterministic elements (like memory addresses) with placeholders for easier diffing and automated analysis.
 
-## Features [↑](#vglog-filter)
+[↑ Back to top](#vglog-filter)
+
+## Features
 
 - **High performance**: Optimized for speed, suitable for large log files.
 - **Flexible filtering**: Customizable rules for what to keep or discard.
@@ -45,7 +47,9 @@ vglog-filter addresses these issues by:
 - **Automated versioning**: Semantic versioning with automated bumping based on conventional commits.
 - **Comprehensive testing**: Multi-platform CI/CD with multiple build configurations.
 
-## Installation & Prerequisites [↑](#vglog-filter)
+[↑ Back to top](#vglog-filter)
+
+## Installation & Prerequisites
 
 - **Dependencies**: Requires a C++17-compatible compiler, CMake (version 3.10 or newer recommended).
 - **Supported platforms**: Linux (tested), should work on other POSIX systems with minimal changes.
@@ -57,7 +61,9 @@ sudo pacman -S base-devel cmake gcc   # Arch Linux example
 sudo apt-get install build-essential cmake   # Debian/Ubuntu example
 ```
 
-## Build Options [↑](#vglog-filter)
+[↑ Back to top](#vglog-filter)
+
+## Build Options
 
 This project supports several build modes via CMake options and the `build.sh` script:
 
@@ -65,7 +71,7 @@ This project supports several build modes via CMake options and the `build.sh` s
 - **WARNING_MODE**: Enables extra compiler warnings (`-Wextra` in addition to `-Wall -pedantic`).
 - **DEBUG_MODE**: Enables debug flags (`-g -O0`, defines `DEBUG`). Mutually exclusive with PERFORMANCE_BUILD (debug takes precedence).
 
-### Usage with build.sh [↑](#vglog-filter)
+### Usage with build.sh
 
 You can use the `build.sh` script to configure builds with these options:
 
@@ -92,7 +98,9 @@ You can use the `build.sh` script to configure builds with these options:
 
 If both `debug` and `performance` are specified, debug mode takes precedence.
 
-## Usage Example [↑](#vglog-filter)
+[↑ Back to top](#vglog-filter)
+
+## Usage Example
 
 After building, you can use vglog-filter as follows:
 
@@ -111,17 +119,19 @@ valgrind --leak-check=full ./your_program 2>&1 | ./vglog-filter > filtered.log
 
 For detailed usage instructions, command-line options, and advanced filtering techniques, see the [Usage Guide](doc/USAGE.md).
 
-## Versioning System [↑](#vglog-filter)
+[↑ Back to top](#vglog-filter)
+
+## Versioning System
 
 vglog-filter uses [Semantic Versioning](https://semver.org/) with automated version management:
 
-### Current Version [↑](#vglog-filter)
+### Current Version
 The current version is stored in the `VERSION` file and displayed with:
 ```sh
 ./vglog-filter --version
 ```
 
-### Automated Version Bumping [↑](#vglog-filter)
+### Automated Version Bumping
 The project uses GitHub Actions to automatically bump versions based on [Conventional Commits](https://www.conventionalcommits.org/):
 
 - **BREAKING CHANGE**: Triggers a **major** version bump
@@ -129,7 +139,7 @@ The project uses GitHub Actions to automatically bump versions based on [Convent
 - **fix**: Triggers a **patch** version bump
 - **docs**, **style**, **refactor**, **perf**, **test**, **chore**: Triggers a **patch** version bump
 
-### Manual Version Management [↑](#vglog-filter)
+### Manual Version Management
 For manual version bumps, use the provided tools:
 
 ```sh
@@ -140,29 +150,33 @@ For manual version bumps, use the provided tools:
 ./dev-bin/cursor-version-bump
 ```
 
-## Testing & CI/CD [↑](#vglog-filter)
+[↑ Back to top](#vglog-filter)
+
+## Testing & CI/CD
 
 The project includes comprehensive testing infrastructure:
 
-### GitHub Actions Workflows [↑](#vglog-filter)
+### GitHub Actions Workflows
 - **Build and Test**: Multi-platform testing with multiple build configurations
 - **Code Security**: Automated security analysis with CodeQL
 - **Shell Script Linting**: ShellCheck validation for all scripts
 - **Automated Versioning**: Semantic version bumping based on commit messages
 
-### Local Testing [↑](#vglog-filter)
+### Local Testing
 All build configurations are tested locally and in CI:
 - Default build
 - Performance build (optimized)
 - Debug build
 - Warnings build (extra compiler warnings)
 
-### Development Tools [↑](#vglog-filter)
+### Development Tools
 The `dev-bin/` directory contains development utilities:
 - `bump-version`: Command-line version management
 - `cursor-version-bump`: Interactive version bumping for Cursor IDE
 
-## Documentation [↑](#vglog-filter)
+[↑ Back to top](#vglog-filter)
+
+## Documentation
 
 Comprehensive documentation is available in the [`doc/`](doc/) folder:
 
@@ -172,16 +186,22 @@ Comprehensive documentation is available in the [`doc/`](doc/) folder:
 - [BUILD.md](doc/BUILD.md): Build script and configuration options
 - [VERSIONING.md](doc/VERSIONING.md): Versioning strategy and automated version management
 
-## Contributing [↑](#vglog-filter)
+[↑ Back to top](#vglog-filter)
+
+## Contributing
 
 Contributions, bug reports, and feature requests are welcome! Please open an issue or submit a pull request.
 
-### Development Workflow [↑](#vglog-filter)
+### Development Workflow
 1. Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for commit messages
 2. Use the provided version bumping tools for releases
 3. Ensure all tests pass before submitting pull requests
 4. Check the [CONTRIBUTING.md](.github/CONTRIBUTING.md) for detailed guidelines
 
-## License [↑](#vglog-filter)
+[↑ Back to top](#vglog-filter)
+
+## License
 
 This project is licensed under the GNU General Public License v3.0 (GPLv3). See the LICENSE file for details.
+
+[↑ Back to top](#vglog-filter)
