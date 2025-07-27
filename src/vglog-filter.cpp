@@ -19,6 +19,7 @@
 #include <string_view>
 #include <unordered_set>
 #include <vector>
+#include <sys/stat.h> // Required for stat()
 
 using Str  = std::string;
 using StrView = std::string_view;
@@ -268,18 +269,18 @@ VecS read_file_lines(const Str& fname)
 }
 
 // Check if file is large enough to warrant stream processing
-bool is_large_file(const Str& fname, size_t threshold_mb = 50) {
-    FILE* file = fopen(fname.c_str(), "rb");
-    if (!file) return false;
+bool is_large_file(const Str& fname, size_t threshold_mb = 5) {
+    struct stat file_stat;
+    if (stat(fname.c_str(), &file_stat) != 0) {
+        return false;  // File doesn't exist or can't be accessed
+    }
     
-    fseek(file, 0, SEEK_END);
-    long file_size = ftell(file);
-    fclose(file);
-    
-    if (file_size < 0) return false;
+    if (!S_ISREG(file_stat.st_mode)) {
+        return false;  // Not a regular file
+    }
     
     // Convert to MB and compare with threshold
-    size_t file_size_mb = static_cast<size_t>(file_size) / (1024 * 1024);
+    size_t file_size_mb = static_cast<size_t>(file_stat.st_size) / (1024 * 1024);
     return file_size_mb >= threshold_mb;
 }
 
