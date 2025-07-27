@@ -310,13 +310,15 @@ int main(int argc, char* argv[])
     }
     
     // Ensure start doesn't exceed array bounds
-    if (start > lines.size()) {
+    if (start >= lines.size()) {
         start = lines.size();
     }
     
     std::stringstream work;
-    std::copy(lines.begin() + static_cast<long>(start), lines.end(),
-              std::ostream_iterator<Str>(work, "\n"));
+    if (start < lines.size()) {
+        std::copy(lines.begin() + static_cast<std::ptrdiff_t>(start), lines.end(),
+                  std::ostream_iterator<Str>(work, "\n"));
+    }
     // run dedupe
     process(work, opt);
     return 0;
