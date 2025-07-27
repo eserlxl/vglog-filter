@@ -192,7 +192,18 @@ int main(int argc, char* argv[])
         switch (c) {
             case 'k': opt.trim = false; break;
             case 'v': opt.scrub_raw = false; break;
-            case 'd': opt.depth = std::stoi(optarg); break;
+            case 'd': 
+                try {
+                    opt.depth = std::stoi(optarg);
+                    if (opt.depth < 0) {
+                        std::cerr << "Error: Depth must be non-negative" << std::endl;
+                        return 1;
+                    }
+                } catch (const std::exception& e) {
+                    std::cerr << "Error: Invalid depth value '" << optarg << "'" << std::endl;
+                    return 1;
+                }
+                break;
             case 'm': opt.marker = optarg; break;
             case 'V': 
                 std::cout << "vglog-filter version " << get_version() << std::endl; 
