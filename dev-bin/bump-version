@@ -11,6 +11,9 @@
 
 set -euo pipefail
 
+# Ensure consistent locale and behavior
+export LC_ALL=C
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -111,9 +114,11 @@ bump_version() {
     NEW_VERSION="$new_major.$new_minor.$new_patch"
 }
 
-# Function to update VERSION file
+# Function to update VERSION file with atomic write
 update_version_file() {
-    echo "$NEW_VERSION" > "$VERSION_FILE"
+    local tmp="${VERSION_FILE}.tmp.$$"
+    printf '%s\n' "$NEW_VERSION" > "$tmp"
+    mv -f "$tmp" "$VERSION_FILE"
     echo -e "${GREEN}Updated VERSION file: $CURRENT_VERSION → $NEW_VERSION${RESET}"
 }
 
@@ -122,12 +127,12 @@ update_cmake_version() {
     local cmake="$PROJECT_ROOT/CMakeLists.txt"
     if [[ -f "$cmake" ]]; then
         # Update common patterns if present; otherwise just note it
-        if grep -Eq 'project\([^)]*VERSION\s+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-            sed -E -i "s/(project\([^)]*VERSION\s+)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
+        if grep -Eq 'project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
+            sed -E -i "s/(project\([^)]*VERSION[[:space:]]+)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
             echo -e "${GREEN}Updated CMakeLists.txt project VERSION to ${NEW_VERSION}${RESET}"
             git add "$cmake" || true
-        elif grep -Eq 'set\s*\(\s*PROJECT_VERSION\s+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-            sed -E -i "s/(set\s*\(\s*PROJECT_VERSION\s+\"?)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
+        elif grep -Eq 'set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
+            sed -E -i "s/(set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
             echo -e "${GREEN}Updated CMake PROJECT_VERSION to ${NEW_VERSION}${RESET}"
             git add "$cmake" || true
         else
@@ -144,9 +149,14 @@ create_commit() {
         # Default conventional message if not provided
         local msg="${COMMIT_MSG}"
         if [[ -z "$msg" ]]; then
-            msg="chore(release): v${NEW_VERSION}"
-            msg+="
+            # Ensure [skip ci] is present when running in GitHub Actions
+            if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+                msg="chore(release): v${NEW_VERSION} [skip ci]
 bump: ${CURRENT_VERSION} → ${NEW_VERSION}"
+            else
+                msg="chore(release): v${NEW_VERSION}
+bump: ${CURRENT_VERSION} → ${NEW_VERSION}"
+            fi
             # Append analysis if provided
             if [[ -n "${ANALYSIS_MESSAGE:-}" ]]; then
                 msg+="
@@ -246,20 +256,27 @@ if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
     fi
 fi
 
-# Optional dirty-tree guard (only if commit requested)
+# Safer dirty-tree guard using pathspec exclusion
 if [[ "$DO_COMMIT" == "true" && "$ALLOW_DIRTY" == "false" ]]; then
-    # anything changed other than VERSION?
-    if git rev-parse --git-dir >/dev/null 2>&1; then
-        if git status --porcelain | grep -v -E '^\s*[MA?]{1,2}\s+VERSION$' | grep -q .; then
-            echo -e "${RED}Error:${RESET} working tree has changes other than VERSION. Use --allow-dirty to override." >&2
-            exit 1
-        fi
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        echo -e "${RED}Error: Not in a git repository${RESET}" >&2
+        exit 1
+    fi
+    if ! git diff --quiet -- . ':(exclude)VERSION'; then
+        echo -e "${RED}Error:${RESET} working tree has changes other than VERSION. Use --allow-dirty to override." >&2
+        exit 1
     fi
 fi
 
 # Perform the version bump
 echo -e "${CYAN}Bumping version from $CURRENT_VERSION...${RESET}"
 bump_version "$BUMP_TYPE"
+
+# No-op guard if version unchanged
+if [[ "$CURRENT_VERSION" == "$NEW_VERSION" ]]; then
+    echo -e "${YELLOW}Version unchanged ($CURRENT_VERSION); nothing to do.${RESET}"
+    exit 0
+fi
 
 # Handle dry-run mode
 if [[ "$DRY_RUN" == "true" ]]; then
@@ -287,4 +304,7 @@ if [[ "$DO_TAG" == "true" ]]; then
     echo -e "${YELLOW}Next steps:${RESET}"
     echo -e "  git push origin main"
     echo -e "  git push origin v$NEW_VERSION"
-fi 
+fi
+
+# Print the new version for callers
+echo "$NEW_VERSION" 
