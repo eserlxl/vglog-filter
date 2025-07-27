@@ -71,16 +71,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Check if semantic-version-analyzer exists and is executable
+          if [ ! -x ./dev-bin/semantic-version-analyzer ]; then
+            echo "semantic-version-analyzer not found or not executable"
+            exit 1
+          fi
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             BUMP_TYPE="${{ github.event.inputs.bump_type }}"
             RELEASE_NOTES="${{ github.event.inputs.release_notes }}"
             PRERELEASE="${{ github.event.inputs.prerelease }}"
             if [ "$BUMP_TYPE" = "auto" ]; then
-              chmod +x ./dev-bin/semantic-version-analyzer
               BUMP_TYPE="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo none)"
             fi
           else
-            chmod +x ./dev-bin/semantic-version-analyzer
             ANALYSIS="$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || true)"
 
             # Find the previous tag or fall back to the first commit
@@ -89,7 +93,8 @@ jobs:
               RANGE="${LAST_TAG}..HEAD"
             else
               BASE="$(git rev-list --max-parents=0 HEAD)"
-              RANGE="${BASE}..HEAD"
+              # Include the first commit in the range by using ^..HEAD
+              RANGE="${BASE}^..HEAD"
             fi
 
             # Robust diff size (insertions + deletions)
@@ -142,11 +147,34 @@ jobs:
         if: steps.version-analysis.outputs.bump_type != 'none'
         run: |
           echo "Bumping version type: ${{ steps.version-analysis.outputs.bump_type }}"
-          chmod +x ./dev-bin/bump-version
+          
+          # Check if bump-version script exists and is executable
+          if [ ! -x ./dev-bin/bump-version ]; then
+            echo "bump-version script not found or not executable"
+            exit 1
+          fi
+          
           echo "Current version: $(cat VERSION)"
+          
+          # Create analysis message for commit
+          ANALYSIS_MESSAGE="Version bump: ${{ steps.version-analysis.outputs.bump_type }}
+          
+          [skip ci] - Automated version bump to prevent CI loops
+          
+          Triggered by: ${{ github.event_name }}
+          Workflow run: ${{ github.run_id }}"
+          
+          # Export for the script to use
+          export ANALYSIS_MESSAGE
+          
           ./dev-bin/bump-version ${{ steps.version-analysis.outputs.bump_type }} --commit
           NEW_VERSION=$(cat VERSION)
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          
+          # Fetch latest changes and rebase before pushing
+          git fetch --tags origin main
+          git pull --rebase origin main
+          
           git push origin main
 
       - name: Create Release
