@@ -39,6 +39,7 @@ void usage(const char* prog) {
         "  -v, --verbose           Show completely raw blocks (no address / \"at:\" scrub).\n"
         "  -d N, --depth N         Signature depth (default: " << DEFAULT_DEPTH << ", 0 = unlimited).\n"
         "  -m S, --marker S        Marker string (default: \"" << DEFAULT_MARKER << "\").\n"
+        "  -V, --version           Show version information.\n"
         "  -h, --help              Show this help.\n";
 }
 
