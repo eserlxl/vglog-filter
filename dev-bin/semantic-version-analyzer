@@ -109,13 +109,13 @@ analyze_file_changes() {
     local new_features=false
     local bug_fixes=false
     
-    echo "$changes" | while IFS=$'\t' read -r status file; do
+    # Process each change
+    while IFS=$'\t' read -r status file; do
         case "$status" in
             A)
                 ((added_files++))
-                if [[ "$file" =~ \.(h|hpp|hxx)$ ]] || [[ "$file" =~ ^include/ ]]; then
-                    new_features=true
-                fi
+                # Consider new files as potential new features
+                new_features=true
                 ;;
             M)
                 ((modified_files++))
@@ -140,7 +140,7 @@ analyze_file_changes() {
                 fi
                 ;;
         esac
-    done
+    done <<< "$changes"
     
     # Check for breaking changes in CMakeLists.txt or build system
     if git diff "$base_ref"..HEAD -- CMakeLists.txt build.sh 2>/dev/null | grep -E "(REQUIRED|minimum|target_link_libraries)" >/dev/null; then
@@ -169,7 +169,8 @@ analyze_commit_messages() {
     local new_features=false
     local bug_fixes=false
     
-    echo "$commits" | while read -r commit; do
+    # Process each commit
+    while read -r commit; do
         local message=$(echo "$commit" | cut -d' ' -f2-)
         
         # Check for breaking change indicators
@@ -186,7 +187,7 @@ analyze_commit_messages() {
         if echo "$message" | grep -iE "(fix|bug|issue|crash|error)" >/dev/null; then
             bug_fixes=true
         fi
-    done
+    done <<< "$commits"
     
     echo "commit_breaking_changes=$breaking_changes"
     echo "commit_new_features=$new_features"
@@ -265,6 +266,9 @@ main() {
         has_bug_fixes=true
     fi
     
+    # Get diff size for threshold analysis
+    local diff_size=$(git diff --stat HEAD~1 2>/dev/null | tail -1 | awk '{print $4}' | sed 's/,//' | sed 's/insertions//' | sed 's/insertion//' | tr -d '()' || echo "0")
+    
     # Show detailed analysis if verbose
     if [ "$VERBOSE" = "true" ]; then
         echo "=== Detailed Analysis ==="
@@ -290,9 +294,6 @@ main() {
         git log --oneline "$base_ref"..HEAD | head -10
         echo
     fi
-    
-    # Get diff size for threshold analysis
-    local diff_size=$(git diff --stat HEAD~1 2>/dev/null | tail -1 | awk '{print $4}' | sed 's/,//' || echo "0")
     
     # Determine suggestion
     local suggestion=$(suggest_version_bump "$has_breaking_changes" "$has_new_features" "$has_bug_fixes" "$diff_size")
