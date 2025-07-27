@@ -14,12 +14,11 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 option(DEBUG_MODE        "Enable debug build flags"         OFF)
 option(PERFORMANCE_BUILD "Enable performance-optimised flags" ON)
 option(WARNING_MODE      "Enable extra warnings"             ON)
+option(BUILD_TESTS       "Build test suite"                  ON)
 
 if (DEBUG_MODE AND PERFORMANCE_BUILD)
     message(FATAL_ERROR "DEBUG_MODE and PERFORMANCE_BUILD cannot both be ON.")
 endif()
-
-add_executable(vglog-filter src/vglog-filter.cpp)
 
 # ---------------- compile / link flags ---------------------------------------
 if (DEBUG_MODE)
@@ -33,6 +32,14 @@ endif()
 set(WARNING_FLAGS -Wall -pedantic)
 if (WARNING_MODE)
     list(APPEND WARNING_FLAGS -Wextra)
+endif()
+
+add_executable(vglog-filter src/vglog-filter.cpp)
+
+# Add test executable if BUILD_TESTS is enabled
+if (BUILD_TESTS)
+    add_executable(test_basic test/test_basic.cpp)
+    target_compile_options(test_basic PRIVATE ${WARNING_FLAGS})
 endif()
     
 target_compile_options(vglog-filter PRIVATE ${OPT_FLAGS} ${WARNING_FLAGS})
@@ -50,9 +57,20 @@ target_compile_definitions(vglog-filter PRIVATE
 message(STATUS "DEBUG_MODE     : ${DEBUG_MODE}")
 message(STATUS "PERFORMANCE_BUILD: ${PERFORMANCE_BUILD}")
 message(STATUS "WARNING_MODE   : ${WARNING_MODE}")
+message(STATUS "BUILD_TESTS    : ${BUILD_TESTS}")
 message(STATUS "OPT_FLAGS      : ${OPT_FLAGS}")
 message(STATUS "WARNING_FLAGS  : ${WARNING_FLAGS}")
 get_target_property(LTO_ENABLED vglog-filter INTERPROCEDURAL_OPTIMIZATION)
 message(STATUS "INTERPROCEDURAL_OPTIMIZATION (LTO) enabled: ${LTO_ENABLED}")
 get_target_property(VGLOG_COMPILE_OPTIONS vglog-filter COMPILE_OPTIONS)
 message(STATUS "vglog-filter target compile options: ${VGLOG_COMPILE_OPTIONS}")
+
+# Add test target
+if (BUILD_TESTS)
+    add_custom_target(test
+        COMMAND ${CMAKE_BINARY_DIR}/test_basic
+        DEPENDS test_basic
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Running basic tests"
+    )
+endif()
