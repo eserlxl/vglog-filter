@@ -52,6 +52,8 @@ jobs:
       contents: write
     env:
       NEW_VERSION: ''
+    outputs:
+      new_version: ${{ env.NEW_VERSION }}
 
     steps:
       - name: Checkout code
@@ -147,12 +149,24 @@ jobs:
         run: |
           set -euo pipefail
           echo "Bumping version type: ${{ steps.version-analysis.outputs.bump_type }}"
-          chmod +x ./dev-bin/bump-version
+          
+          # Fail early if bump-version is missing
+          if [ ! -x ./dev-bin/bump-version ]; then
+            echo "bump-version not found or not executable at ./dev-bin/bump-version" >&2
+            exit 1
+          fi
+          
           echo "Current version: $(cat VERSION)"
           
           # Add [skip ci] to prevent triggering other workflows
           # TODO: Consider adding --json support to semantic-version-analyzer for more robust parsing
           ANALYSIS_MESSAGE="[skip ci] Auto version bump triggered by ${{ github.event_name }}" ./dev-bin/bump-version ${{ steps.version-analysis.outputs.bump_type }} --commit
+          
+          # Ensure [skip ci] is in the commit message
+          if ! git log -1 --pretty=%B | grep -q '\[skip ci\]'; then
+            git commit --amend -m "$(git log -1 --pretty=%B) [skip ci]"
+          fi
+          
           NEW_VERSION=$(cat VERSION)
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           git fetch --tags origin main
