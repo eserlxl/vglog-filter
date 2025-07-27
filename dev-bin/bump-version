@@ -7,7 +7,7 @@
 # See the LICENSE file in the project root for details.
 #
 # Version bump script for vglog-filter
-# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag]
+# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag]
 
 set -euo pipefail
 
@@ -25,6 +25,9 @@ RESET='\033[0m'
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 VERSION_FILE="$PROJECT_ROOT/VERSION"
+
+# Trap to clean temp files on interrupt/exit
+trap 'rm -f "${VERSION_FILE}.tmp."* 2>/dev/null || true' INT TERM EXIT
 
 # Check if VERSION file exists
 if [[ ! -f "$VERSION_FILE" ]]; then
@@ -49,10 +52,11 @@ IFS='.' read -r CURRENT_MAJOR CURRENT_MINOR CURRENT_PATCH <<< "$CURRENT_VERSION"
 COMMIT_MSG=""
 ALLOW_DIRTY=false
 ANNOTATED_TAG=true    # default to annotated tag
+SIGNED_TAG=false      # default to unsigned tag
 
 # Function to show usage
 usage() {
-    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag]"
+    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag]"
     echo ""
     echo "Bump the semantic version of vglog-filter"
     echo ""
@@ -68,9 +72,15 @@ usage() {
     echo "  --message MSG     Use MSG as the full commit message (overrides default)"
     echo "  --allow-dirty     Allow committing when other files are modified"
     echo "  --lightweight-tag Create a lightweight tag instead of annotated"
+    echo "  --signed-tag      Create a signed tag (requires GPG key configured)"
     echo ""
     echo "Environment Variables:"
     echo "  ANALYSIS_MESSAGE  Optional detailed analysis to include in commit message"
+    echo ""
+    echo "CI Integration:"
+    echo "  When running in GitHub Actions and --message isn't provided, the script"
+    echo "  automatically appends [skip ci] to the default commit message to prevent"
+    echo "  other workflows from running."
     echo ""
     echo "Examples:"
     echo "  $0 patch                    # Bump patch version"
@@ -79,6 +89,8 @@ usage() {
     echo "  $0 patch --dry-run          # Show what patch bump would do"
     echo "  ANALYSIS_MESSAGE='...' $0 patch --commit  # Include analysis in commit"
     echo "  $0 patch --message 'Custom commit message' --commit  # Use custom message"
+    echo "  $0 patch --signed-tag --tag # Create signed tag for provenance"
+    echo "  ANALYSIS_MESSAGE='Auto version bump (push)' $0 patch --commit --message 'chore(release): vX.Y.Z [skip ci]'  # CI usage"
     echo ""
     echo "Current version: $CURRENT_VERSION"
 }
@@ -130,21 +142,29 @@ update_cmake_version() {
         if grep -Eq 'project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
             sed -E -i "s/(project\([^)]*VERSION[[:space:]]+)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
             echo -e "${GREEN}Updated CMakeLists.txt project VERSION to ${NEW_VERSION}${RESET}"
-            git add "$cmake" || true
         elif grep -Eq 'set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
             sed -E -i "s/(set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
             echo -e "${GREEN}Updated CMake PROJECT_VERSION to ${NEW_VERSION}${RESET}"
-            git add "$cmake" || true
         else
             echo -e "${YELLOW}Note: CMakeLists.txt present but no recognizable version field to update${RESET}"
         fi
     fi
 }
 
+# Function to stage files for commit
+stage_files() {
+    # Stage CMakeLists.txt if it exists and has changes
+    if [[ -f "$PROJECT_ROOT/CMakeLists.txt" ]]; then
+        git add "$PROJECT_ROOT/CMakeLists.txt" || true
+    fi
+    # Stage VERSION file
+    git add "$VERSION_FILE"
+}
+
 # Function to create git commit
 create_commit() {
     if ! git diff --quiet "$VERSION_FILE"; then
-        git add "$VERSION_FILE"
+        stage_files
         
         # Default conventional message if not provided
         local msg="${COMMIT_MSG}"
@@ -181,12 +201,16 @@ create_tag() {
         return 0
     fi
     
-    if $ANNOTATED_TAG; then
+    if $SIGNED_TAG; then
+        git tag -s "$tag_name" -m "Release v$NEW_VERSION"
+        echo -e "${GREEN}Created signed tag: $tag_name${RESET}"
+    elif $ANNOTATED_TAG; then
         git tag -a "$tag_name" -m "Release v$NEW_VERSION"
+        echo -e "${GREEN}Created annotated tag: $tag_name${RESET}"
     else
         git tag "$tag_name"
+        echo -e "${GREEN}Created lightweight tag: $tag_name${RESET}"
     fi
-    echo -e "${GREEN}Created ${ANNOTATED_TAG:+annotated }tag: $tag_name${RESET}"
 }
 
 # Parse command line arguments
@@ -227,6 +251,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --lightweight-tag)
             ANNOTATED_TAG=false
+            shift
+            ;;
+        --signed-tag)
+            SIGNED_TAG=true
+            ANNOTATED_TAG=false  # signed tags are always annotated
             shift
             ;;
         -h|--help)
