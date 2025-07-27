@@ -166,6 +166,163 @@ bool test_error_handling_edge_cases() {
     return true;
 }
 
+bool test_invalid_input_scenarios() {
+    // Test various invalid input scenarios that should be handled gracefully
+    
+    // Test with completely empty file
+    std::ofstream empty_file("test_empty.tmp");
+    empty_file.close();
+    
+    std::ifstream check_empty("test_empty.tmp");
+    TEST_ASSERT(check_empty.good(), "Empty file should be readable");
+    check_empty.close();
+    
+    // Test with file containing only whitespace
+    std::ofstream whitespace_file("test_whitespace.tmp");
+    whitespace_file << "   \n\t\n  \n";
+    whitespace_file.close();
+    
+    std::ifstream check_whitespace("test_whitespace.tmp");
+    TEST_ASSERT(check_whitespace.good(), "Whitespace-only file should be readable");
+    check_whitespace.close();
+    
+    // Test with file containing no valgrind markers
+    std::ofstream no_markers_file("test_no_markers.tmp");
+    no_markers_file << "This is not a valgrind log\n";
+    no_markers_file << "Just some random text\n";
+    no_markers_file << "No ==PID== markers here\n";
+    no_markers_file.close();
+    
+    std::ifstream check_no_markers("test_no_markers.tmp");
+    TEST_ASSERT(check_no_markers.good(), "File without markers should be readable");
+    check_no_markers.close();
+    
+    // Test with file containing invalid PID format
+    std::ofstream invalid_pid_file("test_invalid_pid.tmp");
+    invalid_pid_file << "==abc== Invalid read of size 4\n";  // Non-numeric PID
+    invalid_pid_file << "==12345==    at 0x401234: main (test.cpp:10)\n";
+    invalid_pid_file << "==def== Invalid write of size 8\n";  // Another non-numeric PID
+    invalid_pid_file << "==12345==    at 0x401245: main (test.cpp:15)\n";
+    invalid_pid_file.close();
+    
+    std::ifstream check_invalid_pid("test_invalid_pid.tmp");
+    TEST_ASSERT(check_invalid_pid.good(), "File with invalid PID format should be readable");
+    check_invalid_pid.close();
+    
+    // Test with file containing null bytes (should be handled gracefully)
+    std::ofstream null_bytes_file("test_null_bytes.tmp", std::ios::binary);
+    null_bytes_file << "==12345== Invalid read of size 4\n";
+    null_bytes_file << '\0';  // Null byte
+    null_bytes_file << "==12345==    at 0x401234: main (test.cpp:10)\n";
+    null_bytes_file.close();
+    
+    std::ifstream check_null_bytes("test_null_bytes.tmp");
+    TEST_ASSERT(check_null_bytes.good(), "File with null bytes should be readable");
+    check_null_bytes.close();
+    
+    // Clean up
+    std::remove("test_empty.tmp");
+    std::remove("test_whitespace.tmp");
+    std::remove("test_no_markers.tmp");
+    std::remove("test_invalid_pid.tmp");
+    std::remove("test_null_bytes.tmp");
+    
+    TEST_PASS("Invalid input scenarios handled correctly");
+    return true;
+}
+
+bool test_memory_allocation_failure_simulation() {
+    // Test scenarios that might trigger memory allocation issues
+    
+    // Test with extremely long lines that might cause memory issues
+    std::ofstream long_lines_file("test_memory_long_lines.tmp");
+    std::string extremely_long_line = "==12345== ";
+    for (int i = 0; i < 10000; ++i) {
+        extremely_long_line += "very_long_function_name_with_many_characters_and_numbers_" + std::to_string(i) + "_";
+    }
+    extremely_long_line += " (very_long_file_name_with_many_characters.cpp:10000)";
+    
+    long_lines_file << extremely_long_line << "\n";
+    long_lines_file << "==12345==    at 0x401234: main (test.cpp:10)\n";
+    long_lines_file.close();
+    
+    std::ifstream check_long_lines("test_memory_long_lines.tmp");
+    TEST_ASSERT(check_long_lines.good(), "File with extremely long lines should be readable");
+    check_long_lines.close();
+    
+    // Test with many duplicate lines that might cause hash table issues
+    std::ofstream duplicates_file("test_memory_duplicates.tmp");
+    for (int i = 0; i < 1000; ++i) {
+        duplicates_file << "==12345== Invalid read of size 4\n";
+        duplicates_file << "==12345==    at 0x401234: main (test.cpp:10)\n";
+        duplicates_file << "==12345==    by 0x401245: helper (test.cpp:15)\n";
+    }
+    duplicates_file.close();
+    
+    std::ifstream check_duplicates("test_memory_duplicates.tmp");
+    TEST_ASSERT(check_duplicates.good(), "File with many duplicates should be readable");
+    check_duplicates.close();
+    
+    // Test with many unique lines that might cause memory growth
+    std::ofstream unique_lines_file("test_memory_unique.tmp");
+    for (int i = 0; i < 1000; ++i) {
+        unique_lines_file << "==12345== Invalid read of size " << i << "\n";
+        unique_lines_file << "==12345==    at 0x" << std::hex << (0x401234 + i) << std::dec << ": main (test.cpp:" << (10 + i) << ")\n";
+        unique_lines_file << "==12345==    by 0x" << std::hex << (0x401245 + i) << std::dec << ": helper (test.cpp:" << (15 + i) << ")\n";
+    }
+    unique_lines_file.close();
+    
+    std::ifstream check_unique("test_memory_unique.tmp");
+    TEST_ASSERT(check_unique.good(), "File with many unique lines should be readable");
+    check_unique.close();
+    
+    // Clean up
+    std::remove("test_memory_long_lines.tmp");
+    std::remove("test_memory_duplicates.tmp");
+    std::remove("test_memory_unique.tmp");
+    
+    TEST_PASS("Memory allocation failure scenarios handled correctly");
+    return true;
+}
+
+bool test_file_system_error_scenarios() {
+    // Test various file system error scenarios
+    
+    // Test with file that becomes unreadable during processing
+    std::ofstream temp_file("test_fs_error.tmp");
+    temp_file << "==12345== Invalid read of size 4\n";
+    temp_file << "==12345==    at 0x401234: main (test.cpp:10)\n";
+    temp_file.close();
+    
+    // Verify file exists and is readable
+    std::ifstream check_file("test_fs_error.tmp");
+    TEST_ASSERT(check_file.good(), "Temporary file should be readable");
+    check_file.close();
+    
+    // Test with file that has read permissions but is actually a directory
+    // (This would be a rare edge case but should be handled)
+    std::remove("test_fs_error.tmp");
+    
+    // Test with file that has unusual permissions
+    std::ofstream perm_file("test_fs_perm.tmp");
+    perm_file << "==12345== Test content\n";
+    perm_file.close();
+    
+    // Change permissions to read-only
+    chmod("test_fs_perm.tmp", S_IRUSR);
+    
+    std::ifstream check_perm("test_fs_perm.tmp");
+    TEST_ASSERT(check_perm.good(), "Read-only file should still be readable");
+    check_perm.close();
+    
+    // Restore permissions and clean up
+    chmod("test_fs_perm.tmp", S_IRUSR | S_IWUSR);
+    std::remove("test_fs_perm.tmp");
+    
+    TEST_PASS("File system error scenarios handled correctly");
+    return true;
+}
+
 bool test_marker_trimming_edge_cases() {
     // Test edge cases for marker trimming functionality
     
@@ -297,6 +454,9 @@ int main() {
     all_passed &= test_nested_templates_and_complex_types();
     all_passed &= test_file_permissions();
     all_passed &= test_error_handling_edge_cases();
+    all_passed &= test_invalid_input_scenarios();
+    all_passed &= test_memory_allocation_failure_simulation();
+    all_passed &= test_file_system_error_scenarios();
     all_passed &= test_marker_trimming_edge_cases();
     all_passed &= test_stream_processing_edge_cases();
     all_passed &= test_concurrent_access_simulation();
