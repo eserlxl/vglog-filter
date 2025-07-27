@@ -1,7 +1,0 @@
-
-In /opt/lxl/linux/vglog-filter/build.sh line 73:
-make -j$(nproc) 
-       ^------^ SC2046 (warning): Quote this to prevent word splitting.
-
-For more information:
-  https://www.shellcheck.net/wiki/SC2046 -- Quote this to prevent word splitt...
