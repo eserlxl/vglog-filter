@@ -212,8 +212,21 @@ int main(int argc, char* argv[])
             default : usage(argv[0]); return 1;
         }
     }
-    if (optind >= argc) { usage(argv[0]); return 1; }
+    if (optind >= argc) { 
+        std::cerr << "Error: No input file specified" << std::endl;
+        usage(argv[0]); 
+        return 1; 
+    }
     opt.filename = argv[optind];
+    
+    // Check if file exists
+    std::ifstream test_file(opt.filename);
+    if (!test_file) {
+        std::cerr << "Error: Cannot open file '" << opt.filename << "'" << std::endl;
+        return 1;
+    }
+    test_file.close();
+    
     // read file
     VecS lines;
     try { lines = read_file_lines(opt.filename); }
