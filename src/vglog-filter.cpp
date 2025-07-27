@@ -305,6 +305,12 @@ int main(int argc, char* argv[])
         std::cerr << "Error: " << e.what() << std::endl;
         return 1; 
     }
+    
+    // Check if file is empty
+    if (lines.empty()) {
+        std::cerr << "Warning: Input file '" << opt.filename << "' is empty" << std::endl;
+        return 0;
+    }
     // trim above last marker if requested
     size_t start = 0;
     if (opt.trim) {
