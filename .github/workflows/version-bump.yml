@@ -17,10 +17,10 @@ on:
         default: 'auto'
         type: choice
         options:
-        - auto
-        - major
-        - minor
-        - patch
+          - auto
+          - major
+          - minor
+          - patch
       release_notes:
         description: 'Custom release notes (optional)'
         required: false
@@ -30,15 +30,15 @@ on:
         required: false
         default: false
         type: boolean
-  
+
   # Automatic trigger for significant changes
   push:
-    branches: [ main ]
+    branches: [main]
     paths-ignore:
-      - 'VERSION'
-      - 'doc/VERSIONING.md'
-      - 'doc/TAG_MANAGEMENT.md'
-      - 'doc/RELEASE_WORKFLOW.md'
+      - VERSION
+      - doc/VERSIONING.md
+      - doc/TAG_MANAGEMENT.md
+      - doc/RELEASE_WORKFLOW.md
 
 jobs:
   version-bump:
@@ -47,195 +47,121 @@ jobs:
       contents: write
       pull-requests: write
     env:
-      NEW_VERSION: ""
-    
+      NEW_VERSION: ''
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Setup Git
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-    
-    - name: Determine version bump type
-      id: version-analysis
-      run: |
-        # Check if this is a manual trigger or automatic
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          # Manual trigger
-          BUMP_TYPE="${{ github.event.inputs.bump_type }}"
-          RELEASE_NOTES="${{ github.event.inputs.release_notes }}"
-          PRERELEASE="${{ github.event.inputs.prerelease }}"
-          
-          if [ "$BUMP_TYPE" = "auto" ]; then
-            echo "Manual trigger with auto detection - analyzing changes..."
-            # Use semantic analyzer for auto detection
-            chmod +x ./dev-bin/semantic-version-analyzer
-            SUGGESTION=$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo "none")
-            BUMP_TYPE="$SUGGESTION"
-            echo "Auto-detected bump type: $BUMP_TYPE"
-          fi
-        else
-          # Automatic trigger - analyze for significant changes
-          echo "Automatic trigger - analyzing for significant changes..."
-          chmod +x ./dev-bin/semantic-version-analyzer
-          
-          # Get detailed analysis
-          ANALYSIS=$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || echo "")
-          
-          # Extract change indicators
-          NEW_SOURCE_FILES=$(echo "$ANALYSIS" | grep "New source files:" | awk '{print $4}' || echo "0")
-          NEW_TEST_FILES=$(echo "$ANALYSIS" | grep "New test files:" | awk '{print $4}' || echo "0")
-          NEW_DOC_FILES=$(echo "$ANALYSIS" | grep "New doc files:" | awk '{print $4}' || echo "0")
-          DELETED_FILES=$(echo "$ANALYSIS" | grep "Deleted files:" | awk '{print $3}' || echo "0")
-          MODIFIED_FILES=$(echo "$ANALYSIS" | grep "Modified files:" | awk '{print $3}' || echo "0")
-          
-          # Get diff size since last tag
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~1")
-          DIFF_SIZE=$(git diff --stat "$LAST_TAG" | tail -1 | awk '{print $4}' | sed 's/,//' | sed 's/insertions//' | sed 's/insertion//' | tr -d '()' || echo "0")
-          
-          # Note: Using very conservative thresholds to prevent rapid version increases
-          # - Major: Breaking changes + >200 lines
-          # - Minor: New features + >500 lines  
-          # - Patch: Bug fixes + >200 lines
-          
-          echo "Analysis results:"
-          echo "  New source files: $NEW_SOURCE_FILES"
-          echo "  New test files: $NEW_TEST_FILES"
-          echo "  New doc files: $NEW_DOC_FILES"
-          echo "  Deleted files: $DELETED_FILES"
-          echo "  Modified files: $MODIFIED_FILES"
-          echo "  Diff size: $DIFF_SIZE lines"
-          
-          # Determine if we should auto-release (extremely conservative thresholds)
-          if [ "$DELETED_FILES" -gt 0 ] && [ "$DIFF_SIZE" -gt 1000 ]; then
-            BUMP_TYPE="major"
-            echo "Auto-release: MAJOR version (deleted files + massive diff: $DIFF_SIZE lines)"
-          elif [ "$NEW_SOURCE_FILES" -gt 2 ] && [ "$DIFF_SIZE" -gt 1000 ]; then
-            BUMP_TYPE="minor"
-            echo "Auto-release: MINOR version (new source files + massive diff: $DIFF_SIZE lines)"
-          elif [ "$NEW_TEST_FILES" -gt 3 ] && [ "$DIFF_SIZE" -gt 800 ]; then
-            BUMP_TYPE="minor"
-            echo "Auto-release: MINOR version (new test files + large diff: $DIFF_SIZE lines)"
-          elif [ "$NEW_DOC_FILES" -gt 2 ] && [ "$DIFF_SIZE" -gt 600 ]; then
-            BUMP_TYPE="minor"
-            echo "Auto-release: MINOR version (new doc files + large diff: $DIFF_SIZE lines)"
-          elif [ "$MODIFIED_FILES" -gt 10 ] && [ "$DIFF_SIZE" -gt 500 ]; then
-            BUMP_TYPE="patch"
-            echo "Auto-release: PATCH version (many modified files + large diff: $DIFF_SIZE lines)"
-          else
-            echo "No significant changes detected - skipping auto-release"
-            echo "bump_type=none" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          RELEASE_NOTES=""
-          PRERELEASE="false"
-        fi
-        
-        echo "Final bump type: $BUMP_TYPE"
-        echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
-        echo "release_notes=$RELEASE_NOTES" >> $GITHUB_OUTPUT
-        echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
-    
-    - name: Bump version
-      if: steps.version-analysis.outputs.bump_type != 'none'
-      run: |
-        echo "Bumping version type: ${{ steps.version-analysis.outputs.bump_type }}"
-        
-        # Make sure the script is executable
-        chmod +x ./dev-bin/bump-version
-        
-        # Show current version
-        echo "Current version: $(cat VERSION)"
-        
-        # Generate detailed analysis message
-        ANALYSIS_MESSAGE=""
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          # Manual trigger
-          if [ "${{ steps.version-analysis.outputs.bump_type }}" != "none" ]; then
-            ANALYSIS_MESSAGE="Manual version bump: ${{ steps.version-analysis.outputs.bump_type }} version"
-            if [ -n "${{ steps.version-analysis.outputs.release_notes }}" ]; then
-              ANALYSIS_MESSAGE="$ANALYSIS_MESSAGE
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-Release notes: ${{ steps.version-analysis.outputs.release_notes }}"
+      - name: Setup Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Determine version bump type
+        id: version-analysis
+        run: |
+          # Check if this is a manual trigger or automatic
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger
+            BUMP_TYPE="${{ github.event.inputs.bump_type }}"
+            RELEASE_NOTES="${{ github.event.inputs.release_notes }}"
+            PRERELEASE="${{ github.event.inputs.prerelease }}"
+
+            if [ "$BUMP_TYPE" = "auto" ]; then
+              echo "Manual trigger with auto detection - analyzing changes..."
+              # Use semantic analyzer for auto detection
+              chmod +x ./dev-bin/semantic-version-analyzer
+              SUGGESTION=$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo "none")
+              BUMP_TYPE="$SUGGESTION"
+              echo "Auto-detected bump type: $BUMP_TYPE"
             fi
+          else
+            # Automatic trigger - analyze for significant changes
+            echo "Automatic trigger - analyzing for significant changes..."
+            chmod +x ./dev-bin/semantic-version-analyzer
+
+            # Get detailed analysis
+            ANALYSIS=$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || echo "")
+
+            # Extract change indicators
+            NEW_SOURCE_FILES=$(echo "$ANALYSIS" | grep "New source files:" | awk '{print $4}' || echo "0")
+            NEW_TEST_FILES=$(echo "$ANALYSIS" | grep "New test files:" | awk '{print $4}' || echo "0")
+            NEW_DOC_FILES=$(echo "$ANALYSIS" | grep "New doc files:" | awk '{print $4}' || echo "0")
+            DELETED_FILES=$(echo "$ANALYSIS" | grep "Deleted files:" | awk '{print $3}' || echo "0")
+            MODIFIED_FILES=$(echo "$ANALYSIS" | grep "Modified files:" | awk '{print $3}' || echo "0")
+
+            # Get diff size since last tag
+            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~1")
+            DIFF_SIZE=$(git diff --stat "$LAST_TAG" | tail -1 | awk '{print $4}' | sed 's/,//' | sed 's/insertions//' | sed 's/insertion//' | tr -d '()' || echo "0")
+
+            echo "Analysis results:"
+            echo "  New source files: $NEW_SOURCE_FILES"
+            echo "  New test files: $NEW_TEST_FILES"
+            echo "  New doc files: $NEW_DOC_FILES"
+            echo "  Deleted files: $DELETED_FILES"
+            echo "  Modified files: $MODIFIED_FILES"
+            echo "  Diff size: $DIFF_SIZE lines"
+
+            # Determine bump type (conservative thresholds)
+            if [ "$DELETED_FILES" -gt 0 ] && [ "$DIFF_SIZE" -gt 1000 ]; then
+              BUMP_TYPE="major"
+            elif [ "$NEW_SOURCE_FILES" -gt 2 ] && [ "$DIFF_SIZE" -gt 1000 ]; then
+              BUMP_TYPE="minor"
+            elif [ "$NEW_TEST_FILES" -gt 3 ] && [ "$DIFF_SIZE" -gt 800 ]; then
+              BUMP_TYPE="minor"
+            elif [ "$NEW_DOC_FILES" -gt 2 ] && [ "$DIFF_SIZE" -gt 600 ]; then
+              BUMP_TYPE="minor"
+            elif [ "$MODIFIED_FILES" -gt 10 ] && [ "$DIFF_SIZE" -gt 500 ]; then
+              BUMP_TYPE="patch"
+            else
+              echo "No significant changes detected - skipping auto-release"
+              echo "bump_type=none" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            RELEASE_NOTES=''
+            PRERELEASE='false'
           fi
-        else
-          # Automatic trigger - generate detailed analysis
-          echo "Generating detailed analysis for commit message..."
-          chmod +x ./dev-bin/semantic-version-analyzer
-          
-          # Get detailed analysis
-          ANALYSIS=$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || echo "")
-          
-          # Extract key metrics
-          NEW_SOURCE_FILES=$(echo "$ANALYSIS" | grep "New source files:" | awk '{print $4}' || echo "0")
-          NEW_TEST_FILES=$(echo "$ANALYSIS" | grep "New test files:" | awk '{print $4}' || echo "0")
-          NEW_DOC_FILES=$(echo "$ANALYSIS" | grep "New doc files:" | awk '{print $4}' || echo "0")
-          DELETED_FILES=$(echo "$ANALYSIS" | grep "Deleted files:" | awk '{print $3}' || echo "0")
-          MODIFIED_FILES=$(echo "$ANALYSIS" | grep "Modified files:" | awk '{print $3}' || echo "0")
-          DIFF_SIZE=$(echo "$ANALYSIS" | grep "Diff size:" | awk '{print $3}' || echo "0")
-          CLI_CHANGES=$(echo "$ANALYSIS" | grep "CLI interface changes:" | awk '{print $4}' || echo "false")
-          BREAKING_CLI=$(echo "$ANALYSIS" | grep "Breaking CLI changes:" | awk '{print $4}' || echo "false")
-          
-          # Build analysis message
-          ANALYSIS_MESSAGE="Auto-release triggered by significant changes:
 
-File Changes:
-- New source files: $NEW_SOURCE_FILES
-- New test files: $NEW_TEST_FILES  
-- New doc files: $NEW_DOC_FILES
-- Deleted files: $DELETED_FILES
-- Modified files: $MODIFIED_FILES
-- Total diff size: $DIFF_SIZE lines
+          echo "bump_type=$BUMP_TYPE"       >> $GITHUB_OUTPUT
+          echo "release_notes=$RELEASE_NOTES" >> $GITHUB_OUTPUT
+          echo "prerelease=$PRERELEASE"     >> $GITHUB_OUTPUT
 
-CLI Changes:
-- CLI interface changes: $CLI_CHANGES
-- Breaking CLI changes: $BREAKING_CLI
+      - name: Bump version
+        if: steps.version-analysis.outputs.bump_type != 'none'
+        run: |
+          echo "Bumping version type: ${{ steps.version-analysis.outputs.bump_type }}"
+          chmod +x ./dev-bin/bump-version
+          echo "Current version: $(cat VERSION)"
+          ./dev-bin/bump-version ${{ steps.version-analysis.outputs.bump_type }} --commit
+          NEW_VERSION=$(cat VERSION)
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          git push origin main
 
-Version Bump Type: ${{ steps.version-analysis.outputs.bump_type }}"
-        fi
-        
-        # Export analysis message for the script
-        export ANALYSIS_MESSAGE
-        
-        # Bump version (without creating tag, let the release action handle it)
-        ./dev-bin/bump-version ${{ steps.version-analysis.outputs.bump_type }} --commit
-        
-        # Show new version
-        NEW_VERSION=$(cat VERSION)
-        echo "New version: $NEW_VERSION"
-        echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-        
-        # Push changes
-        echo "Pushing to main branch..."
-        git push origin main
-    
-    - name: Create Release
-      if: steps.version-analysis.outputs.bump_type != 'none'
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: v${{ env.NEW_VERSION }}
-        name: Release v${{ env.NEW_VERSION }}
-        generate_release_notes: true
-        body: |
-          ## Version Bump Type
-          - **${{ steps.version-analysis.outputs.bump_type }}** version bump
-          
-          ## Release Notes
-          ${{ steps.version-analysis.outputs.release_notes }}
-          
-          ## Auto-Release Information
-          ${{ github.event_name == 'push' && 'This release was automatically triggered due to significant changes detected.' || 'This release was manually triggered.' }}
-          
-          ---
-          *Release notes below are automatically generated by GitHub based on commits since last release.*
-        draft: false
-        prerelease: ${{ steps.version-analysis.outputs.prerelease }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+      - name: Create Release
+        if: steps.version-analysis.outputs.bump_type != 'none'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.NEW_VERSION }}
+          name: Release v${{ env.NEW_VERSION }}
+          generate_release_notes: true
+          body: |
+            ## Version Bump Type
+            - **${{ steps.version-analysis.outputs.bump_type }}** version bump
+
+            ## Release Notes
+            ${{ steps.version-analysis.outputs.release_notes }}
+
+            ## Auto-Release Information
+            ${{ github.event_name == 'push' && 'This release was automatically triggered due to significant changes detected.' || 'This release was manually triggered.' }}
+
+            ---
+            *Release notes below are automatically generated by GitHub based on commits since last release.*
+          draft: false
+          prerelease: ${{ fromJSON(steps.version-analysis.outputs.prerelease || 'false') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
