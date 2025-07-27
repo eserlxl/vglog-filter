@@ -8,23 +8,27 @@
 #
 # vglog-filter build script
 #
-# Usage: ./build.sh [performance] [warnings] [debug]
+# Usage: ./build.sh [performance] [warnings] [debug] [clean]
 #
 # Modes:
 #   performance : Enables performance optimizations (disables debug mode if both are set)
 #   warnings    : Enables extra compiler warnings
 #   debug       : Enables debug mode (disables performance mode if both are set)
+#   clean       : Forces a clean build (removes all build artifacts)
 #
 # Notes:
 #   - 'performance' and 'debug' are mutually exclusive; enabling one disables the other.
 #   - You can combine 'warnings' with either mode.
+#   - 'clean' is useful for configuration changes or debugging build issues
 #   - Example: ./build.sh performance warnings
+#   - Example: ./build.sh debug clean
 #
 set -euo pipefail
 
 PERFORMANCE_BUILD=OFF
 WARNING_MODE=OFF
 DEBUG_MODE=OFF
+CLEAN_BUILD=OFF
 
 for arg in "$@"; do
   case $arg in
@@ -36,6 +40,9 @@ for arg in "$@"; do
       ;;
     debug)
       DEBUG_MODE=ON
+      ;;
+    clean)
+      CLEAN_BUILD=ON
       ;;
   esac
 done
@@ -54,6 +61,13 @@ echo "Build configuration:"
 echo "  PERFORMANCE_BUILD = $PERFORMANCE_BUILD"
 echo "  WARNING_MODE     = $WARNING_MODE"
 echo "  DEBUG_MODE       = $DEBUG_MODE"
+echo "  CLEAN_BUILD      = $CLEAN_BUILD"
 
 cmake -DPERFORMANCE_BUILD=$PERFORMANCE_BUILD -DWARNING_MODE=$WARNING_MODE -DDEBUG_MODE=$DEBUG_MODE ..
-make -j20 
+
+if [ "$CLEAN_BUILD" = "ON" ]; then
+  echo "Performing clean build..."
+  make clean
+fi
+
+make -j$(nproc) 
