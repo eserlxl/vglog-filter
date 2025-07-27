@@ -40,12 +40,16 @@ on:
       - doc/TAG_MANAGEMENT.md
       - doc/RELEASE_WORKFLOW.md
 
+# Concurrency guard to prevent multiple version bumps running simultaneously
+concurrency:
+  group: version-bump-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   version-bump:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     env:
       NEW_VERSION: ''
 
@@ -63,73 +67,76 @@ jobs:
 
       - name: Determine version bump type
         id: version-analysis
+        shell: bash
         run: |
-          # Check if this is a manual trigger or automatic
+          set -euo pipefail
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Manual trigger
             BUMP_TYPE="${{ github.event.inputs.bump_type }}"
             RELEASE_NOTES="${{ github.event.inputs.release_notes }}"
             PRERELEASE="${{ github.event.inputs.prerelease }}"
-
             if [ "$BUMP_TYPE" = "auto" ]; then
-              echo "Manual trigger with auto detection - analyzing changes..."
-              # Use semantic analyzer for auto detection
               chmod +x ./dev-bin/semantic-version-analyzer
-              SUGGESTION=$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo "none")
-              BUMP_TYPE="$SUGGESTION"
-              echo "Auto-detected bump type: $BUMP_TYPE"
+              BUMP_TYPE="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo none)"
             fi
           else
-            # Automatic trigger - analyze for significant changes
-            echo "Automatic trigger - analyzing for significant changes..."
             chmod +x ./dev-bin/semantic-version-analyzer
+            ANALYSIS="$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || true)"
 
-            # Get detailed analysis
-            ANALYSIS=$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || echo "")
-
-            # Extract change indicators
-            NEW_SOURCE_FILES=$(echo "$ANALYSIS" | grep "New source files:" | awk '{print $4}' || echo "0")
-            NEW_TEST_FILES=$(echo "$ANALYSIS" | grep "New test files:" | awk '{print $4}' || echo "0")
-            NEW_DOC_FILES=$(echo "$ANALYSIS" | grep "New doc files:" | awk '{print $4}' || echo "0")
-            DELETED_FILES=$(echo "$ANALYSIS" | grep "Deleted files:" | awk '{print $3}' || echo "0")
-            MODIFIED_FILES=$(echo "$ANALYSIS" | grep "Modified files:" | awk '{print $3}' || echo "0")
-
-            # Get diff size since last tag
-            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~1")
-            DIFF_SIZE=$(git diff --stat "$LAST_TAG" | tail -1 | awk '{print $4}' | sed 's/,//' | sed 's/insertions//' | sed 's/insertion//' | tr -d '()' || echo "0")
-
-            echo "Analysis results:"
-            echo "  New source files: $NEW_SOURCE_FILES"
-            echo "  New test files: $NEW_TEST_FILES"
-            echo "  New doc files: $NEW_DOC_FILES"
-            echo "  Deleted files: $DELETED_FILES"
-            echo "  Modified files: $MODIFIED_FILES"
-            echo "  Diff size: $DIFF_SIZE lines"
-
-            # Determine bump type (conservative thresholds)
-            if [ "$DELETED_FILES" -gt 0 ] && [ "$DIFF_SIZE" -gt 1000 ]; then
-              BUMP_TYPE="major"
-            elif [ "$NEW_SOURCE_FILES" -gt 2 ] && [ "$DIFF_SIZE" -gt 1000 ]; then
-              BUMP_TYPE="minor"
-            elif [ "$NEW_TEST_FILES" -gt 3 ] && [ "$DIFF_SIZE" -gt 800 ]; then
-              BUMP_TYPE="minor"
-            elif [ "$NEW_DOC_FILES" -gt 2 ] && [ "$DIFF_SIZE" -gt 600 ]; then
-              BUMP_TYPE="minor"
-            elif [ "$MODIFIED_FILES" -gt 10 ] && [ "$DIFF_SIZE" -gt 500 ]; then
-              BUMP_TYPE="patch"
+            # Find the previous tag or fall back to the first commit
+            if LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null)"; then
+              BASE="$LAST_TAG"
+              RANGE="${LAST_TAG}..HEAD"
             else
-              echo "No significant changes detected - skipping auto-release"
-              echo "bump_type=none" >> $GITHUB_OUTPUT
-              exit 0
+              BASE="$(git rev-list --max-parents=0 HEAD)"
+              RANGE="${BASE}..HEAD"
             fi
 
+            # Robust diff size (insertions + deletions)
+            DIFF_SIZE="$(git diff --numstat $RANGE | awk '{ins+=$1; del+=$2} END{print (ins+0)+(del+0)}')"
+            NEW_SOURCE_FILES="$(echo "$ANALYSIS" | awk -F': ' '/New source files:/ {print $2+0}')"
+            NEW_TEST_FILES="$(echo  "$ANALYSIS" | awk -F': ' '/New test files:/  {print $2+0}')"
+            NEW_DOC_FILES="$(echo   "$ANALYSIS" | awk -F': ' '/New doc files:/   {print $2+0}')"
+            DELETED_FILES="$(echo   "$ANALYSIS" | awk -F': ' '/Deleted files:/   {print $2+0}')"
+            MODIFIED_FILES="$(echo  "$ANALYSIS" | awk -F': ' '/Modified files:/  {print $2+0}')"
+
+            echo "Analysis:"
+            echo "  base: $BASE"
+            echo "  diff size: $DIFF_SIZE  (ins+del)"
+            echo "  new src: $NEW_SOURCE_FILES, new tests: $NEW_TEST_FILES, new docs: $NEW_DOC_FILES, deleted: $DELETED_FILES, modified: $MODIFIED_FILES"
+
+            # Map to SemVer (example heuristic)
+            if [ "$DELETED_FILES" -gt 0 ]; then
+              BUMP_TYPE="major"
+            elif [ "$NEW_SOURCE_FILES" -gt 0 ] || [ "$NEW_TEST_FILES" -gt 0 ]; then
+              # Feature-level changes
+              if [ "$DIFF_SIZE" -ge 400 ]; then
+                BUMP_TYPE="minor"
+              else
+                BUMP_TYPE="patch"   # small features/tweaks
+              fi
+            elif [ "$MODIFIED_FILES" -gt 0 ] || [ "$DIFF_SIZE" -gt 0 ]; then
+              BUMP_TYPE="patch"
+            else
+              echo "bump_type=none" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             RELEASE_NOTES=''
             PRERELEASE='false'
           fi
 
-          echo "bump_type=$BUMP_TYPE"       >> $GITHUB_OUTPUT
-          echo "release_notes=$RELEASE_NOTES" >> $GITHUB_OUTPUT
-          echo "prerelease=$PRERELEASE"     >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
+          echo "release_notes=$RELEASE_NOTES" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize analysis
+        if: steps.version-analysis.outputs.bump_type != 'none'
+        run: |
+          {
+            echo "### Version analysis"
+            echo "- Bump type: \`${{ steps.version-analysis.outputs.bump_type }}\`"
+            echo "- New version (after bump): will compute in next step"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Bump version
         if: steps.version-analysis.outputs.bump_type != 'none'
@@ -162,6 +169,6 @@ jobs:
             ---
             *Release notes below are automatically generated by GitHub based on commits since last release.*
           draft: false
-          prerelease: ${{ fromJSON(steps.version-analysis.outputs.prerelease || 'false') }}
+          prerelease: ${{ steps.version-analysis.outputs.prerelease == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
