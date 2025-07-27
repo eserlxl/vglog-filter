@@ -107,10 +107,12 @@ if [ "$RUN_TESTS" = "ON" ]; then
     echo "Cleaning up any leftover test files..."
     find .. -name "*.tmp" -type f -delete 2>/dev/null || true
     
-                 if [ -f "build/test_basic" ] && [ -f "build/test_integration" ] && [ -f "build/test_comprehensive" ]; then
+                 if [ -f "build/test_basic" ] && [ -f "build/test_integration" ] && [ -f "build/test_comprehensive" ] && [ -f "build/test_edge_cases" ] && [ -f "build/test_memory_leaks" ]; then
                  ./build/test_basic
                  ./build/test_integration
                  ./build/test_comprehensive
+                 ./build/test_edge_cases
+                 ./build/test_memory_leaks
                  echo "All tests completed successfully!"
              else
                  echo "Warning: Test executables not found. Tests may not have been built correctly."
@@ -118,10 +120,14 @@ if [ "$RUN_TESTS" = "ON" ]; then
                  g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_basic.cpp -o test_basic
                  g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_integration.cpp -o test_integration
                  g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_comprehensive.cpp -o test_comprehensive
-                 if [ -f "test_basic" ] && [ -f "test_integration" ] && [ -f "test_comprehensive" ]; then
+                 g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_edge_cases.cpp -o test_edge_cases
+                 g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_memory_leaks.cpp -o test_memory_leaks
+                 if [ -f "test_basic" ] && [ -f "test_integration" ] && [ -f "test_comprehensive" ] && [ -f "test_edge_cases" ] && [ -f "test_memory_leaks" ]; then
                      ./test_basic
                      ./test_integration
                      ./test_comprehensive
+                     ./test_edge_cases
+                     ./test_memory_leaks
                      echo "All tests completed successfully!"
                  else
                      echo "Error: Failed to build test executables."

@@ -49,6 +49,14 @@ if (BUILD_TESTS)
     add_executable(test_comprehensive test/test_comprehensive.cpp)
     target_compile_options(test_comprehensive PRIVATE ${WARNING_FLAGS})
     message(STATUS "Test target 'test_comprehensive' added")
+    
+    add_executable(test_edge_cases test/test_edge_cases.cpp)
+    target_compile_options(test_edge_cases PRIVATE ${WARNING_FLAGS})
+    message(STATUS "Test target 'test_edge_cases' added")
+    
+    add_executable(test_memory_leaks test/test_memory_leaks.cpp)
+    target_compile_options(test_memory_leaks PRIVATE ${WARNING_FLAGS})
+    message(STATUS "Test target 'test_memory_leaks' added")
 endif()
     
 target_compile_options(vglog-filter PRIVATE ${OPT_FLAGS} ${WARNING_FLAGS})
@@ -80,7 +88,9 @@ if (BUILD_TESTS)
         COMMAND ${CMAKE_BINARY_DIR}/test_basic
         COMMAND ${CMAKE_BINARY_DIR}/test_integration
         COMMAND ${CMAKE_BINARY_DIR}/test_comprehensive
-        DEPENDS test_basic test_integration test_comprehensive
+        COMMAND ${CMAKE_BINARY_DIR}/test_edge_cases
+        COMMAND ${CMAKE_BINARY_DIR}/test_memory_leaks
+        DEPENDS test_basic test_integration test_comprehensive test_edge_cases test_memory_leaks
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Running all tests"
     )

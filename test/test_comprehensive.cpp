@@ -274,6 +274,7 @@ bool test_vglog_filter_integration() {
     test_log << "==12345== \n";
     test_log << "==12345== Invalid read of size 4\n";
     test_log << "==12345==    at 0x401234: main (test.cpp:10)\n";
+    test_log << "==12345== \n";
     test_log.close();
     
     // Test that the file was created
@@ -355,7 +356,7 @@ bool test_marker_trimming_edge_cases() {
 }
 
 int main() {
-    std::cout << "Running comprehensive edge case tests for vglog-filter..." << std::endl;
+    std::cout << "Running comprehensive tests for vglog-filter..." << std::endl;
     
     bool all_passed = true;
     
