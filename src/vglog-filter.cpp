@@ -33,6 +33,7 @@ struct Options {
     bool trim         = true;
     bool scrub_raw    = true;
     bool stream_mode  = false;  // Enable stream processing for large files
+    bool show_progress = false; // Show progress for large files
     Str  marker       = DEFAULT_MARKER;
     Str  filename;
     bool use_stdin    = false;  // Whether to read from stdin
@@ -49,6 +50,7 @@ void usage(const char* prog) {
         "  -d N, --depth N         Signature depth (default: " << DEFAULT_DEPTH << ", 0 = unlimited).\n"
         "  -m S, --marker S        Marker string (default: \"" << DEFAULT_MARKER << "\").\n"
         "  -s, --stream            Force stream processing mode (auto-detected for files >5MB).\n"
+        "  -p, --progress          Show progress for large files.\n"
         "  -V, --version           Show version information.\n"
         "  -h, --help              Show this help.\n\n"
         "Examples\n"
@@ -70,6 +72,19 @@ Str create_error_message(const Str& operation, const Str& filename, const Str& d
         message += ": " + details;
     }
     return message;
+}
+
+// Helper function to report progress for large files
+void report_progress(size_t lines_processed, size_t total_lines, const Str& filename) {
+    if (total_lines == 0) return;
+    
+    int percentage = static_cast<int>((lines_processed * 100) / total_lines);
+    std::cerr << "\rProcessing " << filename << ": " << percentage << "% (" 
+              << lines_processed << "/" << total_lines << " lines)" << std::flush;
+    
+    if (lines_processed >= total_lines) {
+        std::cerr << std::endl;  // New line when complete
+    }
 }
 
 static inline StrView ltrim_view(StrView s) {
@@ -303,6 +318,18 @@ void process_stream(std::istream& in, const Options& opt)
     VecS sigLines;
     std::unordered_set<Str> seen;
     bool found_marker = false;
+    size_t lines_processed = 0;
+    size_t total_lines = 0;
+
+    // Count total lines for progress reporting if enabled
+    if (opt.show_progress && !opt.use_stdin) {
+        std::ifstream count_file(opt.filename);
+        if (count_file) {
+            total_lines = std::count(std::istreambuf_iterator<char>(count_file),
+                                   std::istreambuf_iterator<char>(), '\n');
+            count_file.close();
+        }
+    }
 
     auto flush = [&]() {
         const Str rawStr = raw.str();
@@ -327,6 +354,13 @@ void process_stream(std::istream& in, const Options& opt)
 
     Str line;
     while (std::getline(in, line)) {
+        lines_processed++;
+        
+        // Report progress every 1000 lines if enabled
+        if (opt.show_progress && lines_processed % 1000 == 0) {
+            report_progress(lines_processed, total_lines, opt.filename);
+        }
+        
         // Check for marker if trimming is enabled
         if (opt.trim && line.find(opt.marker) != Str::npos) {
             found_marker = true;
@@ -357,6 +391,12 @@ void process_stream(std::istream& in, const Options& opt)
         sig << canon(line) << '\n';
         sigLines.push_back(canon(line));
     }
+    
+    // Final progress report
+    if (opt.show_progress) {
+        report_progress(lines_processed, total_lines, opt.filename);
+    }
+    
     flush();
 }
 
@@ -424,6 +464,7 @@ int main(int argc, char* argv[])
         {"depth",           required_argument, nullptr, 'd'},
         {"marker",          required_argument, nullptr, 'm'},
         {"stream",          no_argument,       nullptr, 's'},
+        {"progress",        no_argument,       nullptr, 'p'}, // Added progress option
         {"version",         no_argument,       nullptr, 'V'},
         {"help",            no_argument,       nullptr, 'h'},
         {nullptr,           0,                 nullptr,  0 }
@@ -459,6 +500,7 @@ int main(int argc, char* argv[])
                 }
                 break;
             case 's': opt.stream_mode = true; break;
+            case 'p': opt.show_progress = true; break; // Added progress option
             case 'V': 
                 std::cout << "vglog-filter version " << get_version() << std::endl; 
                 return 0;
