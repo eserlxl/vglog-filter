@@ -60,6 +60,18 @@ void usage(const char* prog) {
 
 // ---------- helpers ---------------------------------------------------------
 
+// Helper function to create detailed error messages
+Str create_error_message(const Str& operation, const Str& filename, const Str& details = "") {
+    Str message = "Error during " + operation;
+    if (!filename.empty()) {
+        message += " for file '" + filename + "'";
+    }
+    if (!details.empty()) {
+        message += ": " + details;
+    }
+    return message;
+}
+
 static inline StrView ltrim_view(StrView s) {
     auto start = std::find_if(s.begin(), s.end(),
                               [](int ch){ return !std::isspace(ch); });
@@ -239,7 +251,7 @@ void process(std::istream& in, const Options& opt)
 VecS read_file_lines(const Str& fname)
 {
     FILE* file = fopen(fname.c_str(), "r");
-    if (!file) throw std::runtime_error("Cannot open '" + fname + "'");
+    if (!file) throw std::runtime_error(create_error_message("opening file", fname));
     
     VecS lines;
     lines.reserve(1000); // Reserve capacity for better performance
@@ -252,7 +264,7 @@ VecS read_file_lines(const Str& fname)
         // Check for memory allocation failure
         if (line_buffer == nullptr) {
             fclose(file);
-            throw std::runtime_error("Memory allocation failed while reading '" + fname + "'");
+            throw std::runtime_error(create_error_message("reading file", fname, "Memory allocation failed"));
         }
         
         // Remove trailing newline if present
@@ -353,7 +365,7 @@ void process_file_stream(const Str& fname, const Options& opt)
 {
     // Create a proper stream processing implementation that doesn't load the entire file
     std::ifstream file(fname);
-    if (!file) throw std::runtime_error("Cannot open '" + fname + "'");
+    if (!file) throw std::runtime_error(create_error_message("opening file", fname));
     
     // Process the file directly using the existing process_stream function
     process_stream(file, opt);
@@ -467,7 +479,7 @@ int main(int argc, char* argv[])
             // Check if file exists using fopen for better MSan compatibility
             FILE* test_file = fopen(opt.filename.c_str(), "r");
             if (!test_file) {
-                std::cerr << "Error: Cannot open file '" << opt.filename << "'" << std::endl;
+                std::cerr << create_error_message("opening file", opt.filename) << std::endl;
                 std::cerr << "Please check that the file exists and is readable" << std::endl;
                 return 1;
             }
@@ -503,7 +515,7 @@ int main(int argc, char* argv[])
                 process_file_stream(opt.filename, opt);
             }
         } catch (const std::exception& e) {
-            std::cerr << "Error: " << e.what() << std::endl;
+            std::cerr << create_error_message("stream processing", opt.filename, e.what()) << std::endl;
             return 1;
         }
     } else {
@@ -512,7 +524,7 @@ int main(int argc, char* argv[])
         try { 
             lines = read_file_lines(opt.filename); 
         } catch (const std::exception& e) { 
-            std::cerr << "Error: " << e.what() << std::endl;
+            std::cerr << create_error_message("reading file", opt.filename, e.what()) << std::endl;
             return 1; 
         }
         
