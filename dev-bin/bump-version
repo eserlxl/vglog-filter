@@ -7,7 +7,7 @@
 # See the LICENSE file in the project root for details.
 #
 # Version bump script for vglog-filter
-# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run]
+# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag]
 
 set -euo pipefail
 
@@ -42,9 +42,14 @@ fi
 # Parse current version components
 IFS='.' read -r CURRENT_MAJOR CURRENT_MINOR CURRENT_PATCH <<< "$CURRENT_VERSION"
 
+# New options vars
+COMMIT_MSG=""
+ALLOW_DIRTY=false
+ANNOTATED_TAG=true    # default to annotated tag
+
 # Function to show usage
 usage() {
-    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run]"
+    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag]"
     echo ""
     echo "Bump the semantic version of vglog-filter"
     echo ""
@@ -57,6 +62,9 @@ usage() {
     echo "  --commit Create a git commit with the version bump"
     echo "  --tag    Create a git tag for the new version"
     echo "  --dry-run Show what would be done without making changes"
+    echo "  --message MSG     Use MSG as the full commit message (overrides default)"
+    echo "  --allow-dirty     Allow committing when other files are modified"
+    echo "  --lightweight-tag Create a lightweight tag instead of annotated"
     echo ""
     echo "Environment Variables:"
     echo "  ANALYSIS_MESSAGE  Optional detailed analysis to include in commit message"
@@ -67,6 +75,7 @@ usage() {
     echo "  $0 major --commit --tag     # Bump major version, commit, and tag"
     echo "  $0 patch --dry-run          # Show what patch bump would do"
     echo "  ANALYSIS_MESSAGE='...' $0 patch --commit  # Include analysis in commit"
+    echo "  $0 patch --message 'Custom commit message' --commit  # Use custom message"
     echo ""
     echo "Current version: $CURRENT_VERSION"
 }
@@ -110,10 +119,20 @@ update_version_file() {
 
 # Function to update CMakeLists.txt if it contains version information
 update_cmake_version() {
-    if [ -f "CMakeLists.txt" ]; then
-        # This is a placeholder - you might want to add version to CMakeLists.txt
-        # For now, we'll just note that CMakeLists.txt exists
-        echo -e "${YELLOW}Note: CMakeLists.txt exists but doesn't contain version info to update${RESET}"
+    local cmake="$PROJECT_ROOT/CMakeLists.txt"
+    if [[ -f "$cmake" ]]; then
+        # Update common patterns if present; otherwise just note it
+        if grep -Eq 'project\([^)]*VERSION\s+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
+            sed -E -i "s/(project\([^)]*VERSION\s+)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
+            echo -e "${GREEN}Updated CMakeLists.txt project VERSION to ${NEW_VERSION}${RESET}"
+            git add "$cmake" || true
+        elif grep -Eq 'set\s*\(\s*PROJECT_VERSION\s+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
+            sed -E -i "s/(set\s*\(\s*PROJECT_VERSION\s+\"?)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
+            echo -e "${GREEN}Updated CMake PROJECT_VERSION to ${NEW_VERSION}${RESET}"
+            git add "$cmake" || true
+        else
+            echo -e "${YELLOW}Note: CMakeLists.txt present but no recognizable version field to update${RESET}"
+        fi
     fi
 }
 
@@ -122,18 +141,22 @@ create_commit() {
     if ! git diff --quiet "$VERSION_FILE"; then
         git add "$VERSION_FILE"
         
-        # Create detailed commit message
-        local commit_msg="chore: bump version from $CURRENT_VERSION to $NEW_VERSION"
-        
-        # Add analysis details if provided
-        if [[ -n "${ANALYSIS_MESSAGE:-}" ]]; then
-            commit_msg="$commit_msg
+        # Default conventional message if not provided
+        local msg="${COMMIT_MSG}"
+        if [[ -z "$msg" ]]; then
+            msg="chore(release): v${NEW_VERSION}"
+            msg+="
+bump: ${CURRENT_VERSION} → ${NEW_VERSION}"
+            # Append analysis if provided
+            if [[ -n "${ANALYSIS_MESSAGE:-}" ]]; then
+                msg+="
 
-$ANALYSIS_MESSAGE"
+${ANALYSIS_MESSAGE}"
+            fi
         fi
         
-        git commit -m "$commit_msg"
-        echo -e "${GREEN}Created commit with detailed analysis${RESET}"
+        git commit -m "$msg"
+        echo -e "${GREEN}Created commit${RESET}"
     else
         echo -e "${YELLOW}No changes to commit${RESET}"
     fi
@@ -143,11 +166,17 @@ $ANALYSIS_MESSAGE"
 create_tag() {
     local tag_name="v$NEW_VERSION"
     
-    if git tag "$tag_name" 2>/dev/null; then
-        echo -e "${GREEN}Created tag: $tag_name${RESET}"
-    else
+    if git rev-parse "$tag_name" >/dev/null 2>&1; then
         echo -e "${YELLOW}Tag $tag_name already exists${RESET}"
+        return 0
     fi
+    
+    if $ANNOTATED_TAG; then
+        git tag -a "$tag_name" -m "Release v$NEW_VERSION"
+    else
+        git tag "$tag_name"
+    fi
+    echo -e "${GREEN}Created ${ANNOTATED_TAG:+annotated }tag: $tag_name${RESET}"
 }
 
 # Parse command line arguments
@@ -178,6 +207,18 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=true
             shift
             ;;
+        --message)
+            COMMIT_MSG="${2-}"
+            shift 2
+            ;;
+        --allow-dirty)
+            ALLOW_DIRTY=true
+            shift
+            ;;
+        --lightweight-tag)
+            ANNOTATED_TAG=false
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -202,6 +243,17 @@ if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
         echo -e "${RED}Error: Not in a git repository${RESET}" >&2
         exit 1
+    fi
+fi
+
+# Optional dirty-tree guard (only if commit requested)
+if [[ "$DO_COMMIT" == "true" && "$ALLOW_DIRTY" == "false" ]]; then
+    # anything changed other than VERSION?
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+        if git status --porcelain | grep -v -E '^\s*[MA?]{1,2}\s+VERSION$' | grep -q .; then
+            echo -e "${RED}Error:${RESET} working tree has changes other than VERSION. Use --allow-dirty to override." >&2
+            exit 1
+        fi
     fi
 fi
 
