@@ -68,22 +68,24 @@ A dedicated script (`dev-bin/semantic-version-analyzer`) analyzes actual code ch
 
 ### What the Analyzer Checks
 
-The semantic version analyzer examines actual code changes rather than commit messages:
+The semantic version analyzer examines actual code changes with a focus on CLI tools:
 
 1. **File Changes**:
    - Added files (new source files, test files, documentation)
    - Modified files (existing code changes)
    - Deleted files (removed functionality)
 
-2. **Content Analysis**:
-   - New source files (indicates new features)
+2. **CLI Interface Analysis**:
+   - New command-line options (indicates new features)
+   - Removed command-line options (breaking changes)
+   - Enhanced existing options (non-breaking improvements)
+   - New source files (indicates new functionality)
    - New test files (indicates new functionality)
    - New documentation files (indicates new features)
-   - Deleted files (potential breaking changes)
 
 3. **Change Magnitude**:
    - Diff size analysis for threshold-based decisions
-   - Extremely conservative thresholds to prevent rapid version increases
+   - Conservative thresholds to prevent rapid version increases
 
 ### Manual Version Bumping
 

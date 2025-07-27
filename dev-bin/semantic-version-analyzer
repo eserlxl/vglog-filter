@@ -97,7 +97,7 @@ get_base_reference() {
     fi
 }
 
-# Simple analysis based on file changes and diff size
+# CLI-focused analysis based on file changes and diff size
 analyze_changes() {
     local base_ref="$1"
     local changes
@@ -109,6 +109,8 @@ analyze_changes() {
     local new_source_files=0
     local new_test_files=0
     local new_doc_files=0
+    local cli_changes=false
+    local breaking_cli_changes=false
     
     # Process each change
     while IFS=$'\t' read -r status file; do
@@ -125,9 +127,27 @@ analyze_changes() {
                 ;;
             M)
                 ((modified_files++))
+                # Check for CLI interface changes in main source file
+                if [[ "$file" =~ \.(cpp|cxx|cc)$ ]] || [[ "$file" =~ ^src/ ]]; then
+                    # Check for new command-line options
+                    if git diff "$base_ref"..HEAD -- "$file" | grep -E "(getopt|option|case.*:)" >/dev/null; then
+                        cli_changes=true
+                    fi
+                    # Check for removed command-line options (breaking change)
+                    # Only consider it breaking if a case statement is completely removed
+                    if git diff "$base_ref"..HEAD -- "$file" | grep -E "^-.*case.*:" >/dev/null && \
+                       ! git diff "$base_ref"..HEAD -- "$file" | grep -E "^\+.*case.*:" >/dev/null && \
+                       git diff "$base_ref"..HEAD -- "$file" | grep -E "(main.*argc|getopt|option)" >/dev/null; then
+                        breaking_cli_changes=true
+                    fi
+                fi
                 ;;
             D)
                 ((deleted_files++))
+                # Only consider deleted source files as breaking if they're the main executable
+                if [[ "$file" =~ ^src/.*\.(cpp|cxx|cc)$ ]] && [[ "$file" =~ main ]]; then
+                    breaking_cli_changes=true
+                fi
                 ;;
         esac
     done <<< "$changes"
@@ -142,10 +162,12 @@ analyze_changes() {
     echo "new_source_files=$new_source_files"
     echo "new_test_files=$new_test_files"
     echo "new_doc_files=$new_doc_files"
+    echo "cli_changes=$cli_changes"
+    echo "breaking_cli_changes=$breaking_cli_changes"
     echo "diff_size=$diff_size"
 }
 
-# Determine version bump suggestion based on simple rules
+# Determine version bump suggestion based on CLI-focused rules
 suggest_version_bump() {
     local added_files="$1"
     local modified_files="$2"
@@ -153,11 +175,15 @@ suggest_version_bump() {
     local new_source_files="$4"
     local new_test_files="$5"
     local new_doc_files="$6"
-    local diff_size="$7"
+    local cli_changes="$7"
+    local breaking_cli_changes="$8"
+    local diff_size="$9"
     
-    # Extremely conservative thresholds - only bump for significant changes
-    if [ "${deleted_files:-0}" -gt 0 ] && [ "${diff_size:-0}" -gt 1000 ]; then
+    # CLI-focused thresholds - only bump for significant changes
+    if [ "$breaking_cli_changes" = "true" ] && [ "${diff_size:-0}" -gt 500 ]; then
         echo "major"
+    elif [ "$cli_changes" = "true" ] && [ "${diff_size:-0}" -gt 800 ]; then
+        echo "minor"
     elif [ "${new_source_files:-0}" -gt 2 ] && [ "${diff_size:-0}" -gt 1000 ]; then
         echo "minor"
     elif [ "${new_test_files:-0}" -gt 3 ] && [ "${diff_size:-0}" -gt 800 ]; then
@@ -206,6 +232,10 @@ main() {
     new_test_files=$(echo "$analysis" | grep "new_test_files=" | cut -d'=' -f2)
     local new_doc_files
     new_doc_files=$(echo "$analysis" | grep "new_doc_files=" | cut -d'=' -f2)
+    local cli_changes
+    cli_changes=$(echo "$analysis" | grep "cli_changes=" | cut -d'=' -f2)
+    local breaking_cli_changes
+    breaking_cli_changes=$(echo "$analysis" | grep "breaking_cli_changes=" | cut -d'=' -f2)
     local diff_size
     diff_size=$(echo "$analysis" | grep "diff_size=" | cut -d'=' -f2)
     
@@ -222,11 +252,16 @@ main() {
         echo "  New test files: $new_test_files"
         echo "  New doc files: $new_doc_files"
         echo
+        echo "CLI changes:"
+        echo "  CLI interface changes: $cli_changes"
+        echo "  Breaking CLI changes: $breaking_cli_changes"
+        echo
         echo "Change magnitude:"
         echo "  Diff size: $diff_size lines"
         echo
-        echo "Thresholds for auto-release (extremely conservative):"
-        echo "  Major: Deleted files + diff > 1000 lines"
+        echo "Thresholds for auto-release (CLI-focused):"
+        echo "  Major: Breaking CLI changes + diff > 500 lines"
+        echo "  Minor: CLI interface changes + diff > 800 lines"
         echo "  Minor: New source files (>2) + diff > 1000 lines"
         echo "  Minor: New test files (>3) + diff > 800 lines"
         echo "  Minor: New doc files (>2) + diff > 600 lines"
@@ -241,7 +276,7 @@ main() {
     
     # Determine suggestion
     local suggestion
-    suggestion=$(suggest_version_bump "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$diff_size")
+    suggestion=$(suggest_version_bump "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size")
     
     echo "=== Version Bump Suggestion ==="
     case "$suggestion" in
