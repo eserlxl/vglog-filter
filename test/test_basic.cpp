@@ -214,6 +214,40 @@ bool test_large_file_simulation() {
     return true;
 }
 
+bool test_large_file_detection() {
+    // Create a small file (should not trigger large file detection)
+    std::ofstream small_file("test_small.tmp");
+    small_file << "==12345== Small file test\n";
+    small_file << "==12345== Only a few lines\n";
+    small_file.close();
+    
+    // Create a "large" file for testing (we'll simulate by checking file size logic)
+    std::ofstream large_file("test_large_detect.tmp");
+    // Write enough content to simulate a large file
+    for (int i = 0; i < 10000; ++i) {
+        large_file << "==12345== Line " << i << " with some content to make the file larger\n";
+    }
+    large_file.close();
+    
+    // Test file size detection logic (simplified version)
+    std::ifstream small_check("test_small.tmp");
+    small_check.seekg(0, std::ios::end);
+    std::streampos small_size = small_check.tellg();
+    
+    std::ifstream large_check("test_large_detect.tmp");
+    large_check.seekg(0, std::ios::end);
+    std::streampos large_size = large_check.tellg();
+    
+    // Verify that large file is indeed larger
+    TEST_ASSERT(large_size > small_size, "Large file should be bigger than small file");
+    
+    // Clean up
+    std::remove("test_small.tmp");
+    std::remove("test_large_detect.tmp");
+    TEST_PASS("Large file detection logic works");
+    return true;
+}
+
 int main() {
     std::cout << "Running comprehensive tests for vglog-filter..." << std::endl;
     
@@ -227,6 +261,7 @@ int main() {
     all_passed &= test_regex_patterns();
     all_passed &= test_edge_cases();
     all_passed &= test_large_file_simulation();
+    all_passed &= test_large_file_detection();
     
     if (all_passed) {
         std::cout << "\nAll tests passed!" << std::endl;

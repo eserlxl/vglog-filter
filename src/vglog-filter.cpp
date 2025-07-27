@@ -40,7 +40,7 @@ void usage(const char* prog) {
         "  -v, --verbose           Show completely raw blocks (no address / \"at:\" scrub).\n"
         "  -d N, --depth N         Signature depth (default: " << DEFAULT_DEPTH << ", 0 = unlimited).\n"
         "  -m S, --marker S        Marker string (default: \"" << DEFAULT_MARKER << "\").\n"
-        "  -s, --stream            Enable stream processing for large files (memory efficient).\n"
+        "  -s, --stream            Force stream processing mode (auto-detected for files >5MB).\n"
         "  -V, --version           Show version information.\n"
         "  -h, --help              Show this help.\n";
 }
@@ -223,6 +223,20 @@ VecS read_file_lines(const Str& fname)
     return lines;
 }
 
+// Check if file is large enough to warrant stream processing
+bool is_large_file(const Str& fname, size_t threshold_mb = 50) {
+    std::ifstream in(fname);
+    if (!in) return false;
+    
+    in.seekg(0, std::ios::end);
+    std::streampos file_size = in.tellg();
+    in.seekg(0, std::ios::beg);
+    
+    // Convert to MB and compare with threshold
+    size_t file_size_mb = static_cast<size_t>(file_size) / (1024 * 1024);
+    return file_size_mb >= threshold_mb;
+}
+
 // Stream processing version for large files
 void process_file_stream(const Str& fname, const Options& opt)
 {
@@ -383,8 +397,19 @@ int main(int argc, char* argv[])
     }
     test_file.close();
     
-    // Process file using stream mode or memory mode
-    if (opt.stream_mode) {
+    // Determine processing mode: manual override or automatic detection
+    bool use_stream_mode = opt.stream_mode;
+    
+    if (!use_stream_mode) {
+        // Auto-detect large files (5MB threshold for testing, can be adjusted)
+        use_stream_mode = is_large_file(opt.filename, 5);
+        if (use_stream_mode) {
+            std::cerr << "Info: Large file detected, using stream processing mode" << std::endl;
+        }
+    }
+    
+    // Process file using appropriate mode
+    if (use_stream_mode) {
         // Stream processing for large files
         try {
             process_file_stream(opt.filename, opt);
