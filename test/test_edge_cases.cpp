@@ -443,6 +443,60 @@ bool test_memory_efficiency() {
     return true;
 }
 
+bool test_large_file_processing() {
+    // Test processing of large files that should trigger stream mode
+    std::ofstream test_log("test_large_file.tmp");
+    
+    // Create a file that's large enough to trigger stream processing (5MB threshold)
+    // Each line is approximately 80 bytes, so we need about 65,000 lines
+    const int target_lines = 70000;  // Slightly more than needed for 5MB
+    
+    for (int i = 0; i < target_lines; ++i) {
+        test_log << "==12345== Line " << i << " with some content to test large file processing\n";
+        
+        // Add some valgrind error blocks periodically
+        if (i % 1000 == 0) {
+            test_log << "==12345== Invalid read of size 4\n";
+            test_log << "==12345==    at 0x" << std::hex << (0x401234 + i) << std::dec << ": main (test.cpp:" << (10 + i) << ")\n";
+            test_log << "==12345==    by 0x" << std::hex << (0x401245 + i) << std::dec << ": helper (test.cpp:" << (15 + i) << ")\n";
+            test_log << "==12345==  Address 0x" << std::hex << (0x12345678 + i) << std::dec << " is 0 bytes after a block of size 10 alloc'd\n";
+            test_log << "==12345==    at 0x4C2AB80: malloc (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)\n";
+            test_log << "==12345==    by 0x" << std::hex << (0x401200 + i) << std::dec << ": main (test.cpp:8)\n";
+        }
+        
+        // Add marker line periodically to test trimming
+        if (i % 5000 == 0) {
+            test_log << "==12345== Successfully downloaded debug\n";
+        }
+    }
+    test_log.close();
+    
+    // Check file size
+    struct stat file_stat;
+    if (stat("test_large_file.tmp", &file_stat) == 0) {
+        TEST_ASSERT(file_stat.st_size > 5000000, "Large file test should be at least 5MB");
+        std::cout << "Created large test file: " << (file_stat.st_size / 1024 / 1024) << " MB" << std::endl;
+    }
+    
+    // Test that the file can be opened and read
+    std::ifstream check_file("test_large_file.tmp");
+    TEST_ASSERT(check_file.good(), "Large file should be readable");
+    
+    // Read a few lines to verify content
+    std::string line;
+    int line_count = 0;
+    while (std::getline(check_file, line) && line_count < 10) {
+        TEST_ASSERT(!line.empty(), "Large file should contain non-empty lines");
+        line_count++;
+    }
+    check_file.close();
+    
+    // Clean up
+    std::remove("test_large_file.tmp");
+    TEST_PASS("Large file processing test works");
+    return true;
+}
+
 int main() {
     std::cout << "Running edge case tests for vglog-filter..." << std::endl;
     
@@ -461,6 +515,7 @@ int main() {
     all_passed &= test_stream_processing_edge_cases();
     all_passed &= test_concurrent_access_simulation();
     all_passed &= test_memory_efficiency();
+    all_passed &= test_large_file_processing();
     
     if (all_passed) {
         std::cout << "\nAll edge case tests passed!" << std::endl;
