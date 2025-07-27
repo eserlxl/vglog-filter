@@ -138,6 +138,7 @@ bool test_file_permissions() {
     // Test that we can still read the file
     std::ifstream check_file("test_permissions.tmp");
     TEST_ASSERT(check_file.good(), "Read-only file should still be readable");
+    check_file.close();
     
     // Restore permissions and clean up
     chmod("test_permissions.tmp", 0644);
@@ -497,7 +498,7 @@ bool test_large_file_processing() {
     return true;
 }
 
-bool test_new_features() {
+bool test_progress_and_memory_features() {
     // Test new features like progress reporting and memory monitoring
     
     // Test progress reporting simulation
@@ -554,7 +555,7 @@ bool test_new_features() {
     std::remove("test_memory.tmp");
     std::remove("test_combined.tmp");
     
-    TEST_PASS("New features test works");
+    TEST_PASS("Progress and memory features test works");
     return true;
 }
 
@@ -577,7 +578,7 @@ int main() {
     all_passed &= test_concurrent_access_simulation();
     all_passed &= test_memory_efficiency();
     all_passed &= test_large_file_processing();
-    all_passed &= test_new_features();
+    all_passed &= test_progress_and_memory_features();
     
     if (all_passed) {
         std::cout << "\nAll edge case tests passed!" << std::endl;
