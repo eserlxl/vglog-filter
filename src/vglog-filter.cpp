@@ -20,6 +20,7 @@
 #include <unordered_set>
 #include <vector>
 #include <sys/stat.h> // Required for stat()
+#include <sys/resource.h> // Required for memory monitoring
 
 using Str  = std::string;
 using StrView = std::string_view;
@@ -34,6 +35,7 @@ struct Options {
     bool scrub_raw    = true;
     bool stream_mode  = false;  // Enable stream processing for large files
     bool show_progress = false; // Show progress for large files
+    bool monitor_memory = false; // Monitor memory usage
     Str  marker       = DEFAULT_MARKER;
     Str  filename;
     bool use_stdin    = false;  // Whether to read from stdin
@@ -51,6 +53,7 @@ void usage(const char* prog) {
         "  -m S, --marker S        Marker string (default: \"" << DEFAULT_MARKER << "\").\n"
         "  -s, --stream            Force stream processing mode (auto-detected for files >5MB).\n"
         "  -p, --progress          Show progress for large files.\n"
+        "  -M, --memory            Monitor memory usage during processing.\n"
         "  -V, --version           Show version information.\n"
         "  -h, --help              Show this help.\n\n"
         "Examples\n"
@@ -84,6 +87,28 @@ void report_progress(size_t lines_processed, size_t total_lines, const Str& file
     
     if (lines_processed >= total_lines) {
         std::cerr << std::endl;  // New line when complete
+    }
+}
+
+// Helper function to get current memory usage in MB
+size_t get_memory_usage_mb() {
+    struct rusage usage;
+    if (getrusage(RUSAGE_SELF, &usage) == 0) {
+        // ru_maxrss is in KB on Linux, convert to MB
+        return static_cast<size_t>(usage.ru_maxrss) / 1024;
+    }
+    return 0; // Return 0 if unable to get memory usage
+}
+
+// Helper function to report memory usage
+void report_memory_usage(const Str& operation, const Str& filename = "") {
+    size_t memory_mb = get_memory_usage_mb();
+    if (memory_mb > 0) {
+        std::cerr << "Memory usage during " << operation;
+        if (!filename.empty()) {
+            std::cerr << " for " << filename;
+        }
+        std::cerr << ": " << memory_mb << " MB" << std::endl;
     }
 }
 
@@ -465,6 +490,7 @@ int main(int argc, char* argv[])
         {"marker",          required_argument, nullptr, 'm'},
         {"stream",          no_argument,       nullptr, 's'},
         {"progress",        no_argument,       nullptr, 'p'}, // Added progress option
+        {"memory",          no_argument,       nullptr, 'M'}, // Added memory option
         {"version",         no_argument,       nullptr, 'V'},
         {"help",            no_argument,       nullptr, 'h'},
         {nullptr,           0,                 nullptr,  0 }
@@ -501,6 +527,7 @@ int main(int argc, char* argv[])
                 break;
             case 's': opt.stream_mode = true; break;
             case 'p': opt.show_progress = true; break; // Added progress option
+            case 'M': opt.monitor_memory = true; break; // Added memory option
             case 'V': 
                 std::cout << "vglog-filter version " << get_version() << std::endl; 
                 return 0;
@@ -549,12 +576,20 @@ int main(int argc, char* argv[])
     if (use_stream_mode) {
         // Stream processing for large files or stdin
         try {
+            if (opt.monitor_memory) {
+                report_memory_usage("starting stream processing", opt.filename);
+            }
+            
             if (opt.use_stdin) {
                 // Process from stdin
                 process_stream(std::cin, opt);
             } else {
                 // Process from file
                 process_file_stream(opt.filename, opt);
+            }
+            
+            if (opt.monitor_memory) {
+                report_memory_usage("completed stream processing", opt.filename);
             }
         } catch (const std::exception& e) {
             std::cerr << create_error_message("stream processing", opt.filename, e.what()) << std::endl;
@@ -564,7 +599,15 @@ int main(int argc, char* argv[])
         // Memory-based processing for smaller files
         VecS lines;
         try { 
+            if (opt.monitor_memory) {
+                report_memory_usage("starting file reading", opt.filename);
+            }
+            
             lines = read_file_lines(opt.filename); 
+            
+            if (opt.monitor_memory) {
+                report_memory_usage("completed file reading", opt.filename);
+            }
         } catch (const std::exception& e) { 
             std::cerr << create_error_message("reading file", opt.filename, e.what()) << std::endl;
             return 1; 
@@ -575,6 +618,7 @@ int main(int argc, char* argv[])
             std::cerr << "Warning: Input file '" << opt.filename << "' is empty" << std::endl;
             return 0;
         }
+        
         // trim above last marker if requested
         size_t start = 0;
         if (opt.trim) {
@@ -596,8 +640,17 @@ int main(int argc, char* argv[])
             std::copy(lines.begin() + static_cast<std::ptrdiff_t>(start), lines.end(),
                       std::ostream_iterator<Str>(work, "\n"));
         }
+        
         // run dedupe
+        if (opt.monitor_memory) {
+            report_memory_usage("starting deduplication", opt.filename);
+        }
+        
         process(work, opt);
+        
+        if (opt.monitor_memory) {
+            report_memory_usage("completed deduplication", opt.filename);
+        }
     }
     return 0;
 } 
