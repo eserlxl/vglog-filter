@@ -7,7 +7,7 @@
 # See the LICENSE file in the project root for details.
 #
 # Version bump script for vglog-filter
-# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify]
+# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print]
 
 set -euo pipefail
 
@@ -66,7 +66,7 @@ NO_VERIFY=false       # default to running hooks
 
 # Function to show usage
 usage() {
-    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify]"
+    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print]"
     echo ""
     echo "Bump the semantic version of vglog-filter"
     echo ""
@@ -79,6 +79,7 @@ usage() {
     echo "  --commit Create a git commit with the version bump"
     echo "  --tag    Create a git tag for the new version"
     echo "  --dry-run Show what would be done without making changes"
+    echo "  --print  Print the new version without making any changes"
     echo "  --message MSG     Use MSG as the full commit message (overrides default)"
     echo "  --allow-dirty     Allow committing when other files are modified"
     echo "  --lightweight-tag Create a lightweight tag instead of annotated"
@@ -87,6 +88,7 @@ usage() {
     echo ""
     echo "Environment Variables:"
     echo "  ANALYSIS_MESSAGE  Optional detailed analysis to include in commit message"
+    echo "                    (ignored when --message is provided)"
     echo ""
     echo "CI Integration:"
     echo "  When running in GitHub Actions and --message isn't provided, the script"
@@ -98,6 +100,7 @@ usage() {
     echo "  $0 minor --commit           # Bump minor version and commit"
     echo "  $0 major --commit --tag     # Bump major version, commit, and tag"
     echo "  $0 patch --dry-run          # Show what patch bump would do"
+    echo "  $0 patch --print            # Print new version without changes"
     echo "  ANALYSIS_MESSAGE='...' $0 patch --commit  # Include analysis in commit"
     echo "  $0 patch --message 'Custom commit message' --commit  # Use custom message"
     echo "  $0 patch --signed-tag --tag # Create signed tag for provenance"
@@ -174,32 +177,44 @@ stage_files() {
     git add "$VERSION_FILE"
 }
 
+# Function to check git identity
+check_git_identity() {
+    if ! git config --get user.name >/dev/null; then
+        echo -e "${YELLOW}Warning: git user.name is not set${RESET}" >&2
+    fi
+    if ! git config --get user.email >/dev/null; then
+        echo -e "${YELLOW}Warning: git user.email is not set${RESET}" >&2
+    fi
+}
+
 # Function to create git commit
 create_commit() {
     if ! git diff --quiet "$VERSION_FILE"; then
         stage_files
         
+        # Check git identity before committing
+        check_git_identity
+        
         # Default conventional message if not provided
         local msg="${COMMIT_MSG}"
         if [[ -z "$msg" ]]; then
-            # Ensure [skip ci] is present when running in GitHub Actions
-            if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
-                msg="chore(release): v${NEW_VERSION} [skip ci]
-bump: ${CURRENT_VERSION} → ${NEW_VERSION}"
-            else
-                msg="chore(release): v${NEW_VERSION}
-bump: ${CURRENT_VERSION} → ${NEW_VERSION}"
-            fi
-            # Append analysis if provided
+            # Use paragraph-style commit message
+            local commit_args=(${NO_VERIFY:+--no-verify})
+            commit_args+=(-m "chore(release): v${NEW_VERSION}${GITHUB_ACTIONS:+ [skip ci]}")
+            commit_args+=(-m "bump: ${CURRENT_VERSION} → ${NEW_VERSION}")
+            
+            # Append analysis if provided and no custom message
             if [[ -n "${ANALYSIS_MESSAGE:-}" ]]; then
-                msg+="
-
-${ANALYSIS_MESSAGE}"
+                commit_args+=(-m "$ANALYSIS_MESSAGE")
             fi
+            
+            git commit "${commit_args[@]}"
+            echo -e "${GREEN}Created commit${RESET}"
+        else
+            # Use custom message (ANALYSIS_MESSAGE is ignored when --message is provided)
+            git commit ${NO_VERIFY:+--no-verify} -m "$msg"
+            echo -e "${GREEN}Created commit${RESET}"
         fi
-        
-        git commit ${NO_VERIFY:+--no-verify} -m "$msg"
-        echo -e "${GREEN}Created commit${RESET}"
     else
         echo -e "${YELLOW}No changes to commit${RESET}"
     fi
@@ -242,11 +257,22 @@ check_version_order() {
         IFS='.' read -r new_major new_minor new_patch <<< "$NEW_VERSION"
         IFS='.' read -r last_major last_minor last_patch <<< "$last_version"
         
+        local version_not_greater=false
         if [[ "$NEW_VERSION" == "$last_version" ]] || 
            [[ "$new_major" -lt "$last_major" ]] ||
            ([[ "$new_major" -eq "$last_major" ]] && [[ "$new_minor" -lt "$last_minor" ]]) ||
            ([[ "$new_major" -eq "$last_major" ]] && [[ "$new_minor" -eq "$last_minor" ]] && [[ "$new_patch" -le "$last_patch" ]]); then
+            version_not_greater=true
+        fi
+        
+        if $version_not_greater; then
             echo -e "${YELLOW}Warning:${RESET} New version $NEW_VERSION is not greater than last tag $last_tag${RESET}" >&2
+            
+            # Enforce version order in CI
+            if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+                echo -e "${RED}Error: NEW_VERSION ($NEW_VERSION) must be greater than last tag ($last_tag)${RESET}" >&2
+                exit 1
+            fi
         fi
     fi
 }
@@ -256,6 +282,7 @@ BUMP_TYPE=""
 DO_COMMIT=false
 DO_TAG=false
 DRY_RUN=false
+PRINT_ONLY=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -277,6 +304,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=true
+            shift
+            ;;
+        --print)
+            PRINT_ONLY=true
             shift
             ;;
         --message)
@@ -316,6 +347,12 @@ done
 if [[ -z "$BUMP_TYPE" ]]; then
     echo -e "${RED}Error: No bump type specified${RESET}" >&2
     usage
+    exit 1
+fi
+
+# Check for conflicting options
+if [[ "$DRY_RUN" == "true" && "$PRINT_ONLY" == "true" ]]; then
+    echo -e "${RED}Error: --dry-run and --print cannot be used together${RESET}" >&2
     exit 1
 fi
 
@@ -364,6 +401,12 @@ bump_version "$BUMP_TYPE"
 # No-op guard if version unchanged
 if [[ "$CURRENT_VERSION" == "$NEW_VERSION" ]]; then
     echo -e "${YELLOW}Version unchanged ($CURRENT_VERSION); nothing to do.${RESET}"
+    exit 0
+fi
+
+# Handle print-only mode
+if [[ "$PRINT_ONLY" == "true" ]]; then
+    echo "$NEW_VERSION"
     exit 0
 fi
 
