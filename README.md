@@ -76,7 +76,7 @@ You can also pipe output directly:
 valgrind --leak-check=full ./your_program 2>&1 | vglog-filter > filtered.log
 ```
 
-**New in this version**: Direct stdin support! You can now pipe directly from valgrind:
+Direct stdin support! You can pipe directly from valgrind:
 ```sh
 valgrind --leak-check=full ./your_program 2>&1 | vglog-filter
 ```
