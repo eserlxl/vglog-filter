@@ -53,7 +53,7 @@ jobs:
     env:
       NEW_VERSION: ''
     outputs:
-      new_version: ${{ env.NEW_VERSION }}
+      new_version: ${{ steps.bump.outputs.new_version }}
 
     steps:
       - name: Checkout code
@@ -100,7 +100,7 @@ jobs:
               RANGE="${ROOT}^..HEAD"   # include the first commit
             fi
 
-            DIFF_SIZE="$(git diff --numstat $RANGE | awk '{ins+=$1; del+=$2} END{print (ins+0)+(del+0)}')"
+            DIFF_SIZE="$(git diff --numstat "$RANGE" | awk '{ins+=$1; del+=$2} END{print (ins+0)+(del+0)}')"
             # TODO: Consider adding --json support to semantic-version-analyzer for more robust parsing
             NEW_SOURCE_FILES="$(echo "$ANALYSIS" | awk -F': ' '/New source files:/ {print $2+0}')"
             NEW_TEST_FILES="$(echo  "$ANALYSIS" | awk -F': ' '/New test files:/  {print $2+0}')"
@@ -145,6 +145,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Bump version
+        id: bump
         if: steps.version-analysis.outputs.bump_type != 'none'
         run: |
           set -euo pipefail
@@ -169,6 +170,7 @@ jobs:
           
           NEW_VERSION=$(cat VERSION)
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           git fetch --tags origin main
           git pull --rebase origin main
           git push origin main
