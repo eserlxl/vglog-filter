@@ -4,7 +4,7 @@ vglog-filter is a fast and flexible tool designed to process and clean up Valgri
 
 ## Table of Contents
 
-- [Why Use vglog-filter?](#why-use-vglog-filter)
+- [Motivation](#motivation)
 - [Features](#features)
 - [Installation & Prerequisites](#installation--prerequisites)
 - [Build Options](#build-options)
@@ -23,7 +23,7 @@ vglog-filter is a fast and flexible tool designed to process and clean up Valgri
   - [Development Workflow](#development-workflow)
 - [License](#license)
 
-## Why Use vglog-filter? [↑](#vglog-filter)
+## Motivation [↑](#vglog-filter)
 
 Valgrind is a powerful tool for detecting memory errors and leaks in C/C++ programs, but its logs can be overwhelming—especially for large projects or repeated test runs. Raw Valgrind logs often contain:
 - Repeated or redundant stack traces
