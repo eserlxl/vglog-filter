@@ -41,6 +41,10 @@ if (BUILD_TESTS)
     add_executable(test_basic test/test_basic.cpp)
     target_compile_options(test_basic PRIVATE ${WARNING_FLAGS})
     message(STATUS "Test target 'test_basic' added")
+    
+    add_executable(test_integration test/test_integration.cpp)
+    target_compile_options(test_integration PRIVATE ${WARNING_FLAGS})
+    message(STATUS "Test target 'test_integration' added")
 endif()
     
 target_compile_options(vglog-filter PRIVATE ${OPT_FLAGS} ${WARNING_FLAGS})
@@ -70,8 +74,9 @@ message(STATUS "vglog-filter target compile options: ${VGLOG_COMPILE_OPTIONS}")
 if (BUILD_TESTS)
     add_custom_target(test
         COMMAND ${CMAKE_BINARY_DIR}/test_basic
-        DEPENDS test_basic
+        COMMAND ${CMAKE_BINARY_DIR}/test_integration
+        DEPENDS test_basic test_integration
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        COMMENT "Running basic tests"
+        COMMENT "Running all tests"
     )
 endif()

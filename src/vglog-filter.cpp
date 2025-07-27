@@ -27,6 +27,7 @@ struct Options {
     int  depth        = DEFAULT_DEPTH;
     bool trim         = true;
     bool scrub_raw    = true;
+    bool stream_mode  = false;  // Enable stream processing for large files
     Str  marker       = DEFAULT_MARKER;
     Str  filename;
 };
@@ -39,6 +40,7 @@ void usage(const char* prog) {
         "  -v, --verbose           Show completely raw blocks (no address / \"at:\" scrub).\n"
         "  -d N, --depth N         Signature depth (default: " << DEFAULT_DEPTH << ", 0 = unlimited).\n"
         "  -m S, --marker S        Marker string (default: \"" << DEFAULT_MARKER << "\").\n"
+        "  -s, --stream            Enable stream processing for large files (memory efficient).\n"
         "  -V, --version           Show version information.\n"
         "  -h, --help              Show this help.\n";
 }
@@ -203,10 +205,92 @@ VecS read_file_lines(const Str& fname)
 {
     std::ifstream in(fname);
     if (!in) throw std::runtime_error("Cannot open '" + fname + "'");
+    
+    // Estimate file size for capacity reservation
+    in.seekg(0, std::ios::end);
+    std::streampos file_size = in.tellg();
+    in.seekg(0, std::ios::beg);
+    
+    // Estimate number of lines (assuming average 80 chars per line)
+    size_t estimated_lines = static_cast<size_t>(file_size) / 80;
+    estimated_lines = std::max(estimated_lines, size_t(100)); // Minimum 100 lines
+    
     VecS lines;
-    Str  line;
+    lines.reserve(estimated_lines); // Reserve capacity for better performance
+    
+    Str line;
     while (std::getline(in, line)) lines.push_back(std::move(line));
     return lines;
+}
+
+// Stream processing version for large files
+void process_file_stream(const Str& fname, const Options& opt)
+{
+    std::ifstream in(fname);
+    if (!in) throw std::runtime_error("Cannot open '" + fname + "'");
+    
+    std::ostringstream raw, sig;
+    VecS sigLines;
+    std::unordered_set<Str> seen;
+    bool found_marker = false;
+    size_t line_count = 0;
+
+    auto flush = [&]() {
+        const Str rawStr = raw.str();
+        if (rawStr.empty()) return;
+        Str key;
+        if (opt.depth > 0) {
+            for (int i = 0; i < opt.depth && i < static_cast<int>(sigLines.size()); ++i) {
+                key += sigLines[i] + '\n';
+            }
+        } else {
+            key = sig.str();
+        }
+        if (seen.insert(key).second) {
+            std::cout << rawStr << '\n'; // Add extra newline after each block
+        }
+        raw.str("");
+        raw.clear();
+        sig.str("");
+        sig.clear();
+        sigLines.clear();
+    };
+
+    Str line;
+    while (std::getline(in, line)) {
+        line_count++;
+        
+        // Check for marker if trimming is enabled
+        if (opt.trim && line.find(opt.marker) != Str::npos) {
+            found_marker = true;
+            continue; // Skip this line and continue from next
+        }
+        
+        // If we haven't found the marker yet and trimming is enabled, skip
+        if (opt.trim && !found_marker) {
+            continue;
+        }
+        
+        if (!std::regex_search(line, get_re_vg_line())) continue;
+        // strip "==PID== "
+        line = std::regex_replace(line, get_re_prefix(), "");
+        if (std::regex_search(line, get_re_start())) {
+            flush();
+            if (std::regex_search(line, get_re_bytes_head())) continue;
+        }
+        Str rawLine = line;
+        if (opt.scrub_raw) {
+            rawLine = regex_replace_all(rawLine, get_re_addr(), "");
+            rawLine = regex_replace_all(rawLine, get_re_at(), "");
+            rawLine = regex_replace_all(rawLine, get_re_by(), "");
+            rawLine = regex_replace_all(rawLine, get_re_q(), "");
+        }
+        if (trim(rawLine).empty()) continue;
+        raw << rawLine << '\n';
+        sig << canon(line) << '\n';
+        sigLines.push_back(canon(line));
+    }
+    flush();
 }
 
 Str get_version()
@@ -251,12 +335,13 @@ int main(int argc, char* argv[])
         {"verbose",         no_argument,       nullptr, 'v'},
         {"depth",           required_argument, nullptr, 'd'},
         {"marker",          required_argument, nullptr, 'm'},
+        {"stream",          no_argument,       nullptr, 's'},
         {"version",         no_argument,       nullptr, 'V'},
         {"help",            no_argument,       nullptr, 'h'},
         {nullptr,           0,                 nullptr,  0 }
     };
     int c;
-    while ((c = getopt_long(argc, argv, "kvd:m:Vh", long_opts, nullptr)) != -1) {
+    while ((c = getopt_long(argc, argv, "kvd:m:sVh", long_opts, nullptr)) != -1) {
         switch (c) {
             case 'k': opt.trim = false; break;
             case 'v': opt.scrub_raw = false; break;
@@ -273,6 +358,7 @@ int main(int argc, char* argv[])
                 }
                 break;
             case 'm': opt.marker = optarg; break;
+            case 's': opt.stream_mode = true; break;
             case 'V': 
                 std::cout << "vglog-filter version " << get_version() << std::endl; 
                 return 0;
@@ -297,42 +383,53 @@ int main(int argc, char* argv[])
     }
     test_file.close();
     
-    // read file
-    VecS lines;
-    try { 
-        lines = read_file_lines(opt.filename); 
-    } catch (const std::exception& e) { 
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 1; 
-    }
-    
-    // Check if file is empty
-    if (lines.empty()) {
-        std::cerr << "Warning: Input file '" << opt.filename << "' is empty" << std::endl;
-        return 0;
-    }
-    // trim above last marker if requested
-    size_t start = 0;
-    if (opt.trim) {
-        for (size_t i = lines.size(); i-- > 0;) {
-            if (lines[i].find(opt.marker) != Str::npos) {
-                start = i + 1;
-                break;
+    // Process file using stream mode or memory mode
+    if (opt.stream_mode) {
+        // Stream processing for large files
+        try {
+            process_file_stream(opt.filename, opt);
+        } catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << std::endl;
+            return 1;
+        }
+    } else {
+        // Memory-based processing for smaller files
+        VecS lines;
+        try { 
+            lines = read_file_lines(opt.filename); 
+        } catch (const std::exception& e) { 
+            std::cerr << "Error: " << e.what() << std::endl;
+            return 1; 
+        }
+        
+        // Check if file is empty
+        if (lines.empty()) {
+            std::cerr << "Warning: Input file '" << opt.filename << "' is empty" << std::endl;
+            return 0;
+        }
+        // trim above last marker if requested
+        size_t start = 0;
+        if (opt.trim) {
+            for (size_t i = lines.size(); i-- > 0;) {
+                if (lines[i].find(opt.marker) != Str::npos) {
+                    start = i + 1;
+                    break;
+                }
             }
         }
+        
+        // Ensure start doesn't exceed array bounds
+        if (start >= lines.size()) {
+            start = lines.size();
+        }
+        
+        std::stringstream work;
+        if (start < lines.size()) {
+            std::copy(lines.begin() + static_cast<std::ptrdiff_t>(start), lines.end(),
+                      std::ostream_iterator<Str>(work, "\n"));
+        }
+        // run dedupe
+        process(work, opt);
     }
-    
-    // Ensure start doesn't exceed array bounds
-    if (start >= lines.size()) {
-        start = lines.size();
-    }
-    
-    std::stringstream work;
-    if (start < lines.size()) {
-        std::copy(lines.begin() + static_cast<std::ptrdiff_t>(start), lines.end(),
-                  std::ostream_iterator<Str>(work, "\n"));
-    }
-    // run dedupe
-    process(work, opt);
     return 0;
 } 

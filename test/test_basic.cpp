@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 #include <cassert>
+#include <sstream>
+#include <regex>
 
 // Simple test framework
 #define TEST_ASSERT(condition, message) \
@@ -24,6 +26,36 @@
     do { \
         std::cout << "PASS: " << message << std::endl; \
     } while(0)
+
+// Test helper functions (simplified versions of the main functions)
+std::string trim(const std::string& s) {
+    size_t start = s.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";
+    size_t end = s.find_last_not_of(" \t\r\n");
+    return s.substr(start, end - start + 1);
+}
+
+std::string regex_replace_all(const std::string& src, const std::regex& re, const std::string& repl) {
+    return std::regex_replace(src, re, repl);
+}
+
+std::string canon(const std::string& s) {
+    std::string result = s;
+    
+    // Simplified canonicalization for testing
+    static const std::regex re_addr(R"(0x[0-9a-fA-F]+)", std::regex::optimize);
+    static const std::regex re_line(R"(:[0-9]+)", std::regex::optimize);
+    static const std::regex re_array(R"(\[[0-9]+\])", std::regex::optimize);
+    static const std::regex re_template(R"(<[^>]*>)", std::regex::optimize);
+    static const std::regex re_ws(R"([ \t\v\f\r\n]+)", std::regex::optimize);
+    
+    result = regex_replace_all(result, re_addr, "0xADDR");
+    result = regex_replace_all(result, re_line, ":LINE");
+    result = regex_replace_all(result, re_array, "[]");
+    result = regex_replace_all(result, re_template, "<T>");
+    result = regex_replace_all(result, re_ws, " ");
+    return trim(result);
+}
 
 bool test_version_reading() {
     // Test that version can be read from local VERSION file
@@ -83,14 +115,118 @@ bool test_basic_valgrind_log_parsing() {
     return true;
 }
 
+bool test_string_trimming() {
+    // Test ltrim, rtrim, and trim functions
+    std::string test1 = "  hello world  ";
+    std::string test2 = "\t\n\r test \t\n\r";
+    std::string test3 = "no_spaces";
+    std::string test4 = "   ";
+    
+    TEST_ASSERT(trim(test1) == "hello world", "Basic trimming should work");
+    TEST_ASSERT(trim(test2) == "test", "Complex whitespace trimming should work");
+    TEST_ASSERT(trim(test3) == "no_spaces", "String without spaces should remain unchanged");
+    TEST_ASSERT(trim(test4) == "", "All whitespace should be trimmed to empty string");
+    
+    TEST_PASS("String trimming functions work correctly");
+    return true;
+}
+
+bool test_canonicalization() {
+    // Test the canonicalization function
+    std::string test1 = "at 0x12345678: main (test.cpp:42)";
+    std::string test2 = "array[123] template<int> 0xabcdef";
+    std::string test3 = "normal text without patterns";
+    
+    std::string result1 = canon(test1);
+    std::string result2 = canon(test2);
+    std::string result3 = canon(test3);
+    
+    TEST_ASSERT(result1.find("0xADDR") != std::string::npos, "Address should be canonicalized");
+    TEST_ASSERT(result1.find(":LINE") != std::string::npos, "Line number should be canonicalized");
+    TEST_ASSERT(result2.find("[]") != std::string::npos, "Array index should be canonicalized");
+    TEST_ASSERT(result2.find("<T>") != std::string::npos, "Template should be canonicalized");
+    TEST_ASSERT(result3 == "normal text without patterns", "Normal text should remain unchanged");
+    
+    TEST_PASS("Canonicalization function works correctly");
+    return true;
+}
+
+bool test_regex_patterns() {
+    // Test that our regex patterns work correctly
+    static const std::regex re_addr(R"(0x[0-9a-fA-F]+)", std::regex::optimize);
+    static const std::regex re_line(R"(:[0-9]+)", std::regex::optimize);
+    static const std::regex re_vg_line(R"(^==[0-9]+==)", std::regex::optimize);
+    
+    std::string addr_test = "0x12345678";
+    std::string line_test = ":42";
+    std::string vg_test = "==12345== Some message";
+    std::string normal_test = "normal text";
+    
+    TEST_ASSERT(std::regex_search(addr_test, re_addr), "Address regex should match");
+    TEST_ASSERT(std::regex_search(line_test, re_line), "Line regex should match");
+    TEST_ASSERT(std::regex_search(vg_test, re_vg_line), "Valgrind line regex should match");
+    TEST_ASSERT(!std::regex_search(normal_test, re_addr), "Address regex should not match normal text");
+    
+    TEST_PASS("Regex patterns work correctly");
+    return true;
+}
+
+bool test_edge_cases() {
+    // Test various edge cases
+    std::string empty = "";
+    std::string only_whitespace = "   \t\n\r   ";
+    std::string very_long = std::string(1000, 'x') + "0x12345678" + std::string(1000, 'y');
+    
+    TEST_ASSERT(trim(empty) == "", "Empty string should remain empty");
+    TEST_ASSERT(trim(only_whitespace) == "", "Only whitespace should be trimmed to empty");
+    TEST_ASSERT(canon(empty) == "", "Empty string canonicalization should work");
+    TEST_ASSERT(canon(very_long).find("0xADDR") != std::string::npos, "Long string canonicalization should work");
+    
+    TEST_PASS("Edge cases handled correctly");
+    return true;
+}
+
+bool test_large_file_simulation() {
+    // Simulate processing a large number of lines
+    std::ofstream large_file("test_large.tmp");
+    for (int i = 0; i < 1000; ++i) {
+        large_file << "==12345== Line " << i << " with 0x" << std::hex << (i * 1000) << std::dec << "\n";
+    }
+    large_file.close();
+    
+    // Test that we can read the large file
+    std::ifstream check_file("test_large.tmp");
+    std::string line;
+    int count = 0;
+    while (std::getline(check_file, line)) {
+        count++;
+        if (count % 100 == 0) {
+            // Test canonicalization on some lines
+            std::string canon_line = canon(line);
+            TEST_ASSERT(canon_line.find("0xADDR") != std::string::npos, "Large file canonicalization should work");
+        }
+    }
+    TEST_ASSERT(count == 1000, "Large file should have 1000 lines");
+    
+    // Clean up
+    std::remove("test_large.tmp");
+    TEST_PASS("Large file processing simulation works");
+    return true;
+}
+
 int main() {
-    std::cout << "Running basic tests for vglog-filter..." << std::endl;
+    std::cout << "Running comprehensive tests for vglog-filter..." << std::endl;
     
     bool all_passed = true;
     
     all_passed &= test_version_reading();
     all_passed &= test_empty_file_handling();
     all_passed &= test_basic_valgrind_log_parsing();
+    all_passed &= test_string_trimming();
+    all_passed &= test_canonicalization();
+    all_passed &= test_regex_patterns();
+    all_passed &= test_edge_cases();
+    all_passed &= test_large_file_simulation();
     
     if (all_passed) {
         std::cout << "\nAll tests passed!" << std::endl;

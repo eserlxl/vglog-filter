@@ -107,20 +107,23 @@ if [ "$RUN_TESTS" = "ON" ]; then
     echo "Cleaning up any leftover test files..."
     find .. -name "*.tmp" -type f -delete 2>/dev/null || true
     
-    if [ -f "build/test_basic" ]; then
-        ./build/test_basic
-        echo "Tests completed successfully!"
-    else
-        echo "Warning: Test executable not found. Tests may not have been built correctly."
-        echo "Attempting to build test manually..."
-        g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_basic.cpp -o test_basic
-        if [ -f "test_basic" ]; then
-            ./test_basic
-            echo "Tests completed successfully!"
-        else
-            echo "Error: Failed to build test executable."
-        fi
-    fi
+                 if [ -f "build/test_basic" ] && [ -f "build/test_integration" ]; then
+                 ./build/test_basic
+                 ./build/test_integration
+                 echo "All tests completed successfully!"
+             else
+                 echo "Warning: Test executables not found. Tests may not have been built correctly."
+                 echo "Attempting to build tests manually..."
+                 g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_basic.cpp -o test_basic
+                 g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_integration.cpp -o test_integration
+                 if [ -f "test_basic" ] && [ -f "test_integration" ]; then
+                     ./test_basic
+                     ./test_integration
+                     echo "All tests completed successfully!"
+                 else
+                     echo "Error: Failed to build test executables."
+                 fi
+             fi
     
     # Clean up any test files that might have been left behind
     echo "Cleaning up test artifacts..."
