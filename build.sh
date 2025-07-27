@@ -70,4 +70,4 @@ if [ "$CLEAN_BUILD" = "ON" ]; then
   make clean
 fi
 
-make -j$(nproc) 
+make -j"$(nproc)" 
