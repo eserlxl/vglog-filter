@@ -163,6 +163,20 @@ VecS read_file_lines(const Str& fname)
     return lines;
 }
 
+Str get_version()
+{
+    std::ifstream version_file("/usr/share/vglog-filter/VERSION");
+    if (!version_file) {
+        return "unknown";
+    }
+    Str version;
+    std::getline(version_file, version);
+    // Remove any whitespace
+    version.erase(0, version.find_first_not_of(" \t\r\n"));
+    version.erase(version.find_last_not_of(" \t\r\n") + 1);
+    return version;
+}
+
 int main(int argc, char* argv[])
 {
     Options opt;
@@ -171,16 +185,20 @@ int main(int argc, char* argv[])
         {"verbose",         no_argument,       nullptr, 'v'},
         {"depth",           required_argument, nullptr, 'd'},
         {"marker",          required_argument, nullptr, 'm'},
+        {"version",         no_argument,       nullptr, 'V'},
         {"help",            no_argument,       nullptr, 'h'},
         {nullptr,           0,                 nullptr,  0 }
     };
     int c;
-    while ((c = getopt_long(argc, argv, "kvd:m:h", long_opts, nullptr)) != -1) {
+    while ((c = getopt_long(argc, argv, "kvd:m:Vh", long_opts, nullptr)) != -1) {
         switch (c) {
             case 'k': opt.trim = false; break;
             case 'v': opt.scrub_raw = false; break;
             case 'd': opt.depth = std::stoi(optarg); break;
             case 'm': opt.marker = optarg; break;
+            case 'V': 
+                std::cout << "vglog-filter version " << get_version() << std::endl; 
+                return 0;
             case 'h': usage(argv[0]); return 0;
             default : usage(argv[0]); return 1;
         }
