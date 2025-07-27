@@ -38,7 +38,8 @@ jobs:
           mkdir -p build-clang-tidy
           cd build-clang-tidy
           cmake -DCMAKE_CXX_CLANG_TIDY=clang-tidy \
-                -DCMAKE_CXX_FLAGS="-std=c++17" \
+                -DCMAKE_CXX_STANDARD=20 \
+                -DCMAKE_CXX_STANDARD_REQUIRED=ON \
                 -DPERFORMANCE_BUILD=OFF \
                 -DWARNING_MODE=ON \
                 -DDEBUG_MODE=OFF \

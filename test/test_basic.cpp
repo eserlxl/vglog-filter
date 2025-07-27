@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <cassert>
 #include <sstream>
@@ -28,19 +29,19 @@
     } while(0)
 
 // Test helper functions (simplified versions of the main functions)
-std::string trim(const std::string& s) {
-    size_t start = s.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos) return "";
-    size_t end = s.find_last_not_of(" \t\r\n");
-    return s.substr(start, end - start + 1);
+std::string trim(std::string_view s) {
+    auto start = s.find_first_not_of(" \t\r\n");
+    if (start == std::string_view::npos) return "";
+    auto end = s.find_last_not_of(" \t\r\n");
+    return std::string(s.substr(start, end - start + 1));
 }
 
-std::string regex_replace_all(const std::string& src, const std::regex& re, const std::string& repl) {
-    return std::regex_replace(src, re, repl);
+std::string regex_replace_all(std::string_view src, const std::regex& re, std::string_view repl) {
+    return std::regex_replace(std::string(src), re, std::string(repl));
 }
 
-std::string canon(const std::string& s) {
-    std::string result = s;
+std::string canon(std::string_view s) {
+    std::string result(s);
     
     // Simplified canonicalization for testing
     static const std::regex re_addr(R"(0x[0-9a-fA-F]+)", std::regex::optimize);
@@ -59,8 +60,7 @@ std::string canon(const std::string& s) {
 
 bool test_version_reading() {
     // Test that version can be read from local VERSION file
-    std::ifstream version_file("VERSION");
-    if (version_file) {
+    if (std::ifstream version_file("VERSION"); version_file) {
         std::string version;
         std::getline(version_file, version);
         TEST_ASSERT(!version.empty(), "Version should not be empty");
@@ -74,14 +74,16 @@ bool test_version_reading() {
 
 bool test_empty_file_handling() {
     // Create a temporary empty file
-    std::ofstream empty_file("test_empty.tmp");
-    empty_file.close();
+    {
+        std::ofstream empty_file("test_empty.tmp");
+    } // File automatically closed
     
     // Test that the file is actually empty
-    std::ifstream check_file("test_empty.tmp");
-    std::string line;
-    bool has_content = static_cast<bool>(std::getline(check_file, line));
-    TEST_ASSERT(!has_content, "Empty file should have no content");
+    if (std::ifstream check_file("test_empty.tmp"); check_file) {
+        std::string line;
+        bool has_content = static_cast<bool>(std::getline(check_file, line));
+        TEST_ASSERT(!has_content, "Empty file should have no content");
+    }
     
     // Clean up
     std::remove("test_empty.tmp");

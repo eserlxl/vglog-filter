@@ -49,7 +49,7 @@ vglog-filter addresses these issues by:
 
 ## Installation & Prerequisites
 
-- **Dependencies**: Requires a C++17-compatible compiler, CMake (version 3.10 or newer recommended).
+- **Dependencies**: Requires a C++20-compatible compiler, CMake (version 3.10 or newer recommended).
 - **Supported platforms**: Linux (tested), should work on other POSIX systems with minimal changes.
 - **Build script**: The project includes a `build.sh` script for easy compilation with various build configurations (see [Developer Guide](doc/DEVELOPER_GUIDE.md#build-options) for details).
 

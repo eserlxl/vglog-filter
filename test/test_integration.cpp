@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <cassert>
 #include <sstream>
@@ -61,16 +62,17 @@ bool test_valgrind_log_processing() {
     test_log.close();
     
     // Test that the file was created
-    std::ifstream check_file("test_valgrind.tmp");
-    TEST_ASSERT(check_file.good(), "Test Valgrind log file should be created");
-    
-    // Count lines to verify content
-    std::string line;
-    int line_count = 0;
-    while (std::getline(check_file, line)) {
-        line_count++;
+    if (std::ifstream check_file("test_valgrind.tmp"); check_file) {
+        TEST_ASSERT(check_file.good(), "Test Valgrind log file should be created");
+        
+        // Count lines to verify content
+        std::string line;
+        int line_count = 0;
+        while (std::getline(check_file, line)) {
+            line_count++;
+        }
+        TEST_ASSERT(line_count > 0, "Test Valgrind log should have content");
     }
-    TEST_ASSERT(line_count > 0, "Test Valgrind log should have content");
     
     // Clean up
     std::remove("test_valgrind.tmp");

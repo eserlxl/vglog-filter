@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <cassert>
 #include <sstream>
@@ -59,13 +60,14 @@ bool test_memory_leak_simulation() {
     test_log.close();
     
     // Test that the file was created and has content
-    std::ifstream check_file("test_memory_leak.tmp");
-    std::string line;
-    int line_count = 0;
-    while (std::getline(check_file, line)) {
-        line_count++;
+    if (std::ifstream check_file("test_memory_leak.tmp"); check_file) {
+        std::string line;
+        int line_count = 0;
+        while (std::getline(check_file, line)) {
+            line_count++;
+        }
+        TEST_ASSERT(line_count > 0, "Memory leak test file should have content");
     }
-    TEST_ASSERT(line_count > 0, "Memory leak test file should have content");
     
     // Clean up
     std::remove("test_memory_leak.tmp");

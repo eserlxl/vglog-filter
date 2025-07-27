@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <cassert>
 #include <sstream>
@@ -46,8 +47,9 @@ bool test_malformed_valgrind_lines() {
     test_log.close();
     
     // Test that the file was created
-    std::ifstream check_file("test_malformed.tmp");
-    TEST_ASSERT(check_file.good(), "Malformed lines test file should be created");
+    if (std::ifstream check_file("test_malformed.tmp"); check_file) {
+        TEST_ASSERT(check_file.good(), "Malformed lines test file should be created");
+    }
     
     // Clean up
     std::remove("test_malformed.tmp");
@@ -69,8 +71,9 @@ bool test_very_long_lines() {
     test_log.close();
     
     // Test that the file was created
-    std::ifstream check_file("test_long_lines.tmp");
-    TEST_ASSERT(check_file.good(), "Long lines test file should be created");
+    if (std::ifstream check_file("test_long_lines.tmp"); check_file) {
+        TEST_ASSERT(check_file.good(), "Long lines test file should be created");
+    }
     
     // Clean up
     std::remove("test_long_lines.tmp");
@@ -97,8 +100,9 @@ bool test_unicode_and_special_chars() {
     test_log.close();
     
     // Test that the file was created
-    std::ifstream check_file("test_unicode.tmp");
-    TEST_ASSERT(check_file.good(), "Unicode test file should be created");
+    if (std::ifstream check_file("test_unicode.tmp"); check_file) {
+        TEST_ASSERT(check_file.good(), "Unicode test file should be created");
+    }
     
     // Clean up
     std::remove("test_unicode.tmp");

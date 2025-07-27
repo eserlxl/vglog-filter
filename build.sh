@@ -117,11 +117,11 @@ if [ "$RUN_TESTS" = "ON" ]; then
              else
                  echo "Warning: Test executables not found. Tests may not have been built correctly."
                  echo "Attempting to build tests manually..."
-                 g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_basic.cpp -o test_basic
-                 g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_integration.cpp -o test_integration
-                 g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_comprehensive.cpp -o test_comprehensive
-                 g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_edge_cases.cpp -o test_edge_cases
-                 g++ -std=c++17 -Wall -pedantic -Wextra -O2 ../test/test_memory_leaks.cpp -o test_memory_leaks
+                 g++ -std=c++20 -Wall -pedantic -Wextra -O2 ../test/test_basic.cpp -o test_basic
+                 g++ -std=c++20 -Wall -pedantic -Wextra -O2 ../test/test_integration.cpp -o test_integration
+                 g++ -std=c++20 -Wall -pedantic -Wextra -O2 ../test/test_comprehensive.cpp -o test_comprehensive
+                 g++ -std=c++20 -Wall -pedantic -Wextra -O2 ../test/test_edge_cases.cpp -o test_edge_cases
+                 g++ -std=c++20 -Wall -pedantic -Wextra -O2 ../test/test_memory_leaks.cpp -o test_memory_leaks
                  if [ -f "test_basic" ] && [ -f "test_integration" ] && [ -f "test_comprehensive" ] && [ -f "test_edge_cases" ] && [ -f "test_memory_leaks" ]; then
                      ./test_basic
                      ./test_integration
