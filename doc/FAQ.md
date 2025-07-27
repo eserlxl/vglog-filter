@@ -34,6 +34,15 @@ Use the build script with the `tests` option:
 ```
 This will build and run the test suite, automatically cleaning up any temporary files.
 
+You can also combine tests with other build options:
+```sh
+# Tests with debug mode
+./build.sh tests debug
+
+# Tests with performance optimizations and warnings
+./build.sh tests performance warnings
+```
+
 ## How does vglog-filter handle large files?
 vglog-filter automatically detects files larger than 5MB and switches to stream processing mode for memory efficiency. You'll see a message "Info: Large file detected, using stream processing mode" when this happens. You can also force stream processing with the `-s` flag regardless of file size.
 
@@ -53,4 +62,25 @@ valgrind --leak-check=full ./your_program 2>&1 | vglog-filter
 This is much more convenient than saving to a file first.
 
 ## Can I use vglog-filter with logs from tools other than Valgrind?
-It is designed for Valgrind logs, but may work with similar formats if the error blocks match the expected patterns. 
+It is designed for Valgrind logs, but may work with similar formats if the error blocks match the expected patterns.
+
+## What build configurations are available?
+The project supports several build configurations:
+- **Default**: Standard build with O2 optimizations
+- **Performance**: O3 optimizations with LTO and native architecture tuning
+- **Debug**: Debug symbols with O0 optimization for debugging
+- **Warnings**: Extra compiler warnings for code quality
+- **Tests**: Builds and runs the test suite
+
+You can combine these options: `./build.sh performance warnings tests`
+
+## How is the project tested in CI/CD?
+The project uses comprehensive GitHub Actions workflows that test:
+- All 12 build configuration combinations
+- Cross-platform compatibility (Ubuntu, Arch, Fedora, Debian)
+- Debug builds with GDB integration
+- Performance optimizations and LTO verification
+- Memory sanitizer testing
+- Static analysis with Clang-Tidy
+- Security analysis with CodeQL
+- Shell script validation with ShellCheck 

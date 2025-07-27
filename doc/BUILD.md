@@ -65,6 +65,7 @@ You can provide one or more of the following options:
 - Builds the project using `make -j20` for fast parallel compilation.
 - If `tests` is specified, builds and runs the test suite with automatic cleanup.
 - Validates command-line arguments and provides helpful warnings for unknown options.
+- Supports all build configuration combinations for comprehensive testing.
 
 ## Performance Features
 The built executable includes several performance optimizations:
@@ -75,6 +76,43 @@ The built executable includes several performance optimizations:
 
 ## Output
 - The compiled binary and build artifacts will be placed in the `build/` directory.
+
+## Continuous Integration
+
+The project includes comprehensive GitHub Actions workflows that automatically test all build configurations:
+
+### Automated Testing Workflows
+- **Build and Test**: Tests default, performance, debug, and warnings builds
+- **Comprehensive Test**: Tests all 12 build configuration combinations
+- **Debug Build Test**: Dedicated testing for debug builds with GDB integration
+- **Cross-Platform Test**: Tests builds across Ubuntu, Arch Linux, Fedora, and Debian
+- **Performance Benchmark**: Automated performance testing and optimization verification
+- **Memory Sanitizer**: Memory error detection using Clang's MemorySanitizer
+- **Clang-Tidy**: Static analysis and code quality checks
+- **CodeQL**: Security analysis and vulnerability detection
+- **ShellCheck**: Shell script linting and validation
+
+### Build Configurations Tested
+The CI/CD pipeline automatically tests these combinations:
+- Default build
+- Performance build (O3 optimizations + LTO)
+- Debug build (debug symbols + O0)
+- Warnings build (extra compiler warnings)
+- Performance + Warnings
+- Debug + Warnings
+- Tests build (with test suite)
+- Performance + Tests
+- Debug + Tests
+- Warnings + Tests
+- Performance + Warnings + Tests
+- Debug + Warnings + Tests
+
+### Quality Assurance
+- All builds are tested for functionality and binary characteristics
+- Debug builds are verified to contain debug symbols
+- Performance builds are verified to use O3 optimizations and LTO
+- Test suites are automatically executed when built
+- Cross-platform compatibility is verified across multiple distributions
 
 ---
 **Note for Arch Linux/AUR users:** The `updpkgsums` tool (used for updating PKGBUILD checksums) is provided by the `pacman-contrib` package. Be sure to install it if you plan to maintain or update the PKGBUILD or use the AUR automation scripts.

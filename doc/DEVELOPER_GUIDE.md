@@ -119,8 +119,14 @@ The project includes comprehensive testing infrastructure:
 
 ### GitHub Actions Workflows
 - **Build and Test**: Multi-platform testing with multiple build configurations
-- **Code Security**: Automated security analysis with CodeQL
-- **Shell Script Linting**: ShellCheck validation for all scripts
+- **Comprehensive Test**: Tests all 12 build configuration combinations
+- **Debug Build Test**: Dedicated testing for debug builds with GDB integration
+- **Cross-Platform Test**: Tests builds across Ubuntu, Arch Linux, Fedora, and Debian
+- **Performance Benchmark**: Automated performance testing and optimization verification
+- **Memory Sanitizer**: Memory error detection using Clang's MemorySanitizer
+- **Clang-Tidy**: Static analysis and code quality checks
+- **CodeQL**: Security analysis and vulnerability detection
+- **ShellCheck**: Shell script linting and validation
 - **Automated Versioning**: Semantic version bumping based on commit messages
 
 ### Local Testing
@@ -129,6 +135,14 @@ All build configurations are tested locally and in CI:
 - Performance build (optimized)
 - Debug build
 - Warnings build (extra compiler warnings)
+- All combinations with tests
+- Performance + Warnings
+- Debug + Warnings
+- Performance + Tests
+- Debug + Tests
+- Warnings + Tests
+- Performance + Warnings + Tests
+- Debug + Warnings + Tests
 
 #### Test Framework
 The project includes a basic test framework in the `test/` directory:
@@ -145,10 +159,20 @@ The project includes a basic test framework in the `test/` directory:
 # Run tests with specific build configuration
 ./build.sh tests debug warnings
 
+# Run tests with performance optimizations
+./build.sh tests performance warnings
+
 # Manual test compilation (if needed)
 g++ -std=c++17 -Wall -pedantic -Wextra -O2 test/test_basic.cpp -o build/test_basic
 ./build/test_basic
 ```
+
+#### CI/CD Testing
+The GitHub Actions workflows automatically test all build configurations:
+- **Comprehensive Test**: Tests all 12 build configuration combinations
+- **Debug Build Test**: Verifies debug symbols and GDB integration
+- **Performance Benchmark**: Tests performance optimizations and LTO
+- **Cross-Platform**: Ensures compatibility across different Linux distributions
 
 #### Performance Features
 - **Automatic large file detection**: Files >5MB automatically use stream processing

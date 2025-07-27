@@ -39,7 +39,8 @@ vglog-filter addresses these issues by:
 - **Memory-efficient processing**: Stream processing for large files to prevent OOM errors.
 - **Test framework**: Built-in test suite with automatic cleanup.
 - **Automated versioning**: Semantic versioning with automated bumping based on conventional commits.
-- **Comprehensive testing**: Multi-platform CI/CD with multiple build configurations.
+- **Comprehensive CI/CD**: 12 GitHub Actions workflows testing all build configurations.
+- **Quality assurance**: Static analysis, memory sanitizer, security scanning, and cross-platform testing.
 
 [↑ Back to top](#vglog-filter)
 
@@ -100,6 +101,7 @@ Comprehensive documentation is available in the [`doc/`](doc/) folder:
 - [BUILD.md](doc/BUILD.md): Build script and configuration options
 - [VERSIONING.md](doc/VERSIONING.md): Versioning strategy and automated version management
 - [DEVELOPER_GUIDE.md](doc/DEVELOPER_GUIDE.md): Build options, versioning system, and testing infrastructure for developers
+- [CI_CD_GUIDE.md](doc/CI_CD_GUIDE.md): Comprehensive CI/CD and testing infrastructure guide
 
 [↑ Back to top](#vglog-filter)
 
@@ -111,7 +113,8 @@ Contributions, bug reports, and feature requests are welcome! Please open an iss
 1. Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for commit messages
 2. Use the provided version bumping tools for releases
 3. Run tests with `./build.sh tests` before submitting pull requests
-4. Check the [CONTRIBUTING.md](.github/CONTRIBUTING.md) for detailed guidelines
+4. All builds are automatically tested in CI/CD with 12 different configurations
+5. Check the [CONTRIBUTING.md](.github/CONTRIBUTING.md) for detailed guidelines
 
 [↑ Back to top](#vglog-filter)
 
