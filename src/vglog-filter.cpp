@@ -68,13 +68,15 @@ Str regex_replace_all(const Str& src, const std::regex& re, const Str& repl)
 
 // ---------- canonicalisation ------------------------------------------------
 
+// Static regex objects to avoid recompilation
+static const std::regex re_addr(R"(0x[0-9a-fA-F]+)");
+static const std::regex re_line(R"(:[0-9]+)");
+static const std::regex re_array(R"(\[[0-9]+\])");
+static const std::regex re_template(R"(<[^>]*>)");
+static const std::regex re_ws(R"([ \t\v\f\r\n]+)");
+
 Str canon(Str s)
 {
-    static const std::regex re_addr(R"(0x[0-9a-fA-F]+)");
-    static const std::regex re_line(R"(:[0-9]+)");
-    static const std::regex re_array(R"(\[[0-9]+\])");
-    static const std::regex re_template(R"(<[^>]*>)");
-    static const std::regex re_ws(R"([ \t\v\f\r\n]+)");
     s = regex_replace_all(s, re_addr, "0xADDR");
     s = regex_replace_all(s, re_line, ":LINE");
     s = regex_replace_all(s, re_array, "[]");
@@ -86,20 +88,18 @@ Str canon(Str s)
 
 // ---------- main dedupe engine ---------------------------------------------
 
+// Static regex objects for process function
+static const std::regex re_vg_line(R"(^==[0-9]+==)");
+static const std::regex re_prefix(R"(^==[0-9]+==[ \t\v\f\r\n]*)");
+static const std::regex re_start(
+    R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))");
+static const std::regex re_bytes_head(R"([0-9]+ bytes in [0-9]+ blocks)");
+static const std::regex re_at(R"(at : +)");
+static const std::regex re_by(R"(by : +)");
+static const std::regex re_q(R"(\?{3,})");
+
 void process(std::istream& in, const Options& opt)
 {
-    const std::regex re_vg_line(R"(^==[0-9]+==)");
-    const std::regex re_prefix(R"(^==[0-9]+==[ \t\v\f\r\n]*)");
-    const std::regex re_start(
-        R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))");
-    const std::regex re_bytes_head(R"([0-9]+ bytes in [0-9]+ blocks)");
-
-    // raw scrubbing regexes
-    const std::regex re_addr(R"(0x[0-9a-fA-F]+)");
-    const std::regex re_at(R"(at : +)");
-    const std::regex re_by(R"(by : +)");
-    const std::regex re_q(R"(\?{3,})");
-
     std::ostringstream raw, sig;
     VecS sigLines;
     std::unordered_set<Str> seen;
