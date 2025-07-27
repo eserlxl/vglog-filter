@@ -260,9 +260,13 @@ create_tag() {
 
 # Function to sanitize TAG_PREFIX for use in git tag patterns
 sanitize_tag_prefix() {
-    local prefix="$1"
-    # Escape glob characters that could cause issues in git tag patterns
-    echo "$prefix" | sed 's/[[\]*?]/\\&/g'
+    local p="$1"
+    p="${p//\\/\\\\}"   # backslash -> \\ 
+    p="${p//\*/\\*}"    # * -> \*
+    p="${p//\?/\\?}"    # ? -> \?
+    p="${p//[/\\[}"     # [ -> \[
+    p="${p//]/\\]}"     # ] -> \]
+    printf '%s' "$p"
 }
 
 # Function to check if new version is greater than last tag
@@ -274,7 +278,7 @@ check_version_order() {
     
     if [[ -n "$last_tag" ]]; then
         # Remove tag prefix for comparison
-        local last_version="${last_tag#${TAG_PREFIX}}"
+        local last_version="${last_tag:${#TAG_PREFIX}}"
         if [[ ! "$last_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             return 0  # Skip comparison if last tag format is unexpected
         fi
@@ -473,10 +477,8 @@ fi
 if [[ "$DO_TAG" == "true" ]]; then
     # Warn if tagging without committing and files have changes
     if [[ "$DO_COMMIT" != "true" ]]; then
-        local files_to_check=("$VERSION_FILE")
-        if $UPDATE_CMAKE; then
-            files_to_check+=("$PROJECT_ROOT/CMakeLists.txt")
-        fi
+        files_to_check=("$VERSION_FILE")
+        $UPDATE_CMAKE && files_to_check+=("$PROJECT_ROOT/CMakeLists.txt")
         
         if ! git diff --quiet -- "${files_to_check[@]}"; then
             echo -e "${YELLOW}Warning:${RESET} Tagging without --commit; ensure the version bump commit is pushed before the tag so CI/release matches the version." >&2
