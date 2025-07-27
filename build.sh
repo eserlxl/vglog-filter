@@ -102,6 +102,11 @@ make -j"$(nproc)"
 # Run tests if requested
 if [ "$RUN_TESTS" = "ON" ]; then
     echo "Running tests..."
+    
+    # Clean up any leftover test files before running tests
+    echo "Cleaning up any leftover test files..."
+    find .. -name "*.tmp" -type f -delete 2>/dev/null || true
+    
     if [ -f "build/test_basic" ]; then
         ./build/test_basic
         echo "Tests completed successfully!"
@@ -116,4 +121,8 @@ if [ "$RUN_TESTS" = "ON" ]; then
             echo "Error: Failed to build test executable."
         fi
     fi
+    
+    # Clean up any test files that might have been left behind
+    echo "Cleaning up test artifacts..."
+    find .. -name "*.tmp" -type f -delete 2>/dev/null || true
 fi 
