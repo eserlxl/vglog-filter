@@ -168,26 +168,27 @@ update_version_file() {
 # Function to update CMakeLists.txt if it contains version information
 update_cmake_version() {
     local cmake="$PROJECT_ROOT/CMakeLists.txt"
-    if [[ -f "$cmake" ]]; then
-        # Update common patterns if present; otherwise just note it
-        if grep -Eq 'project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-            sed -E -i "s/(project\([^)]*VERSION[[:space:]]+)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
-            echo -e "${GREEN}Updated CMakeLists.txt project VERSION to ${NEW_VERSION}${RESET}"
-        elif grep -Eq 'set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-            sed -E -i "s/(set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+\"?)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
-            echo -e "${GREEN}Updated CMake PROJECT_VERSION to ${NEW_VERSION}${RESET}"
-        else
-            echo -e "${YELLOW}Note: CMakeLists.txt present but no recognizable version field to update${RESET}"
-        fi
+    [[ -f "$cmake" ]] || return 0
+    local before after changed=0
+
+    before="$(sha1sum "$cmake" | awk '{print $1}')"
+    if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
+        sed -E -i "s/(^[[:space:]]*project\([^)]*VERSION[[:space:]]+)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
+    elif grep -Eq '^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
+        sed -E -i "s/(^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+\"?)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
+    else
+        echo -e "${YELLOW}Note: CMakeLists.txt present but no recognizable version field to update${RESET}"
+        return 0
+    fi
+    after="$(sha1sum "$cmake" | awk '{print $1}')"
+    if [[ "$before" != "$after" ]]; then
+        echo -e "${GREEN}Updated CMakeLists.txt to ${NEW_VERSION}${RESET}"
+        git add -- "$cmake"
     fi
 }
 
 # Function to stage files for commit
 stage_files() {
-    # Stage CMakeLists.txt if it exists and has changes
-    if [[ -f "$PROJECT_ROOT/CMakeLists.txt" ]]; then
-        git add -- "$PROJECT_ROOT/CMakeLists.txt" || true
-    fi
     # Stage VERSION file
     git add -- "$VERSION_FILE"
 }
@@ -482,6 +483,11 @@ if [[ "$DO_TAG" == "true" ]]; then
         
         if ! git diff --quiet -- "${files_to_check[@]}"; then
             echo -e "${YELLOW}Warning:${RESET} Tagging without --commit; ensure the version bump commit is pushed before the tag so CI/release matches the version." >&2
+        fi
+        
+        # Additional warning for any uncommitted changes
+        if ! git diff --quiet --name-only; then
+            echo -e "${YELLOW}Warning:${RESET} There are uncommitted changes; tag may not reflect working tree." >&2
         fi
     fi
     
