@@ -16,10 +16,12 @@
 #include <regex>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
 using Str  = std::string;
+using StrView = std::string_view;
 using VecS = std::vector<Str>;
 
 constexpr int DEFAULT_DEPTH = 1;
@@ -56,6 +58,22 @@ void usage(const char* prog) {
 }
 
 // ---------- helpers ---------------------------------------------------------
+
+static inline StrView ltrim_view(StrView s) {
+    auto start = std::find_if(s.begin(), s.end(),
+                              [](int ch){ return !std::isspace(ch); });
+    return StrView(start, s.end() - start);
+}
+
+static inline StrView rtrim_view(StrView s) {
+    auto end = std::find_if(s.rbegin(), s.rend(),
+                            [](int ch){ return !std::isspace(ch); }).base();
+    return StrView(s.begin(), end - s.begin());
+}
+
+static inline StrView trim_view(StrView s) { 
+    return rtrim_view(ltrim_view(s)); 
+}
 
 static inline Str ltrim(Str s) {
     s.erase(s.begin(), std::find_if(s.begin(), s.end(),
@@ -116,6 +134,12 @@ Str canon(Str s)
     s = regex_replace_all(s, get_re_ws(), " ");
     s = rtrim(s);
     return s;
+}
+
+Str canon(StrView s)
+{
+    Str result(s);
+    return canon(std::move(result));
 }
 
 // ---------- main dedupe engine ---------------------------------------------
@@ -201,7 +225,7 @@ void process(std::istream& in, const Options& opt)
             rawLine = regex_replace_all(rawLine, get_re_by(), "");
             rawLine = regex_replace_all(rawLine, get_re_q(), "");
         }
-        if (trim(rawLine).empty()) continue;
+        if (trim_view(rawLine).empty()) continue;
         raw << rawLine << '\n';
         sig << canon(line) << '\n';
         sigLines.push_back(canon(line));
@@ -315,7 +339,7 @@ void process_stream(std::istream& in, const Options& opt)
             rawLine = regex_replace_all(rawLine, get_re_by(), "");
             rawLine = regex_replace_all(rawLine, get_re_q(), "");
         }
-        if (trim(rawLine).empty()) continue;
+        if (trim_view(rawLine).empty()) continue;
         raw << rawLine << '\n';
         sig << canon(line) << '\n';
         sigLines.push_back(canon(line));
