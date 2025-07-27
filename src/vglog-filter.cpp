@@ -263,11 +263,11 @@ int main(int argc, char* argv[])
                 try {
                     opt.depth = std::stoi(optarg);
                     if (opt.depth < 0) {
-                        std::cerr << "Error: Depth must be non-negative" << std::endl;
+                        std::cerr << "Error: Depth must be non-negative (got: " << optarg << ")" << std::endl;
                         return 1;
                     }
                 } catch (const std::exception& e) {
-                    std::cerr << "Error: Invalid depth value '" << optarg << "'" << std::endl;
+                    std::cerr << "Error: Invalid depth value '" << optarg << "' (expected: non-negative integer)" << std::endl;
                     return 1;
                 }
                 break;
@@ -281,7 +281,8 @@ int main(int argc, char* argv[])
     }
     if (optind >= argc) { 
         std::cerr << "Error: No input file specified" << std::endl;
-        usage(argv[0]); 
+        std::cerr << "Usage: " << argv[0] << " [options] <valgrind_log>" << std::endl;
+        std::cerr << "Use --help for more information" << std::endl;
         return 1; 
     }
     opt.filename = argv[optind];
@@ -290,14 +291,19 @@ int main(int argc, char* argv[])
     std::ifstream test_file(opt.filename);
     if (!test_file) {
         std::cerr << "Error: Cannot open file '" << opt.filename << "'" << std::endl;
+        std::cerr << "Please check that the file exists and is readable" << std::endl;
         return 1;
     }
     test_file.close();
     
     // read file
     VecS lines;
-    try { lines = read_file_lines(opt.filename); }
-    catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
+    try { 
+        lines = read_file_lines(opt.filename); 
+    } catch (const std::exception& e) { 
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1; 
+    }
     // trim above last marker if requested
     size_t start = 0;
     if (opt.trim) {
