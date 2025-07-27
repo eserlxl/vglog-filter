@@ -66,6 +66,13 @@ You can provide one or more of the following options:
 - If `tests` is specified, builds and runs the test suite with automatic cleanup.
 - Validates command-line arguments and provides helpful warnings for unknown options.
 
+## Performance Features
+The built executable includes several performance optimizations:
+- **Automatic large file detection**: Files >5MB automatically use stream processing
+- **Memory optimization**: Vector capacity reservation and efficient string operations
+- **Regex optimization**: All patterns use `std::regex::optimize` for better performance
+- **Smart processing**: Optimal mode selection based on file size
+
 ## Output
 - The compiled binary and build artifacts will be placed in the `build/` directory.
 

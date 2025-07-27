@@ -18,8 +18,9 @@ vglog-filter [options] <valgrind_log>
 | `-v`   | `--verbose`         | Show completely raw blocks (no address / `at:` scrub). |
 | `-d N` | `--depth N`         | Signature depth (default: 1, 0 = unlimited). |
 | `-m S` | `--marker S`        | Marker string (default: "Successfully downloaded debug"). |
+| `-s`   | `--stream`          | Force stream processing mode (auto-detected for files >5MB). |
 | `-V`   | `--version`         | Show version information. |
-| `-h`   | `--help`            | Show help message. |
+| `-h`   | `--help`            | Show this help message. |
 
 ## Typical Workflow
 
@@ -33,17 +34,24 @@ vglog-filter [options] <valgrind_log>
    ```
 3. Review `filtered.log` for unique issues.
 
-## Example
+## Examples
 
 ```sh
+# Basic usage with automatic large file detection
+vglog-filter valgrind.log > filtered.log
+
+# Keep all debug info and use signature depth of 2
 vglog-filter -d 2 -k valgrind.log > filtered.log
+
+# Force stream processing mode regardless of file size
+vglog-filter -s large_valgrind.log > filtered.log
 ```
-- This keeps all debug info and uses a signature depth of 2.
 
 ## How It Works
 - By default, only log entries after the last occurrence of the marker string (default: "Successfully downloaded debug") are processed. Use `-k` to keep all entries.
 - The tool deduplicates error blocks based on a canonicalized signature, with configurable depth.
 - Address and line numbers are scrubbed unless `-v` is used.
+- **Automatic large file detection**: Files larger than 5MB automatically use stream processing for memory efficiency.
 - Empty input files are handled gracefully with appropriate warnings.
 - Comprehensive error messages provide helpful guidance for common issues.
 

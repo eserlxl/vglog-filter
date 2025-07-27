@@ -32,4 +32,11 @@ vglog-filter -d 3 -m "==12345== My Custom Marker" mylog.log > filtered.log
 - Empty input files are handled gracefully with appropriate warnings.
 - Invalid input is handled gracefully with descriptive error messages and helpful suggestions.
 - String operations are performed safely to prevent crashes.
-- Version file resolution supports multiple installation paths for development and production use. 
+- Version file resolution supports multiple installation paths for development and production use.
+
+## Performance and Memory Management
+- **Automatic large file detection**: Files larger than 5MB automatically use stream processing
+- **Memory-efficient processing**: Stream mode processes files line-by-line instead of loading entire file
+- **Vector capacity reservation**: Pre-allocates memory based on file size estimation
+- **Regex optimization**: All patterns use `std::regex::optimize` for better performance
+- **Smart mode selection**: Uses optimal processing approach for each file size 

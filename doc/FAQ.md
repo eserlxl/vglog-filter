@@ -34,6 +34,9 @@ Use the build script with the `tests` option:
 ```
 This will build and run the test suite, automatically cleaning up any temporary files.
 
+## How does vglog-filter handle large files?
+vglog-filter automatically detects files larger than 5MB and switches to stream processing mode for memory efficiency. You'll see a message "Info: Large file detected, using stream processing mode" when this happens. You can also force stream processing with the `-s` flag regardless of file size.
+
 ## How do I check the version of vglog-filter?
 Use the `-V` or `--version` option to display the current version:
 ```sh

@@ -35,6 +35,8 @@ vglog-filter addresses these issues by:
 - **Log normalization**: Makes logs comparable across runs and systems.
 - **Easy integration**: Can be used as a standalone tool or in CI pipelines.
 - **Robust error handling**: Comprehensive error messages and input validation.
+- **Automatic large file detection**: Smart processing mode selection for optimal performance.
+- **Memory-efficient processing**: Stream processing for large files to prevent OOM errors.
 - **Test framework**: Built-in test suite with automatic cleanup.
 - **Automated versioning**: Semantic versioning with automated bumping based on conventional commits.
 - **Comprehensive testing**: Multi-platform CI/CD with multiple build configurations.
@@ -67,10 +69,16 @@ valgrind --leak-check=full ./your_program 2> raw.log
 
 - `raw.log`: The original Valgrind output.
 - `filtered.log`: The cleaned, deduplicated, and normalized log.
+- **Automatic optimization**: Large files (>5MB) automatically use stream processing.
 
 You can also pipe output directly:
 ```sh
 valgrind --leak-check=full ./your_program 2>&1 | ./vglog-filter > filtered.log
+```
+
+For large files, you can force stream processing:
+```sh
+./vglog-filter -s very_large.log > filtered.log
 ```
 
 For detailed usage instructions, see the [Usage Guide](doc/USAGE.md).

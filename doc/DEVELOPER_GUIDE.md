@@ -150,6 +150,13 @@ g++ -std=c++17 -Wall -pedantic -Wextra -O2 test/test_basic.cpp -o build/test_bas
 ./build/test_basic
 ```
 
+#### Performance Features
+- **Automatic large file detection**: Files >5MB automatically use stream processing
+- **Memory optimization**: Vector capacity reservation and efficient string operations
+- **Regex optimization**: All patterns use `std::regex::optimize` flag
+- **Stream processing**: Line-by-line processing for large files to prevent OOM
+- **Smart defaults**: Optimal processing mode selected automatically
+
 ### Development Tools
 The `dev-bin/` directory contains development utilities:
 - `bump-version`: Command-line version management
