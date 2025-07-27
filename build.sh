@@ -30,19 +30,29 @@ WARNING_MODE=OFF
 DEBUG_MODE=OFF
 CLEAN_BUILD=OFF
 
+# Track if any valid arguments were provided
+VALID_ARGS=false
+
 for arg in "$@"; do
   case $arg in
     performance)
       PERFORMANCE_BUILD=ON
+      VALID_ARGS=true
       ;;
     warnings)
       WARNING_MODE=ON
+      VALID_ARGS=true
       ;;
     debug)
       DEBUG_MODE=ON
+      VALID_ARGS=true
       ;;
     clean)
       CLEAN_BUILD=ON
+      VALID_ARGS=true
+      ;;
+    *)
+      echo "Warning: Unknown argument '$arg' will be ignored"
       ;;
   esac
 done
@@ -62,6 +72,11 @@ echo "  PERFORMANCE_BUILD = $PERFORMANCE_BUILD"
 echo "  WARNING_MODE     = $WARNING_MODE"
 echo "  DEBUG_MODE       = $DEBUG_MODE"
 echo "  CLEAN_BUILD      = $CLEAN_BUILD"
+
+# Show warning if no valid arguments were provided
+if [ "$VALID_ARGS" = "false" ] && [ $# -gt 0 ]; then
+    echo "Warning: No valid build options specified. Using default configuration."
+fi
 
 cmake -DPERFORMANCE_BUILD=$PERFORMANCE_BUILD -DWARNING_MODE=$WARNING_MODE -DDEBUG_MODE=$DEBUG_MODE ..
 
