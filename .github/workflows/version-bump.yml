@@ -30,7 +30,6 @@ on:
     paths-ignore:
       - 'VERSION'
       - 'doc/VERSIONING.md'
-      - '.github/workflows/version-bump.yml'
       - 'doc/TAG_MANAGEMENT.md'
       - 'doc/RELEASE_WORKFLOW.md'
 
@@ -86,8 +85,9 @@ jobs:
           NEW_FEATURES=$(echo "$ANALYSIS" | grep -c "New features: true" || echo "0")
           BUG_FIXES=$(echo "$ANALYSIS" | grep -c "Bug fixes: true" || echo "0")
           
-          # Get diff size
-          DIFF_SIZE=$(git diff --stat HEAD~1 | tail -1 | awk '{print $4}' | sed 's/,//' || echo "0")
+          # Get diff size since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~1")
+          DIFF_SIZE=$(git diff --stat "$LAST_TAG" | tail -1 | awk '{print $4}' | sed 's/,//' | sed 's/insertions//' | sed 's/insertion//' | tr -d '()' || echo "0")
           
           echo "Analysis results:"
           echo "  Breaking changes: $BREAKING_CHANGES"
