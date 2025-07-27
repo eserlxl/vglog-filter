@@ -45,7 +45,11 @@ if [[ ! -f "$VERSION_FILE" ]]; then
 fi
 
 # Validate VERSION symlink safety
-VERSION_REAL="$(readlink -f "$VERSION_FILE")"
+VERSION_REAL="$(readlink -f "$VERSION_FILE" 2>/dev/null || echo "")"
+if [[ -z "$VERSION_REAL" ]]; then
+    echo -e "${RED}Error: VERSION path is a broken symlink${RESET}" >&2
+    exit 1
+fi
 case "$VERSION_REAL" in 
     "$PROJECT_ROOT"/*) ;; 
     *) 
@@ -373,6 +377,7 @@ while [[ $# -gt 0 ]]; do
         major|minor|patch)
             if [[ -n "$BUMP_TYPE" ]]; then
                 echo -e "${RED}Error: Multiple bump types specified${RESET}" >&2
+                usage | sed "s/CURRENT_VERSION_PLACEHOLDER/$CURRENT_VERSION/"
                 exit 1
             fi
             BUMP_TYPE="$1"
@@ -467,16 +472,18 @@ if [[ "$DRY_RUN" == "true" && "$PRINT_ONLY" == "true" ]]; then
     exit 1
 fi
 
-# Check if we're in a git repository
-if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
-    if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        echo -e "${RED}Error: Not in a git repository${RESET}" >&2
-        exit 1
-    fi
+# Check if we're in a git repository (centralized check)
+IN_GIT_REPO=false
+if git rev-parse --git-dir >/dev/null 2>&1; then
+    IN_GIT_REPO=true
 fi
 
 # Check for detached HEAD if committing or tagging
 if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
+    if ! $IN_GIT_REPO; then
+        echo -e "${RED}Error: Not in a git repository${RESET}" >&2
+        exit 1
+    fi
     if ! git symbolic-ref -q HEAD >/dev/null; then
         echo -e "${RED}Error:${RESET} detached HEAD; checkout a branch before committing/tagging." >&2
         exit 1
@@ -516,6 +523,11 @@ if $SIGNED_TAG || $COMMIT_SIGN; then
     [[ -t 1 && -z "${GPG_TTY:-}" ]] && echo -e "${YELLOW}Hint:${RESET} export GPG_TTY=$(tty) may be required for pinentry." >&2
 fi
 
+# Add signing UX hint for commit.gpgSign=true
+if [[ "$DO_COMMIT" == "true" && "$COMMIT_SIGN" != "true" ]] && git config --get commit.gpgSign >/dev/null; then
+    echo -e "${YELLOW}Note:${RESET} commit.gpgSign=true is configured; Git may still sign commits even without --sign-commit." >&2
+fi
+
 # Protect against concurrent edits (local use)
 if $DO_COMMIT && ! $ALLOW_DIRTY && ! git diff --quiet --no-ext-diff; then
     echo -e "${RED}Error:${RESET} working tree has unstaged changes; use --allow-dirty to override." >&2
@@ -524,7 +536,7 @@ fi
 
 # Safer dirty-tree guard using pathspec exclusion (for both commit and tag)
 if ([[ "$DO_COMMIT" == "true" ]] || [[ "$DO_TAG" == "true" ]]) && ! $ALLOW_DIRTY; then
-    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+    if ! $IN_GIT_REPO; then
         echo -e "${RED}Error: Not in a git repository${RESET}" >&2
         exit 1
     fi
@@ -557,7 +569,6 @@ if [[ "$DRY_RUN" == "true" ]]; then
     if $DO_TAG; then
         echo -e "${YELLOW}DRY RUN: Would create tag: ${TAG_PREFIX}${NEW_VERSION}${RESET}" >&2
         # Show last detected tag for comparison
-        local sanitized_prefix last_tag
         sanitized_prefix=$(sanitize_tag_prefix "$TAG_PREFIX")
         last_tag=$(git tag --list "${sanitized_prefix}[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n1)
         if [[ -n "$last_tag" ]]; then
@@ -602,6 +613,26 @@ if [[ "$DO_TAG" == "true" ]]; then
     check_version_order
     
     create_tag
+fi
+
+# Warn about version ordering for --set even when not tagging
+if [[ -n "$SET_VERSION" && "$DO_TAG" != "true" ]]; then
+    sanitized_prefix=$(sanitize_tag_prefix "$TAG_PREFIX")
+    last_tag=$(git tag --list "${sanitized_prefix}[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n1)
+    if [[ -n "$last_tag" ]]; then
+        local last_version="${last_tag:${#TAG_PREFIX}}"
+        if [[ "$last_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            IFS='.' read -r new_major new_minor new_patch <<< "$NEW_VERSION"
+            IFS='.' read -r last_major last_minor last_patch <<< "$last_version"
+            
+            if [[ "$NEW_VERSION" == "$last_version" ]] || 
+               [[ "$new_major" -lt "$last_major" ]] ||
+               ([[ "$new_major" -eq "$last_major" ]] && [[ "$new_minor" -lt "$last_minor" ]]) ||
+               ([[ "$new_major" -eq "$last_major" ]] && [[ "$new_minor" -eq "$last_minor" ]] && [[ "$new_patch" -le "$last_patch" ]]); then
+                echo -e "${YELLOW}Warning:${RESET} --set version $NEW_VERSION is not greater than last tag $last_tag${RESET}" >&2
+            fi
+        fi
+    fi
 fi
 
 echo -e "${GREEN}Version bump completed: $CURRENT_VERSION → $NEW_VERSION${RESET}" >&2
