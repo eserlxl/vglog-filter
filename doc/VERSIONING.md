@@ -39,16 +39,18 @@ The project uses a semantic versioning system that analyzes actual code changes 
 
 ### Automatic Release Detection
 
-The system automatically detects and releases for significant changes:
+The system automatically detects and releases for significant changes using very conservative thresholds to prevent rapid version increases:
 
-- **MAJOR releases**: Any breaking changes detected
-- **MINOR releases**: New features with large diffs (>50 lines)
-- **PATCH releases**: Bug fixes with significant diffs (>20 lines)
-- **No release**: Small changes that don't meet thresholds
+- **MAJOR releases**: Breaking changes with very large diffs (>200 lines)
+- **MINOR releases**: New features with massive diffs (>500 lines)
+- **PATCH releases**: Bug fixes with very large diffs (>200 lines)
+- **No release**: Changes that don't meet the conservative thresholds
+
+**Note**: These conservative thresholds were implemented to prevent rapid version increases and ensure that only truly significant changes trigger automatic releases.
 
 ### Semantic Version Analyzer
 
-A dedicated script (`dev-bin/semantic-version-analyzer`) analyzes changes and suggests appropriate version bumps:
+A dedicated script (`dev-bin/semantic-version-analyzer`) analyzes actual code changes and suggests appropriate version bumps:
 
 ```bash
 # Analyze changes since last tag
@@ -66,27 +68,22 @@ A dedicated script (`dev-bin/semantic-version-analyzer`) analyzes changes and su
 
 ### What the Analyzer Checks
 
-The semantic version analyzer examines:
+The semantic version analyzer examines actual code changes rather than commit messages:
 
 1. **File Changes**:
-   - Added files (especially headers and includes)
-   - Modified files (function signatures, API changes)
+   - Added files (new source files, test files, documentation)
+   - Modified files (existing code changes)
    - Deleted files (removed functionality)
 
-2. **Code Analysis**:
-   - Breaking changes in header files
-   - New features in source files
-   - Bug fixes and error handling
-   - Build system changes
+2. **Content Analysis**:
+   - New source files (indicates new features)
+   - New test files (indicates new functionality)
+   - New documentation files (indicates new features)
+   - Deleted files (potential breaking changes)
 
-3. **Commit Messages**:
-   - Keywords indicating breaking changes
-   - New feature indicators
-   - Bug fix references
-
-4. **Change Magnitude**:
+3. **Change Magnitude**:
    - Diff size analysis for threshold-based decisions
-   - Automatic release triggers for significant changes
+   - Extremely conservative thresholds to prevent rapid version increases
 
 ### Manual Version Bumping
 
