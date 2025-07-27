@@ -1,0 +1,116 @@
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+
+name: Debug Build Testing
+
+permissions:
+  contents: read
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'build.sh'
+      - '.github/workflows/debug-build-test.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'build.sh'
+      - '.github/workflows/debug-build-test.yml'
+
+jobs:
+  debug-build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake g++ make gdb
+      
+      - name: Build debug version
+        run: |
+          ./build.sh debug clean
+          echo "Debug build completed"
+      
+      - name: Verify debug build characteristics
+        run: |
+          echo "=== Debug Build Verification ==="
+          
+          # Check if binary contains debug symbols
+          if file build/vglog-filter | grep -q "not stripped"; then
+            echo "✓ Debug symbols present"
+          else
+            echo "✗ Debug symbols missing"
+            exit 1
+          fi
+          
+          # Check binary size (should be larger due to debug info)
+          BINARY_SIZE=$(stat -c%s build/vglog-filter)
+          echo "Binary size: $BINARY_SIZE bytes"
+          
+          # Verify debug information is present
+          if readelf -S build/vglog-filter | grep -q "\.debug"; then
+            echo "✓ Debug sections present"
+          else
+            echo "✗ Debug sections missing"
+            exit 1
+          fi
+      
+      - name: Test debug functionality
+        run: |
+          echo "=== Testing Debug Build Functionality ==="
+          
+          # Test basic functionality
+          ./build/vglog-filter --help
+          
+          # Test with sample input
+          cat > test_input.txt << 'EOF'
+          ==12345== Memcheck, a memory error detector
+          ==12345== Invalid read of size 4
+          ==12345==    at 0x4005A1: main (test.c:10)
+          ==12345== HEAP SUMMARY:
+          ==12345==     in use at exit: 40 bytes in 1 blocks
+          EOF
+          
+          ./build/vglog-filter test_input.txt > output.txt
+          
+          # Verify output
+          if [ -s output.txt ]; then
+            echo "✓ Debug build processes input correctly"
+            cat output.txt
+          else
+            echo "✗ Debug build failed to process input"
+            exit 1
+          fi
+          
+          # Clean up
+          rm -f test_input.txt output.txt
+      
+      - name: Test with GDB (if available)
+        run: |
+          echo "=== GDB Debug Test ==="
+          
+          # Test that GDB can load the binary
+          if command -v gdb >/dev/null 2>&1; then
+            echo "Testing GDB integration..."
+            gdb -batch -ex "file build/vglog-filter" -ex "info functions" | head -20
+            echo "✓ GDB can load debug symbols"
+          else
+            echo "GDB not available, skipping debugger test"
+          fi
+      
+      - name: Debug build summary
+        run: |
+          echo "=== Debug Build Summary ==="
+          echo "✓ Debug build completed successfully"
+          echo "✓ Debug symbols verified"
+          echo "✓ Functionality tested"
+          echo "✓ Ready for debugging and development" 

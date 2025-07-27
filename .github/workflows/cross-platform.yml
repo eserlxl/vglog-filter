@@ -37,6 +37,8 @@ jobs:
         run: |
           ./build.sh performance warnings clean
           ./build/vglog-filter --help
+          # Test basic functionality
+          echo "==12345== Test input" | ./build/vglog-filter
 
   test-arch:
     runs-on: ubuntu-latest
@@ -52,6 +54,8 @@ jobs:
         run: |
           ./build.sh performance warnings clean
           ./build/vglog-filter --help
+          # Test basic functionality
+          echo "==12345== Test input" | ./build/vglog-filter
 
   test-fedora:
     runs-on: ubuntu-latest
@@ -67,6 +71,8 @@ jobs:
         run: |
           ./build.sh performance warnings clean
           ./build/vglog-filter --help
+          # Test basic functionality
+          echo "==12345== Test input" | ./build/vglog-filter
 
   test-debian:
     runs-on: ubuntu-latest
@@ -81,4 +87,6 @@ jobs:
       - name: Build and test
         run: |
           ./build.sh performance warnings clean
-          ./build/vglog-filter --help 
+          ./build/vglog-filter --help
+          # Test basic functionality
+          echo "==12345== Test input" | ./build/vglog-filter 

@@ -40,6 +40,7 @@ jobs:
       - name: Build performance version
         run: |
           ./build.sh performance clean
+          echo "Performance build completed"
       
       - name: Create benchmark test data
         run: |
@@ -89,6 +90,11 @@ jobs:
           else
             echo "Binary is stripped"
           fi
+          
+          # Verify build configuration
+          echo "Build configuration verification:"
+          echo "- Performance optimizations: $(grep -c "O3" build/CMakeCache.txt || echo "Not found")"
+          echo "- Debug symbols: $(file build/vglog-filter | grep -o "not stripped\|stripped")"
       
       - name: Clean up
         run: |

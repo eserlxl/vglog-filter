@@ -42,6 +42,7 @@ jobs:
                 -DPERFORMANCE_BUILD=OFF \
                 -DWARNING_MODE=ON \
                 -DDEBUG_MODE=OFF \
+                -DBUILD_TESTS=ON \
                 ..
       
       - name: Run Clang-Tidy

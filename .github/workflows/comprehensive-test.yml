@@ -1,0 +1,187 @@
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+
+name: Comprehensive Build Testing
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'build.sh'
+      - '.github/workflows/comprehensive-test.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'build.sh'
+      - '.github/workflows/comprehensive-test.yml'
+
+jobs:
+  comprehensive-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build-config:
+          - name: "default"
+            args: ""
+          - name: "performance"
+            args: "performance"
+          - name: "debug"
+            args: "debug"
+          - name: "warnings"
+            args: "warnings"
+          - name: "performance-warnings"
+            args: "performance warnings"
+          - name: "debug-warnings"
+            args: "debug warnings"
+          - name: "tests"
+            args: "tests"
+          - name: "performance-tests"
+            args: "performance tests"
+          - name: "debug-tests"
+            args: "debug tests"
+          - name: "warnings-tests"
+            args: "warnings tests"
+          - name: "performance-warnings-tests"
+            args: "performance warnings tests"
+          - name: "debug-warnings-tests"
+            args: "debug warnings tests"
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake g++ make
+      
+      - name: Build with ${{ matrix.build-config.name }} configuration
+        run: |
+          echo "=== Building with configuration: ${{ matrix.build-config.name }} ==="
+          echo "Arguments: ${{ matrix.build-config.args }}"
+          
+          # Build with the specified configuration
+          if [ -n "${{ matrix.build-config.args }}" ]; then
+            ./build.sh ${{ matrix.build-config.args }} clean
+          else
+            ./build.sh clean
+          fi
+          
+          echo "✓ Build completed for ${{ matrix.build-config.name }}"
+      
+      - name: Verify binary characteristics
+        run: |
+          echo "=== Verifying ${{ matrix.build-config.name }} build ==="
+          
+          # Check binary exists
+          if [ ! -f "build/vglog-filter" ]; then
+            echo "✗ Binary not found"
+            exit 1
+          fi
+          
+          # Check binary size
+          BINARY_SIZE=$(stat -c%s build/vglog-filter)
+          echo "Binary size: $BINARY_SIZE bytes"
+          
+          # Check debug symbols based on configuration
+          if [[ "${{ matrix.build-config.name }}" == *"debug"* ]]; then
+            if file build/vglog-filter | grep -q "not stripped"; then
+              echo "✓ Debug symbols present (expected for debug build)"
+            else
+              echo "✗ Debug symbols missing (expected for debug build)"
+              exit 1
+            fi
+          else
+            if file build/vglog-filter | grep -q "stripped"; then
+              echo "✓ Binary stripped (expected for non-debug build)"
+            else
+              echo "⚠ Binary not stripped (may contain debug symbols)"
+            fi
+          fi
+          
+          # Check test executables if tests were built
+          if [[ "${{ matrix.build-config.name }}" == *"tests"* ]]; then
+            if [ -f "build/test_basic" ] && [ -f "build/test_integration" ]; then
+              echo "✓ Test executables built"
+            else
+              echo "✗ Test executables missing"
+              exit 1
+            fi
+          fi
+      
+      - name: Test functionality
+        run: |
+          echo "=== Testing ${{ matrix.build-config.name }} functionality ==="
+          
+          # Test help output
+          ./build/vglog-filter --help
+          
+          # Test basic processing
+          echo "==12345== Test input" | ./build/vglog-filter > /dev/null
+          echo "✓ Basic functionality works"
+          
+          # Run tests if they were built
+          if [[ "${{ matrix.build-config.name }}" == *"tests"* ]]; then
+            echo "Running test suite..."
+            ./build/test_basic
+            ./build/test_integration
+            echo "✓ All tests passed"
+          fi
+      
+      - name: Performance check (for performance builds)
+        if: contains(matrix.build-config.name, 'performance')
+        run: |
+          echo "=== Performance Build Verification ==="
+          
+          # Check for performance optimizations in CMake cache
+          if grep -q "O3" build/CMakeCache.txt; then
+            echo "✓ O3 optimization enabled"
+          else
+            echo "⚠ O3 optimization not found in cache"
+          fi
+          
+          # Check for LTO if available
+          if grep -q "INTERPROCEDURAL_OPTIMIZATION:BOOL=TRUE" build/CMakeCache.txt; then
+            echo "✓ Link Time Optimization enabled"
+          else
+            echo "⚠ Link Time Optimization not enabled"
+          fi
+      
+      - name: Debug check (for debug builds)
+        if: contains(matrix.build-config.name, 'debug')
+        run: |
+          echo "=== Debug Build Verification ==="
+          
+          # Check for debug flags in CMake cache
+          if grep -q "O0" build/CMakeCache.txt; then
+            echo "✓ O0 optimization (debug mode) enabled"
+          else
+            echo "⚠ O0 optimization not found in cache"
+          fi
+          
+          # Check for debug symbols
+          if readelf -S build/vglog-filter | grep -q "\.debug"; then
+            echo "✓ Debug sections present"
+          else
+            echo "⚠ Debug sections not found"
+          fi
+      
+      - name: Test summary
+        run: |
+          echo "=== ${{ matrix.build-config.name }} Test Summary ==="
+          echo "✓ Build completed successfully"
+          echo "✓ Binary characteristics verified"
+          echo "✓ Functionality tested"
+          if [[ "${{ matrix.build-config.name }}" == *"tests"* ]]; then
+            echo "✓ Test suite executed"
+          fi
+          echo "Configuration: ${{ matrix.build-config.args }}" 

@@ -45,6 +45,7 @@ jobs:
                 -DPERFORMANCE_BUILD=OFF \
                 -DWARNING_MODE=ON \
                 -DDEBUG_MODE=ON \
+                -DBUILD_TESTS=ON \
                 ..
           make -j$(nproc)
       
