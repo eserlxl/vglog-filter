@@ -99,6 +99,7 @@ jobs:
             fi
 
             DIFF_SIZE="$(git diff --numstat $RANGE | awk '{ins+=$1; del+=$2} END{print (ins+0)+(del+0)}')"
+            # TODO: Consider adding --json support to semantic-version-analyzer for more robust parsing
             NEW_SOURCE_FILES="$(echo "$ANALYSIS" | awk -F': ' '/New source files:/ {print $2+0}')"
             NEW_TEST_FILES="$(echo  "$ANALYSIS" | awk -F': ' '/New test files:/  {print $2+0}')"
             NEW_DOC_FILES="$(echo   "$ANALYSIS" | awk -F': ' '/New doc files:/   {print $2+0}')"
@@ -148,19 +149,30 @@ jobs:
           echo "Bumping version type: ${{ steps.version-analysis.outputs.bump_type }}"
           chmod +x ./dev-bin/bump-version
           echo "Current version: $(cat VERSION)"
-          # If your script supports a custom message, prefer adding [skip ci] here.
-          ./dev-bin/bump-version ${{ steps.version-analysis.outputs.bump_type }} --commit
+          
+          # Add [skip ci] to prevent triggering other workflows
+          # TODO: Consider adding --json support to semantic-version-analyzer for more robust parsing
+          ANALYSIS_MESSAGE="[skip ci] Auto version bump triggered by ${{ github.event_name }}" ./dev-bin/bump-version ${{ steps.version-analysis.outputs.bump_type }} --commit
           NEW_VERSION=$(cat VERSION)
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           git fetch --tags origin main
           git pull --rebase origin main
           git push origin main
 
+      - name: Append new version to summary
+        if: steps.version-analysis.outputs.bump_type != 'none'
+        run: |
+          echo "- New version: v${NEW_VERSION}" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Create annotated tag
         if: steps.version-analysis.outputs.bump_type != 'none'
         run: |
-          git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
-          git push origin "v${NEW_VERSION}"
+          if git rev-parse "v${NEW_VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${NEW_VERSION} already exists; skipping tag creation."
+          else
+            git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
+            git push origin "v${NEW_VERSION}"
+          fi
 
       - name: Create Release
         if: steps.version-analysis.outputs.bump_type != 'none'
