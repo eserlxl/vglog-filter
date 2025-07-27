@@ -34,8 +34,7 @@ struct Options {
 };
 
 void usage(const char* prog) {
-    std::cerr <<
-        "Usage: " << prog << " [options] [valgrind_log]\n\n"
+    std::cerr << "Usage: " << prog << " [options] [valgrind_log]\n\n"
         "Input\n"
         "  valgrind_log            Path to Valgrind log file (default: stdin if omitted)\n"
         "  -                       Read from stdin (explicit)\n\n"
@@ -253,7 +252,6 @@ void process_stream(std::istream& in, const Options& opt)
     VecS sigLines;
     std::unordered_set<Str> seen;
     bool found_marker = false;
-    size_t line_count = 0;
 
     auto flush = [&]() {
         const Str rawStr = raw.str();
@@ -278,8 +276,6 @@ void process_stream(std::istream& in, const Options& opt)
 
     Str line;
     while (std::getline(in, line)) {
-        line_count++;
-        
         // Check for marker if trimming is enabled
         if (opt.trim && line.find(opt.marker) != Str::npos) {
             found_marker = true;
