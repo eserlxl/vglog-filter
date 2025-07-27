@@ -71,7 +71,7 @@ You can also pipe output directly:
 valgrind --leak-check=full ./your_program 2>&1 | ./vglog-filter > filtered.log
 ```
 
-For detailed usage instructions, command-line options, and advanced filtering techniques, see the [Usage Guide](doc/USAGE.md).
+For detailed usage instructions, see the [Usage Guide](doc/USAGE.md).
 
 [↑ Back to top](#vglog-filter)
 
