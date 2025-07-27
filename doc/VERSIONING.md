@@ -156,7 +156,7 @@ To manually bump the version, use the `dev-bin/bump-version` script:
 ### Usage
 
 ```bash
-./dev-bin/bump-version [major|minor|patch] [--commit] [--tag]
+./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run]
 ```
 
 ### Arguments
@@ -169,6 +169,7 @@ To manually bump the version, use the `dev-bin/bump-version` script:
 
 - **--commit**: Create a git commit with the version bump
 - **--tag**: Create a git tag for the new version
+- **--dry-run**: Show what would be done without making changes
 
 ### Examples
 
@@ -187,6 +188,9 @@ To manually bump the version, use the `dev-bin/bump-version` script:
 
 # Bump minor version, commit, and tag
 ./dev-bin/bump-version minor --commit --tag
+
+# Show what a patch bump would do
+./dev-bin/bump-version patch --dry-run
 ```
 
 ## When to Bump Versions
