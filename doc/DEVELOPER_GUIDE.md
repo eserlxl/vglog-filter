@@ -79,9 +79,9 @@ vglog-filter uses [Semantic Versioning](https://semver.org/) with automated vers
 ### Current Version
 The current version is stored in the `VERSION` file and displayed with:
 ```sh
-./vglog-filter --version
+vglog-filter --version
 # or
-./vglog-filter -V
+vglog-filter -V
 ```
 
 **Note**: The version is read from multiple locations in order of preference:

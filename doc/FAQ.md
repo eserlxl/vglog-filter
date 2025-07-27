@@ -45,5 +45,12 @@ vglog-filter --version
 
 **Note**: The version is read from multiple locations in order of preference (local development, build directory, system installation). If no version file is found, it will display "unknown".
 
+## Can I pipe output directly from valgrind to vglog-filter?
+Yes! You can now pipe directly from valgrind:
+```sh
+valgrind --leak-check=full ./your_program 2>&1 | vglog-filter
+```
+This is much more convenient than saving to a file first.
+
 ## Can I use vglog-filter with logs from tools other than Valgrind?
 It is designed for Valgrind logs, but may work with similar formats if the error blocks match the expected patterns. 

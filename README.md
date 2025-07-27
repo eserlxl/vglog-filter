@@ -64,7 +64,7 @@ After building, you can use vglog-filter as follows:
 
 ```sh
 valgrind --leak-check=full ./your_program 2> raw.log
-./vglog-filter raw.log > filtered.log
+vglog-filter raw.log > filtered.log
 ```
 
 - `raw.log`: The original Valgrind output.
@@ -73,12 +73,17 @@ valgrind --leak-check=full ./your_program 2> raw.log
 
 You can also pipe output directly:
 ```sh
-valgrind --leak-check=full ./your_program 2>&1 | ./vglog-filter > filtered.log
+valgrind --leak-check=full ./your_program 2>&1 | vglog-filter > filtered.log
+```
+
+**New in this version**: Direct stdin support! You can now pipe directly from valgrind:
+```sh
+valgrind --leak-check=full ./your_program 2>&1 | vglog-filter
 ```
 
 For large files, you can force stream processing:
 ```sh
-./vglog-filter -s very_large.log > filtered.log
+vglog-filter -s very_large.log > filtered.log
 ```
 
 For detailed usage instructions, see the [Usage Guide](doc/USAGE.md).

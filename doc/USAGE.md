@@ -5,10 +5,11 @@
 ## Basic Usage
 
 ```sh
-vglog-filter [options] <valgrind_log>
+vglog-filter [options] [valgrind_log]
 ```
 
-- `<valgrind_log>`: Path to the Valgrind log file to process.
+- `[valgrind_log]`: Path to the Valgrind log file to process (optional, defaults to stdin if omitted)
+- `-`: Explicitly read from stdin
 
 ## Options
 
@@ -45,6 +46,15 @@ vglog-filter -d 2 -k valgrind.log > filtered.log
 
 # Force stream processing mode regardless of file size
 vglog-filter -s large_valgrind.log > filtered.log
+
+# Process from stdin (new feature)
+cat valgrind.log | vglog-filter > filtered.log
+
+# Direct pipe from valgrind (new feature)
+valgrind --leak-check=full ./your_program 2>&1 | vglog-filter > filtered.log
+
+# Explicit stdin usage
+vglog-filter - < valgrind.log > filtered.log
 ```
 
 ## How It Works

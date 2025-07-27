@@ -57,7 +57,7 @@ jobs:
           
           # Test basic functionality
           echo "Testing help output..."
-          ./vglog-filter --help
+          ./build/vglog-filter --help
           
           echo "Testing with sample input..."
           # Create a minimal test input
@@ -70,7 +70,7 @@ jobs:
           EOF
           
           # Run the program and capture any sanitizer output
-          ./vglog-filter test_input.txt > output.txt 2>&1 || true
+          ./build/vglog-filter test_input.txt > output.txt 2>&1 || true
           
           # Check for sanitizer errors
           if grep -q "ERROR: MemorySanitizer" output.txt; then

@@ -30,11 +30,15 @@ struct Options {
     bool stream_mode  = false;  // Enable stream processing for large files
     Str  marker       = DEFAULT_MARKER;
     Str  filename;
+    bool use_stdin    = false;  // Whether to read from stdin
 };
 
 void usage(const char* prog) {
     std::cerr <<
-        "Usage: " << prog << " [options] <valgrind_log>\n\n"
+        "Usage: " << prog << " [options] [valgrind_log]\n\n"
+        "Input\n"
+        "  valgrind_log            Path to Valgrind log file (default: stdin if omitted)\n"
+        "  -                       Read from stdin (explicit)\n\n"
         "Options\n"
         "  -k, --keep-debug-info   Keep everything; do not trim above last debug marker.\n"
         "  -v, --verbose           Show completely raw blocks (no address / \"at:\" scrub).\n"
@@ -42,7 +46,12 @@ void usage(const char* prog) {
         "  -m S, --marker S        Marker string (default: \"" << DEFAULT_MARKER << "\").\n"
         "  -s, --stream            Force stream processing mode (auto-detected for files >5MB).\n"
         "  -V, --version           Show version information.\n"
-        "  -h, --help              Show this help.\n";
+        "  -h, --help              Show this help.\n\n"
+        "Examples\n"
+        "  " << prog << " log.txt                    # Process file\n"
+        "  " << prog << " < log.txt                  # Process from stdin\n"
+        "  " << prog << " - < log.txt                # Explicit stdin\n"
+        "  valgrind ./prog 2>&1 | " << prog << "     # Direct pipe from valgrind\n";
 }
 
 // ---------- helpers ---------------------------------------------------------
@@ -237,12 +246,9 @@ bool is_large_file(const Str& fname, size_t threshold_mb = 50) {
     return file_size_mb >= threshold_mb;
 }
 
-// Stream processing version for large files
-void process_file_stream(const Str& fname, const Options& opt)
+// Stream processing version that accepts any istream
+void process_stream(std::istream& in, const Options& opt)
 {
-    std::ifstream in(fname);
-    if (!in) throw std::runtime_error("Cannot open '" + fname + "'");
-    
     std::ostringstream raw, sig;
     VecS sigLines;
     std::unordered_set<Str> seen;
@@ -305,6 +311,14 @@ void process_file_stream(const Str& fname, const Options& opt)
         sigLines.push_back(canon(line));
     }
     flush();
+}
+
+// Stream processing version for large files
+void process_file_stream(const Str& fname, const Options& opt)
+{
+    std::ifstream in(fname);
+    if (!in) throw std::runtime_error("Cannot open '" + fname + "'");
+    process_stream(in, opt);
 }
 
 Str get_version()
@@ -380,39 +394,54 @@ int main(int argc, char* argv[])
             default : usage(argv[0]); return 1;
         }
     }
-    if (optind >= argc) { 
-        std::cerr << "Error: No input file specified" << std::endl;
-        std::cerr << "Usage: " << argv[0] << " [options] <valgrind_log>" << std::endl;
-        std::cerr << "Use --help for more information" << std::endl;
-        return 1; 
+    // Handle input source
+    if (optind >= argc) {
+        // No filename provided, use stdin
+        opt.use_stdin = true;
+        opt.filename = "-";
+    } else {
+        opt.filename = argv[optind];
+        if (opt.filename == "-") {
+            opt.use_stdin = true;
+        } else {
+            // Check if file exists
+            std::ifstream test_file(opt.filename);
+            if (!test_file) {
+                std::cerr << "Error: Cannot open file '" << opt.filename << "'" << std::endl;
+                std::cerr << "Please check that the file exists and is readable" << std::endl;
+                return 1;
+            }
+            test_file.close();
+        }
     }
-    opt.filename = argv[optind];
-    
-    // Check if file exists
-    std::ifstream test_file(opt.filename);
-    if (!test_file) {
-        std::cerr << "Error: Cannot open file '" << opt.filename << "'" << std::endl;
-        std::cerr << "Please check that the file exists and is readable" << std::endl;
-        return 1;
-    }
-    test_file.close();
     
     // Determine processing mode: manual override or automatic detection
     bool use_stream_mode = opt.stream_mode;
     
     if (!use_stream_mode) {
-        // Auto-detect large files (5MB threshold for testing, can be adjusted)
-        use_stream_mode = is_large_file(opt.filename, 5);
-        if (use_stream_mode) {
-            std::cerr << "Info: Large file detected, using stream processing mode" << std::endl;
+        if (opt.use_stdin) {
+            // Always use stream mode for stdin since we can't seek
+            use_stream_mode = true;
+        } else {
+            // Auto-detect large files (5MB threshold for testing, can be adjusted)
+            use_stream_mode = is_large_file(opt.filename, 5);
+            if (use_stream_mode) {
+                std::cerr << "Info: Large file detected, using stream processing mode" << std::endl;
+            }
         }
     }
     
-    // Process file using appropriate mode
+    // Process input using appropriate mode
     if (use_stream_mode) {
-        // Stream processing for large files
+        // Stream processing for large files or stdin
         try {
-            process_file_stream(opt.filename, opt);
+            if (opt.use_stdin) {
+                // Process from stdin
+                process_stream(std::cin, opt);
+            } else {
+                // Process from file
+                process_file_stream(opt.filename, opt);
+            }
         } catch (const std::exception& e) {
             std::cerr << "Error: " << e.what() << std::endl;
             return 1;
