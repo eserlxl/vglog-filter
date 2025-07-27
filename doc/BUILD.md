@@ -5,7 +5,7 @@ The `build.sh` script automates the configuration and compilation of the vglog-f
 ## Usage
 
 ```sh
-./build.sh [performance] [warnings] [debug]
+./build.sh [performance] [warnings] [debug] [clean]
 ```
 
 You can provide one or more of the following options:
@@ -15,9 +15,11 @@ You can provide one or more of the following options:
 | `performance` | Enables performance optimizations (disables debug mode if both are set) |
 | `warnings`    | Enables extra compiler warnings                                  |
 | `debug`       | Enables debug mode (disables performance mode if both are set)   |
+| `clean`       | Forces a clean build (removes all build artifacts)               |
 
 - `performance` and `debug` are **mutually exclusive**. If both are specified, `debug` takes precedence and disables `performance`.
-- `warnings` can be combined with either mode.
+- `warnings` and `clean` can be combined with any mode.
+- `clean` is useful for configuration changes or debugging build issues.
 
 ## Examples
 
@@ -33,10 +35,19 @@ You can provide one or more of the following options:
   ```sh
   ./build.sh debug warnings
   ```
+- **Clean build (removes all artifacts before building):**
+  ```sh
+  ./build.sh clean
+  ```
+- **Performance build with warnings and clean:**
+  ```sh
+  ./build.sh performance warnings clean
+  ```
 
 ## What the Script Does
 - Creates a `build/` directory if it does not exist.
 - Runs CMake with the selected options as variables.
+- If `clean` is specified, runs `make clean` to remove all build artifacts.
 - Builds the project using `make -j20` for fast parallel compilation.
 
 ## Output

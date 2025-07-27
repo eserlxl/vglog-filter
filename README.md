@@ -91,12 +91,20 @@ You can use the `build.sh` script to configure builds with these options:
   ```sh
   ./build.sh debug
   ```
+- Clean build (removes all build artifacts):
+  ```sh
+  ./build.sh clean
+  ```
 - Combine options (e.g., debug + warnings):
   ```sh
   ./build.sh debug warnings
   ```
+- Performance build with warnings and clean:
+  ```sh
+  ./build.sh performance warnings clean
+  ```
 
-If both `debug` and `performance` are specified, debug mode takes precedence.
+If both `debug` and `performance` are specified, debug mode takes precedence. The `clean` option can be combined with any other options.
 
 [↑ Back to top](#vglog-filter)
 
