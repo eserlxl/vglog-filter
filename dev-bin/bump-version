@@ -7,7 +7,7 @@
 # See the LICENSE file in the project root for details.
 #
 # Version bump script for vglog-filter
-# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX]
+# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit]
 
 set -euo pipefail
 
@@ -44,6 +44,16 @@ if [[ ! -f "$VERSION_FILE" ]]; then
     exit 1
 fi
 
+# Validate VERSION symlink safety
+VERSION_REAL="$(readlink -f "$VERSION_FILE")"
+case "$VERSION_REAL" in 
+    "$PROJECT_ROOT"/*) ;; 
+    *) 
+        echo -e "${RED}Error: VERSION resolves outside repo${RESET}" >&2
+        exit 1
+        ;;
+esac
+
 # Read current version
 CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
 
@@ -62,15 +72,25 @@ COMMIT_MSG=""
 ALLOW_DIRTY=false
 ANNOTATED_TAG=true    # default to annotated tag
 SIGNED_TAG=false      # default to unsigned tag
+COMMIT_SIGN=false     # default to unsigned commit
 NO_VERIFY=false       # default to running hooks
 UPDATE_CMAKE=true     # default to updating CMake
 TAG_PREFIX="${TAG_PREFIX:-v}"  # default tag prefix, can be overridden by env var
 
+# Validate TAG_PREFIX content early
+if [[ "$TAG_PREFIX" == $'\n' || "$TAG_PREFIX" == $'\r' ]]; then
+    echo -e "${RED}Error: TAG_PREFIX contains newline characters${RESET}" >&2
+    exit 1
+fi
+
 # Function to show usage
 usage() {
-    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX]"
+    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit]"
     echo ""
     echo "Bump the semantic version of vglog-filter"
+    echo ""
+    echo "Requirements:"
+    echo "  GNU tools on Linux: realpath, sha1sum, GNU sed, GNU grep"
     echo ""
     echo "Arguments:"
     echo "  major    Increment major version (breaking changes)"
@@ -87,6 +107,7 @@ usage() {
     echo "  --allow-dirty     Allow committing when other files are modified"
     echo "  --lightweight-tag Create a lightweight tag instead of annotated"
     echo "  --signed-tag      Create a signed tag (requires GPG key configured)"
+    echo "  --sign-commit     GPG-sign the commit (requires GPG key configured)"
     echo "  --no-verify       Skip commit hooks (useful in CI environments)"
     echo "  --no-cmake        Skip updating CMakeLists.txt version fields"
     echo "  --tag-prefix PREFIX  Use PREFIX instead of 'v' for tag names (default: v)"
@@ -116,11 +137,13 @@ usage() {
     echo "  ANALYSIS_MESSAGE='...' $0 patch --commit  # Include analysis in commit"
     echo "  $0 patch --message 'Custom commit message' --commit  # Use custom message"
     echo "  $0 patch --signed-tag --tag # Create signed tag for provenance"
+    echo "  $0 patch --sign-commit --commit # GPG-sign the commit"
     echo "  $0 patch --no-verify --commit # Skip commit hooks (useful in CI)"
     echo "  $0 patch --commit --signed-tag --no-verify --message 'chore(release): <prefix>X.Y.Z [skip ci]'  # Signed tag with CI"
     echo "  ANALYSIS_MESSAGE='Auto version bump (push)' $0 patch --commit --message 'chore(release): <prefix>X.Y.Z [skip ci]'  # CI usage"
     echo "  $0 patch --no-cmake         # Skip CMakeLists.txt updates"
     echo "  $0 patch --tag-prefix 'release-' --tag  # Create tag 'release-1.2.3'"
+    echo "  $0 patch --tag-prefix '' --tag  # Create tag '1.2.3' (no prefix)"
     echo "  TAG_PREFIX='ver' $0 patch --tag  # Use environment variable for prefix"
     echo ""
     echo "Current version: $CURRENT_VERSION"
@@ -162,7 +185,7 @@ update_version_file() {
     TMP_FILE="${VERSION_FILE}.tmp.$$"
     printf '%s\n' "$NEW_VERSION" > "$TMP_FILE"
     mv -f "$TMP_FILE" "$VERSION_FILE"
-    echo -e "${GREEN}Updated VERSION file: $CURRENT_VERSION → $NEW_VERSION${RESET}"
+    echo -e "${GREEN}Updated VERSION file: $CURRENT_VERSION → $NEW_VERSION${RESET}" >&2
 }
 
 # Function to update CMakeLists.txt if it contains version information
@@ -177,12 +200,12 @@ update_cmake_version() {
     elif grep -Eq '^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
         sed -E -i "s/(^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+\"?)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
     else
-        echo -e "${YELLOW}Note: CMakeLists.txt present but no recognizable version field to update${RESET}"
+        echo -e "${YELLOW}Note: CMakeLists.txt present but no recognizable version field to update${RESET}" >&2
         return 0
     fi
     after="$(sha1sum "$cmake" | awk '{print $1}')"
     if [[ "$before" != "$after" ]]; then
-        echo -e "${GREEN}Updated CMakeLists.txt to ${NEW_VERSION}${RESET}"
+        echo -e "${GREEN}Updated CMakeLists.txt to ${NEW_VERSION}${RESET}" >&2
         git add -- "$cmake"
     fi
 }
@@ -205,34 +228,37 @@ check_git_identity() {
 
 # Function to create git commit
 create_commit() {
-    if ! git diff --quiet -- "$VERSION_FILE"; then
-        stage_files
+    stage_files
+    
+    # update_cmake_version may have already staged CMakeLists.txt
+    if git diff --cached --quiet; then
+        echo -e "${YELLOW}No staged changes to commit${RESET}" >&2
+        return 0
+    fi
+    
+    # Check git identity before committing
+    check_git_identity
+    
+    # Default conventional message if not provided
+    local msg="${COMMIT_MSG}"
+    if [[ -z "$msg" ]]; then
+        # Use paragraph-style commit message
+        local commit_args=(${NO_VERIFY:+--no-verify})
+        commit_args+=(${COMMIT_SIGN:+-S})
+        commit_args+=(-m "chore(release): ${TAG_PREFIX}${NEW_VERSION}${GITHUB_ACTIONS:+ [skip ci]}")
+        commit_args+=(-m "bump: ${CURRENT_VERSION} → ${NEW_VERSION}")
         
-        # Check git identity before committing
-        check_git_identity
-        
-        # Default conventional message if not provided
-        local msg="${COMMIT_MSG}"
-        if [[ -z "$msg" ]]; then
-            # Use paragraph-style commit message
-            local commit_args=(${NO_VERIFY:+--no-verify})
-            commit_args+=(-m "chore(release): ${TAG_PREFIX}${NEW_VERSION}${GITHUB_ACTIONS:+ [skip ci]}")
-            commit_args+=(-m "bump: ${CURRENT_VERSION} → ${NEW_VERSION}")
-            
-            # Append analysis if provided and no custom message
-            if [[ -n "${ANALYSIS_MESSAGE:-}" ]]; then
-                commit_args+=(-m "$ANALYSIS_MESSAGE")
-            fi
-            
-            git commit "${commit_args[@]}"
-            echo -e "${GREEN}Created commit${RESET}"
-        else
-            # Use custom message (ANALYSIS_MESSAGE is ignored when --message is provided)
-            git commit ${NO_VERIFY:+--no-verify} -m "$msg"
-            echo -e "${GREEN}Created commit${RESET}"
+        # Append analysis if provided and no custom message
+        if [[ -n "${ANALYSIS_MESSAGE:-}" ]]; then
+            commit_args+=(-m "$ANALYSIS_MESSAGE")
         fi
+        
+        git commit "${commit_args[@]}"
+        echo -e "${GREEN}Created commit${RESET}" >&2
     else
-        echo -e "${YELLOW}No changes to commit${RESET}"
+        # Use custom message (ANALYSIS_MESSAGE is ignored when --message is provided)
+        git commit ${NO_VERIFY:+--no-verify} ${COMMIT_SIGN:+-S} -m "$msg"
+        echo -e "${GREEN}Created commit${RESET}" >&2
     fi
 }
 
@@ -240,23 +266,28 @@ create_commit() {
 create_tag() {
     local tag_name="${TAG_PREFIX}${NEW_VERSION}"
     
-    if git rev-parse "$tag_name" >/dev/null 2>&1; then
-        echo -e "${YELLOW}Tag $tag_name already exists${RESET}"
+    # Guard against accidental re-tag on same commit
+    if git rev-parse -q --verify "$tag_name" >/dev/null; then
+        if ! git merge-base --is-ancestor "$tag_name" HEAD; then
+            echo -e "${RED}Error: tag $tag_name exists and points to a different commit.${RESET}" >&2
+            exit 1
+        fi
+        echo -e "${YELLOW}Tag $tag_name already exists${RESET}" >&2
         return 0
     fi
     
     if $SIGNED_TAG; then
         git tag -s "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
-        echo -e "${GREEN}Created signed tag: $tag_name${RESET}"
+        echo -e "${GREEN}Created signed tag: $tag_name${RESET}" >&2
     elif $ANNOTATED_TAG; then
         git tag -a "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
-        echo -e "${GREEN}Created annotated tag: $tag_name${RESET}"
+        echo -e "${GREEN}Created annotated tag: $tag_name${RESET}" >&2
     else
         git tag "$tag_name"
-        echo -e "${GREEN}Created lightweight tag: $tag_name${RESET}"
+        echo -e "${GREEN}Created lightweight tag: $tag_name${RESET}" >&2
     fi
     
-    echo -e "${GREEN}Tag created: $tag_name${RESET}"
+    echo -e "${GREEN}Tag created: $tag_name${RESET}" >&2
 }
 
 # Function to sanitize TAG_PREFIX for use in git tag patterns
@@ -358,6 +389,10 @@ while [[ $# -gt 0 ]]; do
             ANNOTATED_TAG=false  # signed tags are always annotated
             shift
             ;;
+        --sign-commit)
+            COMMIT_SIGN=true
+            shift
+            ;;
         --no-verify)
             NO_VERIFY=true
             shift
@@ -411,14 +446,43 @@ if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
     fi
 fi
 
+# Fail fast if VERSION is untracked
+if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
+    if ! git ls-files --error-unmatch -- "$VERSION_FILE" >/dev/null 2>&1; then
+        echo -e "${RED}Error: VERSION is not tracked by git${RESET}" >&2
+        exit 1
+    fi
+fi
+
 # Check signed tag prerequisites
 if $SIGNED_TAG && ! git config --get user.signingkey >/dev/null; then
     echo -e "${YELLOW}Warning:${RESET} --signed-tag requested but no user.signingkey is configured. Tag creation may fail." >&2
+    # Fail in CI for signed tags without key
+    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        echo -e "${RED}Error:${RESET} --signed-tag requested in CI but no user.signingkey configured." >&2
+        exit 1
+    fi
 fi
 
-# Add GPG_TTY hint for interactive signed tags
-if $SIGNED_TAG && [[ -t 1 && -z "${GPG_TTY:-}" ]]; then
+# Check signed commit prerequisites
+if $COMMIT_SIGN && ! git config --get user.signingkey >/dev/null; then
+    echo -e "${YELLOW}Warning:${RESET} --sign-commit requested but no user.signingkey is configured. Commit signing may fail." >&2
+    # Fail in CI for signed commits without key
+    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        echo -e "${RED}Error:${RESET} --sign-commit requested in CI but no user.signingkey configured." >&2
+        exit 1
+    fi
+fi
+
+# Add GPG_TTY hint for interactive signed tags/commits
+if (($SIGNED_TAG || $COMMIT_SIGN)) && [[ -t 1 && -z "${GPG_TTY:-}" ]]; then
     echo -e "${YELLOW}Hint:${RESET} export GPG_TTY=$(tty) may be required for pinentry." >&2
+fi
+
+# Protect against concurrent edits (local use)
+if ! $ALLOW_DIRTY && ! git diff --quiet --no-ext-diff; then
+    echo -e "${RED}Error:${RESET} working tree has unstaged changes; use --allow-dirty to override." >&2
+    exit 1
 fi
 
 # Safer dirty-tree guard using pathspec exclusion
@@ -434,12 +498,12 @@ if [[ "$DO_COMMIT" == "true" && "$ALLOW_DIRTY" == "false" ]]; then
 fi
 
 # Perform the version bump
-echo -e "${CYAN}Bumping version from $CURRENT_VERSION...${RESET}"
+echo -e "${CYAN}Bumping version from $CURRENT_VERSION...${RESET}" >&2
 bump_version "$BUMP_TYPE"
 
 # No-op guard if version unchanged
 if [[ "$CURRENT_VERSION" == "$NEW_VERSION" ]]; then
-    echo -e "${YELLOW}Version unchanged ($CURRENT_VERSION); nothing to do.${RESET}"
+    echo -e "${YELLOW}Version unchanged ($CURRENT_VERSION); nothing to do.${RESET}" >&2
     exit 0
 fi
 
@@ -451,11 +515,11 @@ fi
 
 # Handle dry-run mode
 if [[ "$DRY_RUN" == "true" ]]; then
-    echo -e "${YELLOW}DRY RUN: Would update VERSION file to $NEW_VERSION${RESET}"
+    echo -e "${YELLOW}DRY RUN: Would update VERSION file to $NEW_VERSION${RESET}" >&2
     if $UPDATE_CMAKE; then
-        echo -e "${YELLOW}DRY RUN: Would update CMakeLists.txt to $NEW_VERSION${RESET}"
+        echo -e "${YELLOW}DRY RUN: Would update CMakeLists.txt to $NEW_VERSION${RESET}" >&2
     else
-        echo -e "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (--no-cmake)${RESET}"
+        echo -e "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (--no-cmake)${RESET}" >&2
     fi
     exit 0
 fi
@@ -466,7 +530,7 @@ update_version_file
 if $UPDATE_CMAKE; then
     update_cmake_version
 else
-    echo -e "${YELLOW}Skipped CMakeLists.txt update (--no-cmake)${RESET}"
+    echo -e "${YELLOW}Skipped CMakeLists.txt update (--no-cmake)${RESET}" >&2
 fi
 
 # Create commit if requested
@@ -497,14 +561,14 @@ if [[ "$DO_TAG" == "true" ]]; then
     create_tag
 fi
 
-echo -e "${GREEN}Version bump completed: $CURRENT_VERSION → $NEW_VERSION${RESET}"
+echo -e "${GREEN}Version bump completed: $CURRENT_VERSION → $NEW_VERSION${RESET}" >&2
 
 # Show next steps
 if [[ "$DO_TAG" == "true" ]]; then
-    echo -e "${YELLOW}Next steps:${RESET}"
+    echo -e "${YELLOW}Next steps:${RESET}" >&2
     current_branch="$(git rev-parse --abbrev-ref HEAD)"
-    echo -e "  git push origin ${current_branch}"
-    echo -e "  git push origin ${TAG_PREFIX}${NEW_VERSION}"
+    echo -e "  git push origin ${current_branch}" >&2
+    echo -e "  git push origin ${TAG_PREFIX}${NEW_VERSION}" >&2
 fi
 
 # Print the new version for callers
