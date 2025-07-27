@@ -4,6 +4,7 @@
 // This file is part of vglog-filter and is licensed under
 // the GNU General Public License v3.0 or later.
 // See the LICENSE file in the project root for details.
+
 #include <algorithm>
 #include <cctype>
 #include <fstream>

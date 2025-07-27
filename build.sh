@@ -22,7 +22,7 @@
 #   - 'clean' is useful for configuration changes or debugging build issues
 #   - Example: ./build.sh performance warnings
 #   - Example: ./build.sh debug clean
-#
+
 set -euo pipefail
 
 PERFORMANCE_BUILD=OFF
