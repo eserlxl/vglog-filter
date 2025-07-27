@@ -18,18 +18,20 @@ vglog-filter follows [Semantic Versioning](https://semver.org/) (SemVer) with th
 
 ## Version Storage and Display
 
-The current version is stored in the `VERSION` file at the project root:
+The current version is stored in the `VERSION` file at the project root and is read at runtime from `/usr/share/vglog-filter/VERSION`:
 
 ```
-1.0.0
+1.3.1
 ```
 
-The version is automatically displayed when using the `--version` or `-v` flag:
+The version is automatically displayed when using the `--version` or `-V` flag:
 
 ```bash
 vglog-filter --version
-# Output: vglog-filter version 1.0.0
+# Output: vglog-filter version 1.3.1
 ```
+
+**Note**: The version is read from `/usr/share/vglog-filter/VERSION` at runtime. If the file is not accessible, the version will be displayed as "unknown".
 
 ## Semantic Version Bumping
 

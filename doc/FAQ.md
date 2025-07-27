@@ -21,5 +21,11 @@ Use the `-m S` or `--marker S` option to specify a custom marker string.
 ## What happens if the input file cannot be opened?
 The tool will print an error message and exit with a non-zero status.
 
+## How do I check the version of vglog-filter?
+Use the `-V` or `--version` option to display the current version:
+```sh
+vglog-filter --version
+```
+
 ## Can I use vglog-filter with logs from tools other than Valgrind?
 It is designed for Valgrind logs, but may work with similar formats if the error blocks match the expected patterns. 

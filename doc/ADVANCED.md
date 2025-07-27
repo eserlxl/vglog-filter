@@ -23,4 +23,11 @@
 ```sh
 vglog-filter -d 3 -m "==12345== My Custom Marker" mylog.log > filtered.log
 ```
-- This uses a signature depth of 3 and starts processing after the last occurrence of the custom marker. 
+- This uses a signature depth of 3 and starts processing after the last occurrence of the custom marker.
+
+## Error Handling and Input Validation
+- The tool validates all command-line arguments and provides clear error messages.
+- Depth values must be non-negative integers.
+- Input files are checked for existence before processing.
+- Invalid input is handled gracefully with descriptive error messages.
+- String operations are performed safely to prevent crashes. 

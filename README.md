@@ -137,7 +137,11 @@ vglog-filter uses [Semantic Versioning](https://semver.org/) with automated vers
 The current version is stored in the `VERSION` file and displayed with:
 ```sh
 ./vglog-filter --version
+# or
+./vglog-filter -V
 ```
+
+**Note**: The version is read from `/usr/share/vglog-filter/VERSION` at runtime. If the file is not accessible, the version will be displayed as "unknown".
 
 ### Automated Version Bumping
 The project uses GitHub Actions to automatically bump versions based on [Conventional Commits](https://www.conventionalcommits.org/):

@@ -18,6 +18,7 @@ vglog-filter [options] <valgrind_log>
 | `-v`   | `--verbose`         | Show completely raw blocks (no address / `at:` scrub). |
 | `-d N` | `--depth N`         | Signature depth (default: 1, 0 = unlimited). |
 | `-m S` | `--marker S`        | Marker string (default: "Successfully downloaded debug"). |
+| `-V`   | `--version`         | Show version information. |
 | `-h`   | `--help`            | Show help message. |
 
 ## Typical Workflow
