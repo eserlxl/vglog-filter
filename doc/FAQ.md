@@ -46,6 +46,25 @@ You can also combine tests with other build options:
 ## How does vglog-filter handle large files?
 vglog-filter automatically detects files larger than 5MB and switches to stream processing mode for memory efficiency. You'll see a message "Info: Large file detected, using stream processing mode" when this happens. You can also force stream processing with the `-s` flag regardless of file size.
 
+## How can I monitor progress when processing large files?
+Use the `-p` or `--progress` option to see real-time progress updates. The tool will display percentage completion and line counts every 1000 lines processed:
+```sh
+vglog-filter -p large_valgrind.log > filtered.log
+```
+
+## How can I monitor memory usage during processing?
+Use the `-M` or `--memory` option to track memory usage at key processing stages:
+```sh
+vglog-filter -M valgrind.log > filtered.log
+```
+This will show memory usage during file reading, processing, and deduplication phases.
+
+## Can I combine progress and memory monitoring?
+Yes! You can use both options together for comprehensive monitoring:
+```sh
+vglog-filter -p -M very_large_valgrind.log > filtered.log
+```
+
 ## How do I check the version of vglog-filter?
 Use the `-V` or `--version` option to display the current version:
 ```sh
@@ -83,4 +102,13 @@ The project uses comprehensive GitHub Actions workflows that test:
 - Memory sanitizer testing
 - Static analysis with Clang-Tidy
 - Security analysis with CodeQL
-- Shell script validation with ShellCheck 
+- Shell script validation with ShellCheck
+
+## What performance optimizations have been implemented?
+Recent optimizations include:
+- **String operations**: Uses `std::string_view` for better performance
+- **Regex patterns**: Optimized with ECMAScript flags for faster matching
+- **Large file detection**: Efficient file size checking using `stat()`
+- **Array operations**: Uses `std::span` for memory-efficient array handling
+- **Stream processing**: Automatic detection and efficient processing of large files
+- **Memory monitoring**: Real-time memory usage tracking for performance analysis 

@@ -37,6 +37,9 @@ vglog-filter addresses these issues by:
 - **Robust error handling**: Comprehensive error messages and input validation.
 - **Automatic large file detection**: Smart processing mode selection for optimal performance.
 - **Memory-efficient processing**: Stream processing for large files to prevent OOM errors.
+- **Progress reporting**: Real-time progress updates for large file processing.
+- **Memory monitoring**: Track memory usage during processing for performance analysis.
+- **Modern C++ optimizations**: Uses `std::string_view`, `std::span`, and optimized regex patterns.
 - **Test framework**: Built-in test suite with automatic cleanup.
 - **Automated versioning**: Semantic versioning with automated bumping based on conventional commits.
 - **Comprehensive CI/CD**: 12 GitHub Actions workflows testing all build configurations.
@@ -85,6 +88,21 @@ valgrind --leak-check=full ./your_program 2>&1 | vglog-filter
 For large files, you can force stream processing:
 ```sh
 vglog-filter -s very_large.log > filtered.log
+```
+
+Monitor progress for large files:
+```sh
+vglog-filter -p large_file.log > filtered.log
+```
+
+Track memory usage during processing:
+```sh
+vglog-filter -M valgrind.log > filtered.log
+```
+
+Combine progress and memory monitoring:
+```sh
+vglog-filter -p -M very_large_file.log > filtered.log
 ```
 
 For detailed usage instructions, see the [Usage Guide](doc/USAGE.md).

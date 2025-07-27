@@ -181,6 +181,51 @@ The GitHub Actions workflows automatically test all build configurations:
 - **Stream processing**: Line-by-line processing for large files to prevent OOM
 - **Smart defaults**: Optimal processing mode selected automatically
 
+### Recent Performance Optimizations
+
+The project has undergone significant performance improvements:
+
+#### String Operations Optimization
+- **std::string_view**: Added `std::string_view` support for better performance
+- **String trimming**: Optimized with `ltrim_view()`, `rtrim_view()`, and `trim_view()` functions
+- **Canonicalization**: Added `canon()` overload for `string_view` to avoid unnecessary copies
+- **Memory efficiency**: Reduced string allocations in processing loops
+
+#### Regex Pattern Optimization
+- **ECMAScript flags**: All regex patterns now use `std::regex::ECMAScript` flag for better performance
+- **Optimized patterns**: Enhanced regex patterns in both `canon()` and `process()` functions
+- **Consistent flags**: Standardized regex flags across all patterns for maintainability
+
+#### Large File Processing Improvements
+- **Efficient file detection**: Replaced `fopen/fseek/ftell` with `stat()` for single file operation
+- **Regular file checking**: Added `S_ISREG()` check to avoid processing directories
+- **Optimized thresholds**: Reduced default threshold to 5MB for better auto-detection
+
+#### Array Operations Enhancement
+- **std::span support**: Added C++20 `std::span` support for memory-efficient array handling
+- **Span helpers**: Added `create_span_from_vector()` and `find_marker_in_span()` functions
+- **Marker trimming**: Optimized marker search using `std::span` for better performance
+
+#### New Features
+
+##### Progress Reporting
+- **Real-time feedback**: Progress updates every 1000 lines during processing
+- **Percentage display**: Shows completion percentage and line counts
+- **File-specific**: Progress reporting includes filename for clarity
+- **Stdin handling**: Automatically disabled for stdin to avoid performance impact
+
+##### Memory Monitoring
+- **Real-time tracking**: Monitor memory usage at key processing stages
+- **Performance analysis**: Use `-M` flag to identify memory bottlenecks
+- **Resource optimization**: Helps optimize processing for very large files
+- **Cross-platform**: Uses `getrusage()` for Linux compatibility
+
+##### Enhanced Error Handling
+- **Detailed messages**: Added `create_error_message()` helper for consistent formatting
+- **File context**: All error messages include file names and operation details
+- **Troubleshooting hints**: Better guidance for common issues
+- **Memory failures**: Specific error handling for memory allocation issues
+
 ### Development Tools
 The `dev-bin/` directory contains development utilities:
 - `bump-version`: Command-line version management
