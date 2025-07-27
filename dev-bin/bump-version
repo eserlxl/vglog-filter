@@ -7,7 +7,7 @@
 # See the LICENSE file in the project root for details.
 #
 # Version bump script for vglog-filter
-# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print]
+# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX]
 
 set -euo pipefail
 
@@ -63,10 +63,12 @@ ALLOW_DIRTY=false
 ANNOTATED_TAG=true    # default to annotated tag
 SIGNED_TAG=false      # default to unsigned tag
 NO_VERIFY=false       # default to running hooks
+UPDATE_CMAKE=true     # default to updating CMake
+TAG_PREFIX="${TAG_PREFIX:-v}"  # default tag prefix, can be overridden by env var
 
 # Function to show usage
 usage() {
-    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print]"
+    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX]"
     echo ""
     echo "Bump the semantic version of vglog-filter"
     echo ""
@@ -81,14 +83,18 @@ usage() {
     echo "  --dry-run Show what would be done without making changes"
     echo "  --print  Print the new version without making any changes"
     echo "  --message MSG     Use MSG as the full commit message (overrides default)"
+    echo "                    Note: When --message is provided, ANALYSIS_MESSAGE is ignored"
     echo "  --allow-dirty     Allow committing when other files are modified"
     echo "  --lightweight-tag Create a lightweight tag instead of annotated"
     echo "  --signed-tag      Create a signed tag (requires GPG key configured)"
     echo "  --no-verify       Skip commit hooks (useful in CI environments)"
+    echo "  --no-cmake        Skip updating CMakeLists.txt version fields"
+    echo "  --tag-prefix PREFIX  Use PREFIX instead of 'v' for tag names (default: v)"
     echo ""
     echo "Environment Variables:"
     echo "  ANALYSIS_MESSAGE  Optional detailed analysis to include in commit message"
     echo "                    (ignored when --message is provided)"
+    echo "  TAG_PREFIX       Default tag prefix (can be overridden by --tag-prefix)"
     echo ""
     echo "CI Integration:"
     echo "  When running in GitHub Actions and --message isn't provided, the script"
@@ -107,6 +113,9 @@ usage() {
     echo "  $0 patch --no-verify --commit # Skip commit hooks (useful in CI)"
     echo "  $0 patch --commit --signed-tag --no-verify --message 'chore(release): vX.Y.Z [skip ci]'  # Signed tag with CI"
     echo "  ANALYSIS_MESSAGE='Auto version bump (push)' $0 patch --commit --message 'chore(release): vX.Y.Z [skip ci]'  # CI usage"
+    echo "  $0 patch --no-cmake         # Skip CMakeLists.txt updates"
+    echo "  $0 patch --tag-prefix 'release-' --tag  # Create tag 'release-1.2.3'"
+    echo "  TAG_PREFIX='ver' $0 patch --tag  # Use environment variable for prefix"
     echo ""
     echo "Current version: $CURRENT_VERSION"
 }
@@ -171,10 +180,10 @@ update_cmake_version() {
 stage_files() {
     # Stage CMakeLists.txt if it exists and has changes
     if [[ -f "$PROJECT_ROOT/CMakeLists.txt" ]]; then
-        git add "$PROJECT_ROOT/CMakeLists.txt" || true
+        git add -- "$PROJECT_ROOT/CMakeLists.txt" || true
     fi
     # Stage VERSION file
-    git add "$VERSION_FILE"
+    git add -- "$VERSION_FILE"
 }
 
 # Function to check git identity
@@ -189,7 +198,7 @@ check_git_identity() {
 
 # Function to create git commit
 create_commit() {
-    if ! git diff --quiet "$VERSION_FILE"; then
+    if ! git diff --quiet -- "$VERSION_FILE"; then
         stage_files
         
         # Check git identity before committing
@@ -222,7 +231,7 @@ create_commit() {
 
 # Function to create git tag
 create_tag() {
-    local tag_name="v$NEW_VERSION"
+    local tag_name="${TAG_PREFIX}${NEW_VERSION}"
     
     if git rev-parse "$tag_name" >/dev/null 2>&1; then
         echo -e "${YELLOW}Tag $tag_name already exists${RESET}"
@@ -244,11 +253,11 @@ create_tag() {
 # Function to check if new version is greater than last tag
 check_version_order() {
     local last_tag
-    last_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+    last_tag=$(git tag --list "${TAG_PREFIX}[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n1)
     
     if [[ -n "$last_tag" ]]; then
-        # Remove 'v' prefix for comparison
-        local last_version="${last_tag#v}"
+        # Remove tag prefix for comparison
+        local last_version="${last_tag#${TAG_PREFIX}}"
         if [[ ! "$last_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             return 0  # Skip comparison if last tag format is unexpected
         fi
@@ -330,6 +339,14 @@ while [[ $# -gt 0 ]]; do
         --no-verify)
             NO_VERIFY=true
             shift
+            ;;
+        --no-cmake)
+            UPDATE_CMAKE=false
+            shift
+            ;;
+        --tag-prefix)
+            TAG_PREFIX="${2-}"
+            shift 2
             ;;
         -h|--help)
             usage
@@ -413,11 +430,22 @@ fi
 # Handle dry-run mode
 if [[ "$DRY_RUN" == "true" ]]; then
     echo -e "${YELLOW}DRY RUN: Would update VERSION file to $NEW_VERSION${RESET}"
+    if $UPDATE_CMAKE; then
+        echo -e "${YELLOW}DRY RUN: Would update CMakeLists.txt to $NEW_VERSION${RESET}"
+    else
+        echo -e "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (--no-cmake)${RESET}"
+    fi
     exit 0
 fi
 
 update_version_file
-update_cmake_version
+
+# Update CMake only if requested (default true)
+if $UPDATE_CMAKE; then
+    update_cmake_version
+else
+    echo -e "${YELLOW}Skipped CMakeLists.txt update (--no-cmake)${RESET}"
+fi
 
 # Create commit if requested
 if [[ "$DO_COMMIT" == "true" ]]; then
@@ -446,7 +474,7 @@ if [[ "$DO_TAG" == "true" ]]; then
     echo -e "${YELLOW}Next steps:${RESET}"
     current_branch="$(git rev-parse --abbrev-ref HEAD)"
     echo -e "  git push origin ${current_branch}"
-    echo -e "  git push origin v$NEW_VERSION"
+    echo -e "  git push origin ${TAG_PREFIX}${NEW_VERSION}"
 fi
 
 # Print the new version for callers
