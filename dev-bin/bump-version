@@ -1,0 +1,106 @@
+#!/bin/bash
+
+# Copyright (C) 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+
+set -e
+
+# Version bump script for vglog-filter
+# Usage: ./bump-version [major|minor|patch] [--commit]
+
+VERSION_FILE="VERSION"
+COMMIT_CHANGES=false
+
+# Parse arguments
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 [major|minor|patch] [--commit]"
+    echo "  major: Increment major version (x.0.0)"
+    echo "  minor: Increment minor version (0.x.0)"
+    echo "  patch: Increment patch version (0.0.x)"
+    echo "  --commit: Commit the version change"
+    exit 1
+fi
+
+BUMP_TYPE="$1"
+
+if [ "$2" = "--commit" ]; then
+    COMMIT_CHANGES=true
+fi
+
+# Validate bump type
+case "$BUMP_TYPE" in
+    major|minor|patch)
+        ;;
+    *)
+        echo "Error: Invalid bump type '$BUMP_TYPE'. Must be major, minor, or patch."
+        exit 1
+        ;;
+esac
+
+# Check if VERSION file exists
+if [ ! -f "$VERSION_FILE" ]; then
+    echo "Error: VERSION file not found at $VERSION_FILE"
+    exit 1
+fi
+
+# Read current version
+CURRENT_VERSION=$(cat "$VERSION_FILE")
+echo "Current version: $CURRENT_VERSION"
+
+# Parse version components
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+# Validate version format
+if ! [[ "$MAJOR" =~ ^[0-9]+$ ]] || ! [[ "$MINOR" =~ ^[0-9]+$ ]] || ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then
+    echo "Error: Invalid version format '$CURRENT_VERSION'. Expected format: x.y.z"
+    exit 1
+fi
+
+# Bump version based on type
+case "$BUMP_TYPE" in
+    major)
+        NEW_MAJOR=$((MAJOR + 1))
+        NEW_MINOR=0
+        NEW_PATCH=0
+        ;;
+    minor)
+        NEW_MAJOR=$MAJOR
+        NEW_MINOR=$((MINOR + 1))
+        NEW_PATCH=0
+        ;;
+    patch)
+        NEW_MAJOR=$MAJOR
+        NEW_MINOR=$MINOR
+        NEW_PATCH=$((PATCH + 1))
+        ;;
+esac
+
+NEW_VERSION="$NEW_MAJOR.$NEW_MINOR.$NEW_PATCH"
+echo "New version: $NEW_VERSION"
+
+# Update VERSION file
+echo "$NEW_VERSION" > "$VERSION_FILE"
+echo "Updated $VERSION_FILE"
+
+# Update CMakeLists.txt if it contains version information
+if [ -f "CMakeLists.txt" ]; then
+    # This is a placeholder - you might want to add version to CMakeLists.txt
+    # For now, we'll just note that CMakeLists.txt exists
+    echo "Note: CMakeLists.txt exists but doesn't contain version info to update"
+fi
+
+# Commit changes if requested
+if [ "$COMMIT_CHANGES" = true ]; then
+    echo "Committing version change..."
+    git add "$VERSION_FILE"
+    git commit -m "chore: bump version to $NEW_VERSION"
+    echo "Version bump committed"
+else
+    echo "Version bump completed. Use --commit to commit changes."
+fi
+
+echo "Version bump successful: $CURRENT_VERSION -> $NEW_VERSION" 
