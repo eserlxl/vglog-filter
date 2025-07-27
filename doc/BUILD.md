@@ -5,7 +5,7 @@ The `build.sh` script automates the configuration and compilation of the vglog-f
 ## Usage
 
 ```sh
-./build.sh [performance] [warnings] [debug] [clean]
+./build.sh [performance] [warnings] [debug] [clean] [tests]
 ```
 
 You can provide one or more of the following options:
@@ -16,10 +16,12 @@ You can provide one or more of the following options:
 | `warnings`    | Enables extra compiler warnings                                  |
 | `debug`       | Enables debug mode (disables performance mode if both are set)   |
 | `clean`       | Forces a clean build (removes all build artifacts)               |
+| `tests`       | Builds and runs the test suite                                   |
 
 - `performance` and `debug` are **mutually exclusive**. If both are specified, `debug` takes precedence and disables `performance`.
-- `warnings` and `clean` can be combined with any mode.
+- `warnings`, `clean`, and `tests` can be combined with any mode.
 - `clean` is useful for configuration changes or debugging build issues.
+- `tests` will automatically clean up any leftover test files before and after execution.
 
 ## Examples
 
@@ -43,12 +45,26 @@ You can provide one or more of the following options:
   ```sh
   ./build.sh performance warnings clean
   ```
+- **Build and run tests:**
+  ```sh
+  ./build.sh tests
+  ```
+- **Build and run tests with warnings:**
+  ```sh
+  ./build.sh tests warnings
+  ```
+- **Build and run tests in debug mode:**
+  ```sh
+  ./build.sh tests debug
+  ```
 
 ## What the Script Does
 - Creates a `build/` directory if it does not exist.
 - Runs CMake with the selected options as variables.
 - If `clean` is specified, runs `make clean` to remove all build artifacts.
 - Builds the project using `make -j20` for fast parallel compilation.
+- If `tests` is specified, builds and runs the test suite with automatic cleanup.
+- Validates command-line arguments and provides helpful warnings for unknown options.
 
 ## Output
 - The compiled binary and build artifacts will be placed in the `build/` directory.

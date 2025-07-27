@@ -55,8 +55,20 @@ You can use the `build.sh` script to configure builds with these options:
   ```sh
   ./build.sh performance warnings clean
   ```
+- Build and run tests:
+  ```sh
+  ./build.sh tests
+  ```
+- Build and run tests with warnings:
+  ```sh
+  ./build.sh tests warnings
+  ```
+- Build and run tests in debug mode:
+  ```sh
+  ./build.sh tests debug
+  ```
 
-If both `debug` and `performance` are specified, debug mode takes precedence. The `clean` option can be combined with any other options.
+If both `debug` and `performance` are specified, debug mode takes precedence. The `clean` and `tests` options can be combined with any other options.
 
 [↑ Back to top](#developer-guide)
 
@@ -72,7 +84,13 @@ The current version is stored in the `VERSION` file and displayed with:
 ./vglog-filter -V
 ```
 
-**Note**: The version is read from `/usr/share/vglog-filter/VERSION` at runtime. If the file is not accessible, the version will be displayed as "unknown".
+**Note**: The version is read from multiple locations in order of preference:
+1. `./VERSION` (local development)
+2. `../VERSION` (build directory)
+3. `/usr/share/vglog-filter/VERSION` (system installation)
+4. `/usr/local/share/vglog-filter/VERSION` (local installation)
+
+If none of these files are accessible, the version will be displayed as "unknown".
 
 ### Automated Version Bumping
 The project uses GitHub Actions to automatically bump versions based on [Conventional Commits](https://www.conventionalcommits.org/):
@@ -111,6 +129,26 @@ All build configurations are tested locally and in CI:
 - Performance build (optimized)
 - Debug build
 - Warnings build (extra compiler warnings)
+
+#### Test Framework
+The project includes a basic test framework in the `test/` directory:
+- **test_basic.cpp**: Unit tests for core functionality
+- **Test Coverage**: Version file reading, empty file handling, basic parsing
+- **Automatic Cleanup**: Tests automatically clean up temporary files
+- **Build Integration**: Tests can be built and run with `./build.sh tests`
+
+#### Running Tests
+```sh
+# Build and run tests
+./build.sh tests
+
+# Run tests with specific build configuration
+./build.sh tests debug warnings
+
+# Manual test compilation (if needed)
+g++ -std=c++17 -Wall -pedantic -Wextra -O2 test/test_basic.cpp -o build/test_basic
+./build/test_basic
+```
 
 ### Development Tools
 The `dev-bin/` directory contains development utilities:

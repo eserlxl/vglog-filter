@@ -19,13 +19,28 @@ Use the `-v` or `--verbose` option to disable address and `at:` scrubbing.
 Use the `-m S` or `--marker S` option to specify a custom marker string.
 
 ## What happens if the input file cannot be opened?
-The tool will print an error message and exit with a non-zero status.
+The tool will print a descriptive error message with helpful suggestions and exit with a non-zero status. It will also check if the file exists and is readable.
+
+## What happens if the input file is empty?
+The tool will display a warning message and exit successfully (status 0) without processing anything.
+
+## What if I provide an invalid depth value?
+The tool will display a clear error message showing the invalid value and the expected format (non-negative integer).
+
+## How do I run tests for vglog-filter?
+Use the build script with the `tests` option:
+```sh
+./build.sh tests
+```
+This will build and run the test suite, automatically cleaning up any temporary files.
 
 ## How do I check the version of vglog-filter?
 Use the `-V` or `--version` option to display the current version:
 ```sh
 vglog-filter --version
 ```
+
+**Note**: The version is read from multiple locations in order of preference (local development, build directory, system installation). If no version file is found, it will display "unknown".
 
 ## Can I use vglog-filter with logs from tools other than Valgrind?
 It is designed for Valgrind logs, but may work with similar formats if the error blocks match the expected patterns. 

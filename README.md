@@ -34,6 +34,8 @@ vglog-filter addresses these issues by:
 - **Stack trace deduplication**: Groups identical errors for concise output.
 - **Log normalization**: Makes logs comparable across runs and systems.
 - **Easy integration**: Can be used as a standalone tool or in CI pipelines.
+- **Robust error handling**: Comprehensive error messages and input validation.
+- **Test framework**: Built-in test suite with automatic cleanup.
 - **Automated versioning**: Semantic versioning with automated bumping based on conventional commits.
 - **Comprehensive testing**: Multi-platform CI/CD with multiple build configurations.
 
@@ -95,7 +97,7 @@ Contributions, bug reports, and feature requests are welcome! Please open an iss
 ### Development Workflow
 1. Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for commit messages
 2. Use the provided version bumping tools for releases
-3. Ensure all tests pass before submitting pull requests
+3. Run tests with `./build.sh tests` before submitting pull requests
 4. Check the [CONTRIBUTING.md](.github/CONTRIBUTING.md) for detailed guidelines
 
 [↑ Back to top](#vglog-filter)

@@ -44,6 +44,14 @@ vglog-filter -d 2 -k valgrind.log > filtered.log
 - By default, only log entries after the last occurrence of the marker string (default: "Successfully downloaded debug") are processed. Use `-k` to keep all entries.
 - The tool deduplicates error blocks based on a canonicalized signature, with configurable depth.
 - Address and line numbers are scrubbed unless `-v` is used.
+- Empty input files are handled gracefully with appropriate warnings.
+- Comprehensive error messages provide helpful guidance for common issues.
+
+## Error Handling
+- **Invalid depth values**: Clear error messages with expected format
+- **Missing input files**: Helpful suggestions for file access issues
+- **Empty files**: Warning messages for empty input files
+- **File access errors**: Descriptive error messages with troubleshooting hints
 
 ---
 For more details, see the [FAQ](FAQ.md) and [Advanced Filtering](ADVANCED.md). 

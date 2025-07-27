@@ -27,7 +27,9 @@ vglog-filter -d 3 -m "==12345== My Custom Marker" mylog.log > filtered.log
 
 ## Error Handling and Input Validation
 - The tool validates all command-line arguments and provides clear error messages.
-- Depth values must be non-negative integers.
-- Input files are checked for existence before processing.
-- Invalid input is handled gracefully with descriptive error messages.
-- String operations are performed safely to prevent crashes. 
+- Depth values must be non-negative integers with descriptive error messages.
+- Input files are checked for existence and readability before processing.
+- Empty input files are handled gracefully with appropriate warnings.
+- Invalid input is handled gracefully with descriptive error messages and helpful suggestions.
+- String operations are performed safely to prevent crashes.
+- Version file resolution supports multiple installation paths for development and production use. 
