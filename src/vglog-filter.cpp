@@ -71,27 +71,27 @@ Str regex_replace_all(const Str& src, const std::regex& re, const Str& repl)
 
 // Function-local static regex objects to avoid recompilation and initialization issues
 static const std::regex& get_re_addr() {
-    static const std::regex re(R"(0x[0-9a-fA-F]+)");
+    static const std::regex re(R"(0x[0-9a-fA-F]+)", std::regex::optimize);
     return re;
 }
 
 static const std::regex& get_re_line() {
-    static const std::regex re(R"(:[0-9]+)");
+    static const std::regex re(R"(:[0-9]+)", std::regex::optimize);
     return re;
 }
 
 static const std::regex& get_re_array() {
-    static const std::regex re(R"(\[[0-9]+\])");
+    static const std::regex re(R"(\[[0-9]+\])", std::regex::optimize);
     return re;
 }
 
 static const std::regex& get_re_template() {
-    static const std::regex re(R"(<[^>]*>)");
+    static const std::regex re(R"(<[^>]*>)", std::regex::optimize);
     return re;
 }
 
 static const std::regex& get_re_ws() {
-    static const std::regex re(R"([ \t\v\f\r\n]+)");
+    static const std::regex re(R"([ \t\v\f\r\n]+)", std::regex::optimize);
     return re;
 }
 
@@ -110,38 +110,39 @@ Str canon(Str s)
 
 // Function-local static regex objects for process function
 static const std::regex& get_re_vg_line() {
-    static const std::regex re(R"(^==[0-9]+==)");
+    static const std::regex re(R"(^==[0-9]+==)", std::regex::optimize);
     return re;
 }
 
 static const std::regex& get_re_prefix() {
-    static const std::regex re(R"(^==[0-9]+==[ \t\v\f\r\n]*)");
+    static const std::regex re(R"(^==[0-9]+==[ \t\v\f\r\n]*)", std::regex::optimize);
     return re;
 }
 
 static const std::regex& get_re_start() {
     static const std::regex re(
-        R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))");
+        R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))", 
+        std::regex::optimize);
     return re;
 }
 
 static const std::regex& get_re_bytes_head() {
-    static const std::regex re(R"([0-9]+ bytes in [0-9]+ blocks)");
+    static const std::regex re(R"([0-9]+ bytes in [0-9]+ blocks)", std::regex::optimize);
     return re;
 }
 
 static const std::regex& get_re_at() {
-    static const std::regex re(R"(at : +)");
+    static const std::regex re(R"(at : +)", std::regex::optimize);
     return re;
 }
 
 static const std::regex& get_re_by() {
-    static const std::regex re(R"(by : +)");
+    static const std::regex re(R"(by : +)", std::regex::optimize);
     return re;
 }
 
 static const std::regex& get_re_q() {
-    static const std::regex re(R"(\?{3,})");
+    static const std::regex re(R"(\?{3,})", std::regex::optimize);
     return re;
 }
 
