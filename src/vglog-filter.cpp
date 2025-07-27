@@ -1,4 +1,4 @@
-// Copyright (C) 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // This file is part of vglog-filter and is licensed under
