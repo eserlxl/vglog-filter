@@ -95,11 +95,17 @@ usage() {
     echo "  ANALYSIS_MESSAGE  Optional detailed analysis to include in commit message"
     echo "                    (ignored when --message is provided)"
     echo "  TAG_PREFIX       Default tag prefix (can be overridden by --tag-prefix)"
+    echo "                   Note: Avoid glob characters (* ? [ ]) in TAG_PREFIX"
     echo ""
     echo "CI Integration:"
     echo "  When running in GitHub Actions and --message isn't provided, the script"
     echo "  automatically appends [skip ci] to the default commit message to prevent"
     echo "  other workflows from running."
+    echo ""
+    echo "Commit Message Consistency:"
+    echo "  The default commit subject uses the same prefix as tags:"
+    echo "  chore(release): <prefix><version>"
+    echo "  This ensures consistency between commit messages and tag names."
     echo ""
     echo "Examples:"
     echo "  $0 patch                    # Bump patch version"
@@ -111,8 +117,8 @@ usage() {
     echo "  $0 patch --message 'Custom commit message' --commit  # Use custom message"
     echo "  $0 patch --signed-tag --tag # Create signed tag for provenance"
     echo "  $0 patch --no-verify --commit # Skip commit hooks (useful in CI)"
-    echo "  $0 patch --commit --signed-tag --no-verify --message 'chore(release): vX.Y.Z [skip ci]'  # Signed tag with CI"
-    echo "  ANALYSIS_MESSAGE='Auto version bump (push)' $0 patch --commit --message 'chore(release): vX.Y.Z [skip ci]'  # CI usage"
+    echo "  $0 patch --commit --signed-tag --no-verify --message 'chore(release): <prefix>X.Y.Z [skip ci]'  # Signed tag with CI"
+    echo "  ANALYSIS_MESSAGE='Auto version bump (push)' $0 patch --commit --message 'chore(release): <prefix>X.Y.Z [skip ci]'  # CI usage"
     echo "  $0 patch --no-cmake         # Skip CMakeLists.txt updates"
     echo "  $0 patch --tag-prefix 'release-' --tag  # Create tag 'release-1.2.3'"
     echo "  TAG_PREFIX='ver' $0 patch --tag  # Use environment variable for prefix"
@@ -168,7 +174,7 @@ update_cmake_version() {
             sed -E -i "s/(project\([^)]*VERSION[[:space:]]+)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
             echo -e "${GREEN}Updated CMakeLists.txt project VERSION to ${NEW_VERSION}${RESET}"
         elif grep -Eq 'set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-            sed -E -i "s/(set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
+            sed -E -i "s/(set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+\"?)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
             echo -e "${GREEN}Updated CMake PROJECT_VERSION to ${NEW_VERSION}${RESET}"
         else
             echo -e "${YELLOW}Note: CMakeLists.txt present but no recognizable version field to update${RESET}"
@@ -209,7 +215,7 @@ create_commit() {
         if [[ -z "$msg" ]]; then
             # Use paragraph-style commit message
             local commit_args=(${NO_VERIFY:+--no-verify})
-            commit_args+=(-m "chore(release): v${NEW_VERSION}${GITHUB_ACTIONS:+ [skip ci]}")
+            commit_args+=(-m "chore(release): ${TAG_PREFIX}${NEW_VERSION}${GITHUB_ACTIONS:+ [skip ci]}")
             commit_args+=(-m "bump: ${CURRENT_VERSION} → ${NEW_VERSION}")
             
             # Append analysis if provided and no custom message
@@ -239,21 +245,32 @@ create_tag() {
     fi
     
     if $SIGNED_TAG; then
-        git tag -s "$tag_name" -m "Release v$NEW_VERSION"
+        git tag -s "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
         echo -e "${GREEN}Created signed tag: $tag_name${RESET}"
     elif $ANNOTATED_TAG; then
-        git tag -a "$tag_name" -m "Release v$NEW_VERSION"
+        git tag -a "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
         echo -e "${GREEN}Created annotated tag: $tag_name${RESET}"
     else
         git tag "$tag_name"
         echo -e "${GREEN}Created lightweight tag: $tag_name${RESET}"
     fi
+    
+    echo -e "${GREEN}Tag created: $tag_name${RESET}"
+}
+
+# Function to sanitize TAG_PREFIX for use in git tag patterns
+sanitize_tag_prefix() {
+    local prefix="$1"
+    # Escape glob characters that could cause issues in git tag patterns
+    echo "$prefix" | sed 's/[[\]*?]/\\&/g'
 }
 
 # Function to check if new version is greater than last tag
 check_version_order() {
     local last_tag
-    last_tag=$(git tag --list "${TAG_PREFIX}[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n1)
+    local sanitized_prefix
+    sanitized_prefix=$(sanitize_tag_prefix "$TAG_PREFIX")
+    last_tag=$(git tag --list "${sanitized_prefix}[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n1)
     
     if [[ -n "$last_tag" ]]; then
         # Remove tag prefix for comparison
@@ -454,10 +471,15 @@ fi
 
 # Create tag if requested
 if [[ "$DO_TAG" == "true" ]]; then
-    # Warn if tagging without committing and VERSION has changes
+    # Warn if tagging without committing and files have changes
     if [[ "$DO_COMMIT" != "true" ]]; then
-        if ! git diff --quiet -- "$VERSION_FILE"; then
-            echo -e "${YELLOW}Warning:${RESET} Tagging without --commit; ensure the VERSION bump commit is pushed before the tag so CI/release matches the version." >&2
+        local files_to_check=("$VERSION_FILE")
+        if $UPDATE_CMAKE; then
+            files_to_check+=("$PROJECT_ROOT/CMakeLists.txt")
+        fi
+        
+        if ! git diff --quiet -- "${files_to_check[@]}"; then
+            echo -e "${YELLOW}Warning:${RESET} Tagging without --commit; ensure the version bump commit is pushed before the tag so CI/release matches the version." >&2
         fi
     fi
     
