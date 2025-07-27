@@ -158,8 +158,6 @@ static inline Str rtrim(Str s) {
     return s;
 }
 
-static inline Str trim(Str s) { return rtrim(ltrim(std::move(s))); }
-
 Str regex_replace_all(const Str& src, const std::regex& re, const Str& repl)
 {
     return std::regex_replace(src, re, repl,
