@@ -80,7 +80,7 @@ TAG_PREFIX="${TAG_PREFIX:-v}"  # default tag prefix, can be overridden by env va
 SET_VERSION=""        # for --set option
 
 # Validate TAG_PREFIX content early
-if [[ "$TAG_PREFIX" =~ $'\n' || "$TAG_PREFIX" =~ $'\r' ]]; then
+if [[ "$TAG_PREFIX" == *$'\n'* || "$TAG_PREFIX" == *$'\r'* ]]; then
     echo -e "${RED}Error: TAG_PREFIX contains newline characters${RESET}" >&2
     exit 1
 fi
@@ -211,6 +211,7 @@ update_version_file() {
     printf '%s\n' "$NEW_VERSION" > "$TMP_FILE"
     sync -f "$TMP_FILE" 2>/dev/null || true
     mv -f "$TMP_FILE" "$VERSION_FILE"
+    sync -f "$VERSION_FILE" 2>/dev/null || sync -f "$(dirname "$VERSION_FILE")" 2>/dev/null || true
     echo -e "${GREEN}Updated VERSION file: $CURRENT_VERSION → $NEW_VERSION${RESET}" >&2
 }
 
@@ -302,10 +303,10 @@ create_tag() {
         return 0
     fi
     
-    if $SIGNED_TAG; then
+    if [[ "$SIGNED_TAG" == true ]]; then
         git tag -s "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
         echo -e "${GREEN}Created signed tag: $tag_name${RESET}" >&2
-    elif $ANNOTATED_TAG; then
+    elif [[ "$ANNOTATED_TAG" == true ]]; then
         git tag -a "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
         echo -e "${GREEN}Created annotated tag: $tag_name${RESET}" >&2
     else
@@ -353,7 +354,7 @@ check_version_order() {
             version_not_greater=true
         fi
         
-        if $version_not_greater; then
+        if [[ "$version_not_greater" == true ]]; then
             echo -e "${YELLOW}Warning:${RESET} New version $NEW_VERSION is not greater than last tag $last_tag${RESET}" >&2
             
             # Enforce version order in CI
@@ -480,7 +481,7 @@ fi
 
 # Check for detached HEAD if committing or tagging
 if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
-    if ! $IN_GIT_REPO; then
+    if [[ "$IN_GIT_REPO" != true ]]; then
         echo -e "${RED}Error: Not in a git repository${RESET}" >&2
         exit 1
     fi
@@ -499,7 +500,7 @@ if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
 fi
 
 # Check signed tag prerequisites
-if $SIGNED_TAG && ! git config --get user.signingkey >/dev/null; then
+if [[ "$SIGNED_TAG" == true ]] && ! git config --get user.signingkey >/dev/null; then
     echo -e "${YELLOW}Warning:${RESET} --signed-tag requested but no user.signingkey is configured. Tag creation may fail." >&2
     # Fail in CI for signed tags without key
     if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
@@ -509,7 +510,7 @@ if $SIGNED_TAG && ! git config --get user.signingkey >/dev/null; then
 fi
 
 # Check signed commit prerequisites
-if $COMMIT_SIGN && ! git config --get user.signingkey >/dev/null; then
+if [[ "$COMMIT_SIGN" == true ]] && ! git config --get user.signingkey >/dev/null; then
     echo -e "${YELLOW}Warning:${RESET} --sign-commit requested but no user.signingkey is configured. Commit signing may fail." >&2
     # Fail in CI for signed commits without key
     if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
@@ -519,24 +520,25 @@ if $COMMIT_SIGN && ! git config --get user.signingkey >/dev/null; then
 fi
 
 # Add GPG_TTY hint for interactive signed tags/commits
-if $SIGNED_TAG || $COMMIT_SIGN; then
+if [[ "$SIGNED_TAG" == true || "$COMMIT_SIGN" == true ]]; then
     [[ -t 1 && -z "${GPG_TTY:-}" ]] && echo -e "${YELLOW}Hint:${RESET} export GPG_TTY=$(tty) may be required for pinentry." >&2
 fi
 
 # Add signing UX hint for commit.gpgSign=true
 if [[ "$DO_COMMIT" == "true" && "$COMMIT_SIGN" != "true" ]] && git config --get commit.gpgSign >/dev/null; then
     echo -e "${YELLOW}Note:${RESET} commit.gpgSign=true is configured; Git may still sign commits even without --sign-commit." >&2
+    echo -e "${YELLOW}Source:${RESET} $(git config --show-origin --get commit.gpgSign)" >&2
 fi
 
 # Protect against concurrent edits (local use)
-if $DO_COMMIT && ! $ALLOW_DIRTY && ! git diff --quiet --no-ext-diff; then
+if [[ "$DO_COMMIT" == true && "$ALLOW_DIRTY" != true ]] && ! git diff --quiet --no-ext-diff; then
     echo -e "${RED}Error:${RESET} working tree has unstaged changes; use --allow-dirty to override." >&2
     exit 1
 fi
 
 # Safer dirty-tree guard using pathspec exclusion (for both commit and tag)
-if ([[ "$DO_COMMIT" == "true" ]] || [[ "$DO_TAG" == "true" ]]) && ! $ALLOW_DIRTY; then
-    if ! $IN_GIT_REPO; then
+if ([[ "$DO_COMMIT" == "true" ]] || [[ "$DO_TAG" == "true" ]]) && [[ "$ALLOW_DIRTY" != true ]]; then
+    if [[ "$IN_GIT_REPO" != true ]]; then
         echo -e "${RED}Error: Not in a git repository${RESET}" >&2
         exit 1
     fi
@@ -581,7 +583,7 @@ fi
 update_version_file
 
 # Update CMake only if requested (default true)
-if $UPDATE_CMAKE; then
+if [[ "$UPDATE_CMAKE" == true ]]; then
     update_cmake_version
 else
     echo -e "${YELLOW}Skipped CMakeLists.txt update (--no-cmake)${RESET}" >&2
@@ -597,7 +599,7 @@ if [[ "$DO_TAG" == "true" ]]; then
     # Warn if tagging without committing and files have changes
     if [[ "$DO_COMMIT" != "true" ]]; then
         files_to_check=("$VERSION_FILE")
-        $UPDATE_CMAKE && files_to_check+=("$PROJECT_ROOT/CMakeLists.txt")
+        [[ "$UPDATE_CMAKE" == true ]] && files_to_check+=("$PROJECT_ROOT/CMakeLists.txt")
         
         if ! git diff --quiet -- "${files_to_check[@]}"; then
             echo -e "${YELLOW}Warning:${RESET} Tagging without --commit; ensure the version bump commit is pushed before the tag so CI/release matches the version." >&2
@@ -620,7 +622,7 @@ if [[ -n "$SET_VERSION" && "$DO_TAG" != "true" ]]; then
     sanitized_prefix=$(sanitize_tag_prefix "$TAG_PREFIX")
     last_tag=$(git tag --list "${sanitized_prefix}[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n1)
     if [[ -n "$last_tag" ]]; then
-        local last_version="${last_tag:${#TAG_PREFIX}}"
+        last_version="${last_tag:${#TAG_PREFIX}}"
         if [[ "$last_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             IFS='.' read -r new_major new_minor new_patch <<< "$NEW_VERSION"
             IFS='.' read -r last_major last_minor last_patch <<< "$last_version"
