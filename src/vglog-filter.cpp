@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <getopt.h>
 #include <iostream>
@@ -21,7 +23,7 @@ using Str  = std::string;
 using VecS = std::vector<Str>;
 
 constexpr int DEFAULT_DEPTH = 1;
-constexpr char DEFAULT_MARKER[] = "Successfully downloaded debug";
+constexpr const char* DEFAULT_MARKER = "Successfully downloaded debug";
 
 struct Options {
     int  depth        = DEFAULT_DEPTH;
@@ -211,34 +213,40 @@ void process(std::istream& in, const Options& opt)
 
 VecS read_file_lines(const Str& fname)
 {
-    std::ifstream in(fname);
-    if (!in) throw std::runtime_error("Cannot open '" + fname + "'");
-    
-    // Estimate file size for capacity reservation
-    in.seekg(0, std::ios::end);
-    std::streampos file_size = in.tellg();
-    in.seekg(0, std::ios::beg);
-    
-    // Estimate number of lines (assuming average 80 chars per line)
-    size_t estimated_lines = static_cast<size_t>(file_size) / 80;
-    estimated_lines = std::max(estimated_lines, size_t(100)); // Minimum 100 lines
+    FILE* file = fopen(fname.c_str(), "r");
+    if (!file) throw std::runtime_error("Cannot open '" + fname + "'");
     
     VecS lines;
-    lines.reserve(estimated_lines); // Reserve capacity for better performance
+    lines.reserve(1000); // Reserve capacity for better performance
     
-    Str line;
-    while (std::getline(in, line)) lines.push_back(std::move(line));
+    char* line_buffer = nullptr;
+    size_t line_buffer_size = 0;
+    ssize_t line_length;
+    
+    while ((line_length = getline(&line_buffer, &line_buffer_size, file)) != -1) {
+        // Remove trailing newline if present
+        if (line_length > 0 && line_buffer[line_length - 1] == '\n') {
+            line_buffer[line_length - 1] = '\0';
+            line_length--;
+        }
+        lines.emplace_back(line_buffer);
+    }
+    
+    free(line_buffer);
+    fclose(file);
     return lines;
 }
 
 // Check if file is large enough to warrant stream processing
 bool is_large_file(const Str& fname, size_t threshold_mb = 50) {
-    std::ifstream in(fname);
-    if (!in) return false;
+    FILE* file = fopen(fname.c_str(), "rb");
+    if (!file) return false;
     
-    in.seekg(0, std::ios::end);
-    std::streampos file_size = in.tellg();
-    in.seekg(0, std::ios::beg);
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fclose(file);
+    
+    if (file_size < 0) return false;
     
     // Convert to MB and compare with threshold
     size_t file_size_mb = static_cast<size_t>(file_size) / (1024 * 1024);
@@ -312,9 +320,32 @@ void process_stream(std::istream& in, const Options& opt)
 // Stream processing version for large files
 void process_file_stream(const Str& fname, const Options& opt)
 {
-    std::ifstream in(fname);
-    if (!in) throw std::runtime_error("Cannot open '" + fname + "'");
-    process_stream(in, opt);
+    // Use the same approach as read_file_lines but process line by line
+    FILE* file = fopen(fname.c_str(), "r");
+    if (!file) throw std::runtime_error("Cannot open '" + fname + "'");
+    
+    // Create a string stream to simulate istream
+    std::stringstream ss;
+    
+    char* line_buffer = nullptr;
+    size_t line_buffer_size = 0;
+    ssize_t line_length;
+    
+    while ((line_length = getline(&line_buffer, &line_buffer_size, file)) != -1) {
+        // Remove trailing newline if present
+        if (line_length > 0 && line_buffer[line_length - 1] == '\n') {
+            line_buffer[line_length - 1] = '\0';
+            line_length--;
+        }
+        ss << line_buffer << '\n';
+    }
+    
+    free(line_buffer);
+    fclose(file);
+    
+    // Reset stream position
+    ss.seekg(0);
+    process_stream(ss, opt);
 }
 
 Str get_version()
@@ -328,23 +359,33 @@ Str get_version()
     };
     
     for (const auto& path : paths) {
-        std::ifstream version_file(path);
+        FILE* version_file = fopen(path.c_str(), "r");
         if (version_file) {
-            Str version;
-            std::getline(version_file, version);
-            // Remove any whitespace safely
-            if (!version.empty()) {
-                size_t start = version.find_first_not_of(" \t\r\n");
-                if (start != Str::npos) {
-                    version.erase(0, start);
+            char* line_buffer = nullptr;
+            size_t line_buffer_size = 0;
+            ssize_t line_length = getline(&line_buffer, &line_buffer_size, version_file);
+            fclose(version_file);
+            
+            if (line_length > 0) {
+                Str version(line_buffer);
+                free(line_buffer);
+                
+                // Remove any whitespace safely
+                if (!version.empty()) {
+                    size_t start = version.find_first_not_of(" \t\r\n");
+                    if (start != Str::npos) {
+                        version.erase(0, start);
+                    }
+                    size_t end = version.find_last_not_of(" \t\r\n");
+                    if (end != Str::npos) {
+                        version.erase(end + 1);
+                    }
                 }
-                size_t end = version.find_last_not_of(" \t\r\n");
-                if (end != Str::npos) {
-                    version.erase(end + 1);
+                if (!version.empty()) {
+                    return version;
                 }
-            }
-            if (!version.empty()) {
-                return version;
+            } else {
+                free(line_buffer);
             }
         }
     }
@@ -400,14 +441,14 @@ int main(int argc, char* argv[])
         if (opt.filename == "-") {
             opt.use_stdin = true;
         } else {
-            // Check if file exists
-            std::ifstream test_file(opt.filename);
+            // Check if file exists using fopen for better MSan compatibility
+            FILE* test_file = fopen(opt.filename.c_str(), "r");
             if (!test_file) {
                 std::cerr << "Error: Cannot open file '" << opt.filename << "'" << std::endl;
                 std::cerr << "Please check that the file exists and is readable" << std::endl;
                 return 1;
             }
-            test_file.close();
+            fclose(test_file);
         }
     }
     
