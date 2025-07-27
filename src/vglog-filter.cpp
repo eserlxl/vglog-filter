@@ -170,10 +170,18 @@ Str get_version()
     }
     Str version;
     std::getline(version_file, version);
-    // Remove any whitespace
-    version.erase(0, version.find_first_not_of(" \t\r\n"));
-    version.erase(version.find_last_not_of(" \t\r\n") + 1);
-    return version;
+    // Remove any whitespace safely
+    if (!version.empty()) {
+        size_t start = version.find_first_not_of(" \t\r\n");
+        if (start != Str::npos) {
+            version.erase(0, start);
+        }
+        size_t end = version.find_last_not_of(" \t\r\n");
+        if (end != Str::npos) {
+            version.erase(end + 1);
+        }
+    }
+    return version.empty() ? "unknown" : version;
 }
 
 int main(int argc, char* argv[])
