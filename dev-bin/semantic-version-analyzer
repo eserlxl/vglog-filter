@@ -1,16 +1,15 @@
 #!/bin/bash
-#
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # This file is part of vglog-filter and is licensed under
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
-
-set -e
-
+#
 # Semantic Version Analyzer for vglog-filter
 # Analyzes changes and suggests appropriate version bumps based on actual code changes
+
+set -e
 
 show_help() {
     cat << EOF
@@ -128,16 +127,40 @@ analyze_file_changes() {
                         breaking_changes=true
                     fi
                 fi
+                # Check for breaking changes in shell scripts
+                if [[ "$file" =~ \.(sh|bash)$ ]] || [[ "$file" =~ ^bin/ ]] || [[ "$file" =~ ^lib/ ]]; then
+                    # Look for function signature changes, removed functions, etc.
+                    if git diff "$base_ref"..HEAD -- "$file" | grep -q "^-.*[a-zA-Z_][a-zA-Z0-9_]*()"; then
+                        breaking_changes=true
+                    fi
+                    # Check for new features in main scripts
+                    if [[ "$file" =~ ^bin/ ]] || [[ "$file" =~ ^lib/ ]]; then
+                        if git diff "$base_ref"..HEAD -- "$file" | grep -E "(function|new|add|implement)" >/dev/null; then
+                            new_features=true
+                        fi
+                    fi
+                fi
                 # Check for bug fixes in source files
                 if [[ "$file" =~ \.(cpp|cxx|cc)$ ]] || [[ "$file" =~ ^src/ ]]; then
                     if git diff "$base_ref"..HEAD -- "$file" | grep -E "(fix|bug|error|crash|segfault)" >/dev/null; then
                         bug_fixes=true
                     fi
                 fi
+                # Check for bug fixes in any file
+                if git diff "$base_ref"..HEAD -- "$file" | grep -E "(fix|bug|error|issue)" >/dev/null; then
+                    bug_fixes=true
+                fi
+                # Check for new features in any file
+                if git diff "$base_ref"..HEAD -- "$file" | grep -E "(new|add|implement|feature)" >/dev/null; then
+                    new_features=true
+                fi
                 ;;
             D)
                 ((deleted_files++))
                 if [[ "$file" =~ \.(h|hpp|hxx)$ ]] || [[ "$file" =~ ^include/ ]]; then
+                    breaking_changes=true
+                fi
+                if [[ "$file" =~ \.(sh|bash)$ ]] || [[ "$file" =~ ^bin/ ]] || [[ "$file" =~ ^lib/ ]]; then
                     breaking_changes=true
                 fi
                 ;;
@@ -147,6 +170,16 @@ analyze_file_changes() {
     # Check for breaking changes in CMakeLists.txt or build system
     if git diff "$base_ref"..HEAD -- CMakeLists.txt build.sh 2>/dev/null | grep -E "(REQUIRED|minimum|target_link_libraries)" >/dev/null; then
         breaking_changes=true
+    fi
+    
+    # Check for breaking changes in configuration or modes
+    if git diff "$base_ref"..HEAD -- lib/config.sh lib/modes/ 2>/dev/null | grep -E "(required|mandatory|deprecated)" >/dev/null; then
+        breaking_changes=true
+    fi
+    
+    # Check for new modes or features
+    if git diff "$base_ref"..HEAD -- lib/modes/ 2>/dev/null | grep -E "(new|add|implement)" >/dev/null; then
+        new_features=true
     fi
     
     # Check for API changes in main source file
@@ -188,7 +221,7 @@ analyze_commit_messages() {
         fi
         
         # Check for bug fix indicators
-        if echo "$message" | grep -iE "(fix|bug|issue|crash|error)" >/dev/null; then
+        if echo "$message" | grep -iE "(fix|bug|issue|error)" >/dev/null; then
             bug_fixes=true
         fi
     done <<< "$commits"
