@@ -45,6 +45,10 @@ if (BUILD_TESTS)
     add_executable(test_integration test/test_integration.cpp)
     target_compile_options(test_integration PRIVATE ${WARNING_FLAGS})
     message(STATUS "Test target 'test_integration' added")
+    
+    add_executable(test_comprehensive test/test_comprehensive.cpp)
+    target_compile_options(test_comprehensive PRIVATE ${WARNING_FLAGS})
+    message(STATUS "Test target 'test_comprehensive' added")
 endif()
     
 target_compile_options(vglog-filter PRIVATE ${OPT_FLAGS} ${WARNING_FLAGS})
@@ -75,7 +79,8 @@ if (BUILD_TESTS)
     add_custom_target(test
         COMMAND ${CMAKE_BINARY_DIR}/test_basic
         COMMAND ${CMAKE_BINARY_DIR}/test_integration
-        DEPENDS test_basic test_integration
+        COMMAND ${CMAKE_BINARY_DIR}/test_comprehensive
+        DEPENDS test_basic test_integration test_comprehensive
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Running all tests"
     )

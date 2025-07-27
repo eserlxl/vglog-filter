@@ -224,6 +224,12 @@ VecS read_file_lines(const Str& fname)
     ssize_t line_length;
     
     while ((line_length = getline(&line_buffer, &line_buffer_size, file)) != -1) {
+        // Check for memory allocation failure
+        if (line_buffer == nullptr) {
+            fclose(file);
+            throw std::runtime_error("Memory allocation failed while reading '" + fname + "'");
+        }
+        
         // Remove trailing newline if present
         if (line_length > 0 && line_buffer[line_length - 1] == '\n') {
             line_buffer[line_length - 1] = '\0';
@@ -320,32 +326,12 @@ void process_stream(std::istream& in, const Options& opt)
 // Stream processing version for large files
 void process_file_stream(const Str& fname, const Options& opt)
 {
-    // Use the same approach as read_file_lines but process line by line
-    FILE* file = fopen(fname.c_str(), "r");
+    // Create a proper stream processing implementation that doesn't load the entire file
+    std::ifstream file(fname);
     if (!file) throw std::runtime_error("Cannot open '" + fname + "'");
     
-    // Create a string stream to simulate istream
-    std::stringstream ss;
-    
-    char* line_buffer = nullptr;
-    size_t line_buffer_size = 0;
-    ssize_t line_length;
-    
-    while ((line_length = getline(&line_buffer, &line_buffer_size, file)) != -1) {
-        // Remove trailing newline if present
-        if (line_length > 0 && line_buffer[line_length - 1] == '\n') {
-            line_buffer[line_length - 1] = '\0';
-            line_length--;
-        }
-        ss << line_buffer << '\n';
-    }
-    
-    free(line_buffer);
-    fclose(file);
-    
-    // Reset stream position
-    ss.seekg(0);
-    process_stream(ss, opt);
+    // Process the file directly using the existing process_stream function
+    process_stream(file, opt);
 }
 
 Str get_version()
@@ -417,12 +403,24 @@ int main(int argc, char* argv[])
                         std::cerr << "Error: Depth must be non-negative (got: " << optarg << ")" << std::endl;
                         return 1;
                     }
+                    // Add reasonable upper limit to prevent excessive memory usage
+                    if (opt.depth > 1000) {
+                        std::cerr << "Error: Depth value too large (got: " << optarg << ", max: 1000)" << std::endl;
+                        return 1;
+                    }
                 } catch (const std::exception& e) {
                     std::cerr << "Error: Invalid depth value '" << optarg << "' (expected: non-negative integer)" << std::endl;
                     return 1;
                 }
                 break;
-            case 'm': opt.marker = optarg; break;
+            case 'm': 
+                if (optarg && optarg[0] != '\0') {
+                    opt.marker = optarg;
+                } else {
+                    std::cerr << "Error: Marker string cannot be empty" << std::endl;
+                    return 1;
+                }
+                break;
             case 's': opt.stream_mode = true; break;
             case 'V': 
                 std::cout << "vglog-filter version " << get_version() << std::endl; 
