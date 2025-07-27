@@ -27,7 +27,7 @@ on:
         type: boolean
 
 jobs:
-  cleanup-tags:
+  tag-cleanup:
     runs-on: ubuntu-latest
     permissions:
       contents: write
