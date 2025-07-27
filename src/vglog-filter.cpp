@@ -15,6 +15,7 @@
 #include <iterator>
 #include <regex>
 #include <sstream>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -25,6 +26,7 @@
 using Str  = std::string;
 using StrView = std::string_view;
 using VecS = std::vector<Str>;
+using StrSpan = std::span<const Str>;
 
 constexpr int DEFAULT_DEPTH = 1;
 constexpr const char* DEFAULT_MARKER = "Successfully downloaded debug";
@@ -110,6 +112,21 @@ void report_memory_usage(const Str& operation, const Str& filename = "") {
         }
         std::cerr << ": " << memory_mb << " MB" << std::endl;
     }
+}
+
+// Helper function to process string arrays using std::span
+StrSpan create_span_from_vector(const VecS& vec) {
+    return StrSpan(vec);
+}
+
+// Helper function to find marker in string span
+size_t find_marker_in_span(StrSpan lines, const Str& marker) {
+    for (size_t i = lines.size(); i-- > 0;) {
+        if (lines[i].find(marker) != Str::npos) {
+            return i + 1;
+        }
+    }
+    return lines.size(); // Return size if marker not found
 }
 
 static inline StrView ltrim_view(StrView s) {
@@ -622,12 +639,8 @@ int main(int argc, char* argv[])
         // trim above last marker if requested
         size_t start = 0;
         if (opt.trim) {
-            for (size_t i = lines.size(); i-- > 0;) {
-                if (lines[i].find(opt.marker) != Str::npos) {
-                    start = i + 1;
-                    break;
-                }
-            }
+            StrSpan lines_span = create_span_from_vector(lines);
+            start = find_marker_in_span(lines_span, opt.marker);
         }
         
         // Ensure start doesn't exceed array bounds
