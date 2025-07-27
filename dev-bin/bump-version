@@ -78,7 +78,7 @@ UPDATE_CMAKE=true     # default to updating CMake
 TAG_PREFIX="${TAG_PREFIX:-v}"  # default tag prefix, can be overridden by env var
 
 # Validate TAG_PREFIX content early
-if [[ "$TAG_PREFIX" == $'\n' || "$TAG_PREFIX" == $'\r' ]]; then
+if [[ "$TAG_PREFIX" =~ $'\n' || "$TAG_PREFIX" =~ $'\r' ]]; then
     echo -e "${RED}Error: TAG_PREFIX contains newline characters${RESET}" >&2
     exit 1
 fi
@@ -116,7 +116,7 @@ usage() {
     echo "  ANALYSIS_MESSAGE  Optional detailed analysis to include in commit message"
     echo "                    (ignored when --message is provided)"
     echo "  TAG_PREFIX       Default tag prefix (can be overridden by --tag-prefix)"
-    echo "                   Note: Avoid glob characters (* ? [ ]) in TAG_PREFIX"
+echo "                   Note: Glob characters (* ? [ ]) are supported and will be escaped for tag matching"
     echo ""
     echo "CI Integration:"
     echo "  When running in GitHub Actions and --message isn't provided, the script"
@@ -184,6 +184,7 @@ bump_version() {
 update_version_file() {
     TMP_FILE="${VERSION_FILE}.tmp.$$"
     printf '%s\n' "$NEW_VERSION" > "$TMP_FILE"
+    sync -f "$TMP_FILE" 2>/dev/null || true
     mv -f "$TMP_FILE" "$VERSION_FILE"
     echo -e "${GREEN}Updated VERSION file: $CURRENT_VERSION → $NEW_VERSION${RESET}" >&2
 }
@@ -192,7 +193,7 @@ update_version_file() {
 update_cmake_version() {
     local cmake="$PROJECT_ROOT/CMakeLists.txt"
     [[ -f "$cmake" ]] || return 0
-    local before after changed=0
+    local before after
 
     before="$(sha1sum "$cmake" | awk '{print $1}')"
     if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
@@ -268,8 +269,8 @@ create_tag() {
     
     # Guard against accidental re-tag on same commit
     if git rev-parse -q --verify "$tag_name" >/dev/null; then
-        if ! git merge-base --is-ancestor "$tag_name" HEAD; then
-            echo -e "${RED}Error: tag $tag_name exists and points to a different commit.${RESET}" >&2
+        if ! git rev-parse "$tag_name^{commit}" | grep -qx "$(git rev-parse HEAD)"; then
+            echo -e "${RED}Error: tag $tag_name exists but not on HEAD.${RESET}" >&2
             exit 1
         fi
         echo -e "${YELLOW}Tag $tag_name already exists${RESET}" >&2
@@ -475,18 +476,18 @@ if $COMMIT_SIGN && ! git config --get user.signingkey >/dev/null; then
 fi
 
 # Add GPG_TTY hint for interactive signed tags/commits
-if (($SIGNED_TAG || $COMMIT_SIGN)) && [[ -t 1 && -z "${GPG_TTY:-}" ]]; then
-    echo -e "${YELLOW}Hint:${RESET} export GPG_TTY=$(tty) may be required for pinentry." >&2
+if $SIGNED_TAG || $COMMIT_SIGN; then
+    [[ -t 1 && -z "${GPG_TTY:-}" ]] && echo -e "${YELLOW}Hint:${RESET} export GPG_TTY=$(tty) may be required for pinentry." >&2
 fi
 
 # Protect against concurrent edits (local use)
-if ! $ALLOW_DIRTY && ! git diff --quiet --no-ext-diff; then
+if $DO_COMMIT && ! $ALLOW_DIRTY && ! git diff --quiet --no-ext-diff; then
     echo -e "${RED}Error:${RESET} working tree has unstaged changes; use --allow-dirty to override." >&2
     exit 1
 fi
 
 # Safer dirty-tree guard using pathspec exclusion
-if [[ "$DO_COMMIT" == "true" && "$ALLOW_DIRTY" == "false" ]]; then
+if $DO_COMMIT && ! $ALLOW_DIRTY; then
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
         echo -e "${RED}Error: Not in a git repository${RESET}" >&2
         exit 1
@@ -521,6 +522,9 @@ if [[ "$DRY_RUN" == "true" ]]; then
     else
         echo -e "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (--no-cmake)${RESET}" >&2
     fi
+    if $DO_TAG; then
+        echo -e "${YELLOW}DRY RUN: Would create tag: ${TAG_PREFIX}${NEW_VERSION}${RESET}" >&2
+    fi
     exit 0
 fi
 
@@ -542,7 +546,7 @@ fi
 if [[ "$DO_TAG" == "true" ]]; then
     # Warn if tagging without committing and files have changes
     if [[ "$DO_COMMIT" != "true" ]]; then
-        files_to_check=("$VERSION_FILE")
+        local -a files_to_check=("$VERSION_FILE")
         $UPDATE_CMAKE && files_to_check+=("$PROJECT_ROOT/CMakeLists.txt")
         
         if ! git diff --quiet -- "${files_to_check[@]}"; then
