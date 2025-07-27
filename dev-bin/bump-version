@@ -7,7 +7,7 @@
 # See the LICENSE file in the project root for details.
 #
 # Version bump script for vglog-filter
-# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit]
+# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION]
 
 set -euo pipefail
 
@@ -64,9 +64,6 @@ if [[ ! "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
-# Parse current version components
-IFS='.' read -r CURRENT_MAJOR CURRENT_MINOR CURRENT_PATCH <<< "$CURRENT_VERSION"
-
 # New options vars
 COMMIT_MSG=""
 ALLOW_DIRTY=false
@@ -76,6 +73,7 @@ COMMIT_SIGN=false     # default to unsigned commit
 NO_VERIFY=false       # default to running hooks
 UPDATE_CMAKE=true     # default to updating CMake
 TAG_PREFIX="${TAG_PREFIX:-v}"  # default tag prefix, can be overridden by env var
+SET_VERSION=""        # for --set option
 
 # Validate TAG_PREFIX content early
 if [[ "$TAG_PREFIX" =~ $'\n' || "$TAG_PREFIX" =~ $'\r' ]]; then
@@ -85,90 +83,113 @@ fi
 
 # Function to show usage
 usage() {
-    echo "Usage: $0 [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit]"
-    echo ""
-    echo "Bump the semantic version of vglog-filter"
-    echo ""
-    echo "Requirements:"
-    echo "  GNU tools on Linux: realpath, sha1sum, GNU sed, GNU grep"
-    echo ""
-    echo "Arguments:"
-    echo "  major    Increment major version (breaking changes)"
-    echo "  minor    Increment minor version (new features)"
-    echo "  patch    Increment patch version (bug fixes)"
-    echo ""
-    echo "Options:"
-    echo "  --commit Create a git commit with the version bump"
-    echo "  --tag    Create a git tag for the new version"
-    echo "  --dry-run Show what would be done without making changes"
-    echo "  --print  Print the new version without making any changes"
-    echo "  --message MSG     Use MSG as the full commit message (overrides default)"
-    echo "                    Note: When --message is provided, ANALYSIS_MESSAGE is ignored"
-    echo "  --allow-dirty     Allow committing when other files are modified"
-    echo "  --lightweight-tag Create a lightweight tag instead of annotated"
-    echo "  --signed-tag      Create a signed tag (requires GPG key configured)"
-    echo "  --sign-commit     GPG-sign the commit (requires GPG key configured)"
-    echo "  --no-verify       Skip commit hooks (useful in CI environments)"
-    echo "  --no-cmake        Skip updating CMakeLists.txt version fields"
-    echo "  --tag-prefix PREFIX  Use PREFIX instead of 'v' for tag names (default: v)"
-    echo ""
-    echo "Environment Variables:"
-    echo "  ANALYSIS_MESSAGE  Optional detailed analysis to include in commit message"
-    echo "                    (ignored when --message is provided)"
-    echo "  TAG_PREFIX       Default tag prefix (can be overridden by --tag-prefix)"
-echo "                   Note: Glob characters (* ? [ ]) are supported and will be escaped for tag matching"
-    echo ""
-    echo "CI Integration:"
-    echo "  When running in GitHub Actions and --message isn't provided, the script"
-    echo "  automatically appends [skip ci] to the default commit message to prevent"
-    echo "  other workflows from running."
-    echo ""
-    echo "Commit Message Consistency:"
-    echo "  The default commit subject uses the same prefix as tags:"
-    echo "  chore(release): <prefix><version>"
-    echo "  This ensures consistency between commit messages and tag names."
-    echo ""
-    echo "Examples:"
-    echo "  $0 patch                    # Bump patch version"
-    echo "  $0 minor --commit           # Bump minor version and commit"
-    echo "  $0 major --commit --tag     # Bump major version, commit, and tag"
-    echo "  $0 patch --dry-run          # Show what patch bump would do"
-    echo "  $0 patch --print            # Print new version without changes"
-    echo "  ANALYSIS_MESSAGE='...' $0 patch --commit  # Include analysis in commit"
-    echo "  $0 patch --message 'Custom commit message' --commit  # Use custom message"
-    echo "  $0 patch --signed-tag --tag # Create signed tag for provenance"
-    echo "  $0 patch --sign-commit --commit # GPG-sign the commit"
-    echo "  $0 patch --no-verify --commit # Skip commit hooks (useful in CI)"
-    echo "  $0 patch --commit --signed-tag --no-verify --message 'chore(release): <prefix>X.Y.Z [skip ci]'  # Signed tag with CI"
-    echo "  ANALYSIS_MESSAGE='Auto version bump (push)' $0 patch --commit --message 'chore(release): <prefix>X.Y.Z [skip ci]'  # CI usage"
-    echo "  $0 patch --no-cmake         # Skip CMakeLists.txt updates"
-    echo "  $0 patch --tag-prefix 'release-' --tag  # Create tag 'release-1.2.3'"
-    echo "  $0 patch --tag-prefix '' --tag  # Create tag '1.2.3' (no prefix)"
-    echo "  TAG_PREFIX='ver' $0 patch --tag  # Use environment variable for prefix"
-    echo ""
-    echo "Current version: $CURRENT_VERSION"
+    cat << 'EOF'
+Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION]
+
+Bump the semantic version of vglog-filter
+
+Requirements:
+  GNU tools on Linux: realpath, sha1sum, GNU sed, GNU grep
+
+Arguments:
+  major    Increment major version (breaking changes)
+  minor    Increment minor version (new features)
+  patch    Increment patch version (bug fixes)
+
+Options:
+  --commit Create a git commit with the version bump
+  --tag    Create a git tag for the new version
+  --dry-run Show what would be done without making changes
+  --print  Print the new version without making any changes
+  --message MSG     Use MSG as the full commit message (overrides default)
+                    Note: When --message is provided, ANALYSIS_MESSAGE is ignored
+  --allow-dirty     Allow committing when other files are modified
+  --lightweight-tag Create a lightweight tag instead of annotated
+  --signed-tag      Create a signed tag (requires GPG key configured)
+  --sign-commit     GPG-sign the commit (requires GPG key configured)
+  --no-verify       Skip commit hooks (useful in CI environments)
+  --no-cmake        Skip updating CMakeLists.txt version fields
+  --tag-prefix PREFIX  Use PREFIX instead of 'v' for tag names (default: v)
+                       Note: Empty prefix is allowed (tags like 1.2.3)
+  --set VERSION     Set version to VERSION instead of bumping (format: X.Y.Z)
+
+Environment Variables:
+  ANALYSIS_MESSAGE  Optional detailed analysis to include in commit message
+                    (ignored when --message is provided)
+  TAG_PREFIX       Default tag prefix (can be overridden by --tag-prefix)
+                   Note: Glob characters (* ? [ ]) are supported and will be escaped for tag matching
+
+CI Integration:
+  When running in GitHub Actions and --message isn't provided, the script
+  automatically appends [skip ci] to the default commit message to prevent
+  other workflows from running.
+
+Commit Message Consistency:
+  The default commit subject uses the same prefix as tags:
+  chore(release): <prefix><version>
+  This ensures consistency between commit messages and tag names.
+
+GPG Signing Notes:
+  If commit.gpgSign=true is configured, --no-verify will skip hooks but
+  still require GPG signing. Use --sign-commit explicitly if needed.
+
+Examples:
+  ./dev-bin/bump-version patch                    # Bump patch version
+  ./dev-bin/bump-version minor --commit           # Bump minor version and commit
+  ./dev-bin/bump-version major --commit --tag     # Bump major version, commit, and tag
+  ./dev-bin/bump-version patch --dry-run          # Show what patch bump would do
+  ./dev-bin/bump-version patch --print            # Print new version without changes
+  ANALYSIS_MESSAGE='...' ./dev-bin/bump-version patch --commit  # Include analysis in commit
+  ./dev-bin/bump-version patch --message 'Custom commit message' --commit  # Use custom message
+  ./dev-bin/bump-version patch --signed-tag --tag # Create signed tag for provenance
+  ./dev-bin/bump-version patch --sign-commit --commit # GPG-sign the commit
+  ./dev-bin/bump-version patch --no-verify --commit # Skip commit hooks (useful in CI)
+  ./dev-bin/bump-version patch --commit --signed-tag --no-verify --message 'chore(release): <prefix>X.Y.Z [skip ci]'  # Signed tag with CI
+  ANALYSIS_MESSAGE='Auto version bump (push)' ./dev-bin/bump-version patch --commit --message 'chore(release): <prefix>X.Y.Z [skip ci]'  # CI usage
+  ./dev-bin/bump-version patch --no-cmake         # Skip CMakeLists.txt updates
+  ./dev-bin/bump-version patch --tag-prefix 'release-' --tag  # Create tag 'release-1.2.3'
+  ./dev-bin/bump-version patch --tag-prefix '' --tag  # Create tag '1.2.3' (no prefix)
+  TAG_PREFIX='ver' ./dev-bin/bump-version patch --tag  # Use environment variable for prefix
+  ./dev-bin/bump-version --set 2.1.0 --commit     # Set version to 2.1.0 and commit
+
+Current version: CURRENT_VERSION_PLACEHOLDER
+EOF
+}
+
+# Function to validate version format
+validate_version_format() {
+    local version="$1"
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo -e "${RED}Error: Invalid version format: $version${RESET}" >&2
+        echo -e "${YELLOW}Expected format: MAJOR.MINOR.PATCH (e.g., 1.0.0)${RESET}" >&2
+        exit 1
+    fi
 }
 
 # Function to bump version
 bump_version() {
     local bump_type="$1"
+    local current_major current_minor current_patch
     local new_major new_minor new_patch
+    
+    # Parse current version components
+    IFS='.' read -r current_major current_minor current_patch <<< "$CURRENT_VERSION"
     
     case "$bump_type" in
         major)
-            new_major=$((CURRENT_MAJOR + 1))
+            new_major=$((current_major + 1))
             new_minor=0
             new_patch=0
             ;;
         minor)
-            new_major=$CURRENT_MAJOR
-            new_minor=$((CURRENT_MINOR + 1))
+            new_major=$current_major
+            new_minor=$((current_minor + 1))
             new_patch=0
             ;;
         patch)
-            new_major=$CURRENT_MAJOR
-            new_minor=$CURRENT_MINOR
-            new_patch=$((CURRENT_PATCH + 1))
+            new_major=$current_major
+            new_minor=$current_minor
+            new_patch=$((current_patch + 1))
             ;;
         *)
             echo -e "${RED}Error: Invalid bump type '$bump_type'${RESET}" >&2
@@ -297,8 +318,8 @@ sanitize_tag_prefix() {
     p="${p//\\/\\\\}"   # backslash -> \\ 
     p="${p//\*/\\*}"    # * -> \*
     p="${p//\?/\\?}"    # ? -> \?
-    p="${p//[/\\[}"     # [ -> \[
-    p="${p//]/\\]}"     # ] -> \]
+    p="${p//\[/\\[}"    # [ -> \[ (fixed escaping)
+    p="${p//\]/\\]}"    # ] -> \] (fixed escaping)
     printf '%s' "$p"
 }
 
@@ -406,23 +427,38 @@ while [[ $# -gt 0 ]]; do
             TAG_PREFIX="${2-}"
             shift 2
             ;;
+        --set)
+            SET_VERSION="${2-}"
+            shift 2
+            ;;
         -h|--help)
-            usage
+            usage | sed "s/CURRENT_VERSION_PLACEHOLDER/$CURRENT_VERSION/"
             exit 0
             ;;
         *)
             echo -e "${RED}Error: Unknown option '$1'${RESET}" >&2
-            usage
+            usage | sed "s/CURRENT_VERSION_PLACEHOLDER/$CURRENT_VERSION/"
             exit 1
             ;;
     esac
 done
 
-# Check if bump type was specified
-if [[ -z "$BUMP_TYPE" ]]; then
-    echo -e "${RED}Error: No bump type specified${RESET}" >&2
-    usage
+# Check if bump type was specified (unless using --set)
+if [[ -z "$BUMP_TYPE" && -z "$SET_VERSION" ]]; then
+    echo -e "${RED}Error: No bump type specified and no --set version provided${RESET}" >&2
+    usage | sed "s/CURRENT_VERSION_PLACEHOLDER/$CURRENT_VERSION/"
     exit 1
+fi
+
+# Handle --set option
+if [[ -n "$SET_VERSION" ]]; then
+    validate_version_format "$SET_VERSION"
+    NEW_VERSION="$SET_VERSION"
+    BUMP_TYPE="set"  # for display purposes
+else
+    # Perform the version bump
+    echo -e "${CYAN}Bumping version from $CURRENT_VERSION...${RESET}" >&2
+    bump_version "$BUMP_TYPE"
 fi
 
 # Check for conflicting options
@@ -486,8 +522,8 @@ if $DO_COMMIT && ! $ALLOW_DIRTY && ! git diff --quiet --no-ext-diff; then
     exit 1
 fi
 
-# Safer dirty-tree guard using pathspec exclusion
-if $DO_COMMIT && ! $ALLOW_DIRTY; then
+# Safer dirty-tree guard using pathspec exclusion (for both commit and tag)
+if ([[ "$DO_COMMIT" == "true" ]] || [[ "$DO_TAG" == "true" ]]) && ! $ALLOW_DIRTY; then
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
         echo -e "${RED}Error: Not in a git repository${RESET}" >&2
         exit 1
@@ -497,10 +533,6 @@ if $DO_COMMIT && ! $ALLOW_DIRTY; then
         exit 1
     fi
 fi
-
-# Perform the version bump
-echo -e "${CYAN}Bumping version from $CURRENT_VERSION...${RESET}" >&2
-bump_version "$BUMP_TYPE"
 
 # No-op guard if version unchanged
 if [[ "$CURRENT_VERSION" == "$NEW_VERSION" ]]; then
@@ -524,6 +556,13 @@ if [[ "$DRY_RUN" == "true" ]]; then
     fi
     if $DO_TAG; then
         echo -e "${YELLOW}DRY RUN: Would create tag: ${TAG_PREFIX}${NEW_VERSION}${RESET}" >&2
+        # Show last detected tag for comparison
+        local sanitized_prefix last_tag
+        sanitized_prefix=$(sanitize_tag_prefix "$TAG_PREFIX")
+        last_tag=$(git tag --list "${sanitized_prefix}[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n1)
+        if [[ -n "$last_tag" ]]; then
+            echo -e "${YELLOW}DRY RUN: Last tag for comparison: $last_tag${RESET}" >&2
+        fi
     fi
     exit 0
 fi
@@ -546,7 +585,7 @@ fi
 if [[ "$DO_TAG" == "true" ]]; then
     # Warn if tagging without committing and files have changes
     if [[ "$DO_COMMIT" != "true" ]]; then
-        local -a files_to_check=("$VERSION_FILE")
+        files_to_check=("$VERSION_FILE")
         $UPDATE_CMAKE && files_to_check+=("$PROJECT_ROOT/CMakeLists.txt")
         
         if ! git diff --quiet -- "${files_to_check[@]}"; then
