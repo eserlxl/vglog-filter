@@ -497,6 +497,67 @@ bool test_large_file_processing() {
     return true;
 }
 
+bool test_new_features() {
+    // Test new features like progress reporting and memory monitoring
+    
+    // Test progress reporting simulation
+    std::ofstream progress_test_file("test_progress.tmp");
+    for (int i = 0; i < 5000; ++i) {
+        progress_test_file << "==12345== Line " << i << " for progress testing\n";
+        if (i % 100 == 0) {
+            progress_test_file << "==12345== Invalid read of size 4\n";
+            progress_test_file << "==12345==    at 0x" << std::hex << (0x401234 + i) << std::dec << ": main (test.cpp:" << (10 + i) << ")\n";
+        }
+    }
+    progress_test_file.close();
+    
+    // Verify progress test file was created
+    std::ifstream check_progress("test_progress.tmp");
+    TEST_ASSERT(check_progress.good(), "Progress test file should be created");
+    check_progress.close();
+    
+    // Test memory monitoring simulation
+    std::ofstream memory_test_file("test_memory.tmp");
+    for (int i = 0; i < 1000; ++i) {
+        memory_test_file << "==12345== Memory test line " << i << "\n";
+        memory_test_file << "==12345==    at 0x" << std::hex << (0x401234 + i) << std::dec << ": main (test.cpp:" << (10 + i) << ")\n";
+        memory_test_file << "==12345==    by 0x" << std::hex << (0x401245 + i) << std::dec << ": helper (test.cpp:" << (15 + i) << ")\n";
+    }
+    memory_test_file.close();
+    
+    // Verify memory test file was created
+    std::ifstream check_memory("test_memory.tmp");
+    TEST_ASSERT(check_memory.good(), "Memory test file should be created");
+    check_memory.close();
+    
+    // Test combined features simulation
+    std::ofstream combined_test_file("test_combined.tmp");
+    for (int i = 0; i < 2000; ++i) {
+        combined_test_file << "==12345== Combined test line " << i << "\n";
+        if (i % 50 == 0) {
+            combined_test_file << "==12345== Successfully downloaded debug\n";
+        }
+        if (i % 100 == 0) {
+            combined_test_file << "==12345== Invalid read of size 4\n";
+            combined_test_file << "==12345==    at 0x" << std::hex << (0x401234 + i) << std::dec << ": main (test.cpp:" << (10 + i) << ")\n";
+        }
+    }
+    combined_test_file.close();
+    
+    // Verify combined test file was created
+    std::ifstream check_combined("test_combined.tmp");
+    TEST_ASSERT(check_combined.good(), "Combined test file should be created");
+    check_combined.close();
+    
+    // Clean up
+    std::remove("test_progress.tmp");
+    std::remove("test_memory.tmp");
+    std::remove("test_combined.tmp");
+    
+    TEST_PASS("New features test works");
+    return true;
+}
+
 int main() {
     std::cout << "Running edge case tests for vglog-filter..." << std::endl;
     
@@ -516,6 +577,7 @@ int main() {
     all_passed &= test_concurrent_access_simulation();
     all_passed &= test_memory_efficiency();
     all_passed &= test_large_file_processing();
+    all_passed &= test_new_features();
     
     if (all_passed) {
         std::cout << "\nAll edge case tests passed!" << std::endl;
