@@ -91,9 +91,7 @@ void process(std::istream& in, const Options& opt)
     const std::regex re_vg_line(R"(^==[0-9]+==)");
     const std::regex re_prefix(R"(^==[0-9]+==[ \t\v\f\r\n]*)");
     const std::regex re_start(
-        R"((Invalid (read|write)|Syscall param|Use of uninitialised|" \
-        "Conditional jump|bytes in [0-9]+ blocks|still reachable|"  \
-        "possibly lost|definitely lost|Process terminating))");
+        R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))");
     const std::regex re_bytes_head(R"([0-9]+ bytes in [0-9]+ blocks)");
 
     // raw scrubbing regexes
