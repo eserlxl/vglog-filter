@@ -1,0 +1,54 @@
+name: Clang-Tidy Static Analysis
+
+permissions:
+  contents: read
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/clang-tidy.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/clang-tidy.yml'
+
+jobs:
+  clang-tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang-tidy clang-tools
+      
+      - name: Configure CMake with Clang-Tidy
+        run: |
+          mkdir -p build-clang-tidy
+          cd build-clang-tidy
+          cmake -DCMAKE_CXX_CLANG_TIDY=clang-tidy \
+                -DCMAKE_CXX_FLAGS="-std=c++17" \
+                -DPERFORMANCE_BUILD=OFF \
+                -DWARNING_MODE=ON \
+                -DDEBUG_MODE=OFF \
+                ..
+      
+      - name: Run Clang-Tidy
+        run: |
+          cd build-clang-tidy
+          make -j$(nproc) 2>&1 | tee clang-tidy-output.txt || true
+          
+          # Check if there are any clang-tidy warnings/errors
+          if grep -q "warning\|error" clang-tidy-output.txt; then
+            echo "Clang-Tidy found issues:"
+            grep -E "(warning|error)" clang-tidy-output.txt || true
+            echo "Full output:"
+            cat clang-tidy-output.txt
+            exit 1
+          else
+            echo "Clang-Tidy analysis passed - no issues found"
+          fi 

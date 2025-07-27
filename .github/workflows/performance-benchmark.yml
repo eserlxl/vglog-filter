@@ -1,0 +1,98 @@
+name: Performance Benchmark
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/performance-benchmark.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/performance-benchmark.yml'
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  performance-benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake g++ make time
+      
+      - name: Build performance version
+        run: |
+          ./build.sh performance clean
+      
+      - name: Create benchmark test data
+        run: |
+          # Create a larger test file for benchmarking
+          cat > benchmark_input.txt << 'EOF'
+          ==12345== Memcheck, a memory error detector
+          ==12345== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+          ==12345== Using Valgrind-3.13.0 and LibVEX; rerun with -h for copyright info
+          ==12345== Command: ./test_program
+          EOF
+          
+          # Duplicate the content multiple times to create a larger file
+          for i in {1..1000}; do
+            cat benchmark_input.txt >> large_benchmark_input.txt
+          done
+          
+          echo "Created benchmark file with $(wc -l < large_benchmark_input.txt) lines"
+      
+      - name: Run performance benchmarks
+        run: |
+          echo "=== Performance Benchmark Results ==="
+          
+          # Benchmark basic processing
+          echo "Benchmarking basic processing..."
+          /usr/bin/time -f "Basic processing: %e seconds, %M KB memory" \
+            ./build/vglog-filter large_benchmark_input.txt > /dev/null
+          
+          # Benchmark with different options
+          echo "Benchmarking with depth=2..."
+          /usr/bin/time -f "Depth=2 processing: %e seconds, %M KB memory" \
+            ./build/vglog-filter -d 2 large_benchmark_input.txt > /dev/null
+          
+          echo "Benchmarking with keep-debug-info..."
+          /usr/bin/time -f "Keep debug info: %e seconds, %M KB memory" \
+            ./build/vglog-filter -k large_benchmark_input.txt > /dev/null
+          
+          echo "Benchmarking with verbose mode..."
+          /usr/bin/time -f "Verbose mode: %e seconds, %M KB memory" \
+            ./build/vglog-filter -v large_benchmark_input.txt > /dev/null
+          
+          # Check binary size
+          echo "Binary size: $(stat -c%s build/vglog-filter) bytes"
+          
+          # Check if binary is stripped
+          if file build/vglog-filter | grep -q "not stripped"; then
+            echo "Binary contains debug symbols"
+          else
+            echo "Binary is stripped"
+          fi
+      
+      - name: Clean up
+        run: |
+          rm -f benchmark_input.txt large_benchmark_input.txt
+      
+      - name: Performance summary
+        run: |
+          echo "=== Performance Benchmark Summary ==="
+          echo "✓ Performance build completed successfully"
+          echo "✓ All benchmark tests passed"
+          echo "✓ Performance metrics captured"
+          echo ""
+          echo "Note: Performance benchmarks help detect regressions."
+          echo "Consider setting up performance tracking over time." 

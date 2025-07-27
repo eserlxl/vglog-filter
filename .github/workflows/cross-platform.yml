@@ -1,0 +1,77 @@
+name: Cross-Platform Testing
+
+permissions:
+  contents: read
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'build.sh'
+      - '.github/workflows/cross-platform.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'build.sh'
+      - '.github/workflows/cross-platform.yml'
+
+jobs:
+  test-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake g++ make
+      - name: Build and test
+        run: |
+          ./build.sh performance warnings clean
+          ./build/vglog-filter --help
+
+  test-arch:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel cmake gcc
+      - name: Build and test
+        run: |
+          ./build.sh performance warnings clean
+          ./build/vglog-filter --help
+
+  test-fedora:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          dnf update -y
+          dnf install -y gcc-c++ cmake make
+      - name: Build and test
+        run: |
+          ./build.sh performance warnings clean
+          ./build/vglog-filter --help
+
+  test-debian:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y build-essential cmake g++ make
+      - name: Build and test
+        run: |
+          ./build.sh performance warnings clean
+          ./build/vglog-filter --help 

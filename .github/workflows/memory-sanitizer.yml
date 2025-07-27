@@ -1,0 +1,79 @@
+name: Memory Sanitizer Testing
+
+permissions:
+  contents: read
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/memory-sanitizer.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/memory-sanitizer.yml'
+
+jobs:
+  memory-sanitizer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang
+      
+      - name: Build with Memory Sanitizer
+        run: |
+          mkdir -p build-msan
+          cd build-msan
+          cmake -DCMAKE_CXX_COMPILER=clang++ \
+                -DCMAKE_C_COMPILER=clang \
+                -DCMAKE_CXX_FLAGS="-std=c++17 -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -O1 -g" \
+                -DCMAKE_C_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -O1 -g" \
+                -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=memory" \
+                -DPERFORMANCE_BUILD=OFF \
+                -DWARNING_MODE=ON \
+                -DDEBUG_MODE=ON \
+                ..
+          make -j$(nproc)
+      
+      - name: Run Memory Sanitizer Tests
+        run: |
+          cd build-msan
+          
+          # Set environment for MSan
+          export MSAN_OPTIONS="abort_on_error=1:print_stats=1"
+          
+          # Test basic functionality
+          echo "Testing help output..."
+          ./vglog-filter --help
+          
+          echo "Testing with sample input..."
+          # Create a minimal test input
+          cat > test_input.txt << 'EOF'
+          ==12345== Memcheck, a memory error detector
+          ==12345== Invalid read of size 4
+          ==12345==    at 0x4005A1: main (test.c:10)
+          ==12345== HEAP SUMMARY:
+          ==12345==     in use at exit: 40 bytes in 1 blocks
+          EOF
+          
+          # Run the program and capture any sanitizer output
+          ./vglog-filter test_input.txt > output.txt 2>&1 || true
+          
+          # Check for sanitizer errors
+          if grep -q "ERROR: MemorySanitizer" output.txt; then
+            echo "Memory Sanitizer detected issues:"
+            cat output.txt
+            exit 1
+          else
+            echo "Memory Sanitizer test passed"
+            cat output.txt
+          fi
+          
+          # Clean up
+          rm -f test_input.txt output.txt 
