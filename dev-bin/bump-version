@@ -17,19 +17,37 @@ COMMIT_CHANGES=false
 
 # Parse arguments
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 [major|minor|patch] [--commit]"
+    echo "Usage: $0 [major|minor|patch] [--commit] [--dry-run]"
     echo "  major: Increment major version (x.0.0)"
     echo "  minor: Increment minor version (0.x.0)"
     echo "  patch: Increment patch version (0.0.x)"
     echo "  --commit: Commit the version change"
+    echo "  --dry-run: Show what would be done without making changes"
     exit 1
 fi
 
 BUMP_TYPE="$1"
+COMMIT_CHANGES=false
+DRY_RUN=false
 
-if [ "$2" = "--commit" ]; then
-    COMMIT_CHANGES=true
-fi
+# Parse additional arguments
+shift
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --commit)
+            COMMIT_CHANGES=true
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
 
 # Validate bump type
 case "$BUMP_TYPE" in
@@ -82,6 +100,12 @@ esac
 NEW_VERSION="$NEW_MAJOR.$NEW_MINOR.$NEW_PATCH"
 echo "New version: $NEW_VERSION"
 
+# Handle dry-run mode
+if [ "$DRY_RUN" = true ]; then
+    echo "DRY RUN: Would update $VERSION_FILE to $NEW_VERSION"
+    exit 0
+fi
+
 # Update VERSION file
 echo "$NEW_VERSION" > "$VERSION_FILE"
 echo "Updated $VERSION_FILE"
@@ -99,8 +123,14 @@ if [ "$COMMIT_CHANGES" = true ]; then
     git add "$VERSION_FILE"
     git commit -m "chore: bump version to $NEW_VERSION"
     echo "Version bump committed"
+    
+    # Create tag with consistent format
+    TAG_NAME="v$NEW_VERSION"
+    echo "Creating tag: $TAG_NAME"
+    git tag "$TAG_NAME"
+    echo "Tag created: $TAG_NAME"
 else
-    echo "Version bump completed. Use --commit to commit changes."
+    echo "Version bump completed. Use --commit to commit changes and create tag."
 fi
 
 echo "Version bump successful: $CURRENT_VERSION -> $NEW_VERSION" 

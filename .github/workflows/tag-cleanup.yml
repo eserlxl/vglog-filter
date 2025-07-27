@@ -1,0 +1,80 @@
+name: Tag Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_count:
+        description: 'Number of recent tags to keep'
+        required: true
+        default: '10'
+        type: number
+      dry_run:
+        description: 'Dry run (show what would be deleted)'
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+jobs:
+  cleanup-tags:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Setup Git
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+    
+    - name: Clean up old tags
+      run: |
+        KEEP_COUNT=${INPUT_KEEP_COUNT:-10}
+        DRY_RUN=${INPUT_DRY_RUN:-true}
+        
+        echo "Keeping the $KEEP_COUNT most recent tags"
+        
+        # Get all tags sorted by version (newest first)
+        TAGS=$(git tag --sort=-version:refname)
+        TOTAL_TAGS=$(echo "$TAGS" | wc -l)
+        
+        echo "Total tags: $TOTAL_TAGS"
+        
+        if [ "$TOTAL_TAGS" -le "$KEEP_COUNT" ]; then
+          echo "No cleanup needed - only $TOTAL_TAGS tags exist"
+          exit 0
+        fi
+        
+        # Get tags to delete (all except the KEEP_COUNT most recent)
+        TAGS_TO_DELETE=$(echo "$TAGS" | tail -n +$((KEEP_COUNT + 1)))
+        DELETE_COUNT=$(echo "$TAGS_TO_DELETE" | wc -l)
+        
+        echo "Tags to delete ($DELETE_COUNT):"
+        echo "$TAGS_TO_DELETE"
+        
+        if [ "$DRY_RUN" = "true" ]; then
+          echo "DRY RUN: Would delete $DELETE_COUNT tags"
+          exit 0
+        fi
+        
+        # Delete tags locally and push
+        echo "Deleting $DELETE_COUNT old tags..."
+        echo "$TAGS_TO_DELETE" | while read tag; do
+          if [ -n "$tag" ]; then
+            echo "Deleting tag: $tag"
+            git tag -d "$tag"
+            git push origin ":refs/tags/$tag"
+          fi
+        done
+        
+        echo "Tag cleanup completed"
+      env:
+        INPUT_KEEP_COUNT: ${{ github.event.inputs.keep_count }}
+        INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }} 

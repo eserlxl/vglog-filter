@@ -31,13 +31,80 @@ vglog-filter --version
 # Output: vglog-filter version 1.0.0
 ```
 
-## Automated Version Bumping
+## Semantic Version Bumping
 
-The project uses GitHub Actions to automatically bump versions based on conventional commit messages:
+The project uses a semantic versioning system that analyzes actual code changes and supports both manual and automatic releases based on the significance of changes.
 
-### Commit Message Format
+### Automatic Release Detection
 
-Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+The system automatically detects and releases for significant changes:
+
+- **MAJOR releases**: Any breaking changes detected
+- **MINOR releases**: New features with large diffs (>50 lines)
+- **PATCH releases**: Bug fixes with significant diffs (>20 lines)
+- **No release**: Small changes that don't meet thresholds
+
+### Semantic Version Analyzer
+
+A dedicated script (`dev-bin/semantic-version-analyzer`) analyzes changes and suggests appropriate version bumps:
+
+```bash
+# Analyze changes since last tag
+./dev-bin/semantic-version-analyzer
+
+# Analyze changes since specific tag
+./dev-bin/semantic-version-analyzer --since v1.1.0
+
+# Show detailed analysis
+./dev-bin/semantic-version-analyzer --verbose
+
+# Analyze changes since specific date
+./dev-bin/semantic-version-analyzer --since-date 2025-01-01
+```
+
+### What the Analyzer Checks
+
+The semantic version analyzer examines:
+
+1. **File Changes**:
+   - Added files (especially headers and includes)
+   - Modified files (function signatures, API changes)
+   - Deleted files (removed functionality)
+
+2. **Code Analysis**:
+   - Breaking changes in header files
+   - New features in source files
+   - Bug fixes and error handling
+   - Build system changes
+
+3. **Commit Messages**:
+   - Keywords indicating breaking changes
+   - New feature indicators
+   - Bug fix references
+
+4. **Change Magnitude**:
+   - Diff size analysis for threshold-based decisions
+   - Automatic release triggers for significant changes
+
+### Manual Version Bumping
+
+You can manually trigger version bumps through the GitHub Actions interface:
+1. Go to the "Actions" tab in your repository
+2. Select "Auto Version Bump with Semantic Release Notes"
+3. Click "Run workflow"
+4. Choose the bump type (auto, major, minor, patch)
+5. Optionally add custom release notes
+6. Mark as prerelease if needed
+
+### Automatic vs Manual Releases
+
+- **Automatic**: Triggered on pushes to main for significant changes
+- **Manual**: Full control when you want to release regardless of change size
+- **Auto Detection**: Manual trigger with automatic analysis and suggestion
+
+### Commit Message Guidelines
+
+While the semantic version analyzer examines actual code changes, good commit messages help with analysis and documentation:
 
 ```
 <type>[optional scope]: <description>
@@ -47,29 +114,39 @@ Follow the [Conventional Commits](https://www.conventionalcommits.org/) specific
 [optional footer(s)]
 ```
 
-### Version Bump Rules
+### Recommended Commit Types
 
-- **BREAKING CHANGE**: Triggers a **major** version bump
-- **feat**: Triggers a **minor** version bump
-- **fix**: Triggers a **patch** version bump
-- **docs**, **style**, **refactor**, **perf**, **test**, **chore**: Triggers a **patch** version bump
+- **feat**: New features or functionality
+- **fix**: Bug fixes and error corrections
+- **docs**: Documentation changes
+- **style**: Code style changes (formatting, etc.)
+- **refactor**: Code refactoring
+- **perf**: Performance improvements
+- **test**: Test additions or changes
+- **chore**: Maintenance tasks
+
+### Version Bump Guidelines
+
+The semantic analyzer suggests version bumps based on:
+
+- **MAJOR**: Breaking changes, incompatible API changes
+- **MINOR**: New features, backward-compatible additions
+- **PATCH**: Bug fixes, minor improvements, documentation
 
 ### Examples
 
 ```bash
-# Major version bump (breaking change)
-git commit -m "feat: change API interface
-
-BREAKING CHANGE: The filter() method now requires a config object"
-
-# Minor version bump (new feature)
+# New feature (will be detected by semantic analyzer)
 git commit -m "feat: add support for custom log formats"
 
-# Patch version bump (bug fix)
+# Bug fix (will be detected by semantic analyzer)
 git commit -m "fix: handle empty input files correctly"
 
-# Patch version bump (documentation)
+# Documentation update
 git commit -m "docs: update installation instructions"
+
+# Breaking change (will be detected by semantic analyzer)
+git commit -m "feat: change API interface - breaking change"
 ```
 
 ## Manual Version Bumping
@@ -136,12 +213,37 @@ To manually bump the version, use the `dev-bin/bump-version` script:
 ## Git Integration
 
 ### Tags
-Each release should be tagged with the version number:
+Each release should be tagged with the version number. Tags are automatically created by the version bump workflow with the format `vX.Y.Z`.
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+### Tag Management
+
+The project includes tools for managing tags:
+
+#### Tag Manager Script
+```bash
+# List all tags
+./dev-bin/tag-manager list
+
+# Clean up old tags (keep 10 most recent)
+./dev-bin/tag-manager cleanup 10
+
+# Create a new tag
+./dev-bin/tag-manager create 1.2.0
+
+# Show tag information
+./dev-bin/tag-manager info v1.1.2
+```
+
+#### Automated Tag Cleanup
+The project includes a GitHub Actions workflow that automatically cleans up old tags:
+- Runs weekly on Sundays
+- Keeps the 10 most recent tags by default
+- Can be triggered manually with custom parameters
 
 ### Commits
 Version bumps should be committed with clear messages:
@@ -152,30 +254,39 @@ git commit -m "Bump version to 1.0.1"
 
 ## Release Process
 
-### Automated Release Process (Recommended)
+### Semantic Release Process (Recommended)
 
-1. Commits are pushed to the `main` branch
-2. GitHub Actions analyzes commit messages for conventional commit types
-3. If conventional commits are found, the version is automatically bumped
-4. A new release is created with the bumped version
-5. Release notes are automatically generated from conventional commits
+1. **Analyze Changes**: Use the semantic version analyzer to understand what changed
+   ```bash
+   ./dev-bin/semantic-version-analyzer --verbose
+   ```
 
-### Manual Release Process
+2. **Review Suggestion**: The analyzer suggests the appropriate version bump type
+   - MAJOR for breaking changes
+   - MINOR for new features
+   - PATCH for bug fixes
 
-1. **Determine the appropriate version bump type**
-   - Patch for bug fixes
-   - Minor for new features
-   - Major for breaking changes
+3. **Manual Trigger**: Use GitHub Actions to create the release
+   - Go to Actions → Auto Version Bump → Run workflow
+   - Choose the suggested bump type
+   - Add custom release notes if needed
+
+4. **Review Release**: Check the generated release notes and tag
+
+### Alternative Manual Process
+
+1. **Analyze changes manually**
+   - Review code changes since last release
+   - Determine impact on users
 
 2. **Bump the version**
    ```bash
-   ./dev-bin/bump-version patch --commit --tag
+   ./dev-bin/bump-version patch --commit
    ```
 
 3. **Push changes**
    ```bash
    git push origin main
-   git push origin v1.0.1
    ```
 
 4. **Create GitHub release** (optional)
@@ -223,8 +334,12 @@ These should be manually edited in the `VERSION` file and tagged accordingly.
 
 - `VERSION` - Current version number
 - `dev-bin/bump-version` - Version bumping script
+- `dev-bin/semantic-version-analyzer` - Semantic version analysis script
+- `dev-bin/tag-manager` - Tag management script
 - `src/vglog-filter.cpp` - Main source file (reads version)
 - `build.sh` - Build script (may reference version)
+- `.github/workflows/version-bump.yml` - Manual version bump workflow
+- `.github/workflows/tag-cleanup.yml` - Automated tag cleanup workflow
 
 ## Version File
 
