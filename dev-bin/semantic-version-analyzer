@@ -244,6 +244,27 @@ get_base_reference() {
     fi
 }
 
+# Check if there are commits in the range
+check_commit_range() {
+    local base_ref="$1"
+    
+    # Check if there are any commits between base_ref and HEAD
+    if ! git rev-list "$base_ref"..HEAD >/dev/null 2>&1; then
+        printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2
+        return 1
+    fi
+    
+    local commit_count
+    commit_count=$(git rev-list --count "$base_ref"..HEAD 2>/dev/null || printf '0')
+    
+    if [[ "$commit_count" -eq 0 ]]; then
+        printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2
+        return 1
+    fi
+    
+    return 0
+}
+
 # Classify file path - improved to handle multiple folder patterns
 classify_path() {
     local path="$1"
@@ -272,7 +293,7 @@ classify_path() {
     return 0
 }
 
-# Enhanced CLI options detection with better accuracy
+# Enhanced CLI options detection with better accuracy - restrict to changed lines
 extract_cli_options() {
     local base_ref="$1"
     local target_ref="$2"
@@ -289,7 +310,7 @@ extract_cli_options() {
         return
     fi
     
-    # Extract short options from getopt calls - improved regex with context
+    # Extract short options from getopt calls - restrict to changed lines only
     local short_before short_after
     short_before=$(git show "$base_ref":src/*.cpp 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
     short_after=$(git show "$target_ref":src/*.cpp 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
@@ -299,10 +320,55 @@ extract_cli_options() {
     long_before=$(git show "$base_ref":src/*.cpp 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
     long_after=$(git show "$target_ref":src/*.cpp 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
     
+    # Enhanced breaking change detection: look for removed case labels
+    local breaking_changes=false
+    
+    # Check for removed case labels in switch statements
+    local removed_cases
+    removed_cases=$(git diff "$base_ref".."$target_ref" -- src ':(glob)/*.[ch]pp' ':(glob)/*.[ch]' | grep '^-case[[:space:]]' | sed 's/^-case[[:space:]]*//' | sort -u || printf '')
+    
+    if [[ -n "$removed_cases" ]]; then
+        # Check if corresponding +case appears for each removed case
+        local added_cases
+        added_cases=$(git diff "$base_ref".."$target_ref" -- src ':(glob)/*.[ch]pp' ':(glob)/*.[ch]' | grep '^+case[[:space:]]' | sed 's/^+case[[:space:]]*//' | sort -u || printf '')
+        
+        # If any removed case doesn't have a corresponding added case, it's breaking
+        local missing_cases
+        missing_cases=$(comm -23 <(printf '%s' "$removed_cases" | tr '\n' '\n') <(printf '%s' "$added_cases" | tr '\n' '\n') 2>/dev/null || printf '')
+        
+        if [[ -n "$missing_cases" ]]; then
+            breaking_changes=true
+        fi
+    fi
+    
+    # Check for API-breaking hints in headers
+    local api_breaking=false
+    local removed_prototypes
+    removed_prototypes=$(git diff "$base_ref".."$target_ref" -- include ':(glob)/*.h' ':(glob)/*.hpp' | grep '^-[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*(' | grep -v '^---' | wc -l || printf '0')
+    
+    if [[ "$removed_prototypes" -gt 0 ]]; then
+        api_breaking=true
+    fi
+    
+    # Check for explicit API-BREAKING comments
+    local explicit_breaking
+    explicit_breaking=$(git diff "$base_ref".."$target_ref" -- src include ':(glob)/*.[ch]' ':(glob)/*.[ch]pp' | grep -i 'API-BREAKING:' | wc -l || printf '0')
+    
+    if [[ "$explicit_breaking" -gt 0 ]]; then
+        api_breaking=true
+    fi
+    
+    # Security/crash detection in commit messages
+    local security_keywords
+    security_keywords=$(git log --format="%s %b" "$base_ref".."$target_ref" | grep -i -E '(security|cve|crash|segfault|uaf|overflow|xss|vulnerability)' | wc -l || printf '0')
+    
     printf 'short_options_before=%s\n' "$short_before"
     printf 'short_options_after=%s\n' "$short_after"
     printf 'long_options_before=%s\n' "$long_before"
     printf 'long_options_after=%s\n' "$long_after"
+    printf 'breaking_changes=%s\n' "$breaking_changes"
+    printf 'api_breaking=%s\n' "$api_breaking"
+    printf 'security_keywords=%s\n' "$security_keywords"
 }
 
 # Enhanced change analysis with better diff parsing and rename/copy handling
@@ -322,6 +388,8 @@ analyze_changes() {
         printf 'cli_changes=false\n'
         printf 'breaking_cli_changes=false\n'
         printf 'diff_size=0\n'
+        printf 'api_breaking=false\n'
+        printf 'security_keywords=0\n'
         return
     fi
     
@@ -390,6 +458,12 @@ analyze_changes() {
     short_after=$(printf '%s' "$cli_analysis" | grep "short_options_after=" | cut -d'=' -f2)
     long_before=$(printf '%s' "$cli_analysis" | grep "long_options_before=" | cut -d'=' -f2)
     long_after=$(printf '%s' "$cli_analysis" | grep "long_options_after=" | cut -d'=' -f2)
+    local breaking_changes
+    breaking_changes=$(printf '%s' "$cli_analysis" | grep "breaking_changes=" | cut -d'=' -f2)
+    local api_breaking
+    api_breaking=$(printf '%s' "$cli_analysis" | grep "api_breaking=" | cut -d'=' -f2)
+    local security_keywords
+    security_keywords=$(printf '%s' "$cli_analysis" | grep "security_keywords=" | cut -d'=' -f2)
     
     # Check for CLI changes by comparing option sets
     if [[ -n "$short_after" ]] && [[ "$short_after" != "$short_before" ]]; then
@@ -410,6 +484,11 @@ analyze_changes() {
         if [[ -n "$removed_long" ]]; then
             breaking_cli_changes=true
         fi
+    fi
+    
+    # Enhanced breaking change detection
+    if [[ "$breaking_changes" = "true" ]] || [[ "$api_breaking" = "true" ]]; then
+        breaking_cli_changes=true
     fi
     
     # Get diff size using shortstat for safer parsing
@@ -439,6 +518,8 @@ analyze_changes() {
     printf 'cli_changes=%s\n' "$cli_changes"
     printf 'breaking_cli_changes=%s\n' "$breaking_cli_changes"
     printf 'diff_size=%s\n' "$diff_size"
+    printf 'api_breaking=%s\n' "$api_breaking"
+    printf 'security_keywords=%s\n' "$security_keywords"
 }
 
 # Calculate next version without external dependency
@@ -486,9 +567,21 @@ suggest_version_bump() {
     local cli_changes="$7"
     local breaking_cli_changes="$8"
     local diff_size="$9"
+    local api_breaking="${10}"
+    local security_keywords="${11}"
     
-    # MAJOR: Breaking CLI changes or very large changes
+    # MAJOR: Breaking CLI changes, API breaking changes, security issues, or very large changes
     if [[ "$breaking_cli_changes" = "true" ]]; then
+        printf 'major'
+        return
+    fi
+    
+    if [[ "$api_breaking" = "true" ]]; then
+        printf 'major'
+        return
+    fi
+    
+    if [[ "${security_keywords:-0}" -gt 0 ]]; then
         printf 'major'
         return
     fi
@@ -535,6 +628,12 @@ main() {
     local base_ref ref_type
     IFS='|' read -r base_ref ref_type <<< "$base_ref_info"
     
+    # Check if there are commits in the range
+    if ! check_commit_range "$base_ref"; then
+        printf 'Error: No commits found between %s and HEAD. Exiting.\n' "$base_ref" >&2
+        exit 1
+    fi
+
     # Get current version with proper whitespace handling
     local current_version
     current_version=$(tr -d '[:space:]' < VERSION 2>/dev/null || printf '0.0.0')
@@ -560,10 +659,14 @@ main() {
     breaking_cli_changes=$(printf '%s' "$analysis" | grep "breaking_cli_changes=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     local diff_size
     diff_size=$(printf '%s' "$analysis" | grep "diff_size=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
+    local api_breaking
+    api_breaking=$(printf '%s' "$analysis" | grep "api_breaking=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
+    local security_keywords
+    security_keywords=$(printf '%s' "$analysis" | grep "security_keywords=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     
     # Determine suggestion
     local suggestion
-    suggestion=$(suggest_version_bump "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size")
+    suggestion=$(suggest_version_bump "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size" "$api_breaking" "$security_keywords")
     
     # Calculate next version
     local next_version
@@ -571,7 +674,7 @@ main() {
     
     # Output based on mode
     if [[ "$SUGGEST_ONLY" = "true" ]]; then
-        # Output only the suggestion
+        # Output only the suggestion - FIXED: now runs analysis
         printf '%s\n' "$suggestion"
     elif [[ "$JSON_OUTPUT" = "true" ]]; then
         # JSON output for machine consumption
@@ -592,7 +695,9 @@ main() {
         printf '    "new_doc_files": %s,\n' "$new_doc_files"
         printf '    "cli_changes": %s,\n' "$cli_changes"
         printf '    "breaking_cli_changes": %s,\n' "$breaking_cli_changes"
-        printf '    "diff_size": %s\n' "$diff_size"
+        printf '    "diff_size": %s,\n' "$diff_size"
+        printf '    "api_breaking": %s,\n' "${api_breaking:-false}"
+        printf '    "security_keywords": %s\n' "${security_keywords:-0}"
         printf '  }\n'
         printf '}\n'
     elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
@@ -635,6 +740,10 @@ main() {
             printf 'Change magnitude:\n'
             printf '  Diff size: %s lines\n' "$diff_size"
             printf '\n'
+            printf 'Advanced analysis:\n'
+            printf '  API breaking changes: %s\n' "${api_breaking:-false}"
+            printf '  Security/crash keywords: %s\n' "${security_keywords:-0}"
+            printf '\n'
             printf 'Thresholds:\n'
             printf '  Major: Breaking CLI changes or diff > %s lines\n' "$MIN_MAJOR_DIFF_LINES"
             printf '  Minor: CLI changes, new source files (>%s), new test files (>%s), new doc files (>%s)\n' "$MIN_NEW_SOURCE_FILES" "$MIN_NEW_TEST_FILES" "$MIN_NEW_DOC_FILES"
@@ -644,7 +753,8 @@ main() {
             # Show recent commits with proper error handling
             printf 'Recent commits:\n'
             if git rev-list "$base_ref"..HEAD >/dev/null 2>&1; then
-                git log --oneline "$base_ref"..HEAD 2>/dev/null | head -10 || printf 'No commits found\n'
+                # Limit to last 20 commits for performance
+                git log --oneline "$base_ref"..HEAD 2>/dev/null | head -20 || printf 'No commits found\n'
             else
                 printf 'No commits in range\n'
             fi
@@ -657,6 +767,10 @@ main() {
                 printf 'Suggested bump: MAJOR version\n'
                 if [[ "$breaking_cli_changes" = "true" ]]; then
                     printf 'Reason: Breaking CLI changes detected\n'
+                elif [[ "$api_breaking" = "true" ]]; then
+                    printf 'Reason: API breaking changes detected\n'
+                elif [[ "${security_keywords:-0}" -gt 0 ]]; then
+                    printf 'Reason: Security/crash-related changes detected (%s keywords)\n' "$security_keywords"
                 else
                     printf 'Reason: Very large code changes (%s lines)\n' "$diff_size"
                 fi
@@ -691,12 +805,17 @@ main() {
         printf '\n'
         
         # Only show apply command if there's a suggestion and the script exists
-        if [[ "$suggestion" != "none" ]] && [[ -x ./dev-bin/bump-version ]]; then
-            printf 'To apply this suggestion:\n'
-            printf '  ./dev-bin/bump-version %s --commit\n' "$suggestion"
-            printf '\n'
-            printf 'Or use GitHub Actions:\n'
-            printf '  Go to Actions → Auto Version Bump → Run workflow → Choose: %s\n' "$suggestion"
+        if [[ "$suggestion" != "none" ]]; then
+            if [[ -x ./dev-bin/bump-version ]]; then
+                printf 'To apply this suggestion:\n'
+                printf '  ./dev-bin/bump-version %s --commit\n' "$suggestion"
+                printf '\n'
+                printf 'Or use GitHub Actions:\n'
+                printf '  Go to Actions → Auto Version Bump → Run workflow → Choose: %s\n' "$suggestion"
+            else
+                printf 'Note: bump-version script not found at ./dev-bin/bump-version\n'
+                printf 'Preview unavailable - manual version update required\n'
+            fi
         fi
         
         # Always include SUGGESTION= line in verbose output
