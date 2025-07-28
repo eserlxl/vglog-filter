@@ -50,10 +50,30 @@ jobs:
                 -DBUILD_TESTS=ON \
                 ..
           make -j$(nproc)
+          
+          # Debug: Check if executable was built
+          echo "Checking build output..."
+          ls -la
+          if [ -d bin ]; then
+            echo "bin directory contents:"
+            ls -la bin/
+          fi
       
       - name: Run Memory Sanitizer Tests
         run: |
           cd build-msan
+          
+          # Check if executable exists
+          if [ ! -f "./bin/vglog-filter" ]; then
+            echo "ERROR: vglog-filter executable not found!"
+            echo "Current directory contents:"
+            ls -la
+            if [ -d bin ]; then
+              echo "bin directory contents:"
+              ls -la bin/
+            fi
+            exit 1
+          fi
           
           # Set environment for MSan with more permissive options
           # Suppress known false positives from C++ standard library
@@ -61,10 +81,10 @@ jobs:
           
           # Test basic functionality
           echo "Testing help output..."
-          ./vglog-filter --help
+          ./bin/vglog-filter --help
           
           echo "Testing version output..."
-          ./vglog-filter --version
+          ./bin/vglog-filter --version
           
           echo "Testing with sample input..."
           # Create a minimal test input
@@ -78,7 +98,7 @@ jobs:
           
           # Test that the program can process input (even if output is affected by MSan)
           echo "Testing program execution..."
-          ./vglog-filter test_input.txt > /dev/null 2> sanitizer_output.txt || true
+          ./bin/vglog-filter test_input.txt > /dev/null 2> sanitizer_output.txt || true
           
           # Check for sanitizer warnings but don't fail the build
           # Memory Sanitizer has known issues with C++ standard library
