@@ -373,6 +373,7 @@ void process_stream(std::istream& in, const Options& opt) {
 
     size_t lines_processed = 0;
     size_t total_lines     = 0;
+    bool marker_found      = false;
 
     if (opt.show_progress && !opt.use_stdin) {
         std::ifstream count_file(opt.filename);
@@ -429,6 +430,7 @@ void process_stream(std::istream& in, const Options& opt) {
         // If trimming is enabled and we see a marker, we drop everything collected so far
         // and start fresh — this achieves "trim to last marker" while remaining streaming-friendly.
         if (opt.trim && line.find(opt.marker) != Str::npos) {
+            marker_found = true;
             reset_epoch();
             continue; // skip marker line itself
         }
@@ -465,9 +467,11 @@ void process_stream(std::istream& in, const Options& opt) {
     // Flush the last block
     flush();
 
-    // Print only what belongs to the last segment (or all if no marker was found)
-    for (const auto& block : pending_blocks) {
-        std::cout << block;
+    // Print only what belongs to the last segment (or all if no marker was found and trimming is disabled)
+    if (!opt.trim || marker_found) {
+        for (const auto& block : pending_blocks) {
+            std::cout << block;
+        }
     }
 }
 
@@ -641,8 +645,15 @@ int main(int argc, char* argv[])
             }
 
             std::stringstream work;
-            if (start < lines.size()) {
+            if (start > 0 && start < lines.size()) {
                 std::copy(lines.begin() + static_cast<std::ptrdiff_t>(start), lines.end(),
+                          std::ostream_iterator<Str>(work, "\n"));
+            } else if (opt.trim && start == 0) {
+                // No marker found and trimming is enabled, so no output
+                return 0;
+            } else if (!opt.trim) {
+                // Trimming disabled, process entire file
+                std::copy(lines.begin(), lines.end(),
                           std::ostream_iterator<Str>(work, "\n"));
             }
 
