@@ -13,94 +13,103 @@ on:
   pull_request:
     branches: [ "main" ]
   schedule:
-    # Run security scan weekly on Sundays at 2 AM UTC
-    - cron: '0 2 * * 0'
+    # Run security scan weekly on Sundays at 02:00 UTC
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+
+# Avoid duplicate runs for the same ref
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   analyze:
-    name: Analyze
+    name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       actions: read
       contents: read
+      pull-requests: read
       security-events: write
 
     strategy:
       fail-fast: false
       matrix:
-        # CodeQL supported languages for this project
-        # Note: CodeQL doesn't support bash/shell scripts directly
-        # This workflow supports:
-        # - C/C++ (main project language)
-        # - JavaScript/TypeScript (future web interfaces, tools)
-        # - Python (future utilities, automation scripts)
-        # For shell script security, see shellcheck.yml workflow
-        language: [ 'cpp', 'javascript', 'python' ]
+        # Supported CodeQL languages for this repository.
+        # NOTE: Do NOT add "bash" here; CodeQL does not support shell scripts.
+        language: [ "cpp", "javascript", "python" ]
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Check for supported language files
-      id: check-files
-      run: |
-        # Check if any files exist for the current language
-        case "${{ matrix.language }}" in
-          cpp)
-            if find . -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" -o -name "*.c" -o -name "*.h" -o -name "*.hpp" -o -name "*.hxx" | grep -q .; then
-              echo "files_found=true" >> $GITHUB_OUTPUT
-            else
-              echo "files_found=false" >> $GITHUB_OUTPUT
-            fi
-            ;;
-          javascript)
-            if find . -name "*.js" -o -name "*.ts" -o -name "*.jsx" -o -name "*.tsx" | grep -q .; then
-              echo "files_found=true" >> $GITHUB_OUTPUT
-            else
-              echo "files_found=false" >> $GITHUB_OUTPUT
-            fi
-            ;;
-          python)
-            if find . -name "*.py" | grep -q .; then
-              echo "files_found=true" >> $GITHUB_OUTPUT
-            else
-              echo "files_found=false" >> $GITHUB_OUTPUT
-            fi
-            ;;
-          *)
-            echo "files_found=false" >> $GITHUB_OUTPUT
-            ;;
-        esac
+      - name: Detect files for current language
+        id: check-files
+        run: |
+          set -euo pipefail
+          has_files() {
+            # Use git ls-files to consider only tracked files
+            git ls-files -- "$@" | grep -q .
+          }
 
-    - name: Initialize CodeQL
-      if: steps.check-files.outputs.files_found == 'true'
-      uses: github/codeql-action/init@v3
-      with:
-        languages: ${{ matrix.language }}
-        # If you wish to specify custom queries, you can do so here
-        # queries: security-extended,security-and-quality
-        # For more details on CodeQL's query packs, refer to: https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries
+          case "${{ matrix.language }}" in
+            cpp)
+              if has_files '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx'; then
+                echo "files_found=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "files_found=false" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            javascript)
+              if has_files '*.js' '*.jsx' '*.ts' '*.tsx'; then
+                echo "files_found=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "files_found=false" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            python)
+              if has_files '*.py'; then
+                echo "files_found=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "files_found=false" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            *)
+              echo "files_found=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
 
-    - name: Autobuild
-      if: steps.check-files.outputs.files_found == 'true'
-      uses: github/codeql-action/autobuild@v3
-      # CodeQL will automatically detect the build system and build the code
-      # For C++ projects, it will detect CMake and use appropriate build commands
-      # If you need to specify custom build commands, you can do so here
-      # with:
-      #   run: |
-      #     chmod +x build.sh
-      #     ./build.sh debug warnings clean
+      - name: Initialize CodeQL
+        if: steps.check-files.outputs.files_found == 'true'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Enable extended security and quality queries
+          queries: security-extended,security-and-quality
 
-    - name: Perform CodeQL Analysis
-      if: steps.check-files.outputs.files_found == 'true'
-      uses: github/codeql-action/analyze@v3
-      with:
-        category: "/language:${{matrix.language}}"
+      - name: Autobuild
+        if: steps.check-files.outputs.files_found == 'true'
+        uses: github/codeql-action/autobuild@v3
+        # If autobuild fails (e.g., custom build system), replace with manual commands:
+        # with:
+        #   run: |
+        #     chmod +x build.sh
+        #     ./build.sh debug warnings clean
 
-    - name: Skip analysis (no supported files)
-      if: steps.check-files.outputs.files_found == 'false'
-      run: |
-        echo "No ${{ matrix.language }} files found in this repository."
-        echo "CodeQL analysis skipped for ${{ matrix.language }}."
-        echo "For shell script security analysis, see the shellcheck.yml workflow." 
+      - name: Perform CodeQL Analysis
+        if: steps.check-files.outputs.files_found == 'true'
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+      - name: Skip analysis (no supported files)
+        if: steps.check-files.outputs.files_found == 'false'
+        run: |
+          echo "No '${{ matrix.language }}' files found in this repository."
+          echo "CodeQL analysis skipped for '${{ matrix.language }}'."
+          echo "For shell script security, use ShellCheck in a separate workflow."
