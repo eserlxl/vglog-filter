@@ -31,9 +31,9 @@ on:
         default: false
         type: boolean
 
-  # Automatic trigger for significant changes
+  # Automatic trigger for significant changes on main
   push:
-    branches: [main]
+    branches: [ main ]
     paths-ignore:
       - VERSION
       - doc/VERSIONING.md
@@ -45,13 +45,19 @@ concurrency:
   group: version-bump-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   version-bump:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     env:
-      NEW_VERSION: ''
+      NEW_VERSION: ""
+      TARGET_BRANCH: "${{ github.ref_name }}"
     outputs:
       new_version: ${{ steps.bump.outputs.new_version }}
 
@@ -64,76 +70,81 @@ jobs:
 
       - name: Setup Git
         run: |
+          set -euo pipefail
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
 
       - name: Determine version bump type
         id: version-analysis
-        shell: bash
         run: |
           set -euo pipefail
 
           require_analyzer() {
-            if [ ! -x ./dev-bin/semantic-version-analyzer ]; then
+            if [[ ! -x ./dev-bin/semantic-version-analyzer ]]; then
               echo "semantic-version-analyzer not found or not executable at ./dev-bin/semantic-version-analyzer" >&2
               exit 1
             fi
           }
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             BUMP_TYPE="${{ github.event.inputs.bump_type }}"
             RELEASE_NOTES="${{ github.event.inputs.release_notes }}"
             PRERELEASE="${{ github.event.inputs.prerelease }}"
-            if [ "$BUMP_TYPE" = "auto" ]; then
+            if [[ "$BUMP_TYPE" == "auto" ]]; then
               require_analyzer
               BUMP_TYPE="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo none)"
             fi
           else
             require_analyzer
-            ANALYSIS="$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || true)"
 
+            # Establish a robust diff base and compute diff size
             if LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null)"; then
               BASE="$LAST_TAG"
-              RANGE="${LAST_TAG}..HEAD"
+              DIFF_SIZE="$(git diff --numstat "$LAST_TAG..HEAD" | awk '{ins+=$1; del+=$2} END{print (ins+0)+(del+0)}')"
             else
-              ROOT="$(git rev-list --max-parents=0 HEAD)"
-              RANGE="${ROOT}^..HEAD"   # include the first commit
+              EMPTY_TREE="$(git hash-object -t tree /dev/null)"
+              BASE="repo-root"
+              # Use two-arg form to avoid ambiguity with '..' and a tree-ish
+              DIFF_SIZE="$(git diff --numstat "$EMPTY_TREE" HEAD | awk '{ins+=$1; del+=$2} END{print (ins+0)+(del+0)}')"
             fi
 
-            DIFF_SIZE="$(git diff --numstat "$RANGE" | awk '{ins+=$1; del+=$2} END{print (ins+0)+(del+0)}')"
-            # TODO: Consider adding --json support to semantic-version-analyzer for more robust parsing
-            NEW_SOURCE_FILES="$(echo "$ANALYSIS" | awk -F': ' '/New source files:/ {print $2+0}')"
-            NEW_TEST_FILES="$(echo  "$ANALYSIS" | awk -F': ' '/New test files:/  {print $2+0}')"
-            NEW_DOC_FILES="$(echo   "$ANALYSIS" | awk -F': ' '/New doc files:/   {print $2+0}')"
-            DELETED_FILES="$(echo   "$ANALYSIS" | awk -F': ' '/Deleted files:/   {print $2+0}')"
-            MODIFIED_FILES="$(echo  "$ANALYSIS" | awk -F': ' '/Modified files:/  {print $2+0}')"
+            ANALYSIS="$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || true)"
+
+            # Parse simple counters from analyzer output (falls back to 0 if not present)
+            NEW_SOURCE_FILES="$(awk -F': ' '/New source files:/ {print $2+0}' <<<"$ANALYSIS")"
+            NEW_TEST_FILES="$(awk  -F': ' '/New test files:/  {print $2+0}' <<<"$ANALYSIS")"
+            NEW_DOC_FILES="$(awk   -F': ' '/New doc files:/   {print $2+0}' <<<"$ANALYSIS")"
+            DELETED_FILES="$(awk   -F': ' '/Deleted files:/   {print $2+0}' <<<"$ANALYSIS")"
+            MODIFIED_FILES="$(awk  -F': ' '/Modified files:/  {print $2+0}' <<<"$ANALYSIS")"
 
             echo "Analysis:"
-            echo "  base: ${BASE:-repo-root}"
-            echo "  diff size: $DIFF_SIZE (ins+del)"
-            echo "  new src: $NEW_SOURCE_FILES, new tests: $NEW_TEST_FILES, new docs: $NEW_DOC_FILES, deleted: $DELETED_FILES, modified: $MODIFIED_FILES"
+            echo "  base: ${BASE}"
+            echo "  diff size: ${DIFF_SIZE} (ins+del)"
+            echo "  new src: ${NEW_SOURCE_FILES}, new tests: ${NEW_TEST_FILES}, new docs: ${NEW_DOC_FILES}, deleted: ${DELETED_FILES}, modified: ${MODIFIED_FILES}"
 
-            if [ "$DELETED_FILES" -gt 0 ]; then
+            if [[ "${DELETED_FILES}" -gt 0 ]]; then
               BUMP_TYPE="major"
-            elif [ "$NEW_SOURCE_FILES" -gt 0 ] || [ "$NEW_TEST_FILES" -gt 0 ]; then
-              if [ "$DIFF_SIZE" -ge 400 ]; then
+            elif [[ "${NEW_SOURCE_FILES}" -gt 0 || "${NEW_TEST_FILES}" -gt 0 ]]; then
+              if [[ "${DIFF_SIZE}" -ge 400 ]]; then
                 BUMP_TYPE="minor"
               else
                 BUMP_TYPE="patch"
               fi
-            elif [ "$MODIFIED_FILES" -gt 0 ] || [ "$DIFF_SIZE" -gt 0 ]; then
+            elif [[ "${MODIFIED_FILES}" -gt 0 || "${DIFF_SIZE}" -gt 0 ]]; then
               BUMP_TYPE="patch"
             else
               echo "bump_type=none" >> "$GITHUB_OUTPUT"
+              echo "release_notes=" >> "$GITHUB_OUTPUT"
+              echo "prerelease=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            RELEASE_NOTES=''
-            PRERELEASE='false'
+            RELEASE_NOTES=""
+            PRERELEASE="false"
           fi
 
-          echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
-          echo "release_notes=$RELEASE_NOTES" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "bump_type=${BUMP_TYPE}" >> "$GITHUB_OUTPUT"
+          echo "release_notes=${RELEASE_NOTES}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
 
       - name: Summarize analysis
         if: steps.version-analysis.outputs.bump_type != 'none'
@@ -141,7 +152,8 @@ jobs:
           {
             echo "### Version analysis"
             echo "- Bump type: \`${{ steps.version-analysis.outputs.bump_type }}\`"
-            echo "- New version (after bump): will compute in next step"
+            echo "- Target branch: \`${{ env.TARGET_BRANCH }}\`"
+            echo "- New version (after bump): will be computed in the next step"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Bump version
@@ -150,30 +162,39 @@ jobs:
         run: |
           set -euo pipefail
           echo "Bumping version type: ${{ steps.version-analysis.outputs.bump_type }}"
-          
-          # Fail early if bump-version is missing
-          if [ ! -x ./dev-bin/bump-version ]; then
+
+          # Ensure bump-version exists early
+          if [[ ! -x ./dev-bin/bump-version ]]; then
             echo "bump-version not found or not executable at ./dev-bin/bump-version" >&2
             exit 1
           fi
-          
+
+          if [[ ! -f VERSION ]]; then
+            echo "VERSION file not found at repository root." >&2
+            exit 1
+          fi
+
           echo "Current version: $(cat VERSION)"
-          
+
+          # Make sure we are up-to-date before bumping to reduce push races
+          git fetch --prune --tags origin
+          git pull --rebase origin "${TARGET_BRANCH}"
+
           # Add [skip ci] to prevent triggering other workflows
-          # TODO: Consider adding --json support to semantic-version-analyzer for more robust parsing
-          ANALYSIS_MESSAGE="[skip ci] Auto version bump triggered by ${{ github.event_name }}" ./dev-bin/bump-version ${{ steps.version-analysis.outputs.bump_type }} --commit
-          
-          # Ensure [skip ci] is in the commit message
+          ANALYSIS_MESSAGE="[skip ci] Auto version bump triggered by ${{ github.event_name }}" \
+            ./dev-bin/bump-version "${{ steps.version-analysis.outputs.bump_type }}" --commit
+
+          # Ensure [skip ci] present even if the script didn't include it
           if ! git log -1 --pretty=%B | grep -q '\[skip ci\]'; then
             git commit --amend -m "$(git log -1 --pretty=%B) [skip ci]"
           fi
-          
-          NEW_VERSION=$(cat VERSION)
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          git fetch --tags origin main
-          git pull --rebase origin main
-          git push origin main
+
+          NEW_VERSION="$(cat VERSION)"
+          echo "NEW_VERSION=${NEW_VERSION}" >> "$GITHUB_ENV"
+          echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
+          # Push commit to the triggering branch
+          git push origin HEAD:"${TARGET_BRANCH}"
 
       - name: Append new version to summary
         if: steps.version-analysis.outputs.bump_type != 'none'
@@ -183,7 +204,11 @@ jobs:
       - name: Create annotated tag
         if: steps.version-analysis.outputs.bump_type != 'none'
         run: |
-          if git rev-parse "v${NEW_VERSION}" >/dev/null 2>&1; then
+          set -euo pipefail
+          # Ensure we see the latest tags
+          git fetch --prune --tags origin
+
+          if git rev-parse --verify --quiet "refs/tags/v${NEW_VERSION}" >/dev/null; then
             echo "Tag v${NEW_VERSION} already exists; skipping tag creation."
           else
             git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
