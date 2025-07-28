@@ -20,52 +20,62 @@
 #include <string_view>
 #include <unordered_set>
 #include <vector>
-#include <sys/stat.h> // Required for stat()
-#include <sys/resource.h> // Required for memory monitoring
+#include <sys/types.h>   // ssize_t
+#include <sys/stat.h>    // stat()
+#include <sys/resource.h> // memory monitoring
+#include <unistd.h>      // getopt_long()
 
-using Str  = std::string;
-using StrView = std::string_view;
-using VecS = std::vector<Str>;
-using StrSpan = std::span<const Str>;
+using Str      = std::string;
+using StrView  = std::string_view;
+using VecS     = std::vector<Str>;
+using StrSpan  = std::span<const Str>;
 
-constexpr int DEFAULT_DEPTH = 1;
+constexpr int         DEFAULT_DEPTH  = 1;
 constexpr const char* DEFAULT_MARKER = "Successfully downloaded debug";
 
 struct Options {
-    int  depth        = DEFAULT_DEPTH;
-    bool trim         = true;
-    bool scrub_raw    = true;
-    bool stream_mode  = false;  // Enable stream processing for large files
-    bool show_progress = false; // Show progress for large files
-    bool monitor_memory = false; // Monitor memory usage
-    Str  marker       = DEFAULT_MARKER;
-    Str  filename;
-    bool use_stdin    = false;  // Whether to read from stdin
+    int   depth           = DEFAULT_DEPTH;
+    bool  trim            = true;
+    bool  scrub_raw       = true;
+    bool  stream_mode     = false;   // Enable stream processing for large files or stdin
+    bool  show_progress   = false;   // Show progress for large files
+    bool  monitor_memory  = false;   // Monitor memory usage
+    Str   marker          = DEFAULT_MARKER;
+    Str   filename;
+    bool  use_stdin       = false;   // Whether to read from stdin
 };
 
 void usage(const char* prog) {
-    std::cerr << "Usage: " << prog << " [options] [valgrind_log]\n\n"
-        "Input\n"
-        "  valgrind_log            Path to Valgrind log file (default: stdin if omitted)\n"
-        "  -                       Read from stdin (explicit)\n\n"
-        "Options\n"
-        "  -k, --keep-debug-info   Keep everything; do not trim above last debug marker.\n"
-        "  -v, --verbose           Show completely raw blocks (no address / \"at:\" scrub).\n"
-        "  -d N, --depth N         Signature depth (default: " << DEFAULT_DEPTH << ", 0 = unlimited).\n"
-        "  -m S, --marker S        Marker string (default: \"" << DEFAULT_MARKER << "\").\n"
-        "  -s, --stream            Force stream processing mode (auto-detected for files >5MB).\n"
-        "  -p, --progress          Show progress for large files.\n"
-        "  -M, --memory            Monitor memory usage during processing.\n"
-        "  -V, --version           Show version information.\n"
-        "  -h, --help              Show this help.\n\n"
-        "Examples\n"
-        "  " << prog << " log.txt                    # Process file\n"
-        "  " << prog << " < log.txt                  # Process from stdin\n"
-        "  " << prog << " - < log.txt                # Explicit stdin\n"
-        "  valgrind ./prog 2>&1 | " << prog << "     # Direct pipe from valgrind\n";
+    std::cerr
+        << "Usage: " << prog << " [options] [valgrind_log]\n\n"
+        << "Input\n"
+        << "  valgrind_log            Path to Valgrind log file (default: stdin if omitted)\n"
+        << "  -                       Read from stdin (explicit)\n\n"
+        << "Options\n"
+        << "  -k, --keep-debug-info   Keep everything; do not trim above last debug marker.\n"
+        << "  -v, --verbose           Show completely raw blocks (no address / \"at:\" scrub).\n"
+        << "  -d N, --depth N         Signature depth (default: " << DEFAULT_DEPTH << ", 0 = unlimited).\n"
+        << "  -m S, --marker S        Marker string (default: \"" << DEFAULT_MARKER << "\").\n"
+        << "  -s, --stream            Force stream processing mode (auto-detected for files >5MB).\n"
+        << "  -p, --progress          Show progress for large files.\n"
+        << "  -M, --memory            Monitor memory usage during processing.\n"
+        << "  -V, --version           Show version information.\n"
+        << "  -h, --help              Show this help.\n\n"
+        << "Notes\n"
+        << "  • In stream mode (including stdin), the tool outputs only the region after the *last*\n"
+        << "    marker encountered (if any). If no marker is found, the entire input is processed.\n\n"
+        << "Examples\n"
+        << "  " << prog << " log.txt                    # Process file\n"
+        << "  " << prog << " < log.txt                  # Process from stdin\n"
+        << "  " << prog << " - < log.txt                # Explicit stdin\n"
+        << "  valgrind ./prog 2>&1 | " << prog << "     # Direct pipe from valgrind\n";
 }
 
 // ---------- helpers ---------------------------------------------------------
+
+static inline bool is_space(unsigned char ch) {
+    return std::isspace(ch) != 0;
+}
 
 // Helper function to create detailed error messages
 Str create_error_message(const Str& operation, const Str& filename, const Str& details = "") {
@@ -123,10 +133,10 @@ StrSpan create_span_from_vector(const VecS& vec) {
 size_t find_marker_in_span(StrSpan lines, const Str& marker) {
     for (size_t i = lines.size(); i-- > 0;) {
         if (lines[i].find(marker) != Str::npos) {
-            return i + 1;
+            return i + 1; // start after the marker line
         }
     }
-    return lines.size(); // Return size if marker not found
+    return 0; // process whole input when marker not found
 }
 
 static inline StrView ltrim_view(StrView s) {
@@ -200,14 +210,14 @@ Str canon(Str s)
     s = regex_replace_all(s, get_re_array(), "[]");
     s = regex_replace_all(s, get_re_template(), "<T>");
     s = regex_replace_all(s, get_re_ws(), " ");
-    s = rtrim(s);
+    s = rtrim(std::move(s));
     return s;
 }
 
 Str canon(StrView s)
 {
-    Str result(s);
-    return canon(std::move(result));
+    Str tmp(s);
+    return canon(std::move(tmp));
 }
 
 // ---------- main dedupe engine ---------------------------------------------
@@ -225,7 +235,7 @@ static const std::regex& get_re_prefix() {
 
 static const std::regex& get_re_start() {
     static const std::regex re(
-        R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))", 
+        R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))",
         std::regex::optimize | std::regex::ECMAScript);
     return re;
 }
@@ -254,38 +264,45 @@ void process(std::istream& in, const Options& opt)
 {
     std::ostringstream raw, sig;
     VecS sigLines;
+    sigLines.reserve(64);
+
     std::unordered_set<Str> seen;
+    seen.reserve(256);
 
     auto flush = [&]() {
         const Str rawStr = raw.str();
         if (rawStr.empty()) return;
+
         Str key;
         if (opt.depth > 0) {
+            key.reserve(256);
             for (int i = 0; i < opt.depth && i < static_cast<int>(sigLines.size()); ++i) {
-                key += sigLines[i] + '\n';
+                key += sigLines[i];
+                key += '\n';
             }
         } else {
             key = sig.str();
         }
         if (seen.insert(key).second) {
-            std::cout << rawStr << '\n'; // Add extra newline after each block
+            std::cout << rawStr << '\n'; // block separator
         }
-        raw.str("");
-        raw.clear();
-        sig.str("");
-        sig.clear();
+        raw.str(""); raw.clear();
+        sig.str(""); sig.clear();
         sigLines.clear();
     };
 
     Str line;
     while (std::getline(in, line)) {
         if (!std::regex_search(line, get_re_vg_line())) continue;
+
         // strip "==PID== "
         line = std::regex_replace(line, get_re_prefix(), "");
+
         if (std::regex_search(line, get_re_start())) {
             flush();
             if (std::regex_search(line, get_re_bytes_head())) continue;
         }
+
         Str rawLine = line;
         if (opt.scrub_raw) {
             rawLine = regex_replace_all(rawLine, get_re_addr(), "");
@@ -294,9 +311,13 @@ void process(std::istream& in, const Options& opt)
             rawLine = regex_replace_all(rawLine, get_re_q(), "");
         }
         if (trim_view(rawLine).empty()) continue;
+
         raw << rawLine << '\n';
-        sig << canon(line) << '\n';
-        sigLines.push_back(canon(line));
+
+        // canonicalize once
+        Str cl = canon(line);
+        sig << cl << '\n';
+        sigLines.push_back(std::move(cl));
     }
     flush();
 }
@@ -307,29 +328,29 @@ VecS read_file_lines(const Str& fname)
 {
     FILE* file = fopen(fname.c_str(), "r");
     if (!file) throw std::runtime_error(create_error_message("opening file", fname));
-    
+
     VecS lines;
-    lines.reserve(1000); // Reserve capacity for better performance
-    
+    lines.reserve(1024); // Reserve capacity for better performance
+
     char* line_buffer = nullptr;
     size_t line_buffer_size = 0;
     ssize_t line_length;
-    
+
     while ((line_length = getline(&line_buffer, &line_buffer_size, file)) != -1) {
         // Check for memory allocation failure
         if (line_buffer == nullptr) {
             fclose(file);
             throw std::runtime_error(create_error_message("reading file", fname, "Memory allocation failed"));
         }
-        
-        // Remove trailing newline if present
-        if (line_length > 0 && line_buffer[line_length - 1] == '\n') {
-            line_buffer[line_length - 1] = '\0';
-            line_length--;
+        // Remove trailing newline and possible CR
+        if (line_length > 0 && (line_buffer[line_length - 1] == '\n' || line_buffer[line_length - 1] == '\r')) {
+            while (line_length > 0 && (line_buffer[line_length - 1] == '\n' || line_buffer[line_length - 1] == '\r')) {
+                line_buffer[--line_length] = '\0';
+            }
         }
         lines.emplace_back(line_buffer);
     }
-    
+
     free(line_buffer);
     fclose(file);
     return lines;
@@ -337,88 +358,97 @@ VecS read_file_lines(const Str& fname)
 
 // Check if file is large enough to warrant stream processing
 bool is_large_file(const Str& fname, size_t threshold_mb = 5) {
-    struct stat file_stat;
-    if (stat(fname.c_str(), &file_stat) != 0) {
-        return false;  // File doesn't exist or can't be accessed
-    }
-    
-    if (!S_ISREG(file_stat.st_mode)) {
-        return false;  // Not a regular file
-    }
-    
-    // Convert to MB and compare with threshold
-    size_t file_size_mb = static_cast<size_t>(file_stat.st_size) / (1024 * 1024);
+    struct stat st{};
+    if (stat(fname.c_str(), &st) != 0) return false;
+    if (!S_ISREG(st.st_mode))         return false;
+    size_t file_size_mb = static_cast<size_t>(st.st_size) / (1024 * 1024);
     return file_size_mb >= threshold_mb;
 }
 
-// Stream processing version that accepts any istream
-void process_stream(std::istream& in, const Options& opt)
-{
+// Stream processing (also used for stdin)
+void process_stream(std::istream& in, const Options& opt) {
     std::ostringstream raw, sig;
     VecS sigLines;
-    std::unordered_set<Str> seen;
-    bool found_marker = false;
-    size_t lines_processed = 0;
-    size_t total_lines = 0;
+    sigLines.reserve(64);
 
-    // Count total lines for progress reporting if enabled
+    // Keep outputs since the *last* marker only.
+    std::vector<Str> pending_blocks;
+    std::unordered_set<Str> seen;
+    pending_blocks.reserve(64);
+    seen.reserve(256);
+
+    size_t lines_processed = 0;
+    size_t total_lines     = 0;
+
     if (opt.show_progress && !opt.use_stdin) {
         std::ifstream count_file(opt.filename);
         if (count_file) {
-            total_lines = std::count(std::istreambuf_iterator<char>(count_file),
-                                   std::istreambuf_iterator<char>(), '\n');
-            count_file.close();
+            total_lines = static_cast<size_t>(
+                std::count(std::istreambuf_iterator<char>(count_file),
+                           std::istreambuf_iterator<char>(), '\n'));
         }
     }
+
+    auto clear_current_state = [&](){
+        raw.str(""); raw.clear();
+        sig.str(""); sig.clear();
+        sigLines.clear();
+    };
+
+    auto reset_epoch = [&](){
+        // forget everything collected so far (we're starting after a newer marker)
+        pending_blocks.clear();
+        seen.clear();
+        clear_current_state();
+    };
 
     auto flush = [&]() {
         const Str rawStr = raw.str();
         if (rawStr.empty()) return;
+
         Str key;
         if (opt.depth > 0) {
+            key.reserve(256);
             for (int i = 0; i < opt.depth && i < static_cast<int>(sigLines.size()); ++i) {
-                key += sigLines[i] + '\n';
+                key += sigLines[i];
+                key += '\n';
             }
         } else {
             key = sig.str();
         }
         if (seen.insert(key).second) {
-            std::cout << rawStr << '\n'; // Add extra newline after each block
+            // store; we will print only after we are sure no newer marker appears
+            pending_blocks.emplace_back(rawStr + '\n');
         }
-        raw.str("");
-        raw.clear();
-        sig.str("");
-        sig.clear();
-        sigLines.clear();
+        clear_current_state();
     };
 
     Str line;
     while (std::getline(in, line)) {
-        lines_processed++;
-        
-        // Report progress every 1000 lines if enabled
-        if (opt.show_progress && lines_processed % 1000 == 0) {
+        ++lines_processed;
+
+        if (opt.show_progress && (lines_processed % 1000 == 0)) {
             report_progress(lines_processed, total_lines, opt.filename);
         }
-        
-        // Check for marker if trimming is enabled
+
+        // Marker handling:
+        // If trimming is enabled and we see a marker, we drop everything collected so far
+        // and start fresh — this achieves "trim to last marker" while remaining streaming-friendly.
         if (opt.trim && line.find(opt.marker) != Str::npos) {
-            found_marker = true;
-            continue; // Skip this line and continue from next
+            reset_epoch();
+            continue; // skip marker line itself
         }
-        
-        // If we haven't found the marker yet and trimming is enabled, skip
-        if (opt.trim && !found_marker) {
-            continue;
-        }
-        
+
         if (!std::regex_search(line, get_re_vg_line())) continue;
+
         // strip "==PID== "
         line = std::regex_replace(line, get_re_prefix(), "");
+
         if (std::regex_search(line, get_re_start())) {
             flush();
             if (std::regex_search(line, get_re_bytes_head())) continue;
         }
+
         Str rawLine = line;
         if (opt.scrub_raw) {
             rawLine = regex_replace_all(rawLine, get_re_addr(), "");
@@ -427,27 +457,30 @@ void process_stream(std::istream& in, const Options& opt)
             rawLine = regex_replace_all(rawLine, get_re_q(), "");
         }
         if (trim_view(rawLine).empty()) continue;
+
         raw << rawLine << '\n';
-        sig << canon(line) << '\n';
-        sigLines.push_back(canon(line));
+        Str cl = canon(line);
+        sig << cl << '\n';
+        sigLines.push_back(std::move(cl));
     }
-    
-    // Final progress report
+
     if (opt.show_progress) {
         report_progress(lines_processed, total_lines, opt.filename);
     }
-    
+
+    // Flush the last block
     flush();
+
+    // Print only what belongs to the last segment (or all if no marker was found)
+    for (const auto& block : pending_blocks) {
+        std::cout << block;
+    }
 }
 
-// Stream processing version for large files
-void process_file_stream(const Str& fname, const Options& opt)
-{
-    // Create a proper stream processing implementation that doesn't load the entire file
+// Stream wrapper for files
+void process_file_stream(const Str& fname, const Options& opt) {
     std::ifstream file(fname);
     if (!file) throw std::runtime_error(create_error_message("opening file", fname));
-    
-    // Process the file directly using the existing process_stream function
     process_stream(file, opt);
 }
 
@@ -469,7 +502,7 @@ Str get_version()
             ssize_t line_length = getline(&line_buffer, &line_buffer_size, version_file);
             fclose(version_file);
             
-            if (line_length > 0) {
+            if (line_length > 0 && line_buffer) {
                 Str version(line_buffer);
                 free(line_buffer);
                 
@@ -497,6 +530,10 @@ Str get_version()
 
 int main(int argc, char* argv[])
 {
+    // speed up i/o
+    std::ios::sync_with_stdio(false);
+    std::cin.tie(nullptr);
+
     Options opt;
     static const option long_opts[] = {
         {"keep-debug-info", no_argument,       nullptr, 'k'},
@@ -504,164 +541,125 @@ int main(int argc, char* argv[])
         {"depth",           required_argument, nullptr, 'd'},
         {"marker",          required_argument, nullptr, 'm'},
         {"stream",          no_argument,       nullptr, 's'},
-        {"progress",        no_argument,       nullptr, 'p'}, // Added progress option
-        {"memory",          no_argument,       nullptr, 'M'}, // Added memory option
+        {"progress",        no_argument,       nullptr, 'p'},
+        {"memory",          no_argument,       nullptr, 'M'},
         {"version",         no_argument,       nullptr, 'V'},
         {"help",            no_argument,       nullptr, 'h'},
         {nullptr,           0,                 nullptr,  0 }
     };
+
+    // FIX: added 'p' and 'M' to short options (bug in original)
     int c;
-    while ((c = getopt_long(argc, argv, "kvd:m:sVh", long_opts, nullptr)) != -1) {
+    while ((c = getopt_long(argc, argv, "kvd:m:spMVh", long_opts, nullptr)) != -1) {
         switch (c) {
             case 'k': opt.trim = false; break;
             case 'v': opt.scrub_raw = false; break;
-            case 'd': 
+            case 'd':
                 try {
                     opt.depth = std::stoi(optarg);
                     if (opt.depth < 0) {
-                        std::cerr << "Error: Depth must be non-negative (got: " << optarg << ")" << std::endl;
+                        std::cerr << "Error: Depth must be non-negative (got: " << optarg << ")\n";
                         return 1;
                     }
-                    // Add reasonable upper limit to prevent excessive memory usage
                     if (opt.depth > 1000) {
-                        std::cerr << "Error: Depth value too large (got: " << optarg << ", max: 1000)" << std::endl;
+                        std::cerr << "Error: Depth value too large (got: " << optarg << ", max: 1000)\n";
                         return 1;
                     }
-                } catch (const std::exception& e) {
-                    std::cerr << "Error: Invalid depth value '" << optarg << "' (expected: non-negative integer)" << std::endl;
+                } catch (...) {
+                    std::cerr << "Error: Invalid depth value '" << optarg << "' (expected non-negative integer)\n";
                     return 1;
                 }
                 break;
-            case 'm': 
+            case 'm':
                 if (optarg && optarg[0] != '\0') {
                     opt.marker = optarg;
                 } else {
-                    std::cerr << "Error: Marker string cannot be empty" << std::endl;
+                    std::cerr << "Error: Marker string cannot be empty\n";
                     return 1;
                 }
                 break;
-            case 's': opt.stream_mode = true; break;
-            case 'p': opt.show_progress = true; break; // Added progress option
-            case 'M': opt.monitor_memory = true; break; // Added memory option
-            case 'V': 
-                std::cout << "vglog-filter version " << get_version() << std::endl; 
+            case 's': opt.stream_mode    = true; break;
+            case 'p': opt.show_progress  = true; break;
+            case 'M': opt.monitor_memory = true; break;
+            case 'V':
+                std::cout << "vglog-filter version " << get_version() << std::endl;
                 return 0;
             case 'h': usage(argv[0]); return 0;
             default : usage(argv[0]); return 1;
         }
     }
-    // Handle input source
+
+    // Input source
     if (optind >= argc) {
-        // No filename provided, use stdin
         opt.use_stdin = true;
-        opt.filename = "-";
+        opt.filename  = "-";
     } else {
         opt.filename = argv[optind];
         if (opt.filename == "-") {
             opt.use_stdin = true;
         } else {
-            // Check if file exists using fopen for better MSan compatibility
             FILE* test_file = fopen(opt.filename.c_str(), "r");
             if (!test_file) {
-                std::cerr << create_error_message("opening file", opt.filename) << std::endl;
-                std::cerr << "Please check that the file exists and is readable" << std::endl;
+                std::cerr << create_error_message("opening file", opt.filename) << "\n";
+                std::cerr << "Please check that the file exists and is readable\n";
                 return 1;
             }
             fclose(test_file);
         }
     }
-    
-    // Determine processing mode: manual override or automatic detection
+
+    // Determine processing mode
     bool use_stream_mode = opt.stream_mode;
-    
     if (!use_stream_mode) {
         if (opt.use_stdin) {
-            // Always use stream mode for stdin since we can't seek
-            use_stream_mode = true;
+            use_stream_mode = true; // stdin can't seek
         } else {
-            // Auto-detect large files (5MB threshold for testing, can be adjusted)
             use_stream_mode = is_large_file(opt.filename, 5);
             if (use_stream_mode) {
-                std::cerr << "Info: Large file detected, using stream processing mode" << std::endl;
+                std::cerr << "Info: Large file detected, using stream processing mode\n";
             }
         }
     }
-    
-    // Process input using appropriate mode
-    if (use_stream_mode) {
-        // Stream processing for large files or stdin
-        try {
-            if (opt.monitor_memory) {
-                report_memory_usage("starting stream processing", opt.filename);
-            }
-            
+
+    try {
+        if (use_stream_mode) {
+            if (opt.monitor_memory) report_memory_usage("starting stream processing", opt.filename);
             if (opt.use_stdin) {
-                // Process from stdin
                 process_stream(std::cin, opt);
             } else {
-                // Process from file
                 process_file_stream(opt.filename, opt);
             }
-            
-            if (opt.monitor_memory) {
-                report_memory_usage("completed stream processing", opt.filename);
+            if (opt.monitor_memory) report_memory_usage("completed stream processing", opt.filename);
+        } else {
+            if (opt.monitor_memory) report_memory_usage("starting file reading", opt.filename);
+            VecS lines = read_file_lines(opt.filename);
+            if (opt.monitor_memory) report_memory_usage("completed file reading", opt.filename);
+
+            if (lines.empty()) {
+                std::cerr << "Warning: Input file '" << opt.filename << "' is empty\n";
+                return 0;
             }
-        } catch (const std::exception& e) {
-            std::cerr << create_error_message("stream processing", opt.filename, e.what()) << std::endl;
-            return 1;
-        }
-    } else {
-        // Memory-based processing for smaller files
-        VecS lines;
-        try { 
-            if (opt.monitor_memory) {
-                report_memory_usage("starting file reading", opt.filename);
+
+            size_t start = 0;
+            if (opt.trim) {
+                StrSpan lines_span = create_span_from_vector(lines);
+                start = find_marker_in_span(lines_span, opt.marker); // 0 if not found
             }
-            
-            lines = read_file_lines(opt.filename); 
-            
-            if (opt.monitor_memory) {
-                report_memory_usage("completed file reading", opt.filename);
+
+            std::stringstream work;
+            if (start < lines.size()) {
+                std::copy(lines.begin() + static_cast<std::ptrdiff_t>(start), lines.end(),
+                          std::ostream_iterator<Str>(work, "\n"));
             }
-        } catch (const std::exception& e) { 
-            std::cerr << create_error_message("reading file", opt.filename, e.what()) << std::endl;
-            return 1; 
+
+            if (opt.monitor_memory) report_memory_usage("starting deduplication", opt.filename);
+            process(work, opt);
+            if (opt.monitor_memory) report_memory_usage("completed deduplication", opt.filename);
         }
-        
-        // Check if file is empty
-        if (lines.empty()) {
-            std::cerr << "Warning: Input file '" << opt.filename << "' is empty" << std::endl;
-            return 0;
-        }
-        
-        // trim above last marker if requested
-        size_t start = 0;
-        if (opt.trim) {
-            StrSpan lines_span = create_span_from_vector(lines);
-            start = find_marker_in_span(lines_span, opt.marker);
-        }
-        
-        // Ensure start doesn't exceed array bounds
-        if (start >= lines.size()) {
-            start = lines.size();
-        }
-        
-        std::stringstream work;
-        if (start < lines.size()) {
-            std::copy(lines.begin() + static_cast<std::ptrdiff_t>(start), lines.end(),
-                      std::ostream_iterator<Str>(work, "\n"));
-        }
-        
-        // run dedupe
-        if (opt.monitor_memory) {
-            report_memory_usage("starting deduplication", opt.filename);
-        }
-        
-        process(work, opt);
-        
-        if (opt.monitor_memory) {
-            report_memory_usage("completed deduplication", opt.filename);
-        }
+    } catch (const std::exception& e) {
+        std::cerr << create_error_message("processing", opt.filename, e.what()) << "\n";
+        return 1;
     }
+
     return 0;
-} 
+}
