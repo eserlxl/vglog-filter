@@ -35,12 +35,15 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake g++ make time
+          sudo apt-get install -y build-essential cmake g++ make
+          # Install GNU time for better formatting
+          sudo apt-get install -y time
       
       - name: Build performance version
         run: |
           ./build.sh performance clean
           echo "Performance build completed"
+          ls -la build/
       
       - name: Create benchmark test data
         run: |
@@ -63,29 +66,37 @@ jobs:
         run: |
           echo "=== Performance Benchmark Results ==="
           
+          # Verify binary exists and is executable
+          if [[ ! -x "./build/bin/vglog-filter" ]]; then
+            echo "Error: Binary not found or not executable at ./build/bin/vglog-filter"
+            ls -la build/
+            ls -la build/bin/ || true
+            exit 1
+          fi
+          
           # Benchmark basic processing
           echo "Benchmarking basic processing..."
           /usr/bin/time -f "Basic processing: %e seconds, %M KB memory" \
-            ./build/vglog-filter large_benchmark_input.txt > /dev/null
+            ./build/bin/vglog-filter large_benchmark_input.txt > /dev/null
           
           # Benchmark with different options
           echo "Benchmarking with depth=2..."
           /usr/bin/time -f "Depth=2 processing: %e seconds, %M KB memory" \
-            ./build/vglog-filter -d 2 large_benchmark_input.txt > /dev/null
+            ./build/bin/vglog-filter -d 2 large_benchmark_input.txt > /dev/null
           
           echo "Benchmarking with keep-debug-info..."
           /usr/bin/time -f "Keep debug info: %e seconds, %M KB memory" \
-            ./build/vglog-filter -k large_benchmark_input.txt > /dev/null
+            ./build/bin/vglog-filter -k large_benchmark_input.txt > /dev/null
           
           echo "Benchmarking with verbose mode..."
           /usr/bin/time -f "Verbose mode: %e seconds, %M KB memory" \
-            ./build/vglog-filter -v large_benchmark_input.txt > /dev/null
+            ./build/bin/vglog-filter -v large_benchmark_input.txt > /dev/null
           
           # Check binary size
-          echo "Binary size: $(stat -c%s build/vglog-filter) bytes"
+          echo "Binary size: $(stat -c%s build/bin/vglog-filter) bytes"
           
           # Check if binary is stripped
-          if file build/vglog-filter | grep -q "not stripped"; then
+          if file build/bin/vglog-filter | grep -q "not stripped"; then
             echo "Binary contains debug symbols"
           else
             echo "Binary is stripped"
