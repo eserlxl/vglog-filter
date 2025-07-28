@@ -38,7 +38,7 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
 
 show_help() {
     cat << EOF
-Semantic Version Analyzer for vglog-filter
+Semantic Version Analyzer v3 for vglog-filter
 
 Usage: $(basename "$0") [options]
 
@@ -95,7 +95,7 @@ Notes:
   - All git commands use color.ui=false for consistent output
   - All git diff commands use -M -C for deterministic parsing and rename detection
   - Header prototype detection is restricted to include/** or src/** header files with semicolon endings
-  - Manual CLI detection (--verbose or not) scans for added/removed --[[:alnum:]-]+ tokens in C/C++ sources
+  - Manual CLI detection (--verbose or not) scans for added/removed --[[:alnum:]-]+ tokens in C/C++ source files
   - JSON output includes manual_added_long_count and manual_removed_long_count fields
 EOF
 }
@@ -472,7 +472,10 @@ extract_cli_options() {
     )
     manual_added_long_count=$(printf '%s\n' "$added_long_opts"   | wc -l || printf '0')
     manual_removed_long_count=$(printf '%s\n' "$removed_long_opts" | wc -l || printf '0')
-    (( ${manual_added_long_count:-0} > 0 || ${manual_removed_long_count:-0} > 0 )) && manual_cli_changes=true
+    # Ensure variables are numeric for arithmetic
+    manual_added_long_count=${manual_added_long_count:-0}
+    manual_removed_long_count=${manual_removed_long_count:-0}
+    (( manual_added_long_count > 0 || manual_removed_long_count > 0 )) && manual_cli_changes=true
 
     # Compute counts for removed/added options
     local removed_short_count=0 added_short_count=0
