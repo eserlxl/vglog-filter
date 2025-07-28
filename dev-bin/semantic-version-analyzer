@@ -43,6 +43,16 @@ Options:
   --suggest-only   Output only the suggestion (major/minor/patch/none)
   --help            Show this help
 
+Environment Variables:
+  MIN_MAJOR_DIFF_LINES     Minimum lines for major bump (default: 2000)
+  MIN_MINOR_DIFF_LINES     Minimum lines for minor bump (default: 50)
+  MIN_PATCH_DIFF_LINES     Minimum lines for patch bump (default: 100)
+  MIN_PATCH_FILES          Minimum files for patch bump (default: 5)
+  MIN_NEW_SOURCE_FILES     Minimum new source files for minor (default: 2)
+  MIN_NEW_TEST_FILES       Minimum new test files for minor (default: 3)
+  MIN_NEW_DOC_FILES        Minimum new doc files for minor (default: 2)
+  MAJOR_REQUIRE_BREAKING   Require breaking changes for major (default: true)
+
 Examples:
   $0 --since v1.1.0
   $0 --since-date 2025-01-01
@@ -247,20 +257,6 @@ get_base_reference() {
 check_commit_range() {
     local base_ref="$1"
     
-    # Handle disjoint branches by using merge-base
-    local actual_base
-    actual_base=$(git merge-base "$base_ref" HEAD 2>/dev/null || printf '')
-    if [[ -z "$actual_base" ]]; then
-        printf 'Warning: No common ancestor found between %s and HEAD\n' "$base_ref" >&2
-        return 1
-    fi
-    
-    # Use merge-base if it's different from the original base_ref
-    if [[ "$actual_base" != "$base_ref" ]]; then
-        printf 'Info: Using merge-base %s instead of %s for disjoint branches\n' "$actual_base" "$base_ref" >&2
-        base_ref="$actual_base"
-    fi
-    
     # Check if there are any commits between base_ref and HEAD
     if ! git rev-list "$base_ref"..HEAD >/dev/null 2>&1; then
         printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2
@@ -302,7 +298,8 @@ classify_path() {
     fi
     
     # Documentation files - support both doc/ and docs/ and README files
-    if [[ "$path" =~ ^(doc|docs)/ ]] || [[ "$path" =~ ^README ]]; then
+    # FIXED: Broaden doc classification to include common documentation files
+    if [[ "$path" =~ ^(doc|docs)/ ]] || [[ "$path" =~ ^(README|CHANGELOG|CONTRIBUTING|LICENSE|COPYING|AUTHORS|INSTALL|NEWS|HISTORY) ]]; then
         printf '20'
         return
     fi
@@ -330,21 +327,22 @@ extract_cli_options() {
     # Extract short options from getopt calls - scan only changed source files
     local short_before short_after
     local changed_files
-    changed_files=$(git diff --name-only "$base_ref".."$target_ref" | grep '^src/.*\.cpp$' || printf '')
+    # FIXED: Use -z and handle all C/C++ extensions, make NUL-safe
+    mapfile -d '' changed_files < <(git -c core.quotepath=false diff -z --name-only "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' 2>/dev/null || printf '')
     
-    if [[ -n "$changed_files" ]]; then
-        short_before=$(printf '%s' "$changed_files" | while read -r file; do
+    if [[ ${#changed_files[@]} -gt 0 ]]; then
+        short_before=$(for file in "${changed_files[@]}"; do
             git show "$base_ref:$file" 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"'
         done | sort -u | tr -d '\n' || printf '')
-        short_after=$(printf '%s' "$changed_files" | while read -r file; do
+        short_after=$(for file in "${changed_files[@]}"; do
             git show "$target_ref:$file" 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"'
         done | sort -u | tr -d '\n' || printf '')
         
         # Extract long options from struct option arrays - improved detection
-        long_before=$(printf '%s' "$changed_files" | while read -r file; do
+        long_before=$(for file in "${changed_files[@]}"; do
             git show "$base_ref:$file" 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"'
         done | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
-        long_after=$(printf '%s' "$changed_files" | while read -r file; do
+        long_after=$(for file in "${changed_files[@]}"; do
             git show "$target_ref:$file" 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"'
         done | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
     else
@@ -378,7 +376,10 @@ extract_cli_options() {
     # Check for API-breaking hints in headers
     local api_breaking=false
     local removed_prototypes
-    removed_prototypes=$(git diff "$base_ref".."$target_ref" -- ':(glob)include/*.{h,hpp,hh}' | grep '^-[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*(' | grep -v '^---' | wc -l || printf '0')
+    # FIXED: Include both include/ and src/ directories for header prototype checks
+    removed_prototypes=$(git -c core.quotepath=false diff --unified=0 "$base_ref".."$target_ref" \
+      -- ':(glob)include/*.{h,hpp,hh}' ':(glob)src/*.{h,hpp,hh}' \
+      | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/' | wc -l || printf '0')
     
     if [[ "$removed_prototypes" -gt 0 ]]; then
         api_breaking=true
@@ -393,6 +394,8 @@ extract_cli_options() {
     fi
     
     # Security/crash detection in commit messages
+    # TODO: Consider gating with file changes (e.g., not only docs) or demoting to PATCH
+    # unless paired with API/CLI breakage to reduce noise
     local security_keywords
     security_keywords=$(git log --format="%s %b" "$base_ref".."$target_ref" | grep -i -E '(security|cve|crash|segfault|uaf|overflow|xss|vulnerability)' | wc -l || printf '0')
     
@@ -437,56 +440,34 @@ analyze_changes() {
     local breaking_cli_changes=false
     
     # Process changes with NUL-delimited output to handle spaces and renames
-    while IFS= read -r -d '' status && IFS= read -r -d '' path1; do
+    # FIXED: Read the whole record once and split on TABs
+    while IFS=$'\t' read -r -d '' status path1 path2; do
         local file="$path1"
-        local old_file=""
-        
-        # Handle renames and copies (R100/C100 format)
-        if [[ "$status" =~ ^[RC] ]]; then
-            IFS= read -r -d '' path2
-            old_file="$path1"
-            file="$path2"  # Use the new path for classification
-        fi
-        
-        # Improved status handling with proper rename/copy logic
-        local kind="${status:0:1}"
-        case "$kind" in
+        case "${status:0:1}" in
+            R|C) file="$path2" ;;  # for renames/copies use new path
+        esac
+        case "${status:0:1}" in
             A)
                 ((added_files++))
-                local file_class
-                file_class=$(classify_path "$file")
-                case "$file_class" in
+                case "$(classify_path "$file")" in
                     30) ((new_source_files++)) ;;
                     10) ((new_test_files++)) ;;
                     20) ((new_doc_files++)) ;;
                 esac
                 ;;
-            M|T)
-                ((modified_files++))
-                ;;
-            D)
-                ((deleted_files++))
-                ;;
-            R)
-                # Rename: treat as modified
-                ((modified_files++))
-                ;;
+            M|T) ((modified_files++)) ;;
+            D)   ((deleted_files++))  ;;
+            R)   ((modified_files++)) ;;
             C)
-                # Copy: treat as added
                 ((added_files++))
-                local file_class
-                file_class=$(classify_path "$file")
-                case "$file_class" in
+                case "$(classify_path "$file")" in
                     30) ((new_source_files++)) ;;
                     10) ((new_test_files++)) ;;
                     20) ((new_doc_files++)) ;;
                 esac
-                ;;
-            U|X)
-                # Ignore unmerged, unknown
                 ;;
         esac
-    done < <(git diff --name-status -z "$base_ref"..HEAD 2>/dev/null)
+    done < <(git -c core.quotepath=false diff --name-status -z "$base_ref"..HEAD 2>/dev/null)
     
     # Extract CLI options for comparison
     local cli_analysis
@@ -626,7 +607,9 @@ suggest_version_bump() {
     
     if [[ "${diff_size:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
         # Only suggest major for large diffs if breaking changes are not required
-        if [[ "$MAJOR_REQUIRE_BREAKING" != "true" ]]; then
+        # FIXED: Normalize the value to handle various truth values
+        local req="${MAJOR_REQUIRE_BREAKING,,}"
+        if [[ "$req" != "true" && "$req" != "1" && "$req" != "yes" ]]; then
             printf 'major'
             return
         fi
@@ -800,8 +783,8 @@ main() {
             printf '\n'
             printf 'Thresholds:\n'
             printf '  Major: Breaking CLI changes or diff > %s lines (MAJOR_REQUIRE_BREAKING=%s)\n' "$MIN_MAJOR_DIFF_LINES" "$MAJOR_REQUIRE_BREAKING"
-            printf '  Minor: CLI changes, new source files (>%s), new test files (>%s), new doc files (>%s)\n' "$MIN_NEW_SOURCE_FILES" "$MIN_NEW_TEST_FILES" "$MIN_NEW_DOC_FILES"
-            printf '  Patch: Modified files (>%s) + diff > %s lines\n' "$MIN_PATCH_FILES" "$MIN_PATCH_DIFF_LINES"
+            printf '  Minor: CLI changes, new source files (≥%s), new test files (≥%s), new doc files (≥%s)\n' "$MIN_NEW_SOURCE_FILES" "$MIN_NEW_TEST_FILES" "$MIN_NEW_DOC_FILES"
+            printf '  Patch: Modified files (≥%s) + diff > %s lines\n' "$MIN_PATCH_FILES" "$MIN_PATCH_DIFF_LINES"
             printf '\n'
             
             # Show recent commits with proper error handling
