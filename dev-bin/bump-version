@@ -266,6 +266,37 @@ create_commit() {
         if [[ -n "${ANALYSIS_MESSAGE:-}" ]]; then
             commit_args+=(-m "$ANALYSIS_MESSAGE")
         fi
+        
+        # Add explanation if semantic analyzer is available and we're in CI
+        if [[ -n "${GITHUB_ACTIONS:-}" && -x "./dev-bin/semantic-version-analyzer" ]]; then
+            # Try to get explanation from semantic analyzer
+            local explanation=""
+            local analyzer_output
+            analyzer_output="$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || true)"
+            
+            if [[ -n "$analyzer_output" ]]; then
+                # Extract reason from verbose output
+                local reason_line
+                reason_line="$(printf '%s\n' "$analyzer_output" | grep -E '^Reason:' | head -1)"
+                if [[ -n "$reason_line" ]]; then
+                    explanation="${reason_line#Reason: }"
+                fi
+            fi
+            
+            # If no explanation from analyzer, create a basic one
+            if [[ -z "$explanation" ]]; then
+                case "$BUMP_TYPE" in
+                    major) explanation="Major version bump due to significant changes" ;;
+                    minor) explanation="Minor version bump due to new features or additions" ;;
+                    patch) explanation="Patch version bump due to bug fixes or improvements" ;;
+                    *) explanation="Version bump triggered by automated analysis" ;;
+                esac
+            fi
+            
+            if [[ -n "$explanation" ]]; then
+                commit_args+=(-m "Reason: $explanation")
+            fi
+        fi
         if ((${#staged_files[@]} > 0)); then
             git commit "${commit_args[@]}" -- "${staged_files[@]}"
         else
