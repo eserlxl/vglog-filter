@@ -40,10 +40,10 @@ vglog-filter addresses these issues by:
 - **Progress reporting**: Real-time progress updates for large file processing.
 - **Memory monitoring**: Track memory usage during processing for performance analysis.
 - **Modern C++ optimizations**: Uses `std::string_view`, `std::span`, and optimized regex patterns.
-- **Test framework**: Built-in test suite with automatic cleanup.
 - **Automated versioning**: Semantic versioning with automated bumping based on conventional commits.
 - **Comprehensive CI/CD**: 12 GitHub Actions workflows testing all build configurations.
 - **Quality assurance**: Static analysis, memory sanitizer, security scanning, and cross-platform testing.
+- **Comprehensive test suite**: C++ unit tests, integration tests, and automated CI/CD testing (see [Test Suite Documentation](doc/TEST_SUITE.md)).
 
 [↑ Back to top](#vglog-filter)
 
@@ -118,7 +118,8 @@ Comprehensive documentation is available in the [`doc/`](doc/) folder:
 - [ADVANCED.md](doc/ADVANCED.md): Advanced filtering, signature depth, marker customization, and deduplication logic
 - [BUILD.md](doc/BUILD.md): Build script and configuration options
 - [VERSIONING.md](doc/VERSIONING.md): Versioning strategy and automated version management
-- [DEVELOPER_GUIDE.md](doc/DEVELOPER_GUIDE.md): Build options, versioning system, and testing infrastructure for developers
+- [DEVELOPER_GUIDE.md](doc/DEVELOPER_GUIDE.md): Build options, versioning system, and development infrastructure
+- [TEST_SUITE.md](doc/TEST_SUITE.md): Comprehensive test suite documentation and testing guidelines
 - [CI_CD_GUIDE.md](doc/CI_CD_GUIDE.md): Comprehensive CI/CD and testing infrastructure guide
 
 [↑ Back to top](#vglog-filter)
@@ -130,7 +131,7 @@ Contributions, bug reports, and feature requests are welcome! Please open an iss
 ### Development Workflow
 1. Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for commit messages
 2. Use the provided version bumping tools for releases
-3. Run tests with `./build.sh tests` before submitting pull requests
+3. Run tests with `./run_tests.sh` before submitting pull requests (see [Test Suite Documentation](doc/TEST_SUITE.md))
 4. All builds are automatically tested in CI/CD with 12 different configurations
 5. Check the [CONTRIBUTING.md](.github/CONTRIBUTING.md) for detailed guidelines
 

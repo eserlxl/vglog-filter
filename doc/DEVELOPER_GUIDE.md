@@ -11,6 +11,7 @@ This guide provides comprehensive information for developers working on vglog-fi
   - [Automated Version Bumping](#automated-version-bumping)
   - [Manual Version Management](#manual-version-management)
 - [Testing & CI/CD](#testing--cicd)
+  - [Test Suite Overview](#test-suite-overview)
   - [GitHub Actions Workflows](#github-actions-workflows)
   - [Local Testing](#local-testing)
   - [Development Tools](#development-tools)
@@ -115,7 +116,18 @@ For manual version bumps, use the provided tools:
 
 ## Testing & CI/CD
 
-The project includes comprehensive testing infrastructure:
+The project includes comprehensive testing infrastructure with detailed documentation available in [TEST_SUITE.md](TEST_SUITE.md).
+
+### Test Suite Overview
+
+vglog-filter includes multiple test suites:
+
+- **C++ Unit Tests** (`test/` directory): Core functionality tests with automatic CMake integration
+- **Test Workflows** (`test-workflows/` directory): Integration and workflow tests
+- **Comprehensive Test Runner** (`run_tests.sh`): Runs all test suites in sequence
+- **CI/CD Integration**: Automated testing across multiple platforms and configurations
+
+For detailed information about running tests, adding new tests, and debugging test failures, see the [Test Suite Documentation](TEST_SUITE.md).
 
 ### GitHub Actions Workflows
 - **Build and Test**: Multi-platform testing with multiple build configurations
