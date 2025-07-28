@@ -13,6 +13,8 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
 
+# --- early guards -------------------------------------------------------------
+
 # Auto-detect project root
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -23,6 +25,12 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
     printf 'Not in a git repository\n' >&2
     exit 1
 }
+
+# Early git command check
+if ! command -v git >/dev/null 2>&1; then
+    printf 'Error: git command not found\n' >&2
+    exit 1
+fi
 
 show_help() {
     cat << EOF
@@ -84,6 +92,8 @@ JSON_OUTPUT=false
 IGNORE_WHITESPACE=false
 SUGGEST_ONLY=false
 
+# --- defaults / config --------------------------------------------------------
+
 # Configurable thresholds (can be overridden by environment)
 MIN_MAJOR_DIFF_LINES="${MIN_MAJOR_DIFF_LINES:-2000}"
 MIN_MINOR_DIFF_LINES="${MIN_MINOR_DIFF_LINES:-50}"
@@ -97,86 +107,37 @@ MAJOR_REQUIRE_BREAKING="${MAJOR_REQUIRE_BREAKING:-true}"
 # Normalize MAJOR_REQUIRE_BREAKING once for consistency
 REQ="${MAJOR_REQUIRE_BREAKING,,}"
 
+# --- arg parsing --------------------------------------------------------------
+
 # Parse arguments with proper validation
 while [[ $# -gt 0 ]]; do
     case $1 in
         --since|--since-tag)
-            if [[ -z "${2-}" || "${2-}" == -* ]]; then
-                printf 'Error: --since requires a value\n' >&2
-                exit 1
-            fi
-            SINCE_TAG="$2"
-            shift 2
-            ;;
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --since requires a value\n' >&2; exit 1; }
+            SINCE_TAG="$2"; shift 2;;
         --since-commit)
-            if [[ -z "${2-}" || "${2-}" == -* ]]; then
-                printf 'Error: --since-commit requires a value\n' >&2
-                exit 1
-            fi
-            SINCE_COMMIT="$2"
-            shift 2
-            ;;
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --since-commit requires a value\n' >&2; exit 1; }
+            SINCE_COMMIT="$2"; shift 2;;
         --since-date)
-            if [[ -z "${2-}" || "${2-}" == -* ]]; then
-                printf 'Error: --since-date requires a value\n' >&2
-                exit 1
-            fi
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --since-date requires a value\n' >&2; exit 1; }
             # Validate date format (YYYY-MM-DD)
-            if [[ ! "$2" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-                printf 'Error: --since-date requires YYYY-MM-DD format\n' >&2
-                exit 1
-            fi
+            [[ "$2" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { printf 'Error: --since-date requires YYYY-MM-DD format\n' >&2; exit 1; }
             
             # Validate date components
             IFS='-' read -r year month day <<< "$2"
-            if [[ "$month" -lt 1 || "$month" -gt 12 ]]; then
-                printf 'Error: Invalid month in date %s (must be 01-12)\n' "$2" >&2
-                exit 1
-            fi
-            if [[ "$day" -lt 1 || "$day" -gt 31 ]]; then
-                printf 'Error: Invalid day in date %s (must be 01-31)\n' "$2" >&2
-                exit 1
-            fi
-            SINCE_DATE="$2"
-            shift 2
-            ;;
+            ((month>=1 && month<=12)) || { printf 'Error: Invalid month in date %s (must be 01-12)\n' "$2" >&2; exit 1; }
+            ((day>=1 && day<=31)) || { printf 'Error: Invalid day in date %s (must be 01-31)\n' "$2" >&2; exit 1; }
+            SINCE_DATE="$2"; shift 2;;
         --repo-root)
-            if [[ -z "${2-}" || "${2-}" == -* ]]; then
-                printf 'Error: --repo-root requires a value\n' >&2
-                exit 1
-            fi
-            REPO_ROOT="$2"
-            shift 2
-            ;;
-        --verbose)
-            VERBOSE=true
-            shift
-            ;;
-        --machine)
-            MACHINE_OUTPUT=true
-            shift
-            ;;
-        --json)
-            JSON_OUTPUT=true
-            shift
-            ;;
-        --ignore-whitespace)
-            IGNORE_WHITESPACE=true
-            shift
-            ;;
-        --suggest-only)
-            SUGGEST_ONLY=true
-            shift
-            ;;
-        --help|-h)
-            show_help
-            exit 0
-            ;;
-        *)
-            printf 'Error: Unknown option: %s\n' "$1" >&2
-            show_help
-            exit 1
-            ;;
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --repo-root requires a value\n' >&2; exit 1; }
+            REPO_ROOT="$2"; shift 2;;
+        --verbose) VERBOSE=true; shift;;
+        --machine) MACHINE_OUTPUT=true; shift;;
+        --json) JSON_OUTPUT=true; shift;;
+        --ignore-whitespace) IGNORE_WHITESPACE=true; shift;;
+        --suggest-only) SUGGEST_ONLY=true; shift;;
+        --help|-h) show_help; exit 0;;
+        *) printf 'Error: Unknown option: %s\n' "$1" >&2; show_help; exit 1;;
     esac
 done
 
@@ -189,6 +150,8 @@ if [[ -n "$REPO_ROOT" ]]; then
     }
 fi
 
+# --- helpers ------------------------------------------------------------------
+
 # Validate git reference
 verify_ref() {
     local ref="$1"
@@ -200,33 +163,22 @@ verify_ref() {
 
 # Determine the base for comparison with better error handling
 get_base_reference() {
-    local ref_type=""
-    
     if [[ -n "$SINCE_COMMIT" ]]; then
-        verify_ref "$SINCE_COMMIT"
-        printf '%s|commit' "$SINCE_COMMIT"
-        return
+        verify_ref "$SINCE_COMMIT"; printf '%s|commit' "$SINCE_COMMIT"; return
     elif [[ -n "$SINCE_TAG" ]]; then
-        verify_ref "$SINCE_TAG"
-        printf '%s|tag' "$SINCE_TAG"
-        return
+        verify_ref "$SINCE_TAG"; printf '%s|tag' "$SINCE_TAG"; return
     elif [[ -n "$SINCE_DATE" ]]; then
         # Find the latest commit before the specified date
         local ref
         ref=$(git rev-list -1 --before="$SINCE_DATE 23:59:59" HEAD 2>/dev/null || true)
         if [[ -n "$ref" ]]; then
-            verify_ref "$ref"
-            printf '%s|date' "$ref"
+            verify_ref "$ref"; printf '%s|date' "$ref"
         else
             printf 'Warning: No commits found before %s, using first commit\n' "$SINCE_DATE" >&2
             local first_commit
             first_commit=$(git rev-list --max-parents=0 HEAD 2>/dev/null || true)
-            if [[ -n "$first_commit" ]]; then
-                printf '%s|first' "$first_commit"
-            else
-                printf 'Error: No commits found in repository\n' >&2
-                exit 1
-            fi
+            [[ -n "$first_commit" ]] || { printf 'Error: No commits found in repository\n' >&2; exit 1; }
+            printf '%s|first' "$first_commit"
         fi
         return
     fi
@@ -246,12 +198,8 @@ get_base_reference() {
             # Only use first commit if HEAD~1 doesn't exist (single commit repo)
             local first_commit
             first_commit=$(git rev-list --max-parents=0 HEAD 2>/dev/null || true)
-            if [[ -n "$first_commit" ]]; then
-                printf '%s|first' "$first_commit"
-            else
-                printf 'Error: No commits found in repository\n' >&2
-                exit 1
-            fi
+            [[ -n "$first_commit" ]] || { printf 'Error: No commits found in repository\n' >&2; exit 1; }
+            printf '%s|first' "$first_commit"
         fi
     fi
 }
@@ -261,18 +209,12 @@ check_commit_range() {
     local base_ref="$1"
     
     # Check if there are any commits between base_ref and HEAD
-    if ! git rev-list "$base_ref"..HEAD >/dev/null 2>&1; then
-        printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2
-        return 1
-    fi
+    git rev-list "$base_ref"..HEAD >/dev/null 2>&1 || { printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2; return 1; }
     
     local commit_count
     commit_count=$(git rev-list --count "$base_ref"..HEAD 2>/dev/null || printf '0')
     
-    if [[ "$commit_count" -eq 0 ]]; then
-        printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2
-        return 1
-    fi
+    (( commit_count > 0 )) || { printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2; return 1; }
     
     return 0
 }
@@ -334,35 +276,60 @@ extract_cli_options() {
         printf 'short_options_after=\n'
         printf 'long_options_before=\n'
         printf 'long_options_after=\n'
+        printf 'breaking_changes=false\n'
+        printf 'api_breaking=false\n'
+        printf 'security_keywords=0\n'
         return
     fi
     
     # Extract short options from getopt calls - scan only changed source files
     local short_before short_after
-    local changed_files
-    # FIXED: Use -z and handle all C/C++ extensions, make NUL-safe
-    mapfile -d '' changed_files < <(git -c core.quotepath=false diff -z --name-only "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' 2>/dev/null || printf '')
+    local long_before long_after
+    local -a changed_files=()
     
-    if [[ ${#changed_files[@]} -gt 0 ]]; then
-        short_before=$(for file in "${changed_files[@]}"; do
-            git show "$base_ref:$file" 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"'
-        done | sort -u | tr -d '\n' || printf '')
-        short_after=$(for file in "${changed_files[@]}"; do
-            git show "$target_ref:$file" 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"'
-        done | sort -u | tr -d '\n' || printf '')
+    # Collect changed source files (NUL-safe; portable without mapfile)
+    while IFS= read -r -d '' f; do changed_files+=("$f"); done \
+        < <(git -c core.quotepath=false diff -z --name-only "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' 2>/dev/null || printf '')
+    
+    if (( ${#changed_files[@]} > 0 )); then
+        short_before=$(
+            for file in "${changed_files[@]}"; do
+                git show "$base_ref:$file" 2>/dev/null \
+                | grep -E 'getopt\(|getopt_long\(' \
+                | grep -o '"[^"]*"' \
+                | tr -d '"' || true
+            done | sort -u | tr -d '\n' || printf ''
+        )
+        short_after=$(
+            for file in "${changed_files[@]}"; do
+                git show "$target_ref:$file" 2>/dev/null \
+                | grep -E 'getopt\(|getopt_long\(' \
+                | grep -o '"[^"]*"' \
+                | tr -d '"' || true
+            done | sort -u | tr -d '\n' || printf ''
+        )
         
         # Extract long options from struct option arrays - improved detection
-        long_before=$(for file in "${changed_files[@]}"; do
-            git show "$base_ref:$file" 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"'
-        done | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
-        long_after=$(for file in "${changed_files[@]}"; do
-            git show "$target_ref:$file" 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"'
-        done | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
+        long_before=$(
+            for file in "${changed_files[@]}"; do
+                git show "$base_ref:$file" 2>/dev/null \
+                | grep -A 20 'struct option.*long_options' \
+                | grep '{"[^"]*"' \
+                | grep -o '"[^"]*"' \
+                | tr -d '"' || true
+            done | sort -u | tr '\n' ',' | sed 's/,$//' || printf ''
+        )
+        long_after=$(
+            for file in "${changed_files[@]}"; do
+                git show "$target_ref:$file" 2>/dev/null \
+                | grep -A 20 'struct option.*long_options' \
+                | grep '{"[^"]*"' \
+                | grep -o '"[^"]*"' \
+                | tr -d '"' || true
+            done | sort -u | tr '\n' ',' | sed 's/,$//' || printf ''
+        )
     else
-        short_before=""
-        short_after=""
-        long_before=""
-        long_after=""
+        short_before=""; short_after=""; long_before=""; long_after=""
     fi
     
     # Enhanced breaking change detection: look for removed case labels
@@ -370,41 +337,53 @@ extract_cli_options() {
     
     # Check for removed case labels in switch statements
     local removed_cases
-    removed_cases=$(git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' | grep '^-[[:space:]]*case[[:space:]]' | sed 's/^-[[:space:]]*case[[:space:]]*//' | sort -u || printf '')
+    removed_cases=$(
+        git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' \
+        | grep '^-[[:space:]]*case[[:space:]]' \
+        | sed 's/^-[[:space:]]*case[[:space:]]*//' \
+        | sort -u || printf ''
+    )
     
     if [[ -n "$removed_cases" ]]; then
         # Check if corresponding +case appears for each removed case
         local added_cases
-        added_cases=$(git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' | grep '^+[[:space:]]*case[[:space:]]' | sed 's/^+[[:space:]]*case[[:space:]]*//' | sort -u || printf '')
+        added_cases=$(
+            git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' \
+            | grep '^+[[:space:]]*case[[:space:]]' \
+            | sed 's/^+[[:space:]]*case[[:space:]]*//' \
+            | sort -u || printf ''
+        )
         
         # If any removed case doesn't have a corresponding added case, it's breaking
         local missing_cases
-        missing_cases=$(comm -23 <(printf '%s' "$removed_cases" | tr '\n' '\n' | sort -u) <(printf '%s' "$added_cases" | tr '\n' '\n' | sort -u) 2>/dev/null || printf '')
+        missing_cases=$(
+            comm -23 <(printf '%s\n' "$removed_cases" | sort -u) <(printf '%s\n' "$added_cases" | sort -u) 2>/dev/null || printf ''
+        )
         
-        if [[ -n "$missing_cases" ]]; then
-            breaking_changes=true
-        fi
+        [[ -n "$missing_cases" ]] && breaking_changes=true
     fi
     
     # Check for API-breaking hints in headers
     local api_breaking=false
     local removed_prototypes
     # FIXED: Include both include/ and src/ directories for header prototype checks
-    removed_prototypes=$(git -c core.quotepath=false diff --unified=0 "$base_ref".."$target_ref" \
-      -- ':(glob)include/*.{h,hpp,hh}' ':(glob)src/*.{h,hpp,hh}' \
-      | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/' | wc -l || printf '0')
+    removed_prototypes=$(
+        git -c core.quotepath=false diff --unified=0 "$base_ref".."$target_ref" \
+            -- ':(glob)include/*.{h,hpp,hh}' ':(glob)src/*.{h,hpp,hh}' \
+        | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/' \
+        | wc -l || printf '0'
+    )
     
-    if [[ "$removed_prototypes" -gt 0 ]]; then
-        api_breaking=true
-    fi
+    (( removed_prototypes > 0 )) && api_breaking=true
     
     # Check for explicit API-BREAKING comments
     local explicit_breaking
-    explicit_breaking=$(git diff "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' | grep -i 'API-BREAKING:' | wc -l || printf '0')
+    explicit_breaking=$(
+        git diff "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' \
+        | grep -i 'API-BREAKING:' | wc -l || printf '0'
+    )
     
-    if [[ "$explicit_breaking" -gt 0 ]]; then
-        api_breaking=true
-    fi
+    (( explicit_breaking > 0 )) && api_breaking=true
     
     # Security/crash detection in commit messages - FIXED: Gate with code changes
     local security_keywords=0
@@ -417,7 +396,11 @@ extract_cli_options() {
     
     # Only count security keywords if there are code changes or API/CLI breakage
     if [[ "$has_code_changes" = "true" ]] || [[ "$api_breaking" = "true" ]] || [[ "$breaking_changes" = "true" ]]; then
-        security_keywords=$(git log --format="%s %b" "$base_ref".."$target_ref" | grep -i -E '(security|cve|crash|segfault|uaf|overflow|xss|vulnerability)' | wc -l || printf '0')
+        security_keywords=$(
+            git log --format="%s %b" "$base_ref".."$target_ref" \
+            | grep -i -E '(security|cve|crash|segfault|uaf|overflow|xss|vulnerability)' \
+            | wc -l || printf '0'
+        )
     fi
     
     printf 'short_options_before=%s\n' "$short_before"
@@ -474,12 +457,19 @@ analyze_changes() {
     local breaking_cli_changes=false
     
     # Process changes with NUL-delimited output to handle spaces and renames
-    # FIXED: Read the whole record once and split on TABs
-    while IFS=$'\t' read -r -d '' status path1 path2; do
-        local file="$path1"
+    # NUL-safe iteration over name-status:
+    # status\0path1\0[ path2\0 if R/C ]
+    while IFS= read -r -d '' status; do
+        local path1 path2 file
+        IFS= read -r -d '' path1
+        file="$path1"
         case "${status:0:1}" in
-            R|C) file="$path2" ;;  # for renames/copies use new path
+            R|C)
+                IFS= read -r -d '' path2
+                file="$path2"
+                ;;
         esac
+        
         case "${status:0:1}" in
             A)
                 ((added_files++))
@@ -499,38 +489,38 @@ analyze_changes() {
     local cli_analysis
     cli_analysis=$(extract_cli_options "$base_ref" "HEAD")
     local short_before short_after long_before long_after
-    short_before=$(printf '%s' "$cli_analysis" | grep "short_options_before=" | cut -d'=' -f2)
-    short_after=$(printf '%s' "$cli_analysis" | grep "short_options_after=" | cut -d'=' -f2)
-    long_before=$(printf '%s' "$cli_analysis" | grep "long_options_before=" | cut -d'=' -f2)
-    long_after=$(printf '%s' "$cli_analysis" | grep "long_options_after=" | cut -d'=' -f2)
+    short_before=$(printf '%s\n' "$cli_analysis" | grep "^short_options_before=" | cut -d'=' -f2)
+    short_after=$(printf '%s\n' "$cli_analysis" | grep "^short_options_after=" | cut -d'=' -f2)
+    long_before=$(printf '%s\n' "$cli_analysis" | grep "^long_options_before=" | cut -d'=' -f2)
+    long_after=$(printf '%s\n' "$cli_analysis" | grep "^long_options_after=" | cut -d'=' -f2)
     local breaking_changes
-    breaking_changes=$(printf '%s' "$cli_analysis" | grep "breaking_changes=" | cut -d'=' -f2)
+    breaking_changes=$(printf '%s\n' "$cli_analysis" | grep "^breaking_changes=" | cut -d'=' -f2)
     local api_breaking
-    api_breaking=$(printf '%s' "$cli_analysis" | grep "api_breaking=" | cut -d'=' -f2)
+    api_breaking=$(printf '%s\n' "$cli_analysis" | grep "^api_breaking=" | cut -d'=' -f2)
     local security_keywords
-    security_keywords=$(printf '%s' "$cli_analysis" | grep "security_keywords=" | cut -d'=' -f2)
+    security_keywords=$(printf '%s\n' "$cli_analysis" | grep "^security_keywords=" | cut -d'=' -f2)
     
     # Check for CLI changes by comparing option sets
     if [[ -n "$short_after" ]] && [[ "$short_after" != "$short_before" ]]; then
         cli_changes=true
         # Check for breaking changes (removed options) - FIXED: Harden comm inputs
         local removed_short
-        removed_short=$(comm -23 <(printf '%s' "$short_before" | fold -w1 | sort -u) \
-                                      <(printf '%s' "$short_after"  | fold -w1 | sort -u) 2>/dev/null || printf '')
-        if [[ -n "$removed_short" ]]; then
-            breaking_cli_changes=true
-        fi
+        removed_short=$(
+            comm -23 <(printf '%s' "$short_before" | fold -w1 | sort -u) \
+                     <(printf '%s' "$short_after"  | fold -w1 | sort -u) 2>/dev/null || printf ''
+        )
+        [[ -n "$removed_short" ]] && breaking_cli_changes=true
     fi
     
     if [[ -n "$long_after" ]] && [[ "$long_after" != "$long_before" ]]; then
         cli_changes=true
         # Check for breaking changes (removed long options) - FIXED: Harden comm inputs
         local removed_long
-        removed_long=$(comm -23 <(printf '%s' "$long_before" | tr ',' '\n' | sort -u) \
-                                     <(printf '%s' "$long_after"  | tr ',' '\n' | sort -u) 2>/dev/null || printf '')
-        if [[ -n "$removed_long" ]]; then
-            breaking_cli_changes=true
-        fi
+        removed_long=$(
+            comm -23 <(printf '%s' "$long_before" | tr ',' '\n' | sort -u) \
+                     <(printf '%s' "$long_after"  | tr ',' '\n' | sort -u) 2>/dev/null || printf ''
+        )
+        [[ -n "$removed_long" ]] && breaking_cli_changes=true
     fi
     
     # Enhanced breaking change detection
@@ -574,6 +564,11 @@ calculate_next_version() {
         return
     fi
     
+    # FIXED: Validate VERSION format
+    if [[ ! $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        current_version=0.0.0
+    fi
+    
     local major minor patch
     IFS='.' read -r major minor patch <<< "$current_version"
     
@@ -608,59 +603,32 @@ suggest_version_bump() {
     local security_keywords="${11}"
     
     # MAJOR: Breaking CLI changes, API breaking changes, security issues, or very large changes
-    if [[ "$breaking_cli_changes" = "true" ]]; then
-        printf 'major'
-        return
-    fi
-    
-    if [[ "$api_breaking" = "true" ]]; then
-        printf 'major'
-        return
-    fi
-    
-    if [[ "${security_keywords:-0}" -gt 0 ]]; then
-        printf 'major'
-        return
-    fi
-    
+    if [[ "$breaking_cli_changes" = "true" ]]; then printf 'major'; return; fi
+    if [[ "$api_breaking" = "true" ]]; then printf 'major'; return; fi
+    if [[ "${security_keywords:-0}" -gt 0 ]]; then printf 'major'; return; fi
     if [[ "${diff_size:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
         # Only suggest major for large diffs if breaking changes are not required
         # FIXED: Use normalized REQ variable
         if [[ "$REQ" != "true" && "$REQ" != "1" && "$REQ" != "yes" ]]; then
-            printf 'major'
-            return
+            printf 'major'; return
         fi
     fi
     
     # MINOR: New CLI options, new features, or significant new content
-    if [[ "$cli_changes" = "true" ]]; then
-        printf 'minor'
-        return
-    fi
-    
-    if [[ "${new_source_files:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then
-        printf 'minor'
-        return
-    fi
-    
-    if [[ "${new_test_files:-0}" -ge "$MIN_NEW_TEST_FILES" ]]; then
-        printf 'minor'
-        return
-    fi
-    
-    if [[ "${new_doc_files:-0}" -ge "$MIN_NEW_DOC_FILES" ]]; then
-        printf 'minor'
-        return
-    fi
+    if [[ "$cli_changes" = "true" ]]; then printf 'minor'; return; fi
+    if [[ "${new_source_files:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then printf 'minor'; return; fi
+    if [[ "${new_test_files:-0}" -ge "$MIN_NEW_TEST_FILES" ]]; then printf 'minor'; return; fi
+    if [[ "${new_doc_files:-0}" -ge "$MIN_NEW_DOC_FILES" ]]; then printf 'minor'; return; fi
     
     # PATCH: Significant modifications without new features
     if [[ "${modified_files:-0}" -ge "$MIN_PATCH_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
-        printf 'patch'
-        return
+        printf 'patch'; return
     fi
     
     printf 'none'
 }
+
+# --- main ---------------------------------------------------------------------
 
 # Main analysis
 main() {
@@ -693,35 +661,29 @@ main() {
     current_version=$(tr -d '[:space:]' < VERSION 2>/dev/null || printf '0.0.0')
     
     # FIXED: Validate VERSION format
-    if [[ ! $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        current_version=0.0.0
-    fi
+    [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || current_version=0.0.0
     
     # Analyze changes
     local analysis
     analysis=$(analyze_changes "$base_ref")
-    local added_files
-    added_files=$(printf '%s' "$analysis" | grep "added_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
-    local modified_files
-    modified_files=$(printf '%s' "$analysis" | grep "modified_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
-    local deleted_files
-    deleted_files=$(printf '%s' "$analysis" | grep "deleted_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
-    local new_source_files
-    new_source_files=$(printf '%s' "$analysis" | grep "new_source_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
-    local new_test_files
-    new_test_files=$(printf '%s' "$analysis" | grep "new_test_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
-    local new_doc_files
-    new_doc_files=$(printf '%s' "$analysis" | grep "new_doc_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
-    local cli_changes
-    cli_changes=$(printf '%s' "$analysis" | grep "cli_changes=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
-    local breaking_cli_changes
-    breaking_cli_changes=$(printf '%s' "$analysis" | grep "breaking_cli_changes=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
-    local diff_size
-    diff_size=$(printf '%s' "$analysis" | grep "diff_size=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
-    local api_breaking
-    api_breaking=$(printf '%s' "$analysis" | grep "api_breaking=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
-    local security_keywords
-    security_keywords=$(printf '%s' "$analysis" | grep "security_keywords=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
+    
+    # Extract fields
+    local added_files modified_files deleted_files
+    local new_source_files new_test_files new_doc_files
+    local cli_changes breaking_cli_changes diff_size
+    local api_breaking security_keywords
+
+    added_files=$(printf '%s\n' "$analysis" | grep "^added_files=" | cut -d'=' -f2 | tr -d '\r')
+    modified_files=$(printf '%s\n' "$analysis" | grep "^modified_files=" | cut -d'=' -f2 | tr -d '\r')
+    deleted_files=$(printf '%s\n' "$analysis" | grep "^deleted_files=" | cut -d'=' -f2 | tr -d '\r')
+    new_source_files=$(printf '%s\n' "$analysis" | grep "^new_source_files=" | cut -d'=' -f2 | tr -d '\r')
+    new_test_files=$(printf '%s\n' "$analysis" | grep "^new_test_files=" | cut -d'=' -f2 | tr -d '\r')
+    new_doc_files=$(printf '%s\n' "$analysis" | grep "^new_doc_files=" | cut -d'=' -f2 | tr -d '\r')
+    cli_changes=$(printf '%s\n' "$analysis" | grep "^cli_changes=" | cut -d'=' -f2 | tr -d '\r')
+    breaking_cli_changes=$(printf '%s\n' "$analysis" | grep "^breaking_cli_changes=" | cut -d'=' -f2 | tr -d '\r')
+    diff_size=$(printf '%s\n' "$analysis" | grep "^diff_size=" | cut -d'=' -f2 | tr -d '\r')
+    api_breaking=$(printf '%s\n' "$analysis" | grep "^api_breaking=" | cut -d'=' -f2 | tr -d '\r')
+    security_keywords=$(printf '%s\n' "$analysis" | grep "^security_keywords=" | cut -d'=' -f2 | tr -d '\r')
     
     # Determine suggestion
     local suggestion
