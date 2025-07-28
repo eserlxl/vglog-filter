@@ -59,6 +59,7 @@ cmake .. \
     -DCMAKE_BUILD_TYPE=Debug \
     -DWARNING_MODE=ON \
     -DDEBUG_MODE=ON \
+    -DPERFORMANCE_BUILD=OFF \
     -DENABLE_SANITIZERS=ON
 
 if [ $? -ne 0 ]; then
