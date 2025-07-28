@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
@@ -8,26 +8,39 @@
 #
 # vglog-filter build script
 #
-# Usage: ./build.sh [performance] [warnings] [debug] [clean] [tests]
+# Usage:
+#   ./build.sh [performance] [warnings] [debug] [clean] [tests] [-j N] [--build-dir DIR]
+#   ./build.sh --help
 #
 # Modes:
 #   performance : Enables performance optimizations (disables debug mode if both are set)
 #   warnings    : Enables extra compiler warnings
 #   debug       : Enables debug mode (disables performance mode if both are set)
-#   clean       : Forces a clean build (removes all build artifacts)
-#   tests       : Builds and runs the test suite
+#   clean       : Removes the build directory for a truly clean CMake configure/build
+#   tests       : Builds and runs the test suite (uses ctest if available)
 #
 # Notes:
 #   - 'performance' and 'debug' are mutually exclusive; enabling one disables the other.
 #   - You can combine 'warnings' with either mode.
-#   - 'clean' is useful for configuration changes or debugging build issues
-#   - 'tests' will build the test suite and run basic tests
-#   - Example: ./build.sh performance warnings
-#   - Example: ./build.sh debug clean
-#   - Example: ./build.sh tests
+#   - 'clean' wipes the build dir to avoid generator/tool differences (Ninja/Makefiles).
+#   - Use -j/--jobs to control parallelism. Defaults to detected CPU count.
 
-set -euo pipefail
+set -Eeuo pipefail
+IFS=$'\n\t'
 
+# -------- helpers --------------------------------------------------------------
+msg()  { printf '%s\n' "$*"; }
+warn() { printf 'Warning: %s\n' "$*" >&2; }
+die()  { printf 'Error: %s\n' "$*" >&2; exit 1; }
+
+on_err() {
+  local exit_code=$?
+  warn "Build script failed (exit=$exit_code) at line ${BASH_LINENO[0]}."
+  exit "$exit_code"
+}
+trap on_err ERR
+
+# -------- defaults -------------------------------------------------------------
 PERFORMANCE_BUILD=OFF
 WARNING_MODE=OFF
 DEBUG_MODE=OFF
@@ -35,106 +48,159 @@ CLEAN_BUILD=OFF
 BUILD_TESTS=OFF
 RUN_TESTS=OFF
 
-# Track if any valid arguments were provided
-VALID_ARGS=false
+# Allow overrides via env
+BUILD_DIR="${BUILD_DIR:-build}"
 
-for arg in "$@"; do
-  case $arg in
-    performance)
-      PERFORMANCE_BUILD=ON
-      VALID_ARGS=true
-      ;;
-    warnings)
-      WARNING_MODE=ON
-      VALID_ARGS=true
-      ;;
-    debug)
-      DEBUG_MODE=ON
-      VALID_ARGS=true
-      ;;
-    clean)
-      CLEAN_BUILD=ON
-      VALID_ARGS=true
-      ;;
-    tests)
-      BUILD_TESTS=ON
-      RUN_TESTS=ON
-      VALID_ARGS=true
-      ;;
+# Detect CPU count for parallel builds
+detect_jobs() {
+  if command -v nproc >/dev/null 2>&1; then
+    nproc
+  elif command -v getconf >/dev/null 2>&1; then
+    getconf _NPROCESSORS_ONLN || echo 1
+  else
+    echo 1
+  fi
+}
+JOBS="${JOBS:-$(detect_jobs)}"
+
+# -------- resolve project root -------------------------------------------------
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+PROJECT_ROOT="$SCRIPT_DIR"
+
+# -------- usage ----------------------------------------------------------------
+print_help() {
+  cat <<EOF
+vglog-filter build script
+
+Usage:
+  $(basename "$0") [performance] [warnings] [debug] [clean] [tests] [-j N] [--build-dir DIR]
+  $(basename "$0") --help
+
+Options/Modes:
+  performance        Enable performance optimizations (mutually exclusive with debug)
+  warnings           Enable extra compiler warnings
+  debug              Enable debug mode (mutually exclusive with performance)
+  clean              Remove the build directory and reconfigure
+  tests              Build and run tests (ctest if available)
+  -j, --jobs N       Parallel build jobs (default: $JOBS)
+  --build-dir DIR    Build directory (default: $BUILD_DIR)
+  -h, --help         Show this help
+
+Environment overrides:
+  BUILD_DIR=/path/to/build   Set build directory
+  JOBS=N                     Set parallel build jobs
+EOF
+}
+
+# -------- arg parsing ----------------------------------------------------------
+if [[ $# -eq 0 ]]; then
+  : # default config is fine; still print summary later
+fi
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    performance) PERFORMANCE_BUILD=ON; shift ;;
+    warnings)    WARNING_MODE=ON; shift ;;
+    debug)       DEBUG_MODE=ON; shift ;;
+    clean)       CLEAN_BUILD=ON; shift ;;
+    tests)       BUILD_TESTS=ON; RUN_TESTS=ON; shift ;;
+    -j|--jobs)
+      [[ $# -ge 2 ]] || die "Missing value for $1"
+      [[ "$2" =~ ^[0-9]+$ ]] || die "Invalid jobs value: $2"
+      JOBS="$2"; shift 2 ;;
+    --build-dir)
+      [[ $# -ge 2 ]] || die "Missing value for --build-dir"
+      BUILD_DIR="$2"; shift 2 ;;
+    -h|--help) print_help; exit 0 ;;
     *)
-      echo "Warning: Unknown argument '$arg' will be ignored"
-      ;;
+      warn "Unknown argument '$1' will be ignored"
+      shift ;;
   esac
 done
 
-# If debug is ON, force performance OFF (mutually exclusive)
-if [ "$DEBUG_MODE" = "ON" ]; then
+# Mutually exclusive: debug wins over performance
+if [[ "$DEBUG_MODE" == "ON" ]]; then
   PERFORMANCE_BUILD=OFF
 fi
 
-if [ ! -d build ]; then
-  mkdir build
-fi
-cd build
+# -------- sanity checks --------------------------------------------------------
+command -v cmake >/dev/null 2>&1 || die "cmake not found"
+# ctest is optional; we'll detect it later
+# generator is auto; users can set CMAKE_GENERATOR env externally if desired
 
-echo "Build configuration:"
-echo "  PERFORMANCE_BUILD = $PERFORMANCE_BUILD"
-echo "  WARNING_MODE     = $WARNING_MODE"
-echo "  DEBUG_MODE       = $DEBUG_MODE"
-echo "  CLEAN_BUILD      = $CLEAN_BUILD"
-echo "  BUILD_TESTS      = $BUILD_TESTS"
-echo "  RUN_TESTS        = $RUN_TESTS"
+# -------- prepare build dir ----------------------------------------------------
+cd "$PROJECT_ROOT"
 
-# Show warning if no valid arguments were provided
-if [ "$VALID_ARGS" = "false" ] && [ $# -gt 0 ]; then
-    echo "Warning: No valid build options specified. Using default configuration."
+if [[ "$CLEAN_BUILD" == "ON" ]]; then
+  msg "Clean build requested: removing '$BUILD_DIR'..."
+  rm -rf -- "$BUILD_DIR"
 fi
 
-cmake -DPERFORMANCE_BUILD=$PERFORMANCE_BUILD -DWARNING_MODE=$WARNING_MODE -DDEBUG_MODE=$DEBUG_MODE -DBUILD_TESTS=$BUILD_TESTS ..
+mkdir -p -- "$BUILD_DIR"
 
-if [ "$CLEAN_BUILD" = "ON" ]; then
-  echo "Performing clean build..."
-  make clean
+# -------- configuration summary ------------------------------------------------
+msg "Build configuration:"
+msg "  PROJECT_ROOT    = $PROJECT_ROOT"
+msg "  BUILD_DIR       = $BUILD_DIR"
+msg "  PERFORMANCE     = $PERFORMANCE_BUILD"
+msg "  WARNINGS        = $WARNING_MODE"
+msg "  DEBUG           = $DEBUG_MODE"
+msg "  BUILD_TESTS     = $BUILD_TESTS"
+msg "  RUN_TESTS       = $RUN_TESTS"
+msg "  JOBS            = $JOBS"
+if [[ -n "${CMAKE_GENERATOR:-}" ]]; then
+  msg "  CMAKE_GENERATOR = $CMAKE_GENERATOR"
 fi
 
-make -j"$(nproc)"
+# -------- configure ------------------------------------------------------------
+# Use -S/-B to keep cwd stable and avoid generator-specific assumptions.
+cmake \
+  -S "$PROJECT_ROOT" \
+  -B "$BUILD_DIR" \
+  -DPERFORMANCE_BUILD="$PERFORMANCE_BUILD" \
+  -DWARNING_MODE="$WARNING_MODE" \
+  -DDEBUG_MODE="$DEBUG_MODE" \
+  -DBUILD_TESTS="$BUILD_TESTS"
 
-# Run tests if requested
-if [ "$RUN_TESTS" = "ON" ]; then
-    echo "Running tests..."
-    
-    # Clean up any leftover test files before running tests
-    echo "Cleaning up any leftover test files..."
-    find .. -name "*.tmp" -type f -delete 2>/dev/null || true
-    
-                 if [ -f "build/test_basic" ] && [ -f "build/test_integration" ] && [ -f "build/test_comprehensive" ] && [ -f "build/test_edge_cases" ] && [ -f "build/test_memory_leaks" ]; then
-                 ./build/test_basic
-                 ./build/test_integration
-                 ./build/test_comprehensive
-                 ./build/test_edge_cases
-                 ./build/test_memory_leaks
-                 echo "All tests completed successfully!"
-             else
-                 echo "Warning: Test executables not found. Tests may not have been built correctly."
-                 echo "Attempting to build tests manually..."
-                 g++ -std=c++20 -Wall -pedantic -Wextra -O2 ../test/test_basic.cpp -o test_basic
-                 g++ -std=c++20 -Wall -pedantic -Wextra -O2 ../test/test_integration.cpp -o test_integration
-                 g++ -std=c++20 -Wall -pedantic -Wextra -O2 ../test/test_comprehensive.cpp -o test_comprehensive
-                 g++ -std=c++20 -Wall -pedantic -Wextra -O2 ../test/test_edge_cases.cpp -o test_edge_cases
-                 g++ -std=c++20 -Wall -pedantic -Wextra -O2 ../test/test_memory_leaks.cpp -o test_memory_leaks
-                 if [ -f "test_basic" ] && [ -f "test_integration" ] && [ -f "test_comprehensive" ] && [ -f "test_edge_cases" ] && [ -f "test_memory_leaks" ]; then
-                     ./test_basic
-                     ./test_integration
-                     ./test_comprehensive
-                     ./test_edge_cases
-                     ./test_memory_leaks
-                     echo "All tests completed successfully!"
-                 else
-                     echo "Error: Failed to build test executables."
-                 fi
-             fi
-    
-    # Clean up any test files that might have been left behind
-    echo "Cleaning up test artifacts..."
-    find .. -name "*.tmp" -type f -delete 2>/dev/null || true
-fi 
+# -------- build ----------------------------------------------------------------
+cmake --build "$BUILD_DIR" --parallel "$JOBS"
+
+# -------- run tests (if requested) ---------------------------------------------
+if [[ "$RUN_TESTS" == "ON" ]]; then
+  msg "Running tests..."
+
+  # Pre-test cleanup of stray temp files
+  msg "Cleaning up any leftover test files (*.tmp) before tests..."
+  find "$PROJECT_ROOT" -type f -name '*.tmp' -delete 2>/dev/null || true
+
+  if command -v ctest >/dev/null 2>&1; then
+    # Prefer ctest, honoring CMake's test config
+    ctest --test-dir "$BUILD_DIR" --output-on-failure --parallel "$JOBS"
+    msg "All tests completed (ctest)."
+  else
+    warn "ctest not found; attempting to run test executables directly."
+    # Fallback: run any test_* executable in the build dir
+    shopt -s nullglob
+    tests_found=0
+    for tbin in "$BUILD_DIR"/test_*; do
+      if [[ -x "$tbin" ]]; then
+        msg "Running $(basename "$tbin") ..."
+        "$tbin"
+        tests_found=1
+      fi
+    done
+    shopt -u nullglob
+    if [[ "$tests_found" -eq 0 ]]; then
+      warn "No test executables found in '$BUILD_DIR'."
+      warn "If tests are defined, ensure CMake config enables them (BUILD_TESTS=ON)."
+    else
+      msg "All tests completed (direct executables)."
+    fi
+  fi
+
+  # Post-test cleanup
+  msg "Cleaning up any leftover test files (*.tmp) after tests..."
+  find "$PROJECT_ROOT" -type f -name '*.tmp' -delete 2>/dev/null || true
+fi
+
+msg "Done."
