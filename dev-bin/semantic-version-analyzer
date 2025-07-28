@@ -14,7 +14,7 @@ IFS=$'\n\t'
 
 # Early repository guard
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { 
-    printf 'Error: Not in a git repository\n' >&2
+    printf 'Not in a git repository\n' >&2
     exit 1
 }
 
@@ -40,6 +40,11 @@ Examples:
   $0 --since-date 2025-01-01
   $0 --verbose
   $0 --machine
+  $0 --json
+
+Machine output examples:
+  $0 --machine | grep SUGGESTION
+  $0 --json | jq -r .suggestion
 
 EOF
 }
@@ -183,8 +188,8 @@ classify_path() {
         return 0
     fi
     
-    # Source files (including headers)
-    if [[ "$path" =~ \.(c|cc|cpp|cxx|h|hpp)$ ]] || [[ "$path" =~ ^src/ ]]; then
+    # Source files (including headers) - support multiple source directories
+    if [[ "$path" =~ \.(c|cc|cpp|cxx|h|hpp|hh)$ ]] || [[ "$path" =~ ^(src|source|app)/ ]]; then
         return 30
     fi
     
@@ -193,15 +198,15 @@ classify_path() {
         return 10
     fi
     
-    # Documentation files - support both doc/ and docs/
-    if [[ "$path" =~ ^(doc|docs)/ ]]; then
+    # Documentation files - support both doc/ and docs/ and README files
+    if [[ "$path" =~ ^(doc|docs)/ ]] || [[ "$path" =~ ^README ]]; then
         return 20
     fi
     
     return 0
 }
 
-# Extract CLI options from source code
+# Extract CLI options from source code with improved detection
 extract_cli_options() {
     local base_ref="$1"
     local target_ref="$2"
@@ -218,12 +223,12 @@ extract_cli_options() {
         return
     fi
     
-    # Extract short options from getopt calls
+    # Extract short options from getopt calls - improved regex
     local short_before short_after
-    short_before=$(git show "$base_ref":src/*.cpp 2>/dev/null | grep -o 'getopt([^)]*"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
-    short_after=$(git show "$target_ref":src/*.cpp 2>/dev/null | grep -o 'getopt([^)]*"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
+    short_before=$(git show "$base_ref":src/*.cpp 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
+    short_after=$(git show "$target_ref":src/*.cpp 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
     
-    # Extract long options from struct option arrays
+    # Extract long options from struct option arrays - improved detection
     local long_before long_after
     long_before=$(git show "$base_ref":src/*.cpp 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
     long_after=$(git show "$target_ref":src/*.cpp 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
@@ -275,7 +280,9 @@ analyze_changes() {
             file="$path2"  # Use the new path for classification
         fi
         
-        case "${status:0:1}" in
+        # Improved status handling with proper rename/copy logic
+        local kind="${status:0:1}"
+        case "$kind" in
             A)
                 ((added_files++))
                 case $(classify_path "$file") in
@@ -284,18 +291,27 @@ analyze_changes() {
                     20) ((new_doc_files++)) ;;
                 esac
                 ;;
-            M)
+            M|T)
                 ((modified_files++))
                 ;;
             D)
                 ((deleted_files++))
                 ;;
-            R|C)
-                # Treat renames/copies as modifications
+            R)
+                # Rename: treat as modified
                 ((modified_files++))
                 ;;
-            T|U|X)
-                # Ignore type changes, unmerged, unknown
+            C)
+                # Copy: treat as added
+                ((added_files++))
+                case $(classify_path "$file") in
+                    30) ((new_source_files++)) ;;
+                    10) ((new_test_files++)) ;;
+                    20) ((new_doc_files++)) ;;
+                esac
+                ;;
+            U|X)
+                # Ignore unmerged, unknown
                 ;;
         esac
     done < <(git diff --name-status -z "$base_ref"..HEAD 2>/dev/null)
@@ -330,12 +346,20 @@ analyze_changes() {
         fi
     fi
     
-    # Get diff size using numstat for reliable parsing
+    # Get diff size using shortstat for safer parsing
     local diff_size
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        diff_size=$(git diff -w --numstat "$base_ref"..HEAD 2>&1 | awk '{a+=$1; d+=$2} END{print 0+a+d}' || echo "0")
+        diff_size=$(git diff -w --shortstat "$base_ref"..HEAD | awk '
+            {ins=0; del=0;
+             for (i=1;i<=NF;i++) if ($i ~ /insertion/) ins=$(i-1);
+             for (i=1;i<=NF;i++) if ($i ~ /deletion/)  del=$(i-1);
+             print (ins+del)+0 }' || echo "0")
     else
-        diff_size=$(git diff --numstat "$base_ref"..HEAD 2>&1 | awk '{a+=$1; d+=$2} END{print 0+a+d}' || echo "0")
+        diff_size=$(git diff --shortstat "$base_ref"..HEAD | awk '
+            {ins=0; del=0;
+             for (i=1;i<=NF;i++) if ($i ~ /insertion/) ins=$(i-1);
+             for (i=1;i<=NF;i++) if ($i ~ /deletion/)  del=$(i-1);
+             print (ins+del)+0 }' || echo "0")
     fi
     
     printf 'added_files=%s\n' "$added_files"
@@ -501,23 +525,8 @@ main() {
         printf '  }\n'
         printf '}\n'
     elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
-        # Machine-readable key=value format
+        # Machine-readable key=value format - only SUGGESTION for --machine
         printf 'SUGGESTION=%s\n' "$suggestion"
-        printf 'CURRENT_VERSION=%s\n' "$current_version"
-        if [[ -n "$next_version" ]] && [[ "$suggestion" != "none" ]]; then
-            printf 'NEXT_VERSION=%s\n' "$next_version"
-        fi
-        printf 'BASE_REF=%s\n' "$base_ref"
-        printf 'BASE_REF_TYPE=%s\n' "$ref_type"
-        printf 'ADDED_FILES=%s\n' "$added_files"
-        printf 'MODIFIED_FILES=%s\n' "$modified_files"
-        printf 'DELETED_FILES=%s\n' "$deleted_files"
-        printf 'NEW_SOURCE_FILES=%s\n' "$new_source_files"
-        printf 'NEW_TEST_FILES=%s\n' "$new_test_files"
-        printf 'NEW_DOC_FILES=%s\n' "$new_doc_files"
-        printf 'CLI_CHANGES=%s\n' "$cli_changes"
-        printf 'BREAKING_CLI_CHANGES=%s\n' "$breaking_cli_changes"
-        printf 'DIFF_SIZE=%s\n' "$diff_size"
     else
         # Human-readable output
         printf '=== Semantic Version Analysis v3 ===\n'
@@ -563,7 +572,7 @@ main() {
             
             # Show recent commits
             printf 'Recent commits:\n'
-            git log --oneline "$base_ref"..HEAD | head -10
+            git log --oneline "$base_ref"..HEAD 2>/dev/null | head -10 || printf 'No commits found\n'
             printf '\n'
         fi
         
@@ -606,18 +615,16 @@ main() {
         
         printf '\n'
         
-        # Only show apply command if there's a suggestion
-        if [[ "$suggestion" != "none" ]]; then
+        # Only show apply command if there's a suggestion and the script exists
+        if [[ "$suggestion" != "none" ]] && [[ -x ./dev-bin/bump-version ]]; then
             printf 'To apply this suggestion:\n'
             printf '  ./dev-bin/bump-version %s --commit\n' "$suggestion"
             printf '\n'
             printf 'Or use GitHub Actions:\n'
             printf '  Go to Actions → Auto Version Bump → Run workflow → Choose: %s\n' "$suggestion"
         fi
-    fi
-    
-    # Machine-readable output for CI (always last, unless already in machine mode)
-    if [[ "$MACHINE_OUTPUT" != "true" ]]; then
+        
+        # Always include SUGGESTION= line in verbose output
         printf 'SUGGESTION=%s\n' "$suggestion"
     fi
 }
