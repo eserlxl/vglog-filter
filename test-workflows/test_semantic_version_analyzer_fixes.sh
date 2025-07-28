@@ -4,6 +4,7 @@
 #
 # Test script for semantic version analyzer fixes
 # Tests the bug fixes and improvements made to the analyzer
+# shellcheck disable=SC2317 # eval is used for dynamic command execution
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -29,6 +30,7 @@ run_test() {
     
     # Run the test command
     local output
+    # shellcheck disable=SC2317 # eval is used for dynamic command execution
     output=$(eval "$test_command" 2>&1)
     local exit_code=$?
     

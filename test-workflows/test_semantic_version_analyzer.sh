@@ -4,6 +4,7 @@
 #
 # Test script for semantic-version-analyzer
 # Tests all improvements and edge cases
+# shellcheck disable=SC2317 # eval is used for dynamic command execution
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -50,6 +51,7 @@ run_test() {
     log_info "Running test: $test_name"
     
     local output
+    # shellcheck disable=SC2317 # eval is used for dynamic command execution
     output=$(eval "$test_command" 2>&1)
     # shellcheck disable=SC2034 # exit_code is used for debugging
     local exit_code=$?
