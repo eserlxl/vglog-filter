@@ -248,9 +248,6 @@ check_commit_range() {
     local base_ref="$1"
     local target_ref="$2"
     
-    # Check if there are any commits between base_ref and target_ref
-    git -c color.ui=false rev-list "$base_ref".."$target_ref" >/dev/null 2>&1 || { printf 'Warning: No commits found between %s and %s\n' "$base_ref" "$target_ref" >&2; return 1; }
-    
     local commit_count
     commit_count=$(git -c color.ui=false rev-list --count "$base_ref".."$target_ref" 2>/dev/null || printf '0')
     
@@ -315,7 +312,7 @@ extract_cli_options() {
     
     # Get source files diff
     local srcdiff
-    srcdiff=$(git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' 2>/dev/null || true)
+    srcdiff=$(git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- 'src/**/*.c' 'src/**/*.cc' 'src/**/*.cpp' 'src/**/*.cxx' 'include/**/*.h' 'include/**/*.hpp' 'include/**/*.hh' 2>/dev/null || true)
     
     if [[ -z "$srcdiff" ]]; then
         printf 'short_options_before=\n'
@@ -342,7 +339,7 @@ extract_cli_options() {
     
     # Collect changed source files (NUL-safe; portable without mapfile)
     while IFS= read -r -d '' f; do changed_files+=("$f"); done \
-        < <(git -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' 2>/dev/null || printf '')
+        < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" -- 'src/**/*.c' 'src/**/*.cc' 'src/**/*.cpp' 'src/**/*.cxx' 'include/**/*.h' 'include/**/*.hpp' 'include/**/*.hh' 2>/dev/null || printf '')
     
     if (( ${#changed_files[@]} > 0 )); then
         short_before=$(
@@ -391,8 +388,8 @@ extract_cli_options() {
     # Check for removed case labels in switch statements
     local removed_cases
             removed_cases=$(
-            git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
-            | grep '^-[[:space:]]*case[[:space:]]' \
+            git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- 'src/**/*.c' 'src/**/*.cc' 'src/**/*.cpp' 'src/**/*.cxx' 'include/**/*.h' 'include/**/*.hpp' 'include/**/*.hh' \
+            | grep -E '^-[[:space:]]*case[[:space:]]' \
             | sed 's/^-[[:space:]]*case[[:space:]]*//' \
             | sort -u || printf ''
         )
@@ -401,8 +398,8 @@ extract_cli_options() {
         # Check if corresponding +case appears for each removed case
         local added_cases
         added_cases=$(
-            git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
-            | grep '^+[[:space:]]*case[[:space:]]' \
+            git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- 'src/**/*.c' 'src/**/*.cc' 'src/**/*.cpp' 'src/**/*.cxx' 'include/**/*.h' 'include/**/*.hpp' 'include/**/*.hh' \
+            | grep -E '^\+[[:space:]]*case[[:space:]]' \
             | sed 's/^+[[:space:]]*case[[:space:]]*//' \
             | sort -u || printf ''
         )
@@ -424,28 +421,29 @@ extract_cli_options() {
     # ENHANCED: Avoid false positives on typedefs/macros by requiring semicolon and no leading typedef/#
     removed_prototypes=$(
         git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" \
-            -- ':(glob)include/**/*.{h,hpp,hh}' \
+            -- 'include/**/*.h' 'include/**/*.hpp' 'include/**/*.hh' 'src/**/*.h' 'src/**/*.hpp' 'src/**/*.hh' \
         | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/ && !/^-[[:space:]]*(typedef|#)/' \
         | wc -l || printf '0'
     )
     
-    (( removed_prototypes > 0 )) && api_breaking=true
+    if [[ "${removed_prototypes:-0}" -gt 0 ]]; then
+        api_breaking=true
+    fi
     
     # Check for explicit API-BREAKING comments
     local explicit_breaking
-    explicit_breaking=$(
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
-        | grep -i 'API-BREAKING:' | wc -l || printf '0'
-    )
+    explicit_breaking=$(git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- 'src/**/*.c' 'src/**/*.cc' 'src/**/*.cpp' 'src/**/*.cxx' 'include/**/*.h' 'include/**/*.hpp' 'include/**/*.hh' | grep -i 'API-BREAKING:' | wc -l 2>/dev/null || printf '0')
     
-    (( explicit_breaking > 0 )) && api_breaking=true
+    if [[ "${explicit_breaking:-0}" -gt 0 ]]; then
+        api_breaking=true
+    fi
     
     # Security/crash detection in commit messages - FIXED: Gate with code changes
     local security_keywords=0
     local has_code_changes=false
     
     # Check if there are code changes (src/ or include/ files)
-    if git -c color.ui=false diff -M -C --name-only "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx,h,hpp,hh}' ':(glob)include/**/*.{h,hpp,hh}' | grep -q .; then
+    if git -c color.ui=false diff -M -C --name-only "$base_ref".."$target_ref" -- 'src/**/*.c' 'src/**/*.cc' 'src/**/*.cpp' 'src/**/*.cxx' 'src/**/*.h' 'src/**/*.hpp' 'src/**/*.hh' 'include/**/*.h' 'include/**/*.hpp' 'include/**/*.hh' | grep -q .; then
         has_code_changes=true
     fi
     
@@ -459,37 +457,34 @@ extract_cli_options() {
     fi
     
     # FIXED: Manual argv parser detection for tools that don't use getopt
-    # This is behind --verbose to avoid performance impact
     # NOTE: Limited to C/C++ source files; other languages (shell, Python, etc.) not detected
-    local manual_cli_changes=false
-    local manual_added_long_count=0
-    local manual_removed_long_count=0
+    manual_cli_changes=false
+    manual_added_long_count=0
+    manual_removed_long_count=0
     
-    if [[ "$VERBOSE" = "true" ]]; then
-        # FIXED: Properly distinguish between added and removed long options
-        # Extract added long options (lines starting with +)
-        local added_long_opts
-        added_long_opts=$(
-            git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- 'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            | grep -E '^\+[[:space:]]*--[[:alnum:]-]+' \
-            | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf ''
-        )
-        
-        # Extract removed long options (lines starting with -)
-        local removed_long_opts
-        removed_long_opts=$(
-            git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- 'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            | grep -E '^-[[:space:]]*--[[:alnum:]-]+' \
-            | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf ''
-        )
-        
-        # Count the options
-        manual_added_long_count=$(printf '%s\n' "$added_long_opts" | wc -l || printf '0')
-        manual_removed_long_count=$(printf '%s\n' "$removed_long_opts" | wc -l || printf '0')
-        
-        # Set manual_cli_changes if any options were added or removed
-        (( manual_added_long_count > 0 || manual_removed_long_count > 0 )) && manual_cli_changes=true
-    fi
+    # FIXED: Always run manual CLI detection, not just in verbose mode
+    # Extract added long options (lines starting with +)
+    local added_long_opts
+    added_long_opts=$(
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- 'src/**/*.c' 'src/**/*.cc' 'src/**/*.cpp' 'src/**/*.cxx' \
+        | grep -E '^\+.*--[[:alnum:]-]+' \
+        | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf ''
+    )
+    
+    # Extract removed long options (lines starting with -)
+    local removed_long_opts
+    removed_long_opts=$(
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- 'src/**/*.c' 'src/**/*.cc' 'src/**/*.cpp' 'src/**/*.cxx' \
+        | grep -E '^-.*--[[:alnum:]-]+' \
+        | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf ''
+    )
+    
+    # Count the options
+    manual_added_long_count=$(printf '%s\n' "$added_long_opts" | wc -l || printf '0')
+    manual_removed_long_count=$(printf '%s\n' "$removed_long_opts" | wc -l || printf '0')
+    
+    # Set manual_cli_changes if any options were added or removed
+    (( ${manual_added_long_count:-0} > 0 || ${manual_removed_long_count:-0} > 0 )) && manual_cli_changes=true
     
     # Calculate counts for removed/added options for CI messages
     local removed_short_count=0 added_short_count=0
