@@ -91,8 +91,9 @@ Notes:
   - Colons are filtered from getopt strings to avoid false "removed option" detections
   - All git commands use color.ui=false for consistent output
   - Header prototype detection is restricted to include/** files with semicolon endings
-  - Manual argv parser detection (--verbose) scans for --[a-z0-9-]+ tokens in source files
+  - Manual argv parser detection (--verbose) scans for added/removed --[a-z0-9-]+ tokens in source files
   - Short option change detection normalizes colons to handle argument requirement changes consistently
+  - Rename/copy detection is enabled with -M -C flags for accurate file change tracking
 
 EOF
 }
@@ -253,32 +254,35 @@ check_commit_range() {
     return 0
 }
 
-# Classify file path - improved to handle multiple folder patterns
+# Classify file path - improved to handle multiple folder patterns and nested directories
 classify_path() {
     local path="$1"
     
-    # Skip noise directories and binary/lock artifacts
-    if [[ "$path" =~ ^(build|dist|out|third_party|vendor|\.git|node_modules|target|bin|obj)/ ]] || \
+    # Skip noise directories and binary/lock artifacts (including nested ones)
+    if [[ "$path" =~ /(build|dist|out|third_party|vendor|\.git|node_modules|target|bin|obj)/ ]] || \
+       [[ "$path" =~ ^(build|dist|out|third_party|vendor|\.git|node_modules|target|bin|obj)/ ]] || \
        [[ "$path" =~ \.(lock|exe|dll|so|dylib|jar|war|ear|zip|tar|gz|bz2|xz|7z|rar)$ ]]; then
         printf '0'
         return
     fi
     
-    # Source files (including headers) - support multiple source directories
-    if [[ "$path" =~ \.(c|cc|cpp|cxx|h|hpp|hh)$ ]] || [[ "$path" =~ ^(src|source|app)/ ]]; then
+    # Source files (including headers) - support multiple source directories and nested paths
+    if [[ "$path" =~ \.(c|cc|cpp|cxx|h|hpp|hh)$ ]] || [[ "$path" =~ /(src|source|app)/ ]] || [[ "$path" =~ ^(src|source|app)/ ]]; then
         printf '30'
         return
     fi
     
-    # Test files - support both test/ and tests/
-    if [[ "$path" =~ ^(test|tests)/ ]]; then
+    # Test files - support both test/ and tests/ in nested directories
+    if [[ "$path" =~ /(test|tests)/ ]] || [[ "$path" =~ ^(test|tests)/ ]]; then
         printf '10'
         return
     fi
     
-    # Documentation files - support both doc/ and docs/ and README files
-    # FIXED: Broaden doc classification to include common documentation files
-    if [[ "$path" =~ ^(doc|docs)/ ]] || [[ "$path" =~ ^(README|CHANGELOG|CONTRIBUTING|LICENSE|COPYING|AUTHORS|INSTALL|NEWS|HISTORY) ]]; then
+    # Documentation files - support both doc/ and docs/ and README files in nested directories
+    # FIXED: Broaden doc classification to include common documentation files in any directory
+    if [[ "$path" =~ /(doc|docs)/ ]] || [[ "$path" =~ ^(doc|docs)/ ]] || \
+       [[ "$path" =~ /(README|CHANGELOG|CONTRIBUTING|LICENSE|COPYING|AUTHORS|INSTALL|NEWS|HISTORY) ]] || \
+       [[ "$path" =~ ^(README|CHANGELOG|CONTRIBUTING|LICENSE|COPYING|AUTHORS|INSTALL|NEWS|HISTORY) ]]; then
         printf '20'
         return
     fi
@@ -444,47 +448,69 @@ extract_cli_options() {
         )
     fi
     
-    # Optional: Manual argv parser detection for tools that don't use getopt
+    # FIXED: Manual argv parser detection for tools that don't use getopt
     # This is behind --verbose to avoid performance impact
     local manual_cli_changes=false
+    local manual_added_long_count=0
+    local manual_removed_long_count=0
+    
     if [[ "$VERBOSE" = "true" ]]; then
-        # Detect added/removed --[a-z0-9-]+ tokens in changed C/C++ files
-        local added_long_opts removed_long_opts
+        # FIXED: Properly distinguish between added and removed long options
+        # Extract added long options (lines starting with +)
+        local added_long_opts
         added_long_opts=$(
             git -c color.ui=false diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
-            | grep -o '--[a-z0-9-]\+' | sort -u | wc -l || printf '0'
+            | grep '^+[[:space:]]*--[a-z0-9-]\+' \
+            | grep -o '--[a-z0-9-]\+' | sort -u || printf ''
         )
+        
+        # Extract removed long options (lines starting with -)
+        local removed_long_opts
         removed_long_opts=$(
             git -c color.ui=false diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
-            | grep -o '--[a-z0-9-]\+' | sort -u | wc -l || printf '0'
+            | grep '^-[[:space:]]*--[a-z0-9-]\+' \
+            | grep -o '--[a-z0-9-]\+' | sort -u || printf ''
         )
-        (( added_long_opts > 0 || removed_long_opts > 0 )) && manual_cli_changes=true
+        
+        # Count the options
+        manual_added_long_count=$(printf '%s\n' "$added_long_opts" | wc -l || printf '0')
+        manual_removed_long_count=$(printf '%s\n' "$removed_long_opts" | wc -l || printf '0')
+        
+        # Set manual_cli_changes if any options were added or removed
+        (( manual_added_long_count > 0 || manual_removed_long_count > 0 )) && manual_cli_changes=true
     fi
     
     # Calculate counts for removed/added options for CI messages
     local removed_short_count=0 added_short_count=0
     local removed_long_count=0 added_long_count=0
     
-    if [[ -n "$short_before" ]] && [[ -n "$short_after" ]]; then
+    # FIXED: Handle empty sets properly - compute counts even when one side is empty
+    if [[ -n "$short_before" ]] || [[ -n "$short_after" ]]; then
         removed_short_count=$(
-            comm -23 <(printf '%s' "$short_before" | tr -d ':' | fold -w1 | sort -u) \
-                     <(printf '%s' "$short_after"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l || printf '0'
+            comm -23 <(printf '%s' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) \
+                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l || printf '0'
         )
         added_short_count=$(
-            comm -13 <(printf '%s' "$short_before" | tr -d ':' | fold -w1 | sort -u) \
-                     <(printf '%s' "$short_after"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l || printf '0'
+            comm -13 <(printf '%s' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) \
+                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l || printf '0'
         )
     fi
     
-    if [[ -n "$long_before" ]] && [[ -n "$long_after" ]]; then
+    if [[ -n "$long_before" ]] || [[ -n "$long_after" ]]; then
         removed_long_count=$(
-            comm -23 <(printf '%s' "$long_before" | tr ',' '\n' | sort -u) \
-                     <(printf '%s' "$long_after"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l || printf '0'
+            comm -23 <(printf '%s' "${long_before:-}" | tr ',' '\n' | sort -u) \
+                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l || printf '0'
         )
         added_long_count=$(
-            comm -13 <(printf '%s' "$long_before" | tr ',' '\n' | sort -u) \
-                     <(printf '%s' "$long_after"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l || printf '0'
+            comm -13 <(printf '%s' "${long_before:-}" | tr ',' '\n' | sort -u) \
+                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l || printf '0'
         )
+    fi
+    
+    # Add manual CLI counts to the totals if manual detection found changes
+    if [[ "$manual_cli_changes" = "true" ]]; then
+        added_long_count=$((added_long_count + manual_added_long_count))
+        removed_long_count=$((removed_long_count + manual_removed_long_count))
     fi
     
     printf 'short_options_before=%s\n' "$short_before"
@@ -521,7 +547,7 @@ analyze_changes() {
     
     # Check if there are any changes
     if git -c color.ui=false diff --quiet "$base_ref".."$target_ref"; then
-        printf 'Warning: No changes detected since %s\n' "$base_ref" >&2
+        printf 'Warning: No changes detected between %s and %s\n' "$base_ref" "$target_ref" >&2
         # Return early with zero values
         printf 'added_files=0\n'
         printf 'modified_files=0\n'
@@ -552,6 +578,7 @@ analyze_changes() {
     local breaking_cli_changes=false
     
     # Process changes with NUL-delimited output to handle spaces and renames
+    # FIXED: Enable rename/copy detection with -M -C flags
     # NUL-safe iteration over name-status:
     # status\0path1\0[ path2\0 if R/C ]
     while IFS= read -r -d '' status; do
@@ -578,7 +605,7 @@ analyze_changes() {
                 inc_counters_for "$file"
                 ;;
         esac
-    done < <(git -c color.ui=false -c core.quotepath=false diff --name-status -z "$base_ref".."$target_ref" 2>/dev/null)
+    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" 2>/dev/null)
     
     # Extract CLI options for comparison
     local cli_analysis
@@ -719,6 +746,7 @@ suggest_version_bump() {
     local diff_size="$9"
     local api_breaking="${10}"
     local security_keywords="${11}"
+    local manual_cli_changes="${12}"
     
     # MAJOR: Breaking CLI changes, API breaking changes, security issues, or very large changes
     if [[ "$breaking_cli_changes" = "true" ]]; then printf 'major'; return; fi
@@ -734,6 +762,8 @@ suggest_version_bump() {
     
     # MINOR: New CLI options, new features, or significant new content
     if [[ "$cli_changes" = "true" ]]; then printf 'minor'; return; fi
+    # FIXED: Include manual CLI changes in minor version detection
+    if [[ "${manual_cli_changes:-false}" = "true" ]]; then printf 'minor'; return; fi
     if [[ "${new_source_files:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then printf 'minor'; return; fi
     if [[ "${new_test_files:-0}" -ge "$MIN_NEW_TEST_FILES" ]]; then printf 'minor'; return; fi
     if [[ "${new_doc_files:-0}" -ge "$MIN_NEW_DOC_FILES" ]]; then printf 'minor'; return; fi
@@ -759,6 +789,7 @@ get_bump_reason() {
     local diff_size="$9"
     local api_breaking="${10}"
     local security_keywords="${11}"
+    local manual_cli_changes="${12}"
     
     # MAJOR reasons
     if [[ "$breaking_cli_changes" = "true" ]]; then printf 'breaking_cli'; return; fi
@@ -772,6 +803,8 @@ get_bump_reason() {
     
     # MINOR reasons
     if [[ "$cli_changes" = "true" ]]; then printf 'cli_added'; return; fi
+    # FIXED: Include manual CLI changes in reason detection
+    if [[ "${manual_cli_changes:-false}" = "true" ]]; then printf 'cli_added'; return; fi
     if [[ "${new_source_files:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then printf 'new_src'; return; fi
     if [[ "${new_test_files:-0}" -ge "$MIN_NEW_TEST_FILES" ]]; then printf 'new_tests'; return; fi
     if [[ "${new_doc_files:-0}" -ge "$MIN_NEW_DOC_FILES" ]]; then printf 'new_docs'; return; fi
@@ -863,10 +896,10 @@ main() {
     
     # Determine suggestion and reason
     local suggestion
-    suggestion=$(suggest_version_bump "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size" "$api_breaking" "$security_keywords")
+    suggestion=$(suggest_version_bump "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size" "$api_breaking" "$security_keywords" "$manual_cli_changes")
     
     local reason
-    reason=$(get_bump_reason "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size" "$api_breaking" "$security_keywords")
+    reason=$(get_bump_reason "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size" "$api_breaking" "$security_keywords" "$manual_cli_changes")
     
     # Calculate next version
     local next_version
@@ -1011,6 +1044,8 @@ main() {
                 printf 'Suggested bump: MINOR version\n'
                 if [[ "$cli_changes" = "true" ]]; then
                     printf 'Reason: New CLI options added\n'
+                elif [[ "${manual_cli_changes:-false}" = "true" ]]; then
+                    printf 'Reason: Manual CLI changes detected\n'
                 elif [[ "${new_source_files:-0}" -gt 0 ]]; then
                     printf 'Reason: New source files added (%s)\n' "$new_source_files"
                 elif [[ "${new_test_files:-0}" -gt 0 ]]; then
