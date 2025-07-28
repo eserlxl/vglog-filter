@@ -294,7 +294,11 @@ void process(std::istream& in, const Options& opt)
 
         if (std::regex_search(line, get_re_start())) {
             flush();
-            if (std::regex_search(line, get_re_bytes_head())) continue;
+            if (std::regex_search(line, get_re_bytes_head())) {
+                // Skip processing this line if it's a bytes header
+                continue;
+            }
+            // Continue processing this line as the start of a new block
         }
 
         Str rawLine = line;
@@ -442,7 +446,11 @@ void process_stream(std::istream& in, const Options& opt) {
 
         if (std::regex_search(line, get_re_start())) {
             flush();
-            if (std::regex_search(line, get_re_bytes_head())) continue;
+            if (std::regex_search(line, get_re_bytes_head())) {
+                // Skip processing this line if it's a bytes header
+                continue;
+            }
+            // Continue processing this line as the start of a new block
         }
 
         Str rawLine = line;
