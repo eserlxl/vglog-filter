@@ -19,6 +19,9 @@ NC='\033[0m' # No Color
 TESTS_PASSED=0
 TESTS_FAILED=0
 
+# Script path
+SCRIPT_PATH="/opt/lxl/linux/vglog-filter/dev-bin/semantic-version-analyzer"
+
 # Helper functions
 log_info() {
     printf "${BLUE}[INFO]${NC} %s\n" "$1"
@@ -67,13 +70,13 @@ test_basic_functionality() {
     
     # Test help output
     run_test "Help output" \
-        "./dev-bin/semantic-version-analyzer --help" \
+        "$SCRIPT_PATH --help" \
         "Semantic Version Analyzer v3"
     
-    # Test version output
-    run_test "Version suggestion format" \
-        "./dev-bin/semantic-version-analyzer --suggest-only" \
-        "SUGGESTION=none"
+    # Test machine output format
+    run_test "Machine output format" \
+        "$SCRIPT_PATH --machine" \
+        "SUGGESTION="
 }
 
 # Test path classification
@@ -103,7 +106,7 @@ test_path_classification() {
     
     # Test that source files are classified correctly
     local output
-    output=$(./dev-bin/semantic-version-analyzer --verbose 2>&1)
+    output=$("$SCRIPT_PATH" --verbose 2>&1)
     
     if [[ "$output" == *"New source files: 1"* ]]; then
         log_success "Source file classification"
@@ -152,7 +155,7 @@ test_file_paths_with_spaces() {
     
     # Test that files with spaces are handled correctly
     local output
-    output=$(./dev-bin/semantic-version-analyzer --verbose 2>&1)
+    output=$("$SCRIPT_PATH" --verbose 2>&1)
     
     if [[ "$output" == *"New source files: 1"* ]]; then
         log_success "File paths with spaces"
@@ -192,7 +195,7 @@ test_rename_and_copy() {
     
     # Test that rename is handled correctly
     local output
-    output=$(./dev-bin/semantic-version-analyzer --verbose 2>&1)
+    output=$("$SCRIPT_PATH" --verbose 2>&1)
     
     if [[ "$output" == *"Modified files: 1"* ]]; then
         log_success "File rename handling"
@@ -272,7 +275,7 @@ EOF
     
     # Test that CLI changes are detected
     local output
-    output=$(./dev-bin/semantic-version-analyzer --verbose 2>&1)
+    output=$("$SCRIPT_PATH" --verbose 2>&1)
     
     if [[ "$output" == *"CLI interface changes: true"* ]]; then
         log_success "CLI change detection"
@@ -352,7 +355,7 @@ EOF
     
     # Test that breaking CLI changes are detected
     local output
-    output=$(./dev-bin/semantic-version-analyzer --verbose 2>&1)
+    output=$("$SCRIPT_PATH" --verbose 2>&1)
     
     if [[ "$output" == *"Breaking CLI changes: true"* ]]; then
         log_success "Breaking CLI change detection"
@@ -384,7 +387,7 @@ test_no_changes() {
     
     # Test with no changes
     local output
-    output=$(./dev-bin/semantic-version-analyzer --verbose 2>&1)
+    output=$("$SCRIPT_PATH" --verbose 2>&1)
     
     if [[ "$output" == *"SUGGESTION=none"* ]]; then
         log_success "No changes scenario"
@@ -423,7 +426,7 @@ test_threshold_configuration() {
     
     # Test with default thresholds
     local output
-    output=$(./dev-bin/semantic-version-analyzer --verbose 2>&1)
+    output=$("$SCRIPT_PATH" --verbose 2>&1)
     
     if [[ "$output" == *"New source files: 5"* ]]; then
         log_success "Threshold configuration"
@@ -446,7 +449,7 @@ test_error_handling() {
     cd "$test_dir" || exit 1
     
     local output
-    output=$(./dev-bin/semantic-version-analyzer 2>&1)
+    output=$("$SCRIPT_PATH" 2>&1)
     
     if [[ "$output" == *"Not in a git repository"* ]]; then
         log_success "Git repository check"
@@ -478,7 +481,7 @@ test_json_output() {
     
     # Test JSON output
     local output
-    output=$(./dev-bin/semantic-version-analyzer --json 2>&1)
+    output=$("$SCRIPT_PATH" --json 2>&1)
     
     if [[ "$output" == *'"suggestion"'* ]] && [[ "$output" == *'"current_version"'* ]]; then
         log_success "JSON output format"
@@ -496,13 +499,13 @@ main() {
     log_info "Starting semantic version analyzer tests..."
     
     # Check if we're in the right directory
-    if [[ ! -f "./dev-bin/semantic-version-analyzer" ]]; then
-        log_error "semantic-version-analyzer not found. Run from project root."
+    if [[ ! -f "$SCRIPT_PATH" ]]; then
+        log_error "semantic-version-analyzer not found at $SCRIPT_PATH"
         exit 1
     fi
     
     # Make sure the script is executable
-    chmod +x ./dev-bin/semantic-version-analyzer
+    chmod +x "$SCRIPT_PATH"
     
     # Run all tests
     test_basic_functionality

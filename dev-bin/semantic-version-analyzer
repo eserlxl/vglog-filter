@@ -12,6 +12,12 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
+# Early repository guard
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { 
+    printf 'Error: Not in a git repository\n' >&2
+    exit 1
+}
+
 show_help() {
     cat << EOF
 Semantic Version Analyzer v3 for vglog-filter
@@ -20,10 +26,11 @@ Usage: $0 [options]
 
 Options:
   --since <tag>     Analyze changes since specific tag (default: last tag)
+  --since-tag <tag> Alias for --since
   --since-commit <hash>  Analyze changes since specific commit
   --since-date <date>    Analyze changes since specific date (YYYY-MM-DD)
   --verbose         Show detailed analysis
-  --suggest-only    Only show suggestion, don't analyze
+  --machine        Output machine-readable key=value format
   --json           Output machine-readable JSON
   --ignore-whitespace  Ignore whitespace changes in diff size calculation
   --help            Show this help
@@ -32,6 +39,7 @@ Examples:
   $0 --since v1.1.0
   $0 --since-date 2025-01-01
   $0 --verbose
+  $0 --machine
 
 EOF
 }
@@ -41,23 +49,24 @@ SINCE_TAG=""
 SINCE_COMMIT=""
 SINCE_DATE=""
 VERBOSE=false
-SUGGEST_ONLY=false
+MACHINE_OUTPUT=false
 JSON_OUTPUT=false
 IGNORE_WHITESPACE=false
 
 # Configurable thresholds (can be overridden by environment)
-MIN_MAJOR_DIFF_LINES="${MIN_MAJOR_DIFF_LINES:-500}"
-MIN_MINOR_DIFF_LINES="${MIN_MINOR_DIFF_LINES:-800}"
-MIN_PATCH_DIFF_LINES="${MIN_PATCH_DIFF_LINES:-500}"
-MIN_PATCH_FILES="${MIN_PATCH_FILES:-10}"
+MIN_MAJOR_DIFF_LINES="${MIN_MAJOR_DIFF_LINES:-2000}"
+MIN_MINOR_DIFF_LINES="${MIN_MINOR_DIFF_LINES:-50}"
+MIN_PATCH_DIFF_LINES="${MIN_PATCH_DIFF_LINES:-100}"
+MIN_PATCH_FILES="${MIN_PATCH_FILES:-5}"
 MIN_NEW_SOURCE_FILES="${MIN_NEW_SOURCE_FILES:-2}"
 MIN_NEW_TEST_FILES="${MIN_NEW_TEST_FILES:-3}"
 MIN_NEW_DOC_FILES="${MIN_NEW_DOC_FILES:-2}"
+MAJOR_REQUIRE_BREAKING="${MAJOR_REQUIRE_BREAKING:-true}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --since)
+        --since|--since-tag)
             SINCE_TAG="$2"
             shift 2
             ;;
@@ -73,8 +82,8 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        --suggest-only)
-            SUGGEST_ONLY=true
+        --machine)
+            MACHINE_OUTPUT=true
             shift
             ;;
         --json)
@@ -108,13 +117,15 @@ verify_ref() {
 
 # Determine the base for comparison
 get_base_reference() {
+    local ref_type=""
+    
     if [[ -n "$SINCE_COMMIT" ]]; then
         verify_ref "$SINCE_COMMIT"
-        printf '%s' "$SINCE_COMMIT"
+        printf '%s|commit' "$SINCE_COMMIT"
         return
     elif [[ -n "$SINCE_TAG" ]]; then
         verify_ref "$SINCE_TAG"
-        printf '%s' "$SINCE_TAG"
+        printf '%s|tag' "$SINCE_TAG"
         return
     elif [[ -n "$SINCE_DATE" ]]; then
         # Find the latest commit before the specified date
@@ -122,13 +133,13 @@ get_base_reference() {
         ref=$(git rev-list -1 --before="$SINCE_DATE 23:59:59" HEAD 2>/dev/null || true)
         if [[ -n "$ref" ]]; then
             verify_ref "$ref"
-            printf '%s' "$ref"
+            printf '%s|date' "$ref"
         else
             printf 'Warning: No commits found before %s, using first commit\n' "$SINCE_DATE" >&2
             local first_commit
             first_commit=$(git rev-list --max-parents=0 HEAD 2>/dev/null || true)
             if [[ -n "$first_commit" ]]; then
-                printf '%s' "$first_commit"
+                printf '%s|first' "$first_commit"
             else
                 printf 'Error: No commits found in repository\n' >&2
                 exit 1
@@ -137,29 +148,38 @@ get_base_reference() {
         return
     fi
     
-    # Default to last tag
+    # Default to last tag, fallback to HEAD~1 if no tags exist
     local last_tag
     last_tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
     if [[ -n "$last_tag" ]]; then
-        printf '%s' "$last_tag"
+        printf '%s|last_tag' "$last_tag"
     else
-        # If no tags exist, use the first commit
-        local first_commit
-        first_commit=$(git rev-list --max-parents=0 HEAD 2>/dev/null || true)
-        if [[ -n "$first_commit" ]]; then
-            printf '%s' "$first_commit"
+        # If no tags exist, use HEAD~1 instead of first commit
+        local parent_commit
+        parent_commit=$(git rev-parse HEAD~1 2>/dev/null || true)
+        if [[ -n "$parent_commit" ]]; then
+            printf '%s|parent' "$parent_commit"
         else
-            printf 'Error: No commits found in repository\n' >&2
-            exit 1
+            # Only use first commit if HEAD~1 doesn't exist (single commit repo)
+            local first_commit
+            first_commit=$(git rev-list --max-parents=0 HEAD 2>/dev/null || true)
+            if [[ -n "$first_commit" ]]; then
+                printf '%s|first' "$first_commit"
+            else
+                printf 'Error: No commits found in repository\n' >&2
+                exit 1
+            fi
         fi
     fi
 }
 
-# Classify file path - fixed to match project layout
+# Classify file path - improved to handle multiple folder patterns
 classify_path() {
     local path="$1"
-    # Skip vendor/build directories
-    if [[ "$path" =~ ^(third_party|vendor|build|dist)/ ]]; then
+    
+    # Skip noise directories and binary/lock artifacts
+    if [[ "$path" =~ ^(build|dist|out|third_party|vendor|.git|node_modules|target|bin|obj)/ ]] || \
+       [[ "$path" =~ \.(lock|exe|dll|so|dylib|jar|war|ear|zip|tar|gz|bz2|xz|7z|rar)$ ]]; then
         return 0
     fi
     
@@ -168,20 +188,53 @@ classify_path() {
         return 30
     fi
     
-    # Test files
-    if [[ "$path" =~ ^test/ ]]; then
+    # Test files - support both test/ and tests/
+    if [[ "$path" =~ ^(test|tests)/ ]]; then
         return 10
     fi
     
-    # Documentation files
-    if [[ "$path" =~ ^doc/ ]]; then
+    # Documentation files - support both doc/ and docs/
+    if [[ "$path" =~ ^(doc|docs)/ ]]; then
         return 20
     fi
     
     return 0
 }
 
-# CLI-focused analysis based on file changes and diff size
+# Extract CLI options from source code
+extract_cli_options() {
+    local base_ref="$1"
+    local target_ref="$2"
+    
+    # Get source files diff
+    local srcdiff
+    srcdiff=$(git diff "$base_ref".."$target_ref" -- src ':(glob)/*.[ch]pp' ':(glob)/*.[ch]' 2>/dev/null || true)
+    
+    if [[ -z "$srcdiff" ]]; then
+        printf 'short_options_before=\n'
+        printf 'short_options_after=\n'
+        printf 'long_options_before=\n'
+        printf 'long_options_after=\n'
+        return
+    fi
+    
+    # Extract short options from getopt calls
+    local short_before short_after
+    short_before=$(git show "$base_ref":src/*.cpp 2>/dev/null | grep -o 'getopt([^)]*"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
+    short_after=$(git show "$target_ref":src/*.cpp 2>/dev/null | grep -o 'getopt([^)]*"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
+    
+    # Extract long options from struct option arrays
+    local long_before long_after
+    long_before=$(git show "$base_ref":src/*.cpp 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
+    long_after=$(git show "$target_ref":src/*.cpp 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
+    
+    printf 'short_options_before=%s\n' "$short_before"
+    printf 'short_options_after=%s\n' "$short_after"
+    printf 'long_options_before=%s\n' "$long_before"
+    printf 'long_options_after=%s\n' "$long_after"
+}
+
+# Analyze changes with robust rename/copy handling
 analyze_changes() {
     local base_ref="$1"
     
@@ -211,12 +264,14 @@ analyze_changes() {
     local breaking_cli_changes=false
     
     # Process changes with NUL-delimited output to handle spaces and renames
-    while IFS=$'\t' read -r -d '' status path1; do
+    while IFS= read -r -d '' status && IFS= read -r -d '' path1; do
         local file="$path1"
+        local old_file=""
         
         # Handle renames and copies (R100/C100 format)
         if [[ "$status" =~ ^[RC] ]]; then
             IFS= read -r -d '' path2
+            old_file="$path1"
             file="$path2"  # Use the new path for classification
         fi
         
@@ -235,29 +290,42 @@ analyze_changes() {
             D)
                 ((deleted_files++))
                 ;;
+            R|C)
+                # Treat renames/copies as modifications
+                ((modified_files++))
+                ;;
+            T|U|X)
+                # Ignore type changes, unmerged, unknown
+                ;;
         esac
     done < <(git diff --name-status -z "$base_ref"..HEAD 2>/dev/null)
     
-    # Improved CLI change detection with tighter patterns
-    local srcdiff
-    srcdiff=$(git diff "$base_ref"..HEAD -- src ':(glob)/*.[ch]pp' ':(glob)/*.[ch]' 2>/dev/null || true)
+    # Extract CLI options for comparison
+    local cli_analysis
+    cli_analysis=$(extract_cli_options "$base_ref" "HEAD")
+    local short_before short_after long_before long_after
+    short_before=$(printf '%s' "$cli_analysis" | grep "short_options_before=" | cut -d'=' -f2)
+    short_after=$(printf '%s' "$cli_analysis" | grep "short_options_after=" | cut -d'=' -f2)
+    long_before=$(printf '%s' "$cli_analysis" | grep "long_options_before=" | cut -d'=' -f2)
+    long_after=$(printf '%s' "$cli_analysis" | grep "long_options_after=" | cut -d'=' -f2)
     
-    if [[ -n "$srcdiff" ]]; then
-        # Check for added CLI options with more specific patterns
-        if printf '%s' "$srcdiff" | grep -E '^\+.*\b(getopt|getopt_long)\b' >/dev/null 2>&1 || \
-           printf '%s' "$srcdiff" | grep -E '^\+.*"--[A-Za-z0-9-]+"' >/dev/null 2>&1 || \
-           printf '%s' "$srcdiff" | grep -E '^\+.*\bcase[[:space:]]+['"'"'"]?-[A-Za-z0-9]' >/dev/null 2>&1 || \
-           printf '%s' "$srcdiff" | grep -E '^\+.*\b(struct[[:space:]]+option|long_options)\b' >/dev/null 2>&1; then
-            cli_changes=true
+    # Check for CLI changes by comparing option sets
+    if [[ -n "$short_after" ]] && [[ "$short_after" != "$short_before" ]]; then
+        cli_changes=true
+        # Check for breaking changes (removed options)
+        local removed_short
+        removed_short=$(comm -23 <(printf '%s' "$short_before" | fold -w1 | sort) <(printf '%s' "$short_after" | fold -w1 | sort) 2>/dev/null || printf '')
+        if [[ -n "$removed_short" ]]; then
+            breaking_cli_changes=true
         fi
-        
-        # Check for removed CLI options (breaking changes) - only if not re-added
-        local removed_cases
-        local added_cases
-        removed_cases=$(printf '%s' "$srcdiff" | grep -E '^-.*\bcase[[:space:]]+['"'"'"]?-[A-Za-z0-9]' 2>&1 | wc -l)
-        added_cases=$(printf '%s' "$srcdiff" | grep -E '^\+.*\bcase[[:space:]]+['"'"'"]?-[A-Za-z0-9]' 2>&1 | wc -l)
-        
-        if [[ "$removed_cases" -gt 0 ]] && [[ "$added_cases" -eq 0 ]]; then
+    fi
+    
+    if [[ -n "$long_after" ]] && [[ "$long_after" != "$long_before" ]]; then
+        cli_changes=true
+        # Check for breaking changes (removed long options)
+        local removed_long
+        removed_long=$(comm -23 <(printf '%s' "$long_before" | tr ',' '\n' | sort) <(printf '%s' "$long_after" | tr ',' '\n' | sort) 2>/dev/null || printf '')
+        if [[ -n "$removed_long" ]]; then
             breaking_cli_changes=true
         fi
     fi
@@ -281,7 +349,41 @@ analyze_changes() {
     printf 'diff_size=%s\n' "$diff_size"
 }
 
-# Determine version bump suggestion based on CLI-focused rules
+# Calculate next version without external dependency
+calculate_next_version() {
+    local current_version="$1"
+    local bump_type="$2"
+    
+    if [[ -z "$current_version" ]] || [[ "$current_version" = "0.0.0" ]]; then
+        case "$bump_type" in
+            major) printf '1.0.0' ;;
+            minor) printf '0.1.0' ;;
+            patch) printf '0.0.1' ;;
+            *) printf '0.0.0' ;;
+        esac
+        return
+    fi
+    
+    local major minor patch
+    IFS='.' read -r major minor patch <<< "$current_version"
+    
+    case "$bump_type" in
+        major)
+            printf '%d.0.0' "$((major + 1))"
+            ;;
+        minor)
+            printf '%d.%d.0' "$major" "$((minor + 1))"
+            ;;
+        patch)
+            printf '%d.%d.%d' "$major" "$minor" "$((patch + 1))"
+            ;;
+        *)
+            printf '%s' "$current_version"
+            ;;
+    esac
+}
+
+# Determine version bump suggestion based on improved rules
 suggest_version_bump() {
     local added_files="$1"
     local modified_files="$2"
@@ -293,62 +395,57 @@ suggest_version_bump() {
     local breaking_cli_changes="$8"
     local diff_size="$9"
     
-    # CLI-focused thresholds - only bump for significant changes
-    if [[ "$breaking_cli_changes" = "true" ]] && [[ "${diff_size:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
+    # MAJOR: Breaking CLI changes or very large changes
+    if [[ "$breaking_cli_changes" = "true" ]]; then
         printf 'major'
-    elif [[ "$cli_changes" = "true" ]] && [[ "${diff_size:-0}" -gt "$MIN_MINOR_DIFF_LINES" ]]; then
-        printf 'minor'
-    elif [[ "${new_source_files:-0}" -gt "$MIN_NEW_SOURCE_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_MINOR_DIFF_LINES" ]]; then
-        printf 'minor'
-    elif [[ "${new_test_files:-0}" -gt "$MIN_NEW_TEST_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_MINOR_DIFF_LINES" ]]; then
-        printf 'minor'
-    elif [[ "${new_doc_files:-0}" -gt "$MIN_NEW_DOC_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_MINOR_DIFF_LINES" ]]; then
-        printf 'minor'
-    elif [[ "${modified_files:-0}" -gt "$MIN_PATCH_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
-        printf 'patch'
-    else
-        printf 'none'
+        return
     fi
+    
+    if [[ "${diff_size:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
+        printf 'major'
+        return
+    fi
+    
+    # MINOR: New CLI options, new features, or significant new content
+    if [[ "$cli_changes" = "true" ]]; then
+        printf 'minor'
+        return
+    fi
+    
+    if [[ "${new_source_files:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then
+        printf 'minor'
+        return
+    fi
+    
+    if [[ "${new_test_files:-0}" -ge "$MIN_NEW_TEST_FILES" ]]; then
+        printf 'minor'
+        return
+    fi
+    
+    if [[ "${new_doc_files:-0}" -ge "$MIN_NEW_DOC_FILES" ]]; then
+        printf 'minor'
+        return
+    fi
+    
+    # PATCH: Significant modifications without new features
+    if [[ "${modified_files:-0}" -ge "$MIN_PATCH_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
+        printf 'patch'
+        return
+    fi
+    
+    printf 'none'
 }
 
 # Main analysis
 main() {
-    # Check if we're in a git repository
-    if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        printf 'Error: Not in a git repository\n' >&2
-        exit 1
-    fi
-    
-    local base_ref
-    base_ref=$(get_base_reference)
-    
-    if [[ "$SUGGEST_ONLY" = "true" ]]; then
-        printf 'SUGGESTION=none\n'
-        exit 0
-    fi
-    
-    if [[ "$JSON_OUTPUT" = "false" ]]; then
-        printf '=== Semantic Version Analysis v3 ===\n'
-        printf 'Analyzing changes since: %s\n' "$base_ref"
-        printf '\n'
-        
-        # Show base ref context in verbose mode
-        if [[ "$VERBOSE" = "true" ]]; then
-            local base_commit_info
-            base_commit_info=$(git log -1 --format="%H %s (%ad)" --date=short "$base_ref" 2>/dev/null || printf 'Unknown')
-            printf 'Base reference: %s\n' "$base_commit_info"
-            printf '\n'
-        fi
-    fi
+    local base_ref_info
+    base_ref_info=$(get_base_reference)
+    local base_ref ref_type
+    IFS='|' read -r base_ref ref_type <<< "$base_ref_info"
     
     # Get current version
     local current_version
     current_version=$(cat VERSION 2>/dev/null | tr -d '[:space:]' || printf '0.0.0')
-    
-    if [[ "$JSON_OUTPUT" = "false" ]]; then
-        printf 'Current version: %s\n' "$current_version"
-        printf '\n'
-    fi
     
     # Analyze changes
     local analysis
@@ -372,70 +469,25 @@ main() {
     local diff_size
     diff_size=$(printf '%s' "$analysis" | grep "diff_size=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     
-    # Show detailed analysis if verbose
-    if [[ "$VERBOSE" = "true" ]] && [[ "$JSON_OUTPUT" = "false" ]]; then
-        printf '=== Detailed Analysis ===\n'
-        printf 'File changes:\n'
-        printf '  Added files: %s\n' "$added_files"
-        printf '  Modified files: %s\n' "$modified_files"
-        printf '  Deleted files: %s\n' "$deleted_files"
-        printf '\n'
-        printf 'New content:\n'
-        printf '  New source files: %s\n' "$new_source_files"
-        printf '  New test files: %s\n' "$new_test_files"
-        printf '  New doc files: %s\n' "$new_doc_files"
-        printf '\n'
-        printf 'CLI changes:\n'
-        printf '  CLI interface changes: %s\n' "$cli_changes"
-        printf '  Breaking CLI changes: %s\n' "$breaking_cli_changes"
-        printf '\n'
-        printf 'Change magnitude:\n'
-        printf '  Diff size: %s lines\n' "$diff_size"
-        printf '\n'
-        printf 'Thresholds for auto-release (CLI-focused):\n'
-        printf '  Major: Breaking CLI changes + diff > %s lines\n' "$MIN_MAJOR_DIFF_LINES"
-        printf '  Minor: CLI interface changes + diff > %s lines\n' "$MIN_MINOR_DIFF_LINES"
-        printf '  Minor: New source files (>%s) + diff > %s lines\n' "$MIN_NEW_SOURCE_FILES" "$MIN_MINOR_DIFF_LINES"
-        printf '  Minor: New test files (>%s) + diff > %s lines\n' "$MIN_NEW_TEST_FILES" "$MIN_MINOR_DIFF_LINES"
-        printf '  Minor: New doc files (>%s) + diff > %s lines\n' "$MIN_NEW_DOC_FILES" "$MIN_MINOR_DIFF_LINES"
-        printf '  Patch: Modified files (>%s) + diff > %s lines\n' "$MIN_PATCH_FILES" "$MIN_PATCH_DIFF_LINES"
-        printf '\n'
-        
-        # Show recent commits
-        printf 'Recent commits:\n'
-        git log --oneline "$base_ref"..HEAD | head -10
-        printf '\n'
-    fi
-    
     # Determine suggestion
     local suggestion
     suggestion=$(suggest_version_bump "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size")
     
-    # Get next version for preview
-    local next_version=""
-    case "$suggestion" in
-        major)
-            next_version=$(./dev-bin/bump-version major --print 2>/dev/null || printf 'X.0.0')
-            ;;
-        minor)
-            next_version=$(./dev-bin/bump-version minor --print 2>/dev/null || printf '0.X.0')
-            ;;
-        patch)
-            next_version=$(./dev-bin/bump-version patch --print 2>/dev/null || printf '0.0.X')
-            ;;
-        none)
-            next_version=""
-            ;;
-    esac
+    # Calculate next version
+    local next_version
+    next_version=$(calculate_next_version "$current_version" "$suggestion")
     
+    # Output based on mode
     if [[ "$JSON_OUTPUT" = "true" ]]; then
         # JSON output for machine consumption
         printf '{\n'
         printf '  "suggestion": "%s",\n' "$suggestion"
         printf '  "current_version": "%s",\n' "$current_version"
-        if [[ -n "$next_version" ]]; then
+        if [[ -n "$next_version" ]] && [[ "$suggestion" != "none" ]]; then
             printf '  "next_version": "%s",\n' "$next_version"
         fi
+        printf '  "base_ref": "%s",\n' "$base_ref"
+        printf '  "base_ref_type": "%s",\n' "$ref_type"
         printf '  "changes": {\n'
         printf '    "added_files": %s,\n' "$added_files"
         printf '    "modified_files": %s,\n' "$modified_files"
@@ -448,22 +500,102 @@ main() {
         printf '    "diff_size": %s\n' "$diff_size"
         printf '  }\n'
         printf '}\n'
+    elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
+        # Machine-readable key=value format
+        printf 'SUGGESTION=%s\n' "$suggestion"
+        printf 'CURRENT_VERSION=%s\n' "$current_version"
+        if [[ -n "$next_version" ]] && [[ "$suggestion" != "none" ]]; then
+            printf 'NEXT_VERSION=%s\n' "$next_version"
+        fi
+        printf 'BASE_REF=%s\n' "$base_ref"
+        printf 'BASE_REF_TYPE=%s\n' "$ref_type"
+        printf 'ADDED_FILES=%s\n' "$added_files"
+        printf 'MODIFIED_FILES=%s\n' "$modified_files"
+        printf 'DELETED_FILES=%s\n' "$deleted_files"
+        printf 'NEW_SOURCE_FILES=%s\n' "$new_source_files"
+        printf 'NEW_TEST_FILES=%s\n' "$new_test_files"
+        printf 'NEW_DOC_FILES=%s\n' "$new_doc_files"
+        printf 'CLI_CHANGES=%s\n' "$cli_changes"
+        printf 'BREAKING_CLI_CHANGES=%s\n' "$breaking_cli_changes"
+        printf 'DIFF_SIZE=%s\n' "$diff_size"
     else
+        # Human-readable output
+        printf '=== Semantic Version Analysis v3 ===\n'
+        printf 'Analyzing changes since: %s (%s)\n' "$base_ref" "$ref_type"
+        printf '\n'
+        
+        # Show base ref context in verbose mode
+        if [[ "$VERBOSE" = "true" ]]; then
+            local base_commit_info
+            base_commit_info=$(git log -1 --format="%H %s (%ad)" --date=short "$base_ref" 2>/dev/null || printf 'Unknown')
+            printf 'Base reference: %s\n' "$base_commit_info"
+            printf '\n'
+        fi
+        
+        printf 'Current version: %s\n' "$current_version"
+        printf '\n'
+        
+        # Show detailed analysis if verbose
+        if [[ "$VERBOSE" = "true" ]]; then
+            printf '=== Detailed Analysis ===\n'
+            printf 'File changes:\n'
+            printf '  Added files: %s\n' "$added_files"
+            printf '  Modified files: %s\n' "$modified_files"
+            printf '  Deleted files: %s\n' "$deleted_files"
+            printf '\n'
+            printf 'New content:\n'
+            printf '  New source files: %s\n' "$new_source_files"
+            printf '  New test files: %s\n' "$new_test_files"
+            printf '  New doc files: %s\n' "$new_doc_files"
+            printf '\n'
+            printf 'CLI changes:\n'
+            printf '  CLI interface changes: %s\n' "$cli_changes"
+            printf '  Breaking CLI changes: %s\n' "$breaking_cli_changes"
+            printf '\n'
+            printf 'Change magnitude:\n'
+            printf '  Diff size: %s lines\n' "$diff_size"
+            printf '\n'
+            printf 'Thresholds:\n'
+            printf '  Major: Breaking CLI changes or diff > %s lines\n' "$MIN_MAJOR_DIFF_LINES"
+            printf '  Minor: CLI changes, new source files (>%s), new test files (>%s), new doc files (>%s)\n' "$MIN_NEW_SOURCE_FILES" "$MIN_NEW_TEST_FILES" "$MIN_NEW_DOC_FILES"
+            printf '  Patch: Modified files (>%s) + diff > %s lines\n' "$MIN_PATCH_FILES" "$MIN_PATCH_DIFF_LINES"
+            printf '\n'
+            
+            # Show recent commits
+            printf 'Recent commits:\n'
+            git log --oneline "$base_ref"..HEAD | head -10
+            printf '\n'
+        fi
+        
         printf '=== Version Bump Suggestion ===\n'
         case "$suggestion" in
             major)
                 printf 'Suggested bump: MAJOR version\n'
-                printf 'Reason: Breaking CLI changes with large code changes\n'
+                if [[ "$breaking_cli_changes" = "true" ]]; then
+                    printf 'Reason: Breaking CLI changes detected\n'
+                else
+                    printf 'Reason: Very large code changes (%s lines)\n' "$diff_size"
+                fi
                 printf 'Current: %s → New: %s\n' "$current_version" "$next_version"
                 ;;
             minor)
                 printf 'Suggested bump: MINOR version\n'
-                printf 'Reason: New source files, tests, or documentation with significant changes\n'
+                if [[ "$cli_changes" = "true" ]]; then
+                    printf 'Reason: New CLI options added\n'
+                elif [[ "${new_source_files:-0}" -gt 0 ]]; then
+                    printf 'Reason: New source files added (%s)\n' "$new_source_files"
+                elif [[ "${new_test_files:-0}" -gt 0 ]]; then
+                    printf 'Reason: New test files added (%s)\n' "$new_test_files"
+                elif [[ "${new_doc_files:-0}" -gt 0 ]]; then
+                    printf 'Reason: New documentation added (%s)\n' "$new_doc_files"
+                else
+                    printf 'Reason: New features or significant additions\n'
+                fi
                 printf 'Current: %s → New: %s\n' "$current_version" "$next_version"
                 ;;
             patch)
                 printf 'Suggested bump: PATCH version\n'
-                printf 'Reason: Significant modifications with large code changes\n'
+                printf 'Reason: Significant modifications (%s files, %s lines)\n' "$modified_files" "$diff_size"
                 printf 'Current: %s → New: %s\n' "$current_version" "$next_version"
                 ;;
             none)
@@ -484,8 +616,10 @@ main() {
         fi
     fi
     
-    # Machine-readable output for CI (always last)
-    printf 'SUGGESTION=%s\n' "$suggestion"
+    # Machine-readable output for CI (always last, unless already in machine mode)
+    if [[ "$MACHINE_OUTPUT" != "true" ]]; then
+        printf 'SUGGESTION=%s\n' "$suggestion"
+    fi
 }
 
 # Run main function
