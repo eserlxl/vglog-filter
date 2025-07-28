@@ -65,7 +65,7 @@ run_test() {
 printf '%s=== Test 1: ERE Fix for Manual CLI Detection ===%s\n' "${YELLOW}" "${NC}"
 
 # Create a test file with manual CLI parsing
-cat > test_manual_cli.c << 'EOF'
+cat > test-workflows/source-fixtures/cli/simple_cli_test.c << 'EOF'
 #include <stdio.h>
 #include <string.h>
 
@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
 EOF
 
 # Add the file
-git add test_manual_cli.c
+git add test-workflows/source-fixtures/cli/simple_cli_test.c
 git commit -m "Add manual CLI parser test" --no-verify
 
 # Test that manual CLI detection works (should not crash with ERE error)
@@ -182,8 +182,8 @@ run_test "API breaking change detection" \
 printf '%s=== Test 5: Whitespace Ignore ===%s\n' "${YELLOW}" "${NC}"
 
 # Add whitespace-only changes
-echo "   " >> test_manual_cli.c
-git add test_manual_cli.c
+echo "   " >> test-workflows/source-fixtures/cli/simple_cli_test.c
+git add test-workflows/source-fixtures/cli/simple_cli_test.c
 git commit -m "Add whitespace changes" --no-verify
 
 run_test "Whitespace ignore with --ignore-whitespace" \
@@ -246,7 +246,7 @@ run_test "JSON includes manual CLI fields" \
 
 # Cleanup test files
 git reset --hard HEAD~4
-rm -f test_manual_cli.c test_getopt.c
+rm -f test-workflows/source-fixtures/cli/simple_cli_test.c test_getopt.c
 rm -rf include
 
 # Summary

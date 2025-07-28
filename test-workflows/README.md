@@ -27,6 +27,10 @@ Contains test fixtures and sample data:
 Contains copies of source files used for testing:
 - `internal/header.hh` - Internal header file for API testing
 - `cli/main.c` - CLI main file for testing
+- `cli/simple_cli_test.c` - Simple CLI test program with basic argument handling
+- `test_content_simple.txt` - Simple test content file for basic file processing tests
+- `test_content_renamed.txt` - Test content file for rename handling tests
+- `debug_log_with_marker.txt` - Debug log content with markers for log filtering tests
 
 ## Usage
 

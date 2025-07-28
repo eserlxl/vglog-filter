@@ -11,14 +11,14 @@ cd "$PROJECT_ROOT"
 echo "=== Testing Rename Handling ==="
 
 # Create a test file
-echo "test content" > test_file.txt
+echo "test content" > test-workflows/source-fixtures/test_content_simple.txt
 
 # Add and commit the file
-git add test_file.txt
+git add test-workflows/source-fixtures/test_content_simple.txt
 git commit -m "Add test file for rename test"
 
 # Rename the file
-git mv test_file.txt test_file_renamed.txt
+git mv test-workflows/source-fixtures/test_content_simple.txt test-workflows/source-fixtures/test_content_renamed.txt
 git commit -m "Rename test file"
 
 # Run semantic version analyzer
