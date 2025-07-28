@@ -6,7 +6,7 @@
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
 #
-# Semantic Version Analyzer v3 for vglog-filter
+# Semantic Version Analyzer for vglog-filter
 # Simple, reliable version bumping based on actual code changes
 # Note: Short option detection is byte-based; non-ASCII options not supported
 
@@ -38,7 +38,7 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
 
 show_help() {
     cat << EOF
-Semantic Version Analyzer v3 for vglog-filter
+Semantic Version Analyzer for vglog-filter
 
 Usage: "$(basename "$0")" [options]
 
@@ -982,7 +982,7 @@ main() {
         printf 'SUGGESTION=%s\n' "$suggestion"
     else
         # Human-readable output
-        printf '=== Semantic Version Analysis v3 ===\n'
+        printf '=== Semantic Version Analysis ===\n'
         printf 'Analyzing changes: %s (%s) -> %s\n' "$base_ref" "$ref_type" "$target_ref"
         printf '\n'
         
