@@ -55,7 +55,6 @@ Machine output examples:
   $0 --json | jq -r .suggestion
 
 Exit codes:
-  0 = ran successfully (any suggestion)
   10 = major version bump suggested
   11 = minor version bump suggested
   12 = patch version bump suggested
@@ -248,6 +247,20 @@ get_base_reference() {
 check_commit_range() {
     local base_ref="$1"
     
+    # Handle disjoint branches by using merge-base
+    local actual_base
+    actual_base=$(git merge-base "$base_ref" HEAD 2>/dev/null || printf '')
+    if [[ -z "$actual_base" ]]; then
+        printf 'Warning: No common ancestor found between %s and HEAD\n' "$base_ref" >&2
+        return 1
+    fi
+    
+    # Use merge-base if it's different from the original base_ref
+    if [[ "$actual_base" != "$base_ref" ]]; then
+        printf 'Info: Using merge-base %s instead of %s for disjoint branches\n' "$actual_base" "$base_ref" >&2
+        base_ref="$actual_base"
+    fi
+    
     # Check if there are any commits between base_ref and HEAD
     if ! git rev-list "$base_ref"..HEAD >/dev/null 2>&1; then
         printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2
@@ -270,27 +283,31 @@ classify_path() {
     local path="$1"
     
     # Skip noise directories and binary/lock artifacts
-    if [[ "$path" =~ ^(build|dist|out|third_party|vendor|.git|node_modules|target|bin|obj)/ ]] || \
+    if [[ "$path" =~ ^(build|dist|out|third_party|vendor|\.git|node_modules|target|bin|obj)/ ]] || \
        [[ "$path" =~ \.(lock|exe|dll|so|dylib|jar|war|ear|zip|tar|gz|bz2|xz|7z|rar)$ ]]; then
-        return 0
+        printf '0'
+        return
     fi
     
     # Source files (including headers) - support multiple source directories
     if [[ "$path" =~ \.(c|cc|cpp|cxx|h|hpp|hh)$ ]] || [[ "$path" =~ ^(src|source|app)/ ]]; then
-        return 30
+        printf '30'
+        return
     fi
     
     # Test files - support both test/ and tests/
     if [[ "$path" =~ ^(test|tests)/ ]]; then
-        return 10
+        printf '10'
+        return
     fi
     
     # Documentation files - support both doc/ and docs/ and README files
     if [[ "$path" =~ ^(doc|docs)/ ]] || [[ "$path" =~ ^README ]]; then
-        return 20
+        printf '20'
+        return
     fi
     
-    return 0
+    printf '0'
 }
 
 # Enhanced CLI options detection with better accuracy - restrict to changed lines
@@ -300,7 +317,7 @@ extract_cli_options() {
     
     # Get source files diff
     local srcdiff
-    srcdiff=$(git diff "$base_ref".."$target_ref" -- src ':(glob)/*.[ch]pp' ':(glob)/*.[ch]' 2>/dev/null || true)
+    srcdiff=$(git diff "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' 2>/dev/null || true)
     
     if [[ -z "$srcdiff" ]]; then
         printf 'short_options_before=\n'
@@ -310,27 +327,44 @@ extract_cli_options() {
         return
     fi
     
-    # Extract short options from getopt calls - restrict to changed lines only
+    # Extract short options from getopt calls - scan only changed source files
     local short_before short_after
-    short_before=$(git show "$base_ref":src/*.cpp 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
-    short_after=$(git show "$target_ref":src/*.cpp 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
+    local changed_files
+    changed_files=$(git diff --name-only "$base_ref".."$target_ref" | grep '^src/.*\.cpp$' || printf '')
     
-    # Extract long options from struct option arrays - improved detection
-    local long_before long_after
-    long_before=$(git show "$base_ref":src/*.cpp 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
-    long_after=$(git show "$target_ref":src/*.cpp 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
+    if [[ -n "$changed_files" ]]; then
+        short_before=$(printf '%s' "$changed_files" | while read -r file; do
+            git show "$base_ref:$file" 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"'
+        done | sort -u | tr -d '\n' || printf '')
+        short_after=$(printf '%s' "$changed_files" | while read -r file; do
+            git show "$target_ref:$file" 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"'
+        done | sort -u | tr -d '\n' || printf '')
+        
+        # Extract long options from struct option arrays - improved detection
+        long_before=$(printf '%s' "$changed_files" | while read -r file; do
+            git show "$base_ref:$file" 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"'
+        done | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
+        long_after=$(printf '%s' "$changed_files" | while read -r file; do
+            git show "$target_ref:$file" 2>/dev/null | grep -A 20 'struct option.*long_options' | grep '{"[^"]*"' | grep -o '"[^"]*"' | tr -d '"'
+        done | sort -u | tr '\n' ',' | sed 's/,$//' || printf '')
+    else
+        short_before=""
+        short_after=""
+        long_before=""
+        long_after=""
+    fi
     
     # Enhanced breaking change detection: look for removed case labels
     local breaking_changes=false
     
     # Check for removed case labels in switch statements
     local removed_cases
-    removed_cases=$(git diff "$base_ref".."$target_ref" -- src ':(glob)/*.[ch]pp' ':(glob)/*.[ch]' | grep '^-case[[:space:]]' | sed 's/^-case[[:space:]]*//' | sort -u || printf '')
+    removed_cases=$(git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' | grep '^-[[:space:]]*case[[:space:]]' | sed 's/^-[[:space:]]*case[[:space:]]*//' | sort -u || printf '')
     
     if [[ -n "$removed_cases" ]]; then
         # Check if corresponding +case appears for each removed case
         local added_cases
-        added_cases=$(git diff "$base_ref".."$target_ref" -- src ':(glob)/*.[ch]pp' ':(glob)/*.[ch]' | grep '^+case[[:space:]]' | sed 's/^+case[[:space:]]*//' | sort -u || printf '')
+        added_cases=$(git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' | grep '^+[[:space:]]*case[[:space:]]' | sed 's/^+[[:space:]]*case[[:space:]]*//' | sort -u || printf '')
         
         # If any removed case doesn't have a corresponding added case, it's breaking
         local missing_cases
@@ -344,7 +378,7 @@ extract_cli_options() {
     # Check for API-breaking hints in headers
     local api_breaking=false
     local removed_prototypes
-    removed_prototypes=$(git diff "$base_ref".."$target_ref" -- include ':(glob)/*.h' ':(glob)/*.hpp' | grep '^-[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*(' | grep -v '^---' | wc -l || printf '0')
+    removed_prototypes=$(git diff "$base_ref".."$target_ref" -- ':(glob)include/*.{h,hpp,hh}' | grep '^-[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*(' | grep -v '^---' | wc -l || printf '0')
     
     if [[ "$removed_prototypes" -gt 0 ]]; then
         api_breaking=true
@@ -352,7 +386,7 @@ extract_cli_options() {
     
     # Check for explicit API-BREAKING comments
     local explicit_breaking
-    explicit_breaking=$(git diff "$base_ref".."$target_ref" -- src include ':(glob)/*.[ch]' ':(glob)/*.[ch]pp' | grep -i 'API-BREAKING:' | wc -l || printf '0')
+    explicit_breaking=$(git diff "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' | grep -i 'API-BREAKING:' | wc -l || printf '0')
     
     if [[ "$explicit_breaking" -gt 0 ]]; then
         api_breaking=true
@@ -419,7 +453,9 @@ analyze_changes() {
         case "$kind" in
             A)
                 ((added_files++))
-                case $(classify_path "$file") in
+                local file_class
+                file_class=$(classify_path "$file")
+                case "$file_class" in
                     30) ((new_source_files++)) ;;
                     10) ((new_test_files++)) ;;
                     20) ((new_doc_files++)) ;;
@@ -438,7 +474,9 @@ analyze_changes() {
             C)
                 # Copy: treat as added
                 ((added_files++))
-                case $(classify_path "$file") in
+                local file_class
+                file_class=$(classify_path "$file")
+                case "$file_class" in
                     30) ((new_source_files++)) ;;
                     10) ((new_test_files++)) ;;
                     20) ((new_doc_files++)) ;;
@@ -491,22 +529,22 @@ analyze_changes() {
         breaking_cli_changes=true
     fi
     
-    # Get diff size using shortstat for safer parsing
+    # Get diff size using numstat for stable parsing
     local diff_size
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        local shortstat
-        shortstat=$(git diff -w --shortstat "$base_ref"..HEAD 2>/dev/null || printf '')
-        local ins del
-        ins=$(awk '{print $4+0}' <<<"$shortstat" || printf '0')
-        del=$(awk '{print $6+0}' <<<"$shortstat" || printf '0')
-        diff_size=$((ins + del))
+        local total_ins=0 total_del=0
+        while IFS=$'\t' read -r ins del _; do
+            total_ins=$((total_ins + ins))
+            total_del=$((total_del + del))
+        done < <(git diff -w --numstat "$base_ref"..HEAD 2>/dev/null || printf '0\t0\t\n')
+        diff_size=$((total_ins + total_del))
     else
-        local shortstat
-        shortstat=$(git diff --shortstat "$base_ref"..HEAD 2>/dev/null || printf '')
-        local ins del
-        ins=$(awk '{print $4+0}' <<<"$shortstat" || printf '0')
-        del=$(awk '{print $6+0}' <<<"$shortstat" || printf '0')
-        diff_size=$((ins + del))
+        local total_ins=0 total_del=0
+        while IFS=$'\t' read -r ins del _; do
+            total_ins=$((total_ins + ins))
+            total_del=$((total_del + del))
+        done < <(git diff --numstat "$base_ref"..HEAD 2>/dev/null || printf '0\t0\t\n')
+        diff_size=$((total_ins + total_del))
     fi
     
     printf 'added_files=%s\n' "$added_files"
@@ -587,8 +625,11 @@ suggest_version_bump() {
     fi
     
     if [[ "${diff_size:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
-        printf 'major'
-        return
+        # Only suggest major for large diffs if breaking changes are not required
+        if [[ "$MAJOR_REQUIRE_BREAKING" != "true" ]]; then
+            printf 'major'
+            return
+        fi
     fi
     
     # MINOR: New CLI options, new features, or significant new content
@@ -628,7 +669,20 @@ main() {
     local base_ref ref_type
     IFS='|' read -r base_ref ref_type <<< "$base_ref_info"
     
-    # Check if there are commits in the range
+    # Check if there are commits in the range and handle disjoint branches
+    local actual_base
+    actual_base=$(git merge-base "$base_ref" HEAD 2>/dev/null || printf '')
+    if [[ -z "$actual_base" ]]; then
+        printf 'Error: No common ancestor found between %s and HEAD. Exiting.\n' "$base_ref" >&2
+        exit 1
+    fi
+    
+    # Use merge-base if it's different from the original base_ref
+    if [[ "$actual_base" != "$base_ref" ]]; then
+        printf 'Info: Using merge-base %s instead of %s for disjoint branches\n' "$actual_base" "$base_ref" >&2
+        base_ref="$actual_base"
+    fi
+    
     if ! check_commit_range "$base_ref"; then
         printf 'Error: No commits found between %s and HEAD. Exiting.\n' "$base_ref" >&2
         exit 1
@@ -745,7 +799,7 @@ main() {
             printf '  Security/crash keywords: %s\n' "${security_keywords:-0}"
             printf '\n'
             printf 'Thresholds:\n'
-            printf '  Major: Breaking CLI changes or diff > %s lines\n' "$MIN_MAJOR_DIFF_LINES"
+            printf '  Major: Breaking CLI changes or diff > %s lines (MAJOR_REQUIRE_BREAKING=%s)\n' "$MIN_MAJOR_DIFF_LINES" "$MAJOR_REQUIRE_BREAKING"
             printf '  Minor: CLI changes, new source files (>%s), new test files (>%s), new doc files (>%s)\n' "$MIN_NEW_SOURCE_FILES" "$MIN_NEW_TEST_FILES" "$MIN_NEW_DOC_FILES"
             printf '  Patch: Modified files (>%s) + diff > %s lines\n' "$MIN_PATCH_FILES" "$MIN_PATCH_DIFF_LINES"
             printf '\n'
