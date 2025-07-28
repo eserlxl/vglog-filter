@@ -7,7 +7,7 @@
 # See the LICENSE file in the project root for details.
 #
 # Version bump script for vglog-filter
-# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push]
+# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push] [--push-tags]
 
 set -euo pipefail
 
@@ -43,6 +43,7 @@ TAG_PREFIX="${TAG_PREFIX:-v}"  # default tag prefix, can be overridden by env va
 SET_VERSION=""        # for --set option
 NO_COLOR="false"      # for --no-color option
 DO_PUSH="false"       # for --push option
+PUSH_TAGS="false"     # for --push-tags option
 
 # Colors will be initialized after argument parsing
 RED=''
@@ -51,46 +52,10 @@ YELLOW=''
 CYAN=''
 RESET=''
 
-# Check if VERSION file exists
-if [[ ! -f "$VERSION_FILE" ]]; then
-    printf '%s\n' "${RED}Error: VERSION file not found at $VERSION_FILE${RESET}" >&2
-    exit 1
-fi
-
-# Validate VERSION symlink safety
-VERSION_REAL="$(readlink -f "$VERSION_FILE" 2>/dev/null || echo "")"
-if [[ -z "$VERSION_REAL" ]]; then
-    printf '%s\n' "${RED}Error: VERSION path is a broken symlink${RESET}" >&2
-    exit 1
-fi
-case "$VERSION_REAL" in 
-    "$PROJECT_ROOT"/*) ;; 
-    *) 
-        printf '%s\n' "${RED}Error: VERSION resolves outside repo${RESET}" >&2
-        exit 1
-        ;;
-esac
-
-# Read current version
-CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
-
-# Validate current version format
-if [[ ! "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    printf '%s\n' "${RED}Error: Invalid version format in VERSION file: $CURRENT_VERSION${RESET}" >&2
-    printf '%s\n' "${YELLOW}Expected format: MAJOR.MINOR.PATCH (e.g., 1.0.0)${RESET}" >&2
-    exit 1
-fi
-
-# Validate TAG_PREFIX content early
-if [[ "$TAG_PREFIX" == *$'\n'* || "$TAG_PREFIX" == *$'\r'* ]]; then
-    printf '%s\n' "${RED}Error: TAG_PREFIX contains newline characters${RESET}" >&2
-    exit 1
-fi
-
 # Function to show usage
 usage() {
     cat << 'EOF'
-Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push]
+Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push] [--push-tags]
 
 Bump the semantic version of vglog-filter
 
@@ -120,8 +85,10 @@ Options:
   --tag-prefix PREFIX  Use PREFIX instead of 'v' for tag names (default: v)
                        Note: Empty prefix is allowed (tags like 1.2.3)
   --set VERSION     Set version to VERSION instead of bumping (format: X.Y.Z)
+                    Note: Creates VERSION file if it doesn't exist
   --no-color        Disable colored output
   --push            Push changes and tags to remote repository
+  --push-tags       Push tags even if --tag wasn't set in this run
 
 Environment Variables:
   ANALYSIS_MESSAGE  Optional detailed analysis to include in commit message
@@ -163,17 +130,20 @@ Examples:
   ./dev-bin/bump-version --set 2.1.0 --commit     # Set version to 2.1.0 and commit
   ./dev-bin/bump-version patch --no-color          # Disable colored output
   ./dev-bin/bump-version patch --commit --tag --push # Bump, commit, tag, and push
+  ./dev-bin/bump-version patch --commit --push     # Bump, commit, and push (branch only)
+  ./dev-bin/bump-version patch --push-tags         # Push existing tags without creating new ones
 
 Current version: CURRENT_VERSION_PLACEHOLDER
 EOF
 }
 
-# Function to validate version format
+# Function to validate version format (tightened SemVer)
 validate_version_format() {
     local version="$1"
-    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
         printf '%s\n' "${RED}Error: Invalid version format: $version${RESET}" >&2
         printf '%s\n' "${YELLOW}Expected format: MAJOR.MINOR.PATCH (e.g., 1.0.0)${RESET}" >&2
+        printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed (e.g., 01.02.03 is invalid)${RESET}" >&2
         exit 1
     fi
 }
@@ -221,7 +191,11 @@ update_version_file() {
     mv -f "$TMP_FILE" "$VERSION_FILE"
     sync -f "$VERSION_FILE" 2>/dev/null || sync -f "$(dirname "$VERSION_FILE")" 2>/dev/null || sync || true
     TMP_FILE=""
-    printf '%s\n' "${GREEN}Updated VERSION file: $CURRENT_VERSION → $NEW_VERSION${RESET}" >&2
+    if [[ "$CURRENT_VERSION" == "none" ]]; then
+        printf '%s\n' "${GREEN}Created VERSION file: $NEW_VERSION${RESET}" >&2
+    else
+        printf '%s\n' "${GREEN}Updated VERSION file: $CURRENT_VERSION → $NEW_VERSION${RESET}" >&2
+    fi
 }
 
 # Function to update CMakeLists.txt if it contains version information
@@ -250,6 +224,11 @@ update_cmake_version() {
 stage_files() {
     # Stage VERSION file
     git add -- "$VERSION_FILE"
+    
+    # When UPDATE_CMAKE is false and --allow-dirty is off, ensure CMakeLists.txt is not staged
+    if [[ "$UPDATE_CMAKE" != "true" && "$ALLOW_DIRTY" != "true" ]]; then
+        git reset -- "$PROJECT_ROOT/CMakeLists.txt" 2>/dev/null || true
+    fi
 }
 
 # Function to check git identity
@@ -282,7 +261,11 @@ create_commit() {
         local commit_args=(${NO_VERIFY:+--no-verify})
         commit_args+=(${COMMIT_SIGN:+-S})
         commit_args+=(-m "chore(release): ${TAG_PREFIX}${NEW_VERSION}${GITHUB_ACTIONS:+ [skip ci]}")
-        commit_args+=(-m "bump: ${CURRENT_VERSION} → ${NEW_VERSION}")
+        if [[ "$CURRENT_VERSION" == "none" ]]; then
+            commit_args+=(-m "bump: initial version ${NEW_VERSION}")
+        else
+            commit_args+=(-m "bump: ${CURRENT_VERSION} → ${NEW_VERSION}")
+        fi
         
         # Append analysis if provided and no custom message
         if [[ -n "${ANALYSIS_MESSAGE:-}" ]]; then
@@ -291,10 +274,20 @@ create_commit() {
         
         git commit "${commit_args[@]}"
         printf '%s\n' "${GREEN}Created commit${RESET}" >&2
+        
+        # Print commit SHA for traceability
+        local commit_sha
+        commit_sha=$(git rev-parse --short HEAD)
+        printf '%s\n' "${CYAN}Commit SHA: $commit_sha${RESET}" >&2
     else
         # Use custom message (ANALYSIS_MESSAGE is ignored when --message is provided)
         git commit ${NO_VERIFY:+--no-verify} ${COMMIT_SIGN:+-S} -m "$msg"
         printf '%s\n' "${GREEN}Created commit${RESET}" >&2
+        
+        # Print commit SHA for traceability
+        local commit_sha
+        commit_sha=$(git rev-parse --short HEAD)
+        printf '%s\n' "${CYAN}Commit SHA: $commit_sha${RESET}" >&2
     fi
 }
 
@@ -324,6 +317,11 @@ create_tag() {
     fi
     
     printf '%s\n' "${GREEN}Tag created: $tag_name${RESET}" >&2
+    
+    # Print tag SHA for traceability
+    local tag_sha
+    tag_sha=$(git rev-parse --short "$tag_name")
+    printf '%s\n' "${CYAN}Tag SHA: $tag_sha${RESET}" >&2
 }
 
 # Function to sanitize TAG_PREFIX for use in git tag patterns
@@ -387,7 +385,7 @@ while [[ $# -gt 0 ]]; do
         major|minor|patch)
             if [[ -n "$BUMP_TYPE" ]]; then
                 printf '%s\n' "${RED}Error: Multiple bump types specified${RESET}" >&2
-                usage | sed "s/CURRENT_VERSION_PLACEHOLDER/$CURRENT_VERSION/"
+                usage | sed "s/CURRENT_VERSION_PLACEHOLDER/N/A/"
                 exit 1
             fi
             BUMP_TYPE="$1"
@@ -466,13 +464,17 @@ while [[ $# -gt 0 ]]; do
             DO_PUSH="true"
             shift
             ;;
+        --push-tags)
+            PUSH_TAGS="true"
+            shift
+            ;;
         -h|--help)
-            usage | sed "s/CURRENT_VERSION_PLACEHOLDER/$CURRENT_VERSION/"
+            usage | sed "s/CURRENT_VERSION_PLACEHOLDER/N/A/"
             exit 0
             ;;
         *)
             printf '%s\n' "${RED}Error: Unknown option '$1'${RESET}" >&2
-            usage | sed "s/CURRENT_VERSION_PLACEHOLDER/$CURRENT_VERSION/"
+            usage | sed "s/CURRENT_VERSION_PLACEHOLDER/N/A/"
             exit 1
             ;;
     esac
@@ -485,6 +487,52 @@ if [[ "$NO_COLOR" != "true" ]]; then
     YELLOW='\033[1;33m'
     CYAN='\033[0;36m'
     RESET='\033[0m'
+fi
+
+# Validate TAG_PREFIX content early
+if [[ "$TAG_PREFIX" == *$'\n'* || "$TAG_PREFIX" == *$'\r'* ]]; then
+    printf '%s\n' "${RED}Error: TAG_PREFIX contains newline characters${RESET}" >&2
+    exit 1
+fi
+
+# Handle VERSION file checks after argument parsing
+VERSION_EXISTS="false"
+CURRENT_VERSION="none"
+
+if [[ -f "$VERSION_FILE" ]]; then
+    VERSION_EXISTS="true"
+    
+    # Validate VERSION symlink safety
+    VERSION_REAL="$(readlink -f "$VERSION_FILE" 2>/dev/null || echo "")"
+    if [[ -z "$VERSION_REAL" ]]; then
+        printf '%s\n' "${RED}Error: VERSION path is a broken symlink${RESET}" >&2
+        exit 1
+    fi
+    case "$VERSION_REAL" in 
+        "$PROJECT_ROOT"/*) ;; 
+        *) 
+            printf '%s\n' "${RED}Error: VERSION resolves outside repo${RESET}" >&2
+            exit 1
+            ;;
+    esac
+    
+    # Read current version
+    CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
+    
+    # Validate current version format
+    if [[ ! "$CURRENT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+        printf '%s\n' "${RED}Error: Invalid version format in VERSION file: $CURRENT_VERSION${RESET}" >&2
+        printf '%s\n' "${YELLOW}Expected format: MAJOR.MINOR.PATCH (e.g., 1.0.0)${RESET}" >&2
+        printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed (e.g., 01.02.03 is invalid)${RESET}" >&2
+        exit 1
+    fi
+elif [[ -n "$SET_VERSION" ]]; then
+    # Allow --set to create VERSION file if it doesn't exist
+    printf '%s\n' "${YELLOW}Note: VERSION file not found, will create it with version $SET_VERSION${RESET}" >&2
+else
+    printf '%s\n' "${RED}Error: VERSION file not found at $VERSION_FILE${RESET}" >&2
+    printf '%s\n' "${YELLOW}Use --set VERSION to create the file with a specific version${RESET}" >&2
+    exit 1
 fi
 
 # Check if bump type was specified (unless using --set)
@@ -529,8 +577,8 @@ if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
     fi
 fi
 
-# Fail fast if VERSION is untracked
-if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
+# Fail fast if VERSION is untracked (only if it exists and we're committing/tagging)
+if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]] && [[ "$VERSION_EXISTS" == "true" ]]; then
     if ! git ls-files --error-unmatch -- "$VERSION_FILE" >/dev/null 2>&1; then
         printf '%s\n' "${RED}Error: VERSION is not tracked by git${RESET}" >&2
         exit 1
@@ -612,7 +660,11 @@ fi
 
 # Handle dry-run mode
 if [[ "$DRY_RUN" == "true" ]]; then
-    printf '%s\n' "${YELLOW}DRY RUN: Would update VERSION file to $NEW_VERSION${RESET}" >&2
+    if [[ "$CURRENT_VERSION" == "none" ]]; then
+        printf '%s\n' "${YELLOW}DRY RUN: Would create VERSION file with $NEW_VERSION${RESET}" >&2
+    else
+        printf '%s\n' "${YELLOW}DRY RUN: Would update VERSION file to $NEW_VERSION${RESET}" >&2
+    fi
     if [[ "$UPDATE_CMAKE" == "true" ]]; then
         printf '%s\n' "${YELLOW}DRY RUN: Would update CMakeLists.txt to $NEW_VERSION${RESET}" >&2
     else
@@ -628,6 +680,14 @@ if [[ "$DRY_RUN" == "true" ]]; then
         last_tag=$(git tag --list "${sanitized_prefix}[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n1)
         if [[ -n "$last_tag" ]]; then
             printf '%s\n' "${YELLOW}DRY RUN: Last tag for comparison: $last_tag${RESET}" >&2
+            # Check if last tag points to HEAD
+            if git rev-parse -q --verify "$last_tag" >/dev/null; then
+                if [[ "$(git rev-parse "$last_tag^{commit}")" == "$(git rev-parse HEAD)" ]]; then
+                    printf '%s\n' "${YELLOW}DRY RUN: Last tag points to HEAD${RESET}" >&2
+                else
+                    printf '%s\n' "${YELLOW}DRY RUN: Last tag does not point to HEAD${RESET}" >&2
+                fi
+            fi
         fi
     fi
     exit 0
@@ -690,7 +750,11 @@ if [[ -n "$SET_VERSION" && "$DO_TAG" != "true" ]]; then
     fi
 fi
 
-printf '%s\n' "${GREEN}Version bump completed: $CURRENT_VERSION → $NEW_VERSION${RESET}" >&2
+if [[ "$CURRENT_VERSION" == "none" ]]; then
+    printf '%s\n' "${GREEN}Version bump completed: created $NEW_VERSION${RESET}" >&2
+else
+    printf '%s\n' "${GREEN}Version bump completed: $CURRENT_VERSION → $NEW_VERSION${RESET}" >&2
+fi
 
 # Show next steps
 if [[ "$DO_TAG" == "true" ]]; then
@@ -700,12 +764,25 @@ if [[ "$DO_TAG" == "true" ]]; then
     printf '%s\n' "  git push origin ${TAG_PREFIX}${NEW_VERSION}" >&2
 fi
 
-# Handle --push option
+# Handle --push option with improved robustness
 if [[ "$DO_PUSH" == "true" ]]; then
     if [[ "$IN_GIT_REPO" != "true" ]]; then
         printf '%s\n' "${RED}Error: Not in a git repository${RESET}" >&2
         exit 1
     fi
+    
+    # Check for detached HEAD
+    if ! git symbolic-ref -q HEAD >/dev/null; then
+        printf '%s\n' "${RED}Error: Detached HEAD; checkout a branch before pushing${RESET}" >&2
+        exit 1
+    fi
+    
+    # Check that origin remote exists
+    if ! git remote get-url origin >/dev/null 2>&1; then
+        printf '%s\n' "${RED}Error: No remote 'origin' configured${RESET}" >&2
+        exit 1
+    fi
+    
     current_branch="$(git rev-parse --abbrev-ref HEAD)"
     printf '%s\n' "${CYAN}Pushing changes...${RESET}" >&2
     git push origin "$current_branch"
@@ -713,6 +790,24 @@ if [[ "$DO_PUSH" == "true" ]]; then
         git push origin "${TAG_PREFIX}${NEW_VERSION}"
     fi
     printf '%s\n' "${GREEN}Push completed${RESET}" >&2
+fi
+
+# Handle --push-tags option
+if [[ "$PUSH_TAGS" == "true" ]]; then
+    if [[ "$IN_GIT_REPO" != "true" ]]; then
+        printf '%s\n' "${RED}Error: Not in a git repository${RESET}" >&2
+        exit 1
+    fi
+    
+    # Check that origin remote exists
+    if ! git remote get-url origin >/dev/null 2>&1; then
+        printf '%s\n' "${RED}Error: No remote 'origin' configured${RESET}" >&2
+        exit 1
+    fi
+    
+    printf '%s\n' "${CYAN}Pushing tags...${RESET}" >&2
+    git push origin --tags
+    printf '%s\n' "${GREEN}Tags push completed${RESET}" >&2
 fi
 
 # Print the new version for callers
