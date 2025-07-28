@@ -73,9 +73,7 @@ void usage(const char* prog) {
 
 // ---------- helpers ---------------------------------------------------------
 
-static inline bool is_space(unsigned char ch) {
-    return std::isspace(ch) != 0;
-}
+// Removed unused function is_space
 
 // Helper function to create detailed error messages
 Str create_error_message(const Str& operation, const Str& filename, const Str& details = "") {
@@ -142,24 +140,20 @@ size_t find_marker_in_span(StrSpan lines, const Str& marker) {
 static inline StrView ltrim_view(StrView s) {
     auto start = std::find_if(s.begin(), s.end(),
                               [](int ch){ return !std::isspace(ch); });
-    return StrView(start, s.end() - start);
+    return StrView(start, static_cast<size_t>(s.end() - start));
 }
 
 static inline StrView rtrim_view(StrView s) {
     auto end = std::find_if(s.rbegin(), s.rend(),
                             [](int ch){ return !std::isspace(ch); }).base();
-    return StrView(s.begin(), end - s.begin());
+    return StrView(s.begin(), static_cast<size_t>(end - s.begin()));
 }
 
 static inline StrView trim_view(StrView s) { 
     return rtrim_view(ltrim_view(s)); 
 }
 
-static inline Str ltrim(Str s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(),
-                                    [](int ch){ return !std::isspace(ch); }));
-    return s;
-}
+// Removed unused function ltrim
 
 static inline Str rtrim(Str s) {
     s.erase(std::find_if(s.rbegin(), s.rend(),
@@ -277,7 +271,7 @@ void process(std::istream& in, const Options& opt)
         if (opt.depth > 0) {
             key.reserve(256);
             for (int i = 0; i < opt.depth && i < static_cast<int>(sigLines.size()); ++i) {
-                key += sigLines[i];
+                key += sigLines[static_cast<size_t>(i)];
                 key += '\n';
             }
         } else {
@@ -410,7 +404,7 @@ void process_stream(std::istream& in, const Options& opt) {
         if (opt.depth > 0) {
             key.reserve(256);
             for (int i = 0; i < opt.depth && i < static_cast<int>(sigLines.size()); ++i) {
-                key += sigLines[i];
+                key += sigLines[static_cast<size_t>(i)];
                 key += '\n';
             }
         } else {
