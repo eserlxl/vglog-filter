@@ -11,14 +11,14 @@ int main(int argc, char *argv[]) {
             verbose = 1;
         } else if (strcmp(argv[i], "--help") == 0) {
             help = 1;
-        } else if (strcmp(argv[i], "--foo") == 0) {
+        } else if (strcmp(argv[i], "--bar") == 0) {
             // This is a new option that should trigger minor version bump
             printf("New foo option detected\n");
         }
     }
     
     if (help) {
-        printf("Usage: %s [--verbose] [--help] [--foo]\n", argv[0]);
+        printf("Usage: %s [--verbose] [--help] [--bar]\n", argv[0]);
         return 0;
     }
     
