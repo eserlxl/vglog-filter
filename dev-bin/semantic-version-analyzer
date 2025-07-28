@@ -9,7 +9,8 @@
 # Semantic Version Analyzer v3 for vglog-filter
 # Simple, reliable version bumping based on actual code changes
 
-set -e
+set -Eeuo pipefail
+IFS=$'\n\t'
 
 show_help() {
     cat << EOF
@@ -23,6 +24,7 @@ Options:
   --since-date <date>    Analyze changes since specific date (YYYY-MM-DD)
   --verbose         Show detailed analysis
   --suggest-only    Only show suggestion, don't analyze
+  --json           Output machine-readable JSON
   --help            Show this help
 
 Examples:
@@ -39,6 +41,7 @@ SINCE_COMMIT=""
 SINCE_DATE=""
 VERBOSE=false
 SUGGEST_ONLY=false
+JSON_OUTPUT=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -63,45 +66,100 @@ while [[ $# -gt 0 ]]; do
             SUGGEST_ONLY=true
             shift
             ;;
+        --json)
+            JSON_OUTPUT=true
+            shift
+            ;;
         --help|-h)
             show_help
             exit 0
             ;;
         *)
-            echo "Unknown option: $1"
+            printf 'Error: Unknown option: %s\n' "$1" >&2
             show_help
             exit 1
             ;;
     esac
 done
 
+# Validate git reference
+verify_ref() {
+    local ref="$1"
+    if ! git rev-parse -q --verify "$ref^{commit}" >/dev/null; then
+        printf 'Error: Invalid reference: %s\n' "$ref" >&2
+        exit 1
+    fi
+}
+
 # Determine the base for comparison
 get_base_reference() {
-    if [ -n "$SINCE_COMMIT" ]; then
-        echo "$SINCE_COMMIT"
-    elif [ -n "$SINCE_TAG" ]; then
-        echo "$SINCE_TAG"
-    elif [ -n "$SINCE_DATE" ]; then
+    if [[ -n "$SINCE_COMMIT" ]]; then
+        verify_ref "$SINCE_COMMIT"
+        printf '%s' "$SINCE_COMMIT"
+        return
+    elif [[ -n "$SINCE_TAG" ]]; then
+        verify_ref "$SINCE_TAG"
+        printf '%s' "$SINCE_TAG"
+        return
+    elif [[ -n "$SINCE_DATE" ]]; then
         # Find the latest commit before the specified date
-        git rev-list -1 --before="$SINCE_DATE 23:59:59" HEAD
-    else
-        # Default to last tag
-        local last_tag
-        last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-        if [ -n "$last_tag" ]; then
-            echo "$last_tag"
+        local ref
+        ref=$(git rev-list -1 --before="$SINCE_DATE 23:59:59" HEAD 2>/dev/null || true)
+        if [[ -n "$ref" ]]; then
+            printf '%s' "$ref"
         else
-            # If no tags exist, use the first commit
+            printf 'Warning: No commits found before %s, using first commit\n' "$SINCE_DATE" >&2
             git rev-list --max-parents=0 HEAD
         fi
+        return
     fi
+    
+    # Default to last tag
+    local last_tag
+    last_tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
+    if [[ -n "$last_tag" ]]; then
+        printf '%s' "$last_tag"
+    else
+        # If no tags exist, use the first commit
+        git rev-list --max-parents=0 HEAD
+    fi
+}
+
+# Classify file path
+classify_path() {
+    local path="$1"
+    # Skip vendor/build directories
+    if [[ "$path" =~ ^(third_party|vendor|build|dist)/ ]]; then
+        return 0
+    fi
+    
+    # Source files (including headers)
+    if [[ "$path" =~ \.(c|cc|cpp|cxx|h|hpp)$ ]] || [[ "$path" =~ ^src/ ]]; then
+        return 30
+    fi
+    
+    # Test files
+    if [[ "$path" =~ ^tests/ ]]; then
+        return 10
+    fi
+    
+    # Documentation files
+    if [[ "$path" =~ ^docs/ ]]; then
+        return 20
+    fi
+    
+    return 0
 }
 
 # CLI-focused analysis based on file changes and diff size
 analyze_changes() {
     local base_ref="$1"
-    local changes
-    changes=$(git diff --name-status "$base_ref"..HEAD)
+    
+    # Check if there are any changes (but don't exit - we want to analyze even small changes)
+    if git diff --quiet "$base_ref"..HEAD; then
+        printf 'Warning: No changes detected since %s\n' "$base_ref" >&2
+        # Continue with analysis anyway - might be edge cases
+    fi
     
     local added_files=0
     local modified_files=0
@@ -112,59 +170,71 @@ analyze_changes() {
     local cli_changes=false
     local breaking_cli_changes=false
     
-    # Process each change
-    while IFS=$'\t' read -r status file; do
-        case "$status" in
+    # Process changes with NUL-delimited output to handle spaces and renames
+    while IFS=$'\t' read -r -d '' status path1; do
+        local file="$path1"
+        
+        # Handle renames and copies (R100/C100 format)
+        if [[ "$status" =~ ^[RC] ]]; then
+            IFS= read -r -d '' path2
+            file="$path2"  # Use the new path for classification
+        fi
+        
+        case "${status:0:1}" in
             A)
                 ((added_files++))
-                if [[ "$file" =~ \.(cpp|cxx|cc)$ ]] || [[ "$file" =~ ^src/ ]]; then
-                    ((new_source_files++))
-                elif [[ "$file" =~ ^test/ ]]; then
-                    ((new_test_files++))
-                elif [[ "$file" =~ ^doc/ ]]; then
-                    ((new_doc_files++))
-                fi
+                case $(classify_path "$file") in
+                    30) ((new_source_files++)) ;;
+                    10) ((new_test_files++)) ;;
+                    20) ((new_doc_files++)) ;;
+                esac
                 ;;
             M)
                 ((modified_files++))
-                # Check for CLI interface changes in main source file
-                if [[ "$file" =~ \.(cpp|cxx|cc)$ ]] || [[ "$file" =~ ^src/ ]]; then
-                    # Check for new command-line options
-                    if git diff "$base_ref"..HEAD -- "$file" | grep -E "(getopt|option|case.*:)" >/dev/null; then
-                        cli_changes=true
-                    fi
-                    # Check for removed command-line options (breaking change)
-                    # Only consider it breaking if a case statement is completely removed
-                    if git diff "$base_ref"..HEAD -- "$file" | grep -E "^-.*case.*:" >/dev/null && \
-                       ! git diff "$base_ref"..HEAD -- "$file" | grep -E "^\+.*case.*:" >/dev/null && \
-                       git diff "$base_ref"..HEAD -- "$file" | grep -E "(main.*argc|getopt|option)" >/dev/null; then
-                        breaking_cli_changes=true
-                    fi
-                fi
                 ;;
             D)
                 ((deleted_files++))
-                # Only consider deleted source files as breaking if they're the main executable
-                if [[ "$file" =~ ^src/.*\.(cpp|cxx|cc)$ ]] && [[ "$file" =~ main ]]; then
-                    breaking_cli_changes=true
-                fi
                 ;;
         esac
-    done <<< "$changes"
+    done < <(git diff --name-status -z "$base_ref"..HEAD 2>/dev/null)
     
-    # Get diff size
+    # Improved CLI change detection with tighter patterns
+    local srcdiff
+    srcdiff=$(git diff "$base_ref"..HEAD -- src ':(glob)/*.[ch]pp' ':(glob)/*.[ch]' 2>/dev/null || true)
+    
+    if [[ -n "$srcdiff" ]]; then
+        # Check for added CLI options
+        if printf '%s' "$srcdiff" | grep -E '^\+.*\b(getopt|getopt_long)\b' >/dev/null 2>&1 || \
+           printf '%s' "$srcdiff" | grep -E '^\+.*"--[A-Za-z0-9-]+"' >/dev/null 2>&1 || \
+           printf '%s' "$srcdiff" | grep -E '^\+.*\bcase[[:space:]]+['"'"'"]?-[A-Za-z0-9]' >/dev/null 2>&1 || \
+           printf '%s' "$srcdiff" | grep -E '^\+.*\b(struct[[:space:]]+option|long_options)\b' >/dev/null 2>&1; then
+            cli_changes=true
+        fi
+        
+        # Check for removed CLI options (breaking changes)
+        local removed_cases
+        local added_cases
+        removed_cases=$(printf '%s' "$srcdiff" | grep -E '^-.*\bcase[[:space:]]+['"'"'"]?-[A-Za-z0-9]' 2>&1 | wc -l)
+        added_cases=$(printf '%s' "$srcdiff" | grep -E '^\+.*\bcase[[:space:]]+['"'"'"]?-[A-Za-z0-9]' 2>&1 | wc -l)
+        
+        if [[ "$removed_cases" -gt 0 ]] && [[ "$added_cases" -eq 0 ]]; then
+            breaking_cli_changes=true
+        fi
+    fi
+    
+    # Get diff size using numstat for reliable parsing
     local diff_size
-    diff_size=$(git diff --stat "$base_ref" 2>/dev/null | tail -1 | awk '{print $4}' | sed 's/,//' | sed 's/insertions//' | sed 's/insertion//' | tr -d '()' || echo "0")
+    diff_size=$(git diff --numstat "$base_ref"..HEAD 2>&1 | awk '{a+=$1; d+=$2} END{print 0+a+d}' || echo "0")
     
-    echo "added_files=$added_files"
-    echo "modified_files=$modified_files"
-    echo "deleted_files=$deleted_files"
-    echo "new_source_files=$new_source_files"
-    echo "new_test_files=$new_test_files"
-    echo "new_doc_files=$new_doc_files"
-    echo "cli_changes=$cli_changes"
-    echo "breaking_cli_changes=$breaking_cli_changes"
-    echo "diff_size=$diff_size"
+    printf 'added_files=%s\n' "$added_files"
+    printf 'modified_files=%s\n' "$modified_files"
+    printf 'deleted_files=%s\n' "$deleted_files"
+    printf 'new_source_files=%s\n' "$new_source_files"
+    printf 'new_test_files=%s\n' "$new_test_files"
+    printf 'new_doc_files=%s\n' "$new_doc_files"
+    printf 'cli_changes=%s\n' "$cli_changes"
+    printf 'breaking_cli_changes=%s\n' "$breaking_cli_changes"
+    printf 'diff_size=%s\n' "$diff_size"
 }
 
 # Determine version bump suggestion based on CLI-focused rules
@@ -180,20 +250,20 @@ suggest_version_bump() {
     local diff_size="$9"
     
     # CLI-focused thresholds - only bump for significant changes
-    if [ "$breaking_cli_changes" = "true" ] && [ "${diff_size:-0}" -gt 500 ]; then
-        echo "major"
-    elif [ "$cli_changes" = "true" ] && [ "${diff_size:-0}" -gt 800 ]; then
-        echo "minor"
-    elif [ "${new_source_files:-0}" -gt 2 ] && [ "${diff_size:-0}" -gt 1000 ]; then
-        echo "minor"
-    elif [ "${new_test_files:-0}" -gt 3 ] && [ "${diff_size:-0}" -gt 800 ]; then
-        echo "minor"
-    elif [ "${new_doc_files:-0}" -gt 2 ] && [ "${diff_size:-0}" -gt 600 ]; then
-        echo "minor"
-    elif [ "${modified_files:-0}" -gt 10 ] && [ "${diff_size:-0}" -gt 500 ]; then
-        echo "patch"
+    if [[ "$breaking_cli_changes" = "true" ]] && [[ "${diff_size:-0}" -gt 500 ]]; then
+        printf 'major'
+    elif [[ "$cli_changes" = "true" ]] && [[ "${diff_size:-0}" -gt 800 ]]; then
+        printf 'minor'
+    elif [[ "${new_source_files:-0}" -gt 2 ]] && [[ "${diff_size:-0}" -gt 1000 ]]; then
+        printf 'minor'
+    elif [[ "${new_test_files:-0}" -gt 3 ]] && [[ "${diff_size:-0}" -gt 800 ]]; then
+        printf 'minor'
+    elif [[ "${new_doc_files:-0}" -gt 2 ]] && [[ "${diff_size:-0}" -gt 600 ]]; then
+        printf 'minor'
+    elif [[ "${modified_files:-0}" -gt 10 ]] && [[ "${diff_size:-0}" -gt 500 ]]; then
+        printf 'patch'
     else
-        echo "none"
+        printf 'none'
     fi
 }
 
@@ -202,111 +272,170 @@ main() {
     local base_ref
     base_ref=$(get_base_reference)
     
-    if [ "$SUGGEST_ONLY" = "true" ]; then
-        echo "Suggested version bump: none"
+    if [[ "$SUGGEST_ONLY" = "true" ]]; then
+        printf 'SUGGESTION=none\n'
         exit 0
     fi
     
-    echo "=== Semantic Version Analysis v3 ==="
-    echo "Analyzing changes since: $base_ref"
-    echo
+    if [[ "$JSON_OUTPUT" = "false" ]]; then
+        printf '=== Semantic Version Analysis v3 ===\n'
+        printf 'Analyzing changes since: %s\n' "$base_ref"
+        printf '\n'
+        
+        # Show base ref context in verbose mode
+        if [[ "$VERBOSE" = "true" ]]; then
+            local base_commit_info
+            base_commit_info=$(git log -1 --format="%H %s (%ad)" --date=short "$base_ref" 2>/dev/null || printf 'Unknown')
+            printf 'Base reference: %s\n' "$base_commit_info"
+            printf '\n'
+        fi
+    fi
     
     # Get current version
     local current_version
-    current_version=$(cat VERSION 2>/dev/null || echo "0.0.0")
-    echo "Current version: $current_version"
-    echo
+    current_version=$(cat VERSION 2>/dev/null | tr -d '[:space:]' || printf '0.0.0')
+    
+    if [[ "$JSON_OUTPUT" = "false" ]]; then
+        printf 'Current version: %s\n' "$current_version"
+        printf '\n'
+    fi
     
     # Analyze changes
     local analysis
     analysis=$(analyze_changes "$base_ref")
     local added_files
-    added_files=$(echo "$analysis" | grep "added_files=" | cut -d'=' -f2)
+    added_files=$(printf '%s' "$analysis" | grep "added_files=" | cut -d'=' -f2)
     local modified_files
-    modified_files=$(echo "$analysis" | grep "modified_files=" | cut -d'=' -f2)
+    modified_files=$(printf '%s' "$analysis" | grep "modified_files=" | cut -d'=' -f2)
     local deleted_files
-    deleted_files=$(echo "$analysis" | grep "deleted_files=" | cut -d'=' -f2)
+    deleted_files=$(printf '%s' "$analysis" | grep "deleted_files=" | cut -d'=' -f2)
     local new_source_files
-    new_source_files=$(echo "$analysis" | grep "new_source_files=" | cut -d'=' -f2)
+    new_source_files=$(printf '%s' "$analysis" | grep "new_source_files=" | cut -d'=' -f2)
     local new_test_files
-    new_test_files=$(echo "$analysis" | grep "new_test_files=" | cut -d'=' -f2)
+    new_test_files=$(printf '%s' "$analysis" | grep "new_test_files=" | cut -d'=' -f2)
     local new_doc_files
-    new_doc_files=$(echo "$analysis" | grep "new_doc_files=" | cut -d'=' -f2)
+    new_doc_files=$(printf '%s' "$analysis" | grep "new_doc_files=" | cut -d'=' -f2)
     local cli_changes
-    cli_changes=$(echo "$analysis" | grep "cli_changes=" | cut -d'=' -f2)
+    cli_changes=$(printf '%s' "$analysis" | grep "cli_changes=" | cut -d'=' -f2)
     local breaking_cli_changes
-    breaking_cli_changes=$(echo "$analysis" | grep "breaking_cli_changes=" | cut -d'=' -f2)
+    breaking_cli_changes=$(printf '%s' "$analysis" | grep "breaking_cli_changes=" | cut -d'=' -f2)
     local diff_size
-    diff_size=$(echo "$analysis" | grep "diff_size=" | cut -d'=' -f2)
+    diff_size=$(printf '%s' "$analysis" | grep "diff_size=" | cut -d'=' -f2)
     
     # Show detailed analysis if verbose
-    if [ "$VERBOSE" = "true" ]; then
-        echo "=== Detailed Analysis ==="
-        echo "File changes:"
-        echo "  Added files: $added_files"
-        echo "  Modified files: $modified_files"
-        echo "  Deleted files: $deleted_files"
-        echo
-        echo "New content:"
-        echo "  New source files: $new_source_files"
-        echo "  New test files: $new_test_files"
-        echo "  New doc files: $new_doc_files"
-        echo
-        echo "CLI changes:"
-        echo "  CLI interface changes: $cli_changes"
-        echo "  Breaking CLI changes: $breaking_cli_changes"
-        echo
-        echo "Change magnitude:"
-        echo "  Diff size: $diff_size lines"
-        echo
-        echo "Thresholds for auto-release (CLI-focused):"
-        echo "  Major: Breaking CLI changes + diff > 500 lines"
-        echo "  Minor: CLI interface changes + diff > 800 lines"
-        echo "  Minor: New source files (>2) + diff > 1000 lines"
-        echo "  Minor: New test files (>3) + diff > 800 lines"
-        echo "  Minor: New doc files (>2) + diff > 600 lines"
-        echo "  Patch: Modified files (>10) + diff > 500 lines"
-        echo
+    if [[ "$VERBOSE" = "true" ]] && [[ "$JSON_OUTPUT" = "false" ]]; then
+        printf '=== Detailed Analysis ===\n'
+        printf 'File changes:\n'
+        printf '  Added files: %s\n' "$added_files"
+        printf '  Modified files: %s\n' "$modified_files"
+        printf '  Deleted files: %s\n' "$deleted_files"
+        printf '\n'
+        printf 'New content:\n'
+        printf '  New source files: %s\n' "$new_source_files"
+        printf '  New test files: %s\n' "$new_test_files"
+        printf '  New doc files: %s\n' "$new_doc_files"
+        printf '\n'
+        printf 'CLI changes:\n'
+        printf '  CLI interface changes: %s\n' "$cli_changes"
+        printf '  Breaking CLI changes: %s\n' "$breaking_cli_changes"
+        printf '\n'
+        printf 'Change magnitude:\n'
+        printf '  Diff size: %s lines\n' "$diff_size"
+        printf '\n'
+        printf 'Thresholds for auto-release (CLI-focused):\n'
+        printf '  Major: Breaking CLI changes + diff > 500 lines\n'
+        printf '  Minor: CLI interface changes + diff > 800 lines\n'
+        printf '  Minor: New source files (>2) + diff > 1000 lines\n'
+        printf '  Minor: New test files (>3) + diff > 800 lines\n'
+        printf '  Minor: New doc files (>2) + diff > 600 lines\n'
+        printf '  Patch: Modified files (>10) + diff > 500 lines\n'
+        printf '\n'
         
         # Show recent commits
-        echo "Recent commits:"
+        printf 'Recent commits:\n'
         git log --oneline "$base_ref"..HEAD | head -10
-        echo
+        printf '\n'
     fi
     
     # Determine suggestion
     local suggestion
     suggestion=$(suggest_version_bump "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size")
     
-    echo "=== Version Bump Suggestion ==="
+    # Get next version for preview
+    local next_version=""
     case "$suggestion" in
         major)
-            echo "Suggested bump: MAJOR version"
-            echo "Reason: Significant deletions with large code changes"
-            echo "Current: $current_version → New: $(./dev-bin/bump-version major --dry-run 2>/dev/null || echo "X.0.0")"
+            next_version=$(./dev-bin/bump-version major --print 2>/dev/null || printf 'X.0.0')
             ;;
         minor)
-            echo "Suggested bump: MINOR version"
-            echo "Reason: New source files, tests, or documentation with significant changes"
-            echo "Current: $current_version → New: $(./dev-bin/bump-version minor --dry-run 2>/dev/null || echo "0.X.0")"
+            next_version=$(./dev-bin/bump-version minor --print 2>/dev/null || printf '0.X.0')
             ;;
         patch)
-            echo "Suggested bump: PATCH version"
-            echo "Reason: Significant modifications with large code changes"
-            echo "Current: $current_version → New: $(./dev-bin/bump-version patch --dry-run 2>/dev/null || echo "0.0.X")"
+            next_version=$(./dev-bin/bump-version patch --print 2>/dev/null || printf '0.0.X')
             ;;
         none)
-            echo "Suggested bump: NONE"
-            echo "Reason: No significant changes detected"
+            next_version=""
             ;;
     esac
     
-    echo
-    echo "To apply this suggestion:"
-    echo "  ./dev-bin/bump-version $suggestion --commit"
-    echo
-    echo "Or use GitHub Actions:"
-    echo "  Go to Actions → Auto Version Bump → Run workflow → Choose: $suggestion"
+    if [[ "$JSON_OUTPUT" = "true" ]]; then
+        # JSON output for machine consumption
+        printf '{\n'
+        printf '  "suggestion": "%s",\n' "$suggestion"
+        printf '  "current_version": "%s",\n' "$current_version"
+        if [[ -n "$next_version" ]]; then
+            printf '  "next_version": "%s",\n' "$next_version"
+        fi
+        printf '  "changes": {\n'
+        printf '    "added_files": %s,\n' "$added_files"
+        printf '    "modified_files": %s,\n' "$modified_files"
+        printf '    "deleted_files": %s,\n' "$deleted_files"
+        printf '    "new_source_files": %s,\n' "$new_source_files"
+        printf '    "new_test_files": %s,\n' "$new_test_files"
+        printf '    "new_doc_files": %s,\n' "$new_doc_files"
+        printf '    "cli_changes": %s,\n' "$cli_changes"
+        printf '    "breaking_cli_changes": %s,\n' "$breaking_cli_changes"
+        printf '    "diff_size": %s\n' "$diff_size"
+        printf '  }\n'
+        printf '}\n'
+    else
+        printf '=== Version Bump Suggestion ===\n'
+        case "$suggestion" in
+            major)
+                printf 'Suggested bump: MAJOR version\n'
+                printf 'Reason: Breaking CLI changes with large code changes\n'
+                printf 'Current: %s → New: %s\n' "$current_version" "$next_version"
+                ;;
+            minor)
+                printf 'Suggested bump: MINOR version\n'
+                printf 'Reason: New source files, tests, or documentation with significant changes\n'
+                printf 'Current: %s → New: %s\n' "$current_version" "$next_version"
+                ;;
+            patch)
+                printf 'Suggested bump: PATCH version\n'
+                printf 'Reason: Significant modifications with large code changes\n'
+                printf 'Current: %s → New: %s\n' "$current_version" "$next_version"
+                ;;
+            none)
+                printf 'Suggested bump: NONE\n'
+                printf 'Reason: No significant changes detected\n'
+                ;;
+        esac
+        
+        printf '\n'
+        
+        # Only show apply command if there's a suggestion
+        if [[ "$suggestion" != "none" ]]; then
+            printf 'To apply this suggestion:\n'
+            printf '  ./dev-bin/bump-version %s --commit\n' "$suggestion"
+            printf '\n'
+            printf 'Or use GitHub Actions:\n'
+            printf '  Go to Actions → Auto Version Bump → Run workflow → Choose: %s\n' "$suggestion"
+        fi
+        
+        # Machine-readable output for CI
+        printf 'SUGGESTION=%s\n' "$suggestion"
+    fi
 }
 
 # Run main function
