@@ -22,8 +22,6 @@ SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 VERSION_FILE="$PROJECT_ROOT/VERSION"
 
-
-
 # Change to project root for git operations
 cd "$PROJECT_ROOT"
 
@@ -61,7 +59,7 @@ RESET=''
 check_dirty_tree() {
     # For prerelease versions, we don't write to VERSION file, so exclude it from dirty check
     local exclude_paths=()
-    if [[ "$NEW_VERSION" != *-* ]]; then
+    if [[ "$NEW_VERSION" == *-* ]]; then
         exclude_paths+=("VERSION")
     fi
     if [[ "$UPDATE_CMAKE" != "true" ]]; then
@@ -212,8 +210,8 @@ update_cmake_version() {
 
 # Function to stage files for commit
 stage_files() {
-    # Stage VERSION file
-    git add -- "$VERSION_FILE"
+    # Stage VERSION file (skip for prereleases)
+    [[ "$NEW_VERSION" != *-* ]] && git add -- "$VERSION_FILE"
     
     # When UPDATE_CMAKE is false and --allow-dirty is off, ensure CMakeLists.txt is not staged
     if [[ "$UPDATE_CMAKE" != "true" && "$ALLOW_DIRTY" != "true" ]]; then
@@ -237,7 +235,11 @@ create_commit() {
     
     # update_cmake_version may have already staged CMakeLists.txt
     if git diff --cached --quiet; then
-        printf '%s\n' "${YELLOW}No staged changes to commit${RESET}" >&2
+        if [[ "$NEW_VERSION" == *-* ]]; then
+            printf '%s\n' "${YELLOW}Skipping commit: pre-release made no file changes${RESET}" >&2
+        else
+            printf '%s\n' "${YELLOW}No staged changes to commit${RESET}" >&2
+        fi
         return 0
     fi
     
@@ -464,6 +466,7 @@ Examples:
   ./dev-bin/bump-version patch --commit --tag --push # Bump, commit, tag, and push
   ./dev-bin/bump-version patch --commit --push     # Bump, commit, and push (branch only)
   ./dev-bin/bump-version patch --push-tags         # Push existing tags without creating new ones
+  ./dev-bin/bump-version --set 1.0.0-rc.1 --allow-prerelease --print # Print prerelease version
   ./dev-bin/bump-version --set 1.0.0-rc.1 --allow-prerelease --commit # Set prerelease version
   ./dev-bin/bump-version --set 1.0.0 --allow-nonmonotonic-tag --commit # Override tag ordering
   ./dev-bin/bump-version patch --repo-root /path/to/repo --commit # Use custom repo root
@@ -612,6 +615,7 @@ if [[ -n "$REPO_ROOT" ]]; then
     fi
     PROJECT_ROOT="$REPO_ROOT"
     VERSION_FILE="$PROJECT_ROOT/VERSION"
+    cd "$PROJECT_ROOT"
     printf '%s\n' "${CYAN}Using repository root: $PROJECT_ROOT${RESET}" >&2
 fi
 
@@ -963,15 +967,12 @@ fi
 if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" || "$DO_PUSH" == "true" || "$PUSH_TAGS" == "true" ]]; then
     printf '%s\n' "${CYAN}Summary:${RESET}" >&2
     if [[ "$DO_COMMIT" == "true" ]]; then
-        local commit_sha
         commit_sha=$(git rev-parse --short HEAD)
-        local current_branch
         current_branch=$(git rev-parse --abbrev-ref HEAD)
         printf '%s\n' "  Branch: $current_branch" >&2
         printf '%s\n' "  Commit: $commit_sha" >&2
     fi
     if [[ "$DO_TAG" == "true" ]]; then
-        local tag_sha
         tag_sha=$(git rev-parse --short "${TAG_PREFIX}${NEW_VERSION}")
         printf '%s\n' "  Tag: ${TAG_PREFIX}${NEW_VERSION}/$tag_sha" >&2
     fi
