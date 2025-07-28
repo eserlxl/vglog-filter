@@ -44,6 +44,8 @@ SET_VERSION=""        # for --set option
 NO_COLOR="false"      # for --no-color option
 DO_PUSH="false"       # for --push option
 PUSH_TAGS="false"     # for --push-tags option
+ALLOW_NONMONOTONIC_TAG="false"  # for --allow-nonmonotonic-tag option
+ALLOW_PRERELEASE="false"  # for --allow-prerelease option
 
 # Colors will be initialized after argument parsing
 RED=''
@@ -54,8 +56,13 @@ RESET=''
 
 # Function to show usage
 usage() {
-    cat << 'EOF'
-Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push] [--push-tags]
+    # Get current version for help display
+    local help_version="N/A"
+    if [[ -f "$VERSION_FILE" ]]; then
+        help_version=$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || echo "N/A")
+    fi
+    cat << EOF
+Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push] [--push-tags] [--allow-nonmonotonic-tag] [--allow-prerelease]
 
 Bump the semantic version of vglog-filter
 
@@ -63,6 +70,7 @@ Requirements:
   GNU tools on Linux: realpath, sha1sum, GNU sed, GNU grep
   Note: sync -f requires GNU coreutils (not BusyBox). For minimal containers,
         consider using sync without -f as fallback.
+  macOS users: run in GNU coreutils + gsed environment (e.g., brew install coreutils gnu-sed)
 
 Arguments:
   major    Increment major version (breaking changes)
@@ -88,7 +96,11 @@ Options:
                     Note: Creates VERSION file if it doesn't exist
   --no-color        Disable colored output
   --push            Push changes and tags to remote repository
-  --push-tags       Push tags even if --tag wasn't set in this run
+                    Note: --push only pushes the newly created tag, not all tags
+  --push-tags       Push all tags to remote repository (bulk tag sync)
+  --allow-nonmonotonic-tag  Allow setting version lower than last tag (bypasses CI check)
+  --allow-prerelease Allow prerelease versions for --set only (e.g., 1.0.0-rc.1)
+                    Note: Pre-releases are not supported for tags or VERSION file
 
 Environment Variables:
   ANALYSIS_MESSAGE  Optional detailed analysis to include in commit message
@@ -132,19 +144,35 @@ Examples:
   ./dev-bin/bump-version patch --commit --tag --push # Bump, commit, tag, and push
   ./dev-bin/bump-version patch --commit --push     # Bump, commit, and push (branch only)
   ./dev-bin/bump-version patch --push-tags         # Push existing tags without creating new ones
+  ./dev-bin/bump-version --set 1.0.0-rc.1 --allow-prerelease --commit # Set prerelease version
+  ./dev-bin/bump-version --set 1.0.0 --allow-nonmonotonic-tag --commit # Override tag ordering
 
-Current version: CURRENT_VERSION_PLACEHOLDER
+Current version: $help_version
 EOF
 }
 
 # Function to validate version format (tightened SemVer)
 validate_version_format() {
     local version="$1"
-    if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-        printf '%s\n' "${RED}Error: Invalid version format: $version${RESET}" >&2
-        printf '%s\n' "${YELLOW}Expected format: MAJOR.MINOR.PATCH (e.g., 1.0.0)${RESET}" >&2
-        printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed (e.g., 01.02.03 is invalid)${RESET}" >&2
-        exit 1
+    local allow_prerelease="$2"
+    
+    if [[ "$allow_prerelease" == "true" ]]; then
+        # Allow prerelease format: X.Y.Z-rc.1, X.Y.Z-alpha.1, etc.
+        if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            printf '%s\n' "${RED}Error: Invalid version format: $version${RESET}" >&2
+            printf '%s\n' "${YELLOW}Expected format: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-PRERELEASE (e.g., 1.0.0 or 1.0.0-rc.1)${RESET}" >&2
+            printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed (e.g., 01.02.03 is invalid)${RESET}" >&2
+            exit 1
+        fi
+    else
+        # Standard format only
+        if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            printf '%s\n' "${RED}Error: Invalid version format: $version${RESET}" >&2
+            printf '%s\n' "${YELLOW}Expected format: MAJOR.MINOR.PATCH (e.g., 1.0.0)${RESET}" >&2
+            printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed (e.g., 01.02.03 is invalid)${RESET}" >&2
+            printf '%s\n' "${YELLOW}Note: Pre-releases are not supported by default. Use --allow-prerelease for --set only.${RESET}" >&2
+            exit 1
+        fi
     fi
 }
 
@@ -306,10 +334,10 @@ create_tag() {
     fi
     
     if [[ "$SIGNED_TAG" == "true" ]]; then
-        git tag -s "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
+        git tag -s "$tag_name" -m "Release ${NEW_VERSION}"
         printf '%s\n' "${GREEN}Created signed tag: $tag_name${RESET}" >&2
     elif [[ "$ANNOTATED_TAG" == "true" ]]; then
-        git tag -a "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
+        git tag -a "$tag_name" -m "Release ${NEW_VERSION}"
         printf '%s\n' "${GREEN}Created annotated tag: $tag_name${RESET}" >&2
     else
         git tag "$tag_name"
@@ -364,9 +392,10 @@ check_version_order() {
         if [[ "$version_not_greater" == "true" ]]; then
             printf '%s\n' "${YELLOW}Warning:${RESET} New version $NEW_VERSION is not greater than last tag $last_tag${RESET}" >&2
             
-            # Enforce version order in CI
-            if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+            # Enforce version order in CI unless override is set
+            if [[ -n "${GITHUB_ACTIONS:-}" && "$ALLOW_NONMONOTONIC_TAG" != "true" ]]; then
                 printf '%s\n' "${RED}Error: NEW_VERSION ($NEW_VERSION) must be greater than last tag ($last_tag)${RESET}" >&2
+                printf '%s\n' "${YELLOW}Use --allow-nonmonotonic-tag to override this check${RESET}" >&2
                 exit 1
             fi
         fi
@@ -385,7 +414,7 @@ while [[ $# -gt 0 ]]; do
         major|minor|patch)
             if [[ -n "$BUMP_TYPE" ]]; then
                 printf '%s\n' "${RED}Error: Multiple bump types specified${RESET}" >&2
-                usage | sed "s/CURRENT_VERSION_PLACEHOLDER/N/A/"
+                usage
                 exit 1
             fi
             BUMP_TYPE="$1"
@@ -468,13 +497,21 @@ while [[ $# -gt 0 ]]; do
             PUSH_TAGS="true"
             shift
             ;;
+        --allow-nonmonotonic-tag)
+            ALLOW_NONMONOTONIC_TAG="true"
+            shift
+            ;;
+        --allow-prerelease)
+            ALLOW_PRERELEASE="true"
+            shift
+            ;;
         -h|--help)
-            usage | sed "s/CURRENT_VERSION_PLACEHOLDER/N/A/"
+            usage
             exit 0
             ;;
         *)
             printf '%s\n' "${RED}Error: Unknown option '$1'${RESET}" >&2
-            usage | sed "s/CURRENT_VERSION_PLACEHOLDER/N/A/"
+            usage
             exit 1
             ;;
     esac
@@ -516,10 +553,10 @@ if [[ -f "$VERSION_FILE" ]]; then
             ;;
     esac
     
-    # Read current version
+    # Read current version and trim whitespace
     CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
     
-    # Validate current version format
+    # Validate current version format (VERSION file should always be stable)
     if [[ ! "$CURRENT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
         printf '%s\n' "${RED}Error: Invalid version format in VERSION file: $CURRENT_VERSION${RESET}" >&2
         printf '%s\n' "${YELLOW}Expected format: MAJOR.MINOR.PATCH (e.g., 1.0.0)${RESET}" >&2
@@ -538,13 +575,13 @@ fi
 # Check if bump type was specified (unless using --set)
 if [[ -z "$BUMP_TYPE" && -z "$SET_VERSION" ]]; then
     printf '%s\n' "${RED}Error: No bump type specified and no --set version provided${RESET}" >&2
-    usage | sed "s/CURRENT_VERSION_PLACEHOLDER/$CURRENT_VERSION/"
+    usage
     exit 1
 fi
 
 # Handle --set option
 if [[ -n "$SET_VERSION" ]]; then
-    validate_version_format "$SET_VERSION"
+    validate_version_format "$SET_VERSION" "$ALLOW_PRERELEASE"
     NEW_VERSION="$SET_VERSION"
     BUMP_TYPE="set"  # for display purposes
 else
@@ -635,14 +672,32 @@ if ([[ "$DO_COMMIT" == "true" ]] || [[ "$DO_TAG" == "true" ]]) && [[ "$ALLOW_DIR
         printf '%s\n' "${RED}Error: Not in a git repository${RESET}" >&2
         exit 1
     fi
-    if ! git diff --quiet -- . ':(exclude)VERSION' ':(exclude)CMakeLists.txt'; then
-        printf '%s\n' "${RED}Error:${RESET} working tree has changes other than VERSION and CMakeLists.txt. Use --allow-dirty to override." >&2
+    
+    # Build exclusion list based on UPDATE_CMAKE setting
+    local exclude_paths=("VERSION")
+    if [[ "$UPDATE_CMAKE" != "true" ]]; then
+        exclude_paths+=("CMakeLists.txt")
+    fi
+    
+    # Create git pathspec exclusions
+    local git_exclude=""
+    for path in "${exclude_paths[@]}"; do
+        if [[ -n "$git_exclude" ]]; then
+            git_exclude+=" ':(exclude)$path'"
+        else
+            git_exclude="':(exclude)$path'"
+        fi
+    done
+    
+    # Check for changes excluding the specified files
+    if ! git diff --quiet -- . $git_exclude; then
+        printf '%s\n' "${RED}Error:${RESET} working tree has changes other than VERSION${UPDATE_CMAKE:+" and CMakeLists.txt"}. Use --allow-dirty to override." >&2
         exit 1
     fi
     
     # Optional warning for untracked files
     if git ls-files --others --exclude-standard | grep -q .; then
-        printf '%s\n' "${YELLOW}Warning:${RESET} untracked files present." >&2
+        printf '%s\n' "${YELLOW}Warning:${RESET} untracked files present (ignored)." >&2
     fi
 fi
 
@@ -808,6 +863,31 @@ if [[ "$PUSH_TAGS" == "true" ]]; then
     printf '%s\n' "${CYAN}Pushing tags...${RESET}" >&2
     git push origin --tags
     printf '%s\n' "${GREEN}Tags push completed${RESET}" >&2
+fi
+
+# Print diagnostic summary when operations were performed
+if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" || "$DO_PUSH" == "true" || "$PUSH_TAGS" == "true" ]]; then
+    printf '%s\n' "${CYAN}Summary:${RESET}" >&2
+    if [[ "$DO_COMMIT" == "true" ]]; then
+        local commit_sha
+        commit_sha=$(git rev-parse --short HEAD)
+        local current_branch
+        current_branch=$(git rev-parse --abbrev-ref HEAD)
+        printf '%s\n' "  Branch: $current_branch" >&2
+        printf '%s\n' "  Commit: $commit_sha" >&2
+    fi
+    if [[ "$DO_TAG" == "true" ]]; then
+        local tag_sha
+        tag_sha=$(git rev-parse --short "${TAG_PREFIX}${NEW_VERSION}")
+        printf '%s\n' "  Tag: ${TAG_PREFIX}${NEW_VERSION}/$tag_sha" >&2
+    fi
+    if [[ "$DO_PUSH" == "true" ]]; then
+        printf '%s\n' "  Pushed: yes" >&2
+    elif [[ "$PUSH_TAGS" == "true" ]]; then
+        printf '%s\n' "  Tags pushed: yes" >&2
+    else
+        printf '%s\n' "  Pushed: no" >&2
+    fi
 fi
 
 # Print the new version for callers
