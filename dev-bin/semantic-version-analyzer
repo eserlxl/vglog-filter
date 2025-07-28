@@ -25,6 +25,7 @@ Options:
   --verbose         Show detailed analysis
   --suggest-only    Only show suggestion, don't analyze
   --json           Output machine-readable JSON
+  --ignore-whitespace  Ignore whitespace changes in diff size calculation
   --help            Show this help
 
 Examples:
@@ -42,6 +43,16 @@ SINCE_DATE=""
 VERBOSE=false
 SUGGEST_ONLY=false
 JSON_OUTPUT=false
+IGNORE_WHITESPACE=false
+
+# Configurable thresholds (can be overridden by environment)
+MIN_MAJOR_DIFF_LINES="${MIN_MAJOR_DIFF_LINES:-500}"
+MIN_MINOR_DIFF_LINES="${MIN_MINOR_DIFF_LINES:-800}"
+MIN_PATCH_DIFF_LINES="${MIN_PATCH_DIFF_LINES:-500}"
+MIN_PATCH_FILES="${MIN_PATCH_FILES:-10}"
+MIN_NEW_SOURCE_FILES="${MIN_NEW_SOURCE_FILES:-2}"
+MIN_NEW_TEST_FILES="${MIN_NEW_TEST_FILES:-3}"
+MIN_NEW_DOC_FILES="${MIN_NEW_DOC_FILES:-2}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -68,6 +79,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --json)
             JSON_OUTPUT=true
+            shift
+            ;;
+        --ignore-whitespace)
+            IGNORE_WHITESPACE=true
             shift
             ;;
         --help|-h)
@@ -106,10 +121,18 @@ get_base_reference() {
         local ref
         ref=$(git rev-list -1 --before="$SINCE_DATE 23:59:59" HEAD 2>/dev/null || true)
         if [[ -n "$ref" ]]; then
+            verify_ref "$ref"
             printf '%s' "$ref"
         else
             printf 'Warning: No commits found before %s, using first commit\n' "$SINCE_DATE" >&2
-            git rev-list --max-parents=0 HEAD
+            local first_commit
+            first_commit=$(git rev-list --max-parents=0 HEAD 2>/dev/null || true)
+            if [[ -n "$first_commit" ]]; then
+                printf '%s' "$first_commit"
+            else
+                printf 'Error: No commits found in repository\n' >&2
+                exit 1
+            fi
         fi
         return
     fi
@@ -121,11 +144,18 @@ get_base_reference() {
         printf '%s' "$last_tag"
     else
         # If no tags exist, use the first commit
-        git rev-list --max-parents=0 HEAD
+        local first_commit
+        first_commit=$(git rev-list --max-parents=0 HEAD 2>/dev/null || true)
+        if [[ -n "$first_commit" ]]; then
+            printf '%s' "$first_commit"
+        else
+            printf 'Error: No commits found in repository\n' >&2
+            exit 1
+        fi
     fi
 }
 
-# Classify file path
+# Classify file path - fixed to match project layout
 classify_path() {
     local path="$1"
     # Skip vendor/build directories
@@ -155,10 +185,20 @@ classify_path() {
 analyze_changes() {
     local base_ref="$1"
     
-    # Check if there are any changes (but don't exit - we want to analyze even small changes)
+    # Check if there are any changes
     if git diff --quiet "$base_ref"..HEAD; then
         printf 'Warning: No changes detected since %s\n' "$base_ref" >&2
-        # Continue with analysis anyway - might be edge cases
+        # Return early with zero values
+        printf 'added_files=0\n'
+        printf 'modified_files=0\n'
+        printf 'deleted_files=0\n'
+        printf 'new_source_files=0\n'
+        printf 'new_test_files=0\n'
+        printf 'new_doc_files=0\n'
+        printf 'cli_changes=false\n'
+        printf 'breaking_cli_changes=false\n'
+        printf 'diff_size=0\n'
+        return
     fi
     
     local added_files=0
@@ -224,7 +264,11 @@ analyze_changes() {
     
     # Get diff size using numstat for reliable parsing
     local diff_size
-    diff_size=$(git diff --numstat "$base_ref"..HEAD 2>&1 | awk '{a+=$1; d+=$2} END{print 0+a+d}' || echo "0")
+    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
+        diff_size=$(git diff -w --numstat "$base_ref"..HEAD 2>&1 | awk '{a+=$1; d+=$2} END{print 0+a+d}' || echo "0")
+    else
+        diff_size=$(git diff --numstat "$base_ref"..HEAD 2>&1 | awk '{a+=$1; d+=$2} END{print 0+a+d}' || echo "0")
+    fi
     
     printf 'added_files=%s\n' "$added_files"
     printf 'modified_files=%s\n' "$modified_files"
@@ -250,17 +294,17 @@ suggest_version_bump() {
     local diff_size="$9"
     
     # CLI-focused thresholds - only bump for significant changes
-    if [[ "$breaking_cli_changes" = "true" ]] && [[ "${diff_size:-0}" -gt 500 ]]; then
+    if [[ "$breaking_cli_changes" = "true" ]] && [[ "${diff_size:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
         printf 'major'
-    elif [[ "$cli_changes" = "true" ]] && [[ "${diff_size:-0}" -gt 800 ]]; then
+    elif [[ "$cli_changes" = "true" ]] && [[ "${diff_size:-0}" -gt "$MIN_MINOR_DIFF_LINES" ]]; then
         printf 'minor'
-    elif [[ "${new_source_files:-0}" -gt 2 ]] && [[ "${diff_size:-0}" -gt 1000 ]]; then
+    elif [[ "${new_source_files:-0}" -gt "$MIN_NEW_SOURCE_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_MINOR_DIFF_LINES" ]]; then
         printf 'minor'
-    elif [[ "${new_test_files:-0}" -gt 3 ]] && [[ "${diff_size:-0}" -gt 800 ]]; then
+    elif [[ "${new_test_files:-0}" -gt "$MIN_NEW_TEST_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_MINOR_DIFF_LINES" ]]; then
         printf 'minor'
-    elif [[ "${new_doc_files:-0}" -gt 2 ]] && [[ "${diff_size:-0}" -gt 600 ]]; then
+    elif [[ "${new_doc_files:-0}" -gt "$MIN_NEW_DOC_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_MINOR_DIFF_LINES" ]]; then
         printf 'minor'
-    elif [[ "${modified_files:-0}" -gt 10 ]] && [[ "${diff_size:-0}" -gt 500 ]]; then
+    elif [[ "${modified_files:-0}" -gt "$MIN_PATCH_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
         printf 'patch'
     else
         printf 'none'
@@ -269,6 +313,12 @@ suggest_version_bump() {
 
 # Main analysis
 main() {
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        printf 'Error: Not in a git repository\n' >&2
+        exit 1
+    fi
+    
     local base_ref
     base_ref=$(get_base_reference)
     
@@ -343,12 +393,12 @@ main() {
         printf '  Diff size: %s lines\n' "$diff_size"
         printf '\n'
         printf 'Thresholds for auto-release (CLI-focused):\n'
-        printf '  Major: Breaking CLI changes + diff > 500 lines\n'
-        printf '  Minor: CLI interface changes + diff > 800 lines\n'
-        printf '  Minor: New source files (>2) + diff > 1000 lines\n'
-        printf '  Minor: New test files (>3) + diff > 800 lines\n'
-        printf '  Minor: New doc files (>2) + diff > 600 lines\n'
-        printf '  Patch: Modified files (>10) + diff > 500 lines\n'
+        printf '  Major: Breaking CLI changes + diff > %s lines\n' "$MIN_MAJOR_DIFF_LINES"
+        printf '  Minor: CLI interface changes + diff > %s lines\n' "$MIN_MINOR_DIFF_LINES"
+        printf '  Minor: New source files (>%s) + diff > %s lines\n' "$MIN_NEW_SOURCE_FILES" "$MIN_MINOR_DIFF_LINES"
+        printf '  Minor: New test files (>%s) + diff > %s lines\n' "$MIN_NEW_TEST_FILES" "$MIN_MINOR_DIFF_LINES"
+        printf '  Minor: New doc files (>%s) + diff > %s lines\n' "$MIN_NEW_DOC_FILES" "$MIN_MINOR_DIFF_LINES"
+        printf '  Patch: Modified files (>%s) + diff > %s lines\n' "$MIN_PATCH_FILES" "$MIN_PATCH_DIFF_LINES"
         printf '\n'
         
         # Show recent commits
@@ -432,10 +482,10 @@ main() {
             printf 'Or use GitHub Actions:\n'
             printf '  Go to Actions → Auto Version Bump → Run workflow → Choose: %s\n' "$suggestion"
         fi
-        
-        # Machine-readable output for CI
-        printf 'SUGGESTION=%s\n' "$suggestion"
     fi
+    
+    # Machine-readable output for CI (always last)
+    printf 'SUGGESTION=%s\n' "$suggestion"
 }
 
 # Run main function
