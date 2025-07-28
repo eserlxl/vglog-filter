@@ -105,7 +105,7 @@ jobs:
           # Verify build configuration
           echo "Build configuration verification:"
           echo "- Performance optimizations: $(grep -c "O3" build/CMakeCache.txt || echo "Not found")"
-          echo "- Debug symbols: $(file build/vglog-filter | grep -o "not stripped\|stripped")"
+          echo "- Debug symbols: $(file build/bin/vglog-filter | grep -o "not stripped\|stripped")"
       
       - name: Clean up
         run: |

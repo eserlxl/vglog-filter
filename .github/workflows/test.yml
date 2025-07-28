@@ -42,7 +42,7 @@ jobs:
       matrix:
         build-type: [default, performance, debug, warnings]
     env:
-      BINARY_PATH: build/vglog-filter
+      BINARY_PATH: build/bin/vglog-filter
       DEBIAN_FRONTEND: noninteractive
 
     steps:

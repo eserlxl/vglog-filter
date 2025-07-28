@@ -45,7 +45,7 @@ jobs:
           echo "=== Debug Build Verification ==="
           
           # Check if binary contains debug symbols
-          if file build/vglog-filter | grep -q "not stripped"; then
+          if file build/bin/vglog-filter | grep -q "not stripped"; then
             echo "✓ Debug symbols present"
           else
             echo "✗ Debug symbols missing"
@@ -53,11 +53,11 @@ jobs:
           fi
           
           # Check binary size (should be larger due to debug info)
-          BINARY_SIZE=$(stat -c%s build/vglog-filter)
+          BINARY_SIZE=$(stat -c%s build/bin/vglog-filter)
           echo "Binary size: $BINARY_SIZE bytes"
           
           # Verify debug information is present
-          if readelf -S build/vglog-filter | grep -q "\.debug"; then
+          if readelf -S build/bin/vglog-filter | grep -q "\.debug"; then
             echo "✓ Debug sections present"
           else
             echo "✗ Debug sections missing"
@@ -69,7 +69,7 @@ jobs:
           echo "=== Testing Debug Build Functionality ==="
           
           # Test basic functionality
-          ./build/vglog-filter --help
+          ./build/bin/vglog-filter --help
           
           # Test with sample input that includes the debug marker
           cat > test_input.txt << 'EOF'
@@ -106,7 +106,7 @@ jobs:
           ==12345== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)
           EOF
           
-          ./build/vglog-filter test_input.txt > output.txt
+          ./build/bin/vglog-filter test_input.txt > output.txt
           
           # Verify output
           if [ -s output.txt ]; then
@@ -119,7 +119,7 @@ jobs:
           
           # Test with -k flag to keep all debug info
           echo "Testing with -k flag..."
-          ./build/vglog-filter -k test_input.txt > output_keep.txt
+          ./build/bin/vglog-filter -k test_input.txt > output_keep.txt
           
           if [ -s output_keep.txt ]; then
             echo "✓ Debug build processes input with -k flag correctly"
@@ -140,7 +140,7 @@ jobs:
           ==12345==     in use at exit: 40 bytes in 1 blocks
           EOF
           
-          ./build/vglog-filter test_no_marker.txt > output_no_marker.txt
+          ./build/bin/vglog-filter test_no_marker.txt > output_no_marker.txt
           
           # This should produce no output because there's no marker
           if [ ! -s output_no_marker.txt ]; then
@@ -161,7 +161,7 @@ jobs:
           # Test that GDB can load the binary
           if command -v gdb >/dev/null 2>&1; then
             echo "Testing GDB integration..."
-            gdb -batch -ex "file build/vglog-filter" -ex "info functions" | head -20
+            gdb -batch -ex "file build/bin/vglog-filter" -ex "info functions" | head -20
             echo "✓ GDB can load debug symbols"
           else
             echo "GDB not available, skipping debugger test"

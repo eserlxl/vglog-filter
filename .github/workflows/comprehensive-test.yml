@@ -114,27 +114,27 @@ jobs:
           echo "=== Verifying ${{ matrix.build_config.name }} build ==="
 
           # Check binary exists
-          if [ ! -f "${BUILD_DIR}/vglog-filter" ]; then
-            echo "✗ Binary not found at ${BUILD_DIR}/vglog-filter"
-            ls -la "${BUILD_DIR}" || true
+          if [ ! -f "${BUILD_DIR}/bin/vglog-filter" ]; then
+            echo "✗ Binary not found at ${BUILD_DIR}/bin/vglog-filter"
+            ls -la "${BUILD_DIR}/bin" || true
             exit 1
           fi
 
           # Check binary size
-          BINARY_SIZE=$(stat -c%s "${BUILD_DIR}/vglog-filter")
+          BINARY_SIZE=$(stat -c%s "${BUILD_DIR}/bin/vglog-filter")
           echo "Binary size: ${BINARY_SIZE} bytes"
 
           # Debug vs stripped expectation
           if [[ "${{ matrix.build_config.name }}" == *"debug"* ]]; then
-            if file "${BUILD_DIR}/vglog-filter" | grep -q "not stripped"; then
+            if file "${BUILD_DIR}/bin/vglog-filter" | grep -q "not stripped"; then
               echo "✓ Debug symbols present (expected for debug build)"
             else
               echo "✗ Debug symbols missing (expected for debug build)"
-              file "${BUILD_DIR}/vglog-filter"
+              file "${BUILD_DIR}/bin/vglog-filter"
               exit 1
             fi
           else
-            if file "${BUILD_DIR}/vglog-filter" | grep -q "stripped"; then
+            if file "${BUILD_DIR}/bin/vglog-filter" | grep -q "stripped"; then
               echo "✓ Binary stripped (expected for non-debug build)"
             else
               echo "⚠ Binary not stripped (may contain debug symbols)"
@@ -143,11 +143,11 @@ jobs:
 
           # Check test executables if tests were built
           if [[ "${{ matrix.build_config.name }}" == *"tests"* ]]; then
-            if [ -f "${BUILD_DIR}/test_basic" ] && [ -f "${BUILD_DIR}/test_integration" ]; then
+            if [ -f "${BUILD_DIR}/bin/test_basic" ] && [ -f "${BUILD_DIR}/bin/test_integration" ]; then
               echo "✓ Test executables built"
             else
               echo "✗ Test executables missing"
-              ls -la "${BUILD_DIR}" || true
+              ls -la "${BUILD_DIR}/bin" || true
               exit 1
             fi
           fi
@@ -158,17 +158,17 @@ jobs:
           echo "=== Testing ${{ matrix.build_config.name }} functionality ==="
 
           # --help should succeed
-          "${BUILD_DIR}/vglog-filter" --help >/dev/null
+          "${BUILD_DIR}/bin/vglog-filter" --help >/dev/null
 
           # Basic pipeline test
-          echo "==12345== Test input" | "${BUILD_DIR}/vglog-filter" > /dev/null
+          echo "==12345== Test input" | "${BUILD_DIR}/bin/vglog-filter" > /dev/null
           echo "✓ Basic functionality works"
 
           # Run tests if they were built
           if [[ "${{ matrix.build_config.name }}" == *"tests"* ]]; then
             echo "Running test suite..."
-            "${BUILD_DIR}/test_basic"
-            "${BUILD_DIR}/test_integration"
+            "${BUILD_DIR}/bin/test_basic"
+            "${BUILD_DIR}/bin/test_integration"
             echo "✓ All tests passed"
           fi
 
@@ -213,7 +213,7 @@ jobs:
           fi
 
           # Check for debug sections in the binary
-          if readelf -S "${BUILD_DIR}/vglog-filter" | grep -q '\.debug'; then
+          if readelf -S "${BUILD_DIR}/bin/vglog-filter" | grep -q '\.debug'; then
             echo "✓ Debug sections present"
           else
             echo "⚠ Debug sections not found"

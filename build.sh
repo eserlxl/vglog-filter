@@ -182,7 +182,7 @@ if [[ "$RUN_TESTS" == "ON" ]]; then
     # Fallback: run any test_* executable in the build dir
     shopt -s nullglob
     tests_found=0
-    for tbin in "$BUILD_DIR"/test_*; do
+    for tbin in "$BUILD_DIR"/bin/test_*; do
       if [[ -x "$tbin" ]]; then
         msg "Running $(basename "$tbin") ..."
         "$tbin"
@@ -191,7 +191,7 @@ if [[ "$RUN_TESTS" == "ON" ]]; then
     done
     shopt -u nullglob
     if [[ "$tests_found" -eq 0 ]]; then
-      warn "No test executables found in '$BUILD_DIR'."
+      warn "No test executables found in '$BUILD_DIR/bin'."
       warn "If tests are defined, ensure CMake config enables them (BUILD_TESTS=ON)."
     else
       msg "All tests completed (direct executables)."

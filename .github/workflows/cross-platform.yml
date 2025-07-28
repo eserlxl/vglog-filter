@@ -60,9 +60,9 @@ jobs:
         run: |
           set -euo pipefail
           ./build.sh performance warnings clean
-          test -x ./build/vglog-filter
-          ./build/vglog-filter --help
-          echo "==12345== Test input" | ./build/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
+          test -x ./build/bin/vglog-filter
+          ./build/bin/vglog-filter --help
+          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
 
   test-arch:
     name: Arch Linux (container)
@@ -93,9 +93,9 @@ jobs:
         run: |
           set -euo pipefail
           ./build.sh performance warnings clean
-          test -x ./build/vglog-filter
-          ./build/vglog-filter --help
-          echo "==12345== Test input" | ./build/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
+          test -x ./build/bin/vglog-filter
+          ./build/bin/vglog-filter --help
+          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
 
   test-fedora:
     name: Fedora (container)
@@ -126,9 +126,9 @@ jobs:
         run: |
           set -euo pipefail
           ./build.sh performance warnings clean
-          test -x ./build/vglog-filter
-          ./build/vglog-filter --help
-          echo "==12345== Test input" | ./build/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
+          test -x ./build/bin/vglog-filter
+          ./build/bin/vglog-filter --help
+          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
 
   test-debian:
     name: Debian (container)
@@ -162,6 +162,6 @@ jobs:
         run: |
           set -euo pipefail
           ./build.sh performance warnings clean
-          test -x ./build/vglog-filter
-          ./build/vglog-filter --help
-          echo "==12345== Test input" | ./build/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; } 
+          test -x ./build/bin/vglog-filter
+          ./build/bin/vglog-filter --help
+          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; } 

@@ -163,8 +163,8 @@ The project includes a basic test framework in the `test/` directory:
 ./build.sh tests performance warnings
 
 # Manual test compilation (if needed)
-g++ -std=c++20 -Wall -pedantic -Wextra -O2 test/test_basic.cpp -o build/test_basic
-./build/test_basic
+g++ -std=c++20 -Wall -pedantic -Wextra -O2 test/test_basic.cpp -o build/bin/test_basic
+./build/bin/test_basic
 ```
 
 #### CI/CD Testing

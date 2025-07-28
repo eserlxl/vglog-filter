@@ -59,10 +59,10 @@ jobs:
           echo "Analyzing binary dependencies..."
           
           # Check what libraries the binary links against
-          ldd build/vglog-filter || echo "Binary is statically linked or ldd not available"
+          ldd build/bin/vglog-filter || echo "Binary is statically linked or ldd not available"
           
           # Check for any suspicious strings in the binary
-          strings build/vglog-filter | head -20 || echo "strings command not available"
+          strings build/bin/vglog-filter | head -20 || echo "strings command not available"
       
       - name: Security summary
         run: |

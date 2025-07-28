@@ -181,7 +181,7 @@ The CI/CD pipeline tests all possible build configuration combinations:
 
 # Verify debug builds
 ./build.sh debug
-gdb build/vglog-filter
+gdb build/bin/vglog-filter
 
 # Test performance builds
 ./build.sh performance
