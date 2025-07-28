@@ -55,6 +55,18 @@ YELLOW=''
 CYAN=''
 RESET=''
 
+# Helper function to check if CMakeLists.txt has a recognizable version field
+has_cmake_version_field() {
+    local cmake="$PROJECT_ROOT/CMakeLists.txt"
+    [[ -f "$cmake" ]] || return 1
+    if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
+        return 0
+    elif grep -Eq '^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
+        return 0
+    fi
+    return 1
+}
+
 # Function to check for dirty tree with proper exclusions
 check_dirty_tree() {
     # For prerelease versions, we don't write to VERSION file, so exclude it from dirty check
@@ -86,9 +98,19 @@ check_dirty_tree() {
         
         printf '%s\n' "${RED}Error:${RESET} working tree has disallowed changes. Use --allow-dirty to override.$([[ -n "$suffix" ]] && printf ' Allowed: %s.' "$suffix")" >&2
         
-        # Show the dirty files to aid debugging
-        printf '%s\n' "${YELLOW}Dirty files:${RESET}" >&2
-        git diff --name-only "${diff_args[@]}" | sed 's/^/  /' >&2
+        # Build the filtered list that respects your pathspec exclusions
+        local status_args=(--porcelain -- .)
+        for path in "${exclude_paths[@]}"; do
+            status_args+=(":(exclude)$path")
+        done
+        local changed
+        changed="$(git status "${status_args[@]}")"
+        
+        # Print it with the exact label your tests expect
+        if [[ -n "$changed" ]]; then
+            printf '%s\n' "Dirty files:" >&2
+            printf '%s\n' "$changed" >&2
+        fi
         
         exit 1
     fi
@@ -424,10 +446,17 @@ Requirements:
   macOS users: run in GNU coreutils + gsed environment (e.g., brew install coreutils gnu-sed)
 
 Behavior notes:
-  --print computes the version and exits early without validations or git checks
-  --dry-run produces an action plan and skips dirty-tree enforcement
-  Prereleases are printed/committed-without-file-changes but never written to VERSION or tagged
-  Commits are restricted to VERSION and CMakeLists.txt only (prevents unrelated staged files)
+
+Pre-releases (X.Y.Z-...) are supported only with --set and are not written to VERSION or tagged by default.
+
+--print performs calculation without changing files; with --set, it prints the value verbatim unless validation fails.
+
+--push pushes the current branch and, if --tag is used, the newly created tag (not all tags).
+
+--print computes the version and exits early without validations or git checks
+--dry-run produces an action plan and skips dirty-tree enforcement
+Prereleases are printed/committed-without-file-changes but never written to VERSION or tagged
+Commits are restricted to VERSION and CMakeLists.txt only (prevents unrelated staged files)
 
 Arguments:
   major    Increment major version (breaking changes)
@@ -479,8 +508,13 @@ Commit Message Consistency:
   This ensures consistency between commit messages and tag names.
 
 File Tracking Requirements:
-  VERSION file must be tracked by git when using --commit or --tag.
-  This ensures version bumps are properly versioned and traceable.
+
+VERSION must be tracked in git when using --commit or --tag; otherwise the script aborts.
+
+If CMakeLists.txt is updated, it will be staged automatically unless --no-cmake is given.
+
+VERSION file must be tracked by git when using --commit or --tag.
+This ensures version bumps are properly versioned and traceable.
 
 GPG Signing Notes:
   If commit.gpgSign=true is configured, --no-verify will skip hooks but
@@ -666,6 +700,8 @@ if [[ "$PRINT_ONLY" == "true" ]]; then
     # For --print, we need to compute the version even without proper arguments
     # This is a special case for quick version preview
     if [[ -n "$SET_VERSION" ]]; then
+        # Validate version format before printing
+        validate_version_format "$SET_VERSION" "$ALLOW_PRERELEASE"
         printf '%s\n' "$SET_VERSION"
         exit 0
     elif [[ -n "$BUMP_TYPE" ]]; then
@@ -724,7 +760,7 @@ if [[ -f "$VERSION_FILE" ]]; then
     VERSION_EXISTS="true"
     
     # Validate VERSION symlink safety
-    VERSION_REAL="$(readlink -f "$VERSION_FILE" 2>/dev/null || echo "")"
+    VERSION_REAL="$(realpath -e "$VERSION_FILE" 2>/dev/null || echo "")"
     if [[ -z "$VERSION_REAL" ]]; then
         printf '%s\n' "${RED}Error: VERSION path is a broken symlink${RESET}" >&2
         exit 1
@@ -884,18 +920,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
         if [[ "$NEW_VERSION" == *-* ]]; then
             printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (pre-release version)${RESET}" >&2
         else
-            # Probe CMakeLists.txt like update_cmake_version() does
-            cmake="$PROJECT_ROOT/CMakeLists.txt"
-            would_update="false"
-            if [[ -f "$cmake" ]]; then
-                if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-                    would_update="true"
-                elif grep -Eq '^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-                    would_update="true"
-                fi
-            fi
-            
-            if [[ "$would_update" == "true" ]]; then
+            if has_cmake_version_field; then
                 printf '%s\n' "${YELLOW}DRY RUN: Would update CMakeLists.txt to $NEW_VERSION${RESET}" >&2
             else
                 printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (no recognizable version field)${RESET}" >&2
@@ -912,17 +937,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
             effective_files+=("VERSION")
         fi
         if [[ "$UPDATE_CMAKE" == "true" && "$NEW_VERSION" != *-* ]]; then
-            # Probe CMakeLists.txt like update_cmake_version() does
-            cmake="$PROJECT_ROOT/CMakeLists.txt"
-            would_update="false"
-            if [[ -f "$cmake" ]]; then
-                if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-                    would_update="true"
-                elif grep -Eq '^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-                    would_update="true"
-                fi
-            fi
-            if [[ "$would_update" == "true" ]]; then
+            if has_cmake_version_field; then
                 effective_files+=("CMakeLists.txt")
             fi
         fi

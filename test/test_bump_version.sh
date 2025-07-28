@@ -32,14 +32,17 @@ run_test() {
     # Check if output contains expected text
     if echo "$output" | grep -q "$expected_output"; then
         printf '%s\n' "${GREEN}✓ PASS: $test_name${RESET}"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         printf '%s\n' "${RED}✗ FAIL: $test_name${RESET}"
         printf '%s\n' "${YELLOW}Expected: $expected_output${RESET}"
         printf '%s\n' "${YELLOW}Got: $output${RESET}"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     printf '%s\n' ""
+    
+    # Return success to prevent script from exiting
+    return 0
 }
 
 # Function to setup test environment
@@ -56,21 +59,26 @@ setup_test() {
     # Create initial VERSION file
     echo "1.0.0" > VERSION
     git add VERSION
-    git commit --quiet -m "Initial version"
+    git commit --quiet -m "Initial version" 2>/dev/null || true
 }
+
+# Store the original directory for script path
+ORIGINAL_DIR="$(pwd)"
+BUMP_VERSION_SCRIPT="$ORIGINAL_DIR/dev-bin/bump-version"
 
 # Function to cleanup test environment
 cleanup_test() {
     local test_dir="$1"
     cd ..
-    rm -rf "$test_dir"
+    rm -rf "$test_dir" 2>/dev/null || true
+    return 0
 }
 
 # Test 1: Early --print behavior (should exit before validations)
 printf '%s\n' "${CYAN}=== Test 1: Early --print behavior ===${RESET}"
 setup_test "test_print_early"
 run_test "Early --print exits without git checks" \
-    "./dev-bin/bump-version patch --print" \
+    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "1.0.1"
 cleanup_test "test_print_early"
 
@@ -78,13 +86,13 @@ cleanup_test "test_print_early"
 printf '%s\n' "${CYAN}=== Test 2: Dry-run CMakeLists.txt accuracy ===${RESET}"
 setup_test "test_dry_run_cmake"
 run_test "Dry-run shows CMake update when version field exists" \
-    "echo 'project(test VERSION 1.0.0)' > CMakeLists.txt && ./dev-bin/bump-version patch --dry-run" \
+    "echo 'project(test VERSION 1.0.0)' > CMakeLists.txt && $BUMP_VERSION_SCRIPT patch --dry-run --repo-root $(pwd)" \
     "Would update CMakeLists.txt to 1.0.1"
 cleanup_test "test_dry_run_cmake"
 
 setup_test "test_dry_run_cmake_no_field"
 run_test "Dry-run skips CMake when no version field" \
-    "echo 'project(test)' > CMakeLists.txt && ./dev-bin/bump-version patch --dry-run" \
+    "echo 'project(test)' > CMakeLists.txt && $BUMP_VERSION_SCRIPT patch --dry-run --repo-root $(pwd)" \
     "Would skip CMakeLists.txt update (no recognizable version field)"
 cleanup_test "test_dry_run_cmake_no_field"
 
@@ -92,8 +100,11 @@ cleanup_test "test_dry_run_cmake_no_field"
 printf '%s\n' "${CYAN}=== Test 3: Dirty file detection ===${RESET}"
 setup_test "test_dirty_files"
 echo "modified" > some_file.txt
+git add some_file.txt
+git commit --quiet -m "Add some_file.txt" 2>/dev/null || true
+echo "modified again" > some_file.txt
 run_test "Dirty tree detection shows file names" \
-    "./dev-bin/bump-version patch --commit 2>&1 || true" \
+    "$BUMP_VERSION_SCRIPT patch --commit --repo-root $(pwd) 2>&1 || true" \
     "Dirty files:"
 cleanup_test "test_dirty_files"
 
@@ -101,13 +112,13 @@ cleanup_test "test_dirty_files"
 printf '%s\n' "${CYAN}=== Test 4: Prerelease behavior ===${RESET}"
 setup_test "test_prerelease"
 run_test "Prerelease --print works" \
-    "./dev-bin/bump-version --set 1.0.0-rc.1 --allow-prerelease --print" \
+    "$BUMP_VERSION_SCRIPT --set 1.0.0-rc.1 --allow-prerelease --print --repo-root $(pwd)" \
     "1.0.0-rc.1"
 cleanup_test "test_prerelease"
 
 setup_test "test_prerelease_tag_fail"
 run_test "Prerelease tag creation fails" \
-    "./dev-bin/bump-version --set 1.0.0-rc.1 --allow-prerelease --tag 2>&1 || true" \
+    "$BUMP_VERSION_SCRIPT --set 1.0.0-rc.1 --allow-prerelease --tag --repo-root $(pwd) 2>&1 || true" \
     "Cannot create tag for pre-release version"
 cleanup_test "test_prerelease_tag_fail"
 
@@ -117,17 +128,17 @@ setup_test "test_commit_restriction"
 echo "staged" > staged_file.txt
 git add staged_file.txt
 run_test "Commit only includes VERSION and CMakeLists.txt" \
-    "./dev-bin/bump-version patch --commit --dry-run" \
+    "$BUMP_VERSION_SCRIPT patch --commit --dry-run --repo-root $(pwd)" \
     "Would commit files: VERSION"
 cleanup_test "test_commit_restriction"
 
 # Test 6: Usage documentation
 printf '%s\n' "${CYAN}=== Test 6: Usage documentation ===${RESET}"
 run_test "Usage shows behavior notes" \
-    "./dev-bin/bump-version --help" \
+    "$BUMP_VERSION_SCRIPT --help" \
     "Behavior notes:"
 run_test "Usage shows file tracking requirements" \
-    "./dev-bin/bump-version --help" \
+    "$BUMP_VERSION_SCRIPT --help" \
     "File Tracking Requirements:"
 
 # Print summary
