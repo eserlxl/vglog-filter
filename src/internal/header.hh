@@ -8,6 +8,5 @@ int process_data(const char* input, int length);
 void cleanup_resources(void);
 
 // This function will be removed to test API breaking detection
-int deprecated_function(int param);
 
 #endif // INTERNAL_HEADER_HH 
