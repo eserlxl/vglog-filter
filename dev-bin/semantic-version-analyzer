@@ -90,10 +90,11 @@ Notes:
   - Multi-byte characters in long options are not supported
   - Colons are filtered from getopt strings to avoid false "removed option" detections
   - All git commands use color.ui=false for consistent output
+  - All git diff commands use --no-ext-diff -M -C for deterministic parsing and rename detection
   - Header prototype detection is restricted to include/** files with semicolon endings
-  - Manual argv parser detection (--verbose) scans for added/removed --[a-z0-9-]+ tokens in source files
+  - Manual CLI detection (--verbose) scans for added/removed --[[:alnum:]-]+ tokens in C/C++ source files
   - Short option change detection normalizes colons to handle argument requirement changes consistently
-  - Rename/copy detection is enabled with -M -C flags for accurate file change tracking
+  - Documentation detection is case-insensitive for better portability
 
 EOF
 }
@@ -280,9 +281,12 @@ classify_path() {
     
     # Documentation files - support both doc/ and docs/ and README files in nested directories
     # FIXED: Broaden doc classification to include common documentation files in any directory
-    if [[ "$path" =~ /(doc|docs)/ ]] || [[ "$path" =~ ^(doc|docs)/ ]] || \
-       [[ "$path" =~ /(README|CHANGELOG|CONTRIBUTING|LICENSE|COPYING|AUTHORS|INSTALL|NEWS|HISTORY) ]] || \
-       [[ "$path" =~ ^(README|CHANGELOG|CONTRIBUTING|LICENSE|COPYING|AUTHORS|INSTALL|NEWS|HISTORY) ]]; then
+    # ENHANCED: Case-insensitive matching for better portability
+    local path_lower
+    path_lower=$(printf '%s' "$path" | tr '[:upper:]' '[:lower:]')
+    if [[ "$path_lower" =~ /(doc|docs)/ ]] || [[ "$path_lower" =~ ^(doc|docs)/ ]] || \
+       [[ "$path_lower" =~ /(readme|changelog|contributing|license|copying|authors|install|news|history) ]] || \
+       [[ "$path_lower" =~ ^(readme|changelog|contributing|license|copying|authors|install|news|history) ]]; then
         printf '20'
         return
     fi
@@ -307,7 +311,7 @@ extract_cli_options() {
     
     # Get source files diff
     local srcdiff
-    srcdiff=$(git -c color.ui=false diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' 2>/dev/null || true)
+    srcdiff=$(git -c color.ui=false --no-ext-diff -M -C diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' 2>/dev/null || true)
     
     if [[ -z "$srcdiff" ]]; then
         printf 'short_options_before=\n'
@@ -332,7 +336,7 @@ extract_cli_options() {
     
     # Collect changed source files (NUL-safe; portable without mapfile)
     while IFS= read -r -d '' f; do changed_files+=("$f"); done \
-        < <(git -c core.quotepath=false diff -z --name-only "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' 2>/dev/null || printf '')
+        < <(git -c core.quotepath=false --no-ext-diff -M -C diff -z --name-only "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' 2>/dev/null || printf '')
     
     if (( ${#changed_files[@]} > 0 )); then
         short_before=$(
@@ -381,7 +385,7 @@ extract_cli_options() {
     # Check for removed case labels in switch statements
     local removed_cases
     removed_cases=$(
-        git -c color.ui=false diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
+        git -c color.ui=false --no-ext-diff -M -C diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
         | grep '^-[[:space:]]*case[[:space:]]' \
         | sed 's/^-[[:space:]]*case[[:space:]]*//' \
         | sort -u || printf ''
@@ -391,7 +395,7 @@ extract_cli_options() {
         # Check if corresponding +case appears for each removed case
         local added_cases
         added_cases=$(
-            git -c color.ui=false diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
+            git -c color.ui=false --no-ext-diff -M -C diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
             | grep '^+[[:space:]]*case[[:space:]]' \
             | sed 's/^+[[:space:]]*case[[:space:]]*//' \
             | sort -u || printf ''
@@ -413,7 +417,7 @@ extract_cli_options() {
     # Restrict to header files and require semicolon ending for better prototype detection
     # ENHANCED: Avoid false positives on typedefs/macros by requiring semicolon and no leading typedef/#
     removed_prototypes=$(
-        git -c color.ui=false diff --unified=0 "$base_ref".."$target_ref" \
+        git -c color.ui=false --no-ext-diff -M -C diff --unified=0 "$base_ref".."$target_ref" \
             -- ':(glob)include/**/*.{h,hpp,hh}' \
         | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/ && !/^-[[:space:]]*(typedef|#)/' \
         | wc -l || printf '0'
@@ -424,7 +428,7 @@ extract_cli_options() {
     # Check for explicit API-BREAKING comments
     local explicit_breaking
     explicit_breaking=$(
-        git -c color.ui=false diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
+        git -c color.ui=false --no-ext-diff -M -C diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
         | grep -i 'API-BREAKING:' | wc -l || printf '0'
     )
     
@@ -435,7 +439,7 @@ extract_cli_options() {
     local has_code_changes=false
     
     # Check if there are code changes (src/ or include/ files)
-    if git -c color.ui=false diff --name-only "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx,h,hpp,hh}' ':(glob)include/**/*.{h,hpp,hh}' | grep -q .; then
+    if git -c color.ui=false --no-ext-diff -M -C diff --name-only "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx,h,hpp,hh}' ':(glob)include/**/*.{h,hpp,hh}' | grep -q .; then
         has_code_changes=true
     fi
     
@@ -450,6 +454,7 @@ extract_cli_options() {
     
     # FIXED: Manual argv parser detection for tools that don't use getopt
     # This is behind --verbose to avoid performance impact
+    # NOTE: Limited to C/C++ source files; other languages (shell, Python, etc.) not detected
     local manual_cli_changes=false
     local manual_added_long_count=0
     local manual_removed_long_count=0
@@ -459,17 +464,17 @@ extract_cli_options() {
         # Extract added long options (lines starting with +)
         local added_long_opts
         added_long_opts=$(
-            git -c color.ui=false diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
-            | grep '^+[[:space:]]*--[a-z0-9-]\+' \
-            | grep -o '--[a-z0-9-]\+' | sort -u || printf ''
+            git -c color.ui=false --no-ext-diff -M -C diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
+            | grep -E '^+[[:space:]]*--[[:alnum:]-]+' \
+            | grep -o '--[[:alnum:]-]+' | sort -u || printf ''
         )
         
         # Extract removed long options (lines starting with -)
         local removed_long_opts
         removed_long_opts=$(
-            git -c color.ui=false diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
-            | grep '^-[[:space:]]*--[a-z0-9-]\+' \
-            | grep -o '--[a-z0-9-]\+' | sort -u || printf ''
+            git -c color.ui=false --no-ext-diff -M -C diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
+            | grep -E '^-[[:space:]]*--[[:alnum:]-]+' \
+            | grep -o '--[[:alnum:]-]+' | sort -u || printf ''
         )
         
         # Count the options
@@ -508,6 +513,8 @@ extract_cli_options() {
     fi
     
     # Add manual CLI counts to the totals if manual detection found changes
+    # NOTE: This may result in double-counting if a project uses both getopt and manual parsing
+    # The counts are primarily used for "changed?" signals, not exact totals
     if [[ "$manual_cli_changes" = "true" ]]; then
         added_long_count=$((added_long_count + manual_added_long_count))
         removed_long_count=$((removed_long_count + manual_removed_long_count))
@@ -605,7 +612,7 @@ analyze_changes() {
                 inc_counters_for "$file"
                 ;;
         esac
-    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" 2>/dev/null)
+    done < <(git -c color.ui=false -c core.quotepath=false --no-ext-diff -M -C diff --name-status -z "$base_ref".."$target_ref" 2>/dev/null)
     
     # Extract CLI options for comparison
     local cli_analysis
@@ -671,9 +678,9 @@ analyze_changes() {
     # Get diff size using numstat for stable parsing - FIXED: Binary-safe summation
     local diff_size
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        diff_size=$(sum_numstat git -c color.ui=false diff -w --numstat "$base_ref".."$target_ref")
+        diff_size=$(sum_numstat git -c color.ui=false --no-ext-diff -M -C diff -w --numstat "$base_ref".."$target_ref")
     else
-        diff_size=$(sum_numstat git -c color.ui=false diff --numstat "$base_ref".."$target_ref")
+        diff_size=$(sum_numstat git -c color.ui=false --no-ext-diff -M -C diff --numstat "$base_ref".."$target_ref")
     fi
     
     printf 'added_files=%s\n' "$added_files"
