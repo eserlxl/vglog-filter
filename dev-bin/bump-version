@@ -98,19 +98,9 @@ check_dirty_tree() {
         
         printf '%s\n' "${RED}Error:${RESET} working tree has disallowed changes. Use --allow-dirty to override.$([[ -n "$suffix" ]] && printf ' Allowed: %s.' "$suffix")" >&2
         
-        # Build the filtered list that respects your pathspec exclusions
-        local status_args=(--porcelain -- .)
-        for path in "${exclude_paths[@]}"; do
-            status_args+=(":(exclude)$path")
-        done
-        local changed
-        changed="$(git status "${status_args[@]}")"
-        
-        # Print it with the exact label your tests expect
-        if [[ -n "$changed" ]]; then
-            printf '%s\n' "Dirty files:" >&2
-            printf '%s\n' "$changed" >&2
-        fi
+        # Print dirty files with the exact label your tests expect
+        printf '%s\n' "Dirty files:" >&2
+        git diff --name-only "${diff_args[@]}" >&2
         
         exit 1
     fi
@@ -920,10 +910,14 @@ if [[ "$DRY_RUN" == "true" ]]; then
         if [[ "$NEW_VERSION" == *-* ]]; then
             printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (pre-release version)${RESET}" >&2
         else
-            if has_cmake_version_field; then
-                printf '%s\n' "${YELLOW}DRY RUN: Would update CMakeLists.txt to $NEW_VERSION${RESET}" >&2
+            if [[ -f "$PROJECT_ROOT/CMakeLists.txt" ]]; then
+                if has_cmake_version_field; then
+                    printf '%s\n' "${YELLOW}DRY RUN: Would update CMakeLists.txt to $NEW_VERSION${RESET}" >&2
+                else
+                    printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (no recognizable version field)${RESET}" >&2
+                fi
             else
-                printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (no recognizable version field)${RESET}" >&2
+                printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (file not found)${RESET}" >&2
             fi
         fi
     else
