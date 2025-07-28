@@ -54,7 +54,9 @@ require_cmd
 # --- Cleanup trap -------------------------------------------------------------
 TMP_FILE=""
 cleanup() {
-    [[ -n "$TMP_FILE" ]] && rm -f "$TMP_FILE" 2>/dev/null || true
+    if [[ -n "$TMP_FILE" ]]; then
+        rm -f "$TMP_FILE" 2>/dev/null || true
+    fi
 }
 trap cleanup INT TERM EXIT
 
@@ -646,7 +648,7 @@ if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
 fi
 
 # Dirty-tree enforcement
-if ([[ "$DO_COMMIT" == "true" ]] || [[ "$DO_TAG" == "true" ]]) && [[ "$ALLOW_DIRTY" != "true" ]] && [[ "$DRY_RUN" != "true" ]]; then
+    if { [[ "$DO_COMMIT" == "true" ]] || [[ "$DO_TAG" == "true" ]]; } && [[ "$ALLOW_DIRTY" != "true" ]] && [[ "$DRY_RUN" != "true" ]]; then
     [[ "$IN_GIT_REPO" == "true" ]] || { printf '%s\n' "${RED}Error: Not in a git repository${RESET}" >&2; exit 1; }
     check_dirty_tree
 fi

@@ -28,7 +28,7 @@ run_test() {
     local expected_exit="$3"
     local expected_output="$4"
     
-    printf "${YELLOW}Running: %s${NC}\n" "$test_name"
+    printf '%sRunning: %s%s\n' "${YELLOW}" "$test_name" "${NC}"
     
     # Run the test command
     local output
@@ -37,9 +37,9 @@ run_test() {
     
     # Check exit code
     if [[ $exit_code -eq $expected_exit ]]; then
-        printf "${GREEN}✓ Exit code correct (%d)${NC}\n" $exit_code
+        printf '%s✓ Exit code correct (%d)%s\n' "${GREEN}" "$exit_code" "${NC}"
     else
-        printf "${RED}✗ Exit code wrong: got %d, expected %d${NC}\n" $exit_code $expected_exit
+        printf '%s✗ Exit code wrong: got %d, expected %d%s\n' "${RED}" "$exit_code" "$expected_exit" "${NC}"
         ((TESTS_FAILED++))
         return 1
     fi
@@ -47,22 +47,22 @@ run_test() {
     # Check output if specified
     if [[ -n "$expected_output" ]]; then
         if echo "$output" | grep -q "$expected_output"; then
-            printf "${GREEN}✓ Output contains expected text${NC}\n"
+            printf '%s✓ Output contains expected text%s\n' "${GREEN}" "${NC}"
         else
-            printf "${RED}✗ Output missing expected text: %s${NC}\n" "$expected_output"
-            printf "Actual output:\n%s\n" "$output"
+            printf '%s✗ Output missing expected text: %s%s\n' "${RED}" "$expected_output" "${NC}"
+            printf 'Actual output:\n%s\n' "$output"
             ((TESTS_FAILED++))
             return 1
         fi
     fi
     
     ((TESTS_PASSED++))
-    printf "${GREEN}✓ Test passed${NC}\n\n"
+    printf '%s✓ Test passed%s\n\n' "${GREEN}" "${NC}"
     return 0
 }
 
 # Test 1: ERE fix - manual CLI detection should work with escaped +
-printf "${YELLOW}=== Test 1: ERE Fix for Manual CLI Detection ===${NC}\n"
+printf '%s=== Test 1: ERE Fix for Manual CLI Detection ===%s\n' "${YELLOW}" "${NC}"
 
 # Create a test file with manual CLI parsing
 cat > test_manual_cli.c << 'EOF'
@@ -99,7 +99,7 @@ run_test "Manual CLI detection with escaped +" \
     "manual_cli_changes=true"
 
 # Test 2: Manual counts should not be added to getopt totals
-printf "${YELLOW}=== Test 2: Manual Counts Separation ===${NC}\n"
+printf '%s=== Test 2: Manual Counts Separation ===%s\n' "${YELLOW}" "${NC}"
 
 # Create a file with getopt
 cat > test_getopt.c << 'EOF'
@@ -138,7 +138,7 @@ run_test "Getopt and manual counts separation" \
     '"manual_added_long_count": 0'
 
 # Test 3: Breaking changes detection
-printf "${YELLOW}=== Test 3: Breaking Changes Detection ===${NC}\n"
+printf '%s=== Test 3: Breaking Changes Detection ===%s\n' "${YELLOW}" "${NC}"
 
 # Remove a long option from getopt
 sed -i 's/"version"/"old-option"/' test_getopt.c
@@ -151,7 +151,7 @@ run_test "Breaking CLI change detection" \
     "breaking_cli"
 
 # Test 4: API breaking changes
-printf "${YELLOW}=== Test 4: API Breaking Changes ===${NC}\n"
+printf '%s=== Test 4: API Breaking Changes ===%s\n' "${YELLOW}" "${NC}"
 
 # Create header with prototype
 mkdir -p include
@@ -179,7 +179,7 @@ run_test "API breaking change detection" \
     "api_break"
 
 # Test 5: Whitespace-only changes with --ignore-whitespace
-printf "${YELLOW}=== Test 5: Whitespace Ignore ===${NC}\n"
+printf '%s=== Test 5: Whitespace Ignore ===%s\n' "${YELLOW}" "${NC}"
 
 # Add whitespace-only changes
 echo "   " >> test_manual_cli.c
@@ -192,7 +192,7 @@ run_test "Whitespace ignore with --ignore-whitespace" \
     "NONE"
 
 # Test 6: Repository without tags fallback
-printf "${YELLOW}=== Test 6: No Tags Fallback ===${NC}\n"
+printf '%s=== Test 6: No Tags Fallback ===%s\n' "${YELLOW}" "${NC}"
 
 # Create a temporary repo without tags
 TEMP_REPO=$(mktemp -d)
@@ -218,7 +218,7 @@ cd "$PROJECT_ROOT"
 rm -rf "$TEMP_REPO"
 
 # Test 7: MAJOR_REQUIRE_BREAKING environment variable
-printf "${YELLOW}=== Test 7: MAJOR_REQUIRE_BREAKING Environment Variable ===${NC}\n"
+printf '%s=== Test 7: MAJOR_REQUIRE_BREAKING Environment Variable ===%s\n' "${YELLOW}" "${NC}"
 
 # Test with different truthy values
 run_test "MAJOR_REQUIRE_BREAKING=true" \
@@ -237,7 +237,7 @@ run_test "MAJOR_REQUIRE_BREAKING=yes" \
     ""
 
 # Test 8: JSON output includes manual fields
-printf "${YELLOW}=== Test 8: JSON Output Fields ===${NC}\n"
+printf '%s=== Test 8: JSON Output Fields ===%s\n' "${YELLOW}" "${NC}"
 
 run_test "JSON includes manual CLI fields" \
     "./dev-bin/semantic-version-analyzer --verbose --since HEAD~4 --json" \
@@ -250,14 +250,14 @@ rm -f test_manual_cli.c test_getopt.c
 rm -rf include
 
 # Summary
-printf "${YELLOW}=== Test Summary ===${NC}\n"
-printf "${GREEN}Tests passed: %d${NC}\n" $TESTS_PASSED
-printf "${RED}Tests failed: %d${NC}\n" $TESTS_FAILED
+printf '%s=== Test Summary ===%s\n' "${YELLOW}" "${NC}"
+printf '%sTests passed: %d%s\n' "${GREEN}" "$TESTS_PASSED" "${NC}"
+printf '%sTests failed: %d%s\n' "${RED}" "$TESTS_FAILED" "${NC}"
 
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    printf "${GREEN}All tests passed!${NC}\n"
+    printf '%sAll tests passed!%s\n' "${GREEN}" "${NC}"
     exit 0
 else
-    printf "${RED}Some tests failed!${NC}\n"
+    printf '%sSome tests failed!%s\n' "${RED}" "${NC}"
     exit 1
 fi 

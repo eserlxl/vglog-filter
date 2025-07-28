@@ -20,25 +20,25 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 # Script path
-SCRIPT_PATH="/opt/lxl/linux/vglog-filter/dev-bin/semantic-version-analyzer"
+SCRIPT_PATH="$(dirname "$0")/../dev-bin/semantic-version-analyzer"
 
 # Helper functions
 log_info() {
-    printf "${BLUE}[INFO]${NC} %s\n" "$1"
+    printf '%s[INFO]%s %s\n' "${BLUE}" "${NC}" "$1"
 }
 
 log_success() {
-    printf "${GREEN}[PASS]${NC} %s\n" "$1"
+    printf '%s[PASS]%s %s\n' "${GREEN}" "${NC}" "$1"
     ((TESTS_PASSED++))
 }
 
 log_error() {
-    printf "${RED}[FAIL]${NC} %s\n" "$1"
+    printf '%s[FAIL]%s %s\n' "${RED}" "${NC}" "$1"
     ((TESTS_FAILED++))
 }
 
 log_warning() {
-    printf "${YELLOW}[WARN]${NC} %s\n" "$1"
+    printf '%s[WARN]%s %s\n' "${YELLOW}" "${NC}" "$1"
 }
 
 # Test function
@@ -51,6 +51,7 @@ run_test() {
     
     local output
     output=$(eval "$test_command" 2>&1)
+    # shellcheck disable=SC2034 # exit_code is used for debugging
     local exit_code=$?
     
     if [[ "$output" == *"$expected_output"* ]]; then
@@ -58,8 +59,8 @@ run_test() {
         return 0
     else
         log_error "$test_name"
-        printf "Expected: %s\n" "$expected_output"
-        printf "Got: %s\n" "$output"
+        printf 'Expected: %s\n' "$expected_output"
+        printf 'Got: %s\n' "$output"
         return 1
     fi
 }
@@ -496,6 +497,12 @@ test_json_output() {
 
 # Main test runner
 main() {
+    # Check if we're in a git repository
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        log_error "Not in a git repository"
+        exit 1
+    fi
+    
     log_info "Starting semantic version analyzer tests..."
     
     # Check if we're in the right directory
@@ -520,16 +527,16 @@ main() {
     test_json_output
     
     # Print summary
-    printf "\n${BLUE}=== Test Summary ===${NC}\n"
-    printf "Tests passed: ${GREEN}%d${NC}\n" "$TESTS_PASSED"
-    printf "Tests failed: ${RED}%d${NC}\n" "$TESTS_FAILED"
-    printf "Total tests: %d\n" $((TESTS_PASSED + TESTS_FAILED))
+    printf '\n%s=== Test Summary ===%s\n' "${BLUE}" "${NC}"
+    printf 'Tests passed: %s%d%s\n' "${GREEN}" "$TESTS_PASSED" "${NC}"
+    printf 'Tests failed: %s%d%s\n' "${RED}" "$TESTS_FAILED" "${NC}"
+    printf 'Total tests: %d\n' $((TESTS_PASSED + TESTS_FAILED))
     
     if [[ $TESTS_FAILED -eq 0 ]]; then
-        printf "\n${GREEN}All tests passed!${NC}\n"
+        printf '\n%sAll tests passed!%s\n' "${GREEN}" "${NC}"
         exit 0
     else
-        printf "\n${RED}Some tests failed!${NC}\n"
+        printf '\n%sSome tests failed!%s\n' "${RED}" "${NC}"
         exit 1
     fi
 }

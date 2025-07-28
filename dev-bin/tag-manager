@@ -234,7 +234,7 @@ cleanup_tags() {
         for tag in "${tags_to_delete[@]}"; do
             protect=0
             for pat in "${protected_patterns[@]}"; do
-                if [[ "$tag" == $pat ]]; then
+                if [[ "$tag" == "$pat" ]]; then
                     protect=1
                     break
                 fi

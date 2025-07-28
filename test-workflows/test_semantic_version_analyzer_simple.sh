@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
+# shellcheck disable=SC2034 # SCRIPT_PATH is used for reference
 SCRIPT_PATH="./dev-bin/semantic-version-analyzer"
 
 echo "Testing basic functionality..."

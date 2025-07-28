@@ -39,18 +39,21 @@ log_test() {
     local status="$2"
     local output="$3"
     
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $test_name: $status" >> "$DETAILED_LOG"
-    if [[ -n "$output" ]]; then
-        echo "Output:" >> "$DETAILED_LOG"
-        echo "$output" >> "$DETAILED_LOG"
-        echo "---" >> "$DETAILED_LOG"
-    fi
+    {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $test_name: $status"
+        if [[ -n "$output" ]]; then
+            echo "Output:"
+            echo "$output"
+            echo "---"
+        fi
+    } >> "$DETAILED_LOG"
 }
 
 # Function to run a test file
 run_test() {
     local test_file="$1"
-    local test_name=$(basename "$test_file")
+    local test_name
+    test_name=$(basename "$test_file")
     
     # Skip this script itself to prevent recursion
     if [[ "$test_file" == *"run_all_tests.sh" ]]; then
@@ -118,7 +121,8 @@ run_test() {
 # Function to run tests in a directory
 run_tests_in_directory() {
     local dir="$1"
-    local dir_name=$(basename "$dir")
+    local dir_name
+    dir_name=$(basename "$dir")
     
     if [[ ! -d "$dir" ]]; then
         return
@@ -128,7 +132,8 @@ run_tests_in_directory() {
     echo -e "${BLUE}=== Testing $dir_name ===${NC}"
     
     # Find all test files in the directory, excluding this script
-    local test_files=($(find "$dir" -maxdepth 1 -type f \( -name "test_*" -o -name "*.sh" -o -name "*.c" \) -not -name "run_all_tests.sh" | sort))
+    local test_files
+    mapfile -t test_files < <(find "$dir" -maxdepth 1 -type f \( -name "test_*" -o -name "*.sh" -o -name "*.c" \) -not -name "run_all_tests.sh" | sort)
     
     if [[ ${#test_files[@]} -eq 0 ]]; then
         echo "No test files found in $dir_name"
