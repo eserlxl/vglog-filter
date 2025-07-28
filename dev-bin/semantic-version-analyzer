@@ -139,12 +139,12 @@ classify_path() {
     fi
     
     # Test files
-    if [[ "$path" =~ ^tests/ ]]; then
+    if [[ "$path" =~ ^test/ ]]; then
         return 10
     fi
     
     # Documentation files
-    if [[ "$path" =~ ^docs/ ]]; then
+    if [[ "$path" =~ ^doc/ ]]; then
         return 20
     fi
     
@@ -203,7 +203,7 @@ analyze_changes() {
     srcdiff=$(git diff "$base_ref"..HEAD -- src ':(glob)/*.[ch]pp' ':(glob)/*.[ch]' 2>/dev/null || true)
     
     if [[ -n "$srcdiff" ]]; then
-        # Check for added CLI options
+        # Check for added CLI options with more specific patterns
         if printf '%s' "$srcdiff" | grep -E '^\+.*\b(getopt|getopt_long)\b' >/dev/null 2>&1 || \
            printf '%s' "$srcdiff" | grep -E '^\+.*"--[A-Za-z0-9-]+"' >/dev/null 2>&1 || \
            printf '%s' "$srcdiff" | grep -E '^\+.*\bcase[[:space:]]+['"'"'"]?-[A-Za-z0-9]' >/dev/null 2>&1 || \
@@ -211,7 +211,7 @@ analyze_changes() {
             cli_changes=true
         fi
         
-        # Check for removed CLI options (breaking changes)
+        # Check for removed CLI options (breaking changes) - only if not re-added
         local removed_cases
         local added_cases
         removed_cases=$(printf '%s' "$srcdiff" | grep -E '^-.*\bcase[[:space:]]+['"'"'"]?-[A-Za-z0-9]' 2>&1 | wc -l)
@@ -304,23 +304,23 @@ main() {
     local analysis
     analysis=$(analyze_changes "$base_ref")
     local added_files
-    added_files=$(printf '%s' "$analysis" | grep "added_files=" | cut -d'=' -f2)
+    added_files=$(printf '%s' "$analysis" | grep "added_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     local modified_files
-    modified_files=$(printf '%s' "$analysis" | grep "modified_files=" | cut -d'=' -f2)
+    modified_files=$(printf '%s' "$analysis" | grep "modified_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     local deleted_files
-    deleted_files=$(printf '%s' "$analysis" | grep "deleted_files=" | cut -d'=' -f2)
+    deleted_files=$(printf '%s' "$analysis" | grep "deleted_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     local new_source_files
-    new_source_files=$(printf '%s' "$analysis" | grep "new_source_files=" | cut -d'=' -f2)
+    new_source_files=$(printf '%s' "$analysis" | grep "new_source_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     local new_test_files
-    new_test_files=$(printf '%s' "$analysis" | grep "new_test_files=" | cut -d'=' -f2)
+    new_test_files=$(printf '%s' "$analysis" | grep "new_test_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     local new_doc_files
-    new_doc_files=$(printf '%s' "$analysis" | grep "new_doc_files=" | cut -d'=' -f2)
+    new_doc_files=$(printf '%s' "$analysis" | grep "new_doc_files=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     local cli_changes
-    cli_changes=$(printf '%s' "$analysis" | grep "cli_changes=" | cut -d'=' -f2)
+    cli_changes=$(printf '%s' "$analysis" | grep "cli_changes=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     local breaking_cli_changes
-    breaking_cli_changes=$(printf '%s' "$analysis" | grep "breaking_cli_changes=" | cut -d'=' -f2)
+    breaking_cli_changes=$(printf '%s' "$analysis" | grep "breaking_cli_changes=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     local diff_size
-    diff_size=$(printf '%s' "$analysis" | grep "diff_size=" | cut -d'=' -f2)
+    diff_size=$(printf '%s' "$analysis" | grep "diff_size=" | head -1 | cut -d'=' -f2 | tr -d '\n\r')
     
     # Show detailed analysis if verbose
     if [[ "$VERBOSE" = "true" ]] && [[ "$JSON_OUTPUT" = "false" ]]; then
