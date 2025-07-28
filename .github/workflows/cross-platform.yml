@@ -10,6 +10,14 @@ name: Cross-Platform Testing
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 on:
   push:
     paths:
@@ -23,70 +31,137 @@ on:
       - 'CMakeLists.txt'
       - 'build.sh'
       - '.github/workflows/cross-platform.yml'
+  workflow_dispatch: {}
+
+env:
+  CI: "true"
 
 jobs:
   test-ubuntu:
+    name: Ubuntu (native)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install dependencies
         run: |
+          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake g++ make
+          sudo apt-get install -y --no-install-recommends build-essential cmake g++ make
+          cmake --version
+          g++ --version
+          chmod +x ./build.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Build and test
         run: |
+          set -euo pipefail
           ./build.sh performance warnings clean
+          test -x ./build/vglog-filter
           ./build/vglog-filter --help
-          # Test basic functionality
-          echo "==12345== Test input" | ./build/vglog-filter
+          echo "==12345== Test input" | ./build/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
 
   test-arch:
+    name: Arch Linux (container)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
     container:
       image: archlinux:latest
     steps:
+      - name: Prepare git for checkout (Arch container)
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --noprogressbar --disable-download-timeout
+          pacman -S --noconfirm --needed git ca-certificates
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install dependencies
         run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel cmake gcc
+          set -euo pipefail
+          pacman -S --noconfirm --needed base-devel cmake gcc make
+          cmake --version
+          g++ --version || gcc --version
+          chmod +x ./build.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Build and test
         run: |
+          set -euo pipefail
           ./build.sh performance warnings clean
+          test -x ./build/vglog-filter
           ./build/vglog-filter --help
-          # Test basic functionality
-          echo "==12345== Test input" | ./build/vglog-filter
+          echo "==12345== Test input" | ./build/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
 
   test-fedora:
+    name: Fedora (container)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
     container:
       image: fedora:latest
     steps:
+      - name: Prepare git for checkout (Fedora container)
+        run: |
+          set -euo pipefail
+          dnf -y update
+          dnf -y install git ca-certificates
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install dependencies
         run: |
-          dnf update -y
-          dnf install -y gcc-c++ cmake make
+          set -euo pipefail
+          dnf -y install gcc-c++ cmake make
+          cmake --version
+          g++ --version
+          chmod +x ./build.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Build and test
         run: |
+          set -euo pipefail
           ./build.sh performance warnings clean
+          test -x ./build/vglog-filter
           ./build/vglog-filter --help
-          # Test basic functionality
-          echo "==12345== Test input" | ./build/vglog-filter
+          echo "==12345== Test input" | ./build/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
 
   test-debian:
+    name: Debian (container)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
     container:
-      image: debian:latest
+      image: debian:stable
     steps:
+      - name: Prepare git for checkout (Debian container)
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install dependencies
         run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y build-essential cmake g++ make
+          apt-get install -y --no-install-recommends build-essential cmake g++ make
+          cmake --version
+          g++ --version
+          chmod +x ./build.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Build and test
         run: |
+          set -euo pipefail
           ./build.sh performance warnings clean
+          test -x ./build/vglog-filter
           ./build/vglog-filter --help
-          # Test basic functionality
-          echo "==12345== Test input" | ./build/vglog-filter 
+          echo "==12345== Test input" | ./build/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; } 
