@@ -8,6 +8,7 @@
 #
 # Semantic Version Analyzer v3 for vglog-filter
 # Simple, reliable version bumping based on actual code changes
+# Note: Short option detection is byte-based; non-ASCII options not supported
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -43,7 +44,11 @@ Options:
   --since-tag <tag> Alias for --since
   --since-commit <hash>  Analyze changes since specific commit
   --since-date <date>    Analyze changes since specific date (YYYY-MM-DD)
+  --base <ref>      Set base reference for comparison (default: auto-detected)
+  --target <ref>    Set target reference for comparison (default: HEAD)
   --repo-root <path>     Set repository root directory
+  --no-merge-base   Disable automatic merge-base detection for disjoint branches
+  --print-base      Output the chosen base reference SHA/tag on a single line
   --verbose         Show detailed analysis
   --machine        Output machine-readable key=value format
   --json           Output machine-readable JSON
@@ -64,6 +69,8 @@ Environment Variables:
 Examples:
   "$(basename "$0")" --since v1.1.0
   "$(basename "$0")" --since-date 2025-01-01
+  "$(basename "$0")" --base HEAD~5 --target HEAD
+  "$(basename "$0")" --base v1.0.0 --target v1.1.0
   "$(basename "$0")" --verbose
   "$(basename "$0")" --machine
   "$(basename "$0")" --json
@@ -81,7 +88,9 @@ Exit codes:
 Notes:
   - CLI option detection uses fold -w1 for short options (byte-based splitting)
   - Multi-byte characters in long options are not supported
+  - Colons are filtered from getopt strings to avoid false "removed option" detections
   - All git commands use color.ui=false for consistent output
+  - Header prototype detection is restricted to include/** files with semicolon endings
 
 EOF
 }
@@ -90,7 +99,11 @@ EOF
 SINCE_TAG=""
 SINCE_COMMIT=""
 SINCE_DATE=""
+BASE_REF=""
+TARGET_REF=""
 REPO_ROOT=""
+NO_MERGE_BASE=false
+PRINT_BASE=false
 VERBOSE=false
 MACHINE_OUTPUT=false
 JSON_OUTPUT=false
@@ -133,9 +146,17 @@ while [[ $# -gt 0 ]]; do
             ((month>=1 && month<=12)) || { printf 'Error: Invalid month in date %s (must be 01-12)\n' "$2" >&2; exit 1; }
             ((day>=1 && day<=31)) || { printf 'Error: Invalid day in date %s (must be 01-31)\n' "$2" >&2; exit 1; }
             SINCE_DATE="$2"; shift 2;;
+        --base)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --base requires a value\n' >&2; exit 1; }
+            BASE_REF="$2"; shift 2;;
+        --target)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --target requires a value\n' >&2; exit 1; }
+            TARGET_REF="$2"; shift 2;;
         --repo-root)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --repo-root requires a value\n' >&2; exit 1; }
             REPO_ROOT="$2"; shift 2;;
+        --no-merge-base) NO_MERGE_BASE=true; shift;;
+        --print-base) PRINT_BASE=true; shift;;
         --verbose) VERBOSE=true; shift;;
         --machine) MACHINE_OUTPUT=true; shift;;
         --json) JSON_OUTPUT=true; shift;;
@@ -168,6 +189,11 @@ verify_ref() {
 
 # Determine the base for comparison with better error handling
 get_base_reference() {
+    # Handle explicit base/target references
+    if [[ -n "$BASE_REF" ]]; then
+        verify_ref "$BASE_REF"; printf '%s|explicit_base' "$BASE_REF"; return
+    fi
+    
     if [[ -n "$SINCE_COMMIT" ]]; then
         verify_ref "$SINCE_COMMIT"; printf '%s|commit' "$SINCE_COMMIT"; return
     elif [[ -n "$SINCE_TAG" ]]; then
@@ -212,14 +238,15 @@ get_base_reference() {
 # Check if there are commits in the range
 check_commit_range() {
     local base_ref="$1"
+    local target_ref="$2"
     
-    # Check if there are any commits between base_ref and HEAD
-    git -c color.ui=false rev-list "$base_ref"..HEAD >/dev/null 2>&1 || { printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2; return 1; }
+    # Check if there are any commits between base_ref and target_ref
+    git -c color.ui=false rev-list "$base_ref".."$target_ref" >/dev/null 2>&1 || { printf 'Warning: No commits found between %s and %s\n' "$base_ref" "$target_ref" >&2; return 1; }
     
     local commit_count
-    commit_count=$(git -c color.ui=false rev-list --count "$base_ref"..HEAD 2>/dev/null || printf '0')
+    commit_count=$(git -c color.ui=false rev-list --count "$base_ref".."$target_ref" 2>/dev/null || printf '0')
     
-    (( commit_count > 0 )) || { printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2; return 1; }
+    (( commit_count > 0 )) || { printf 'Warning: No commits found between %s and %s\n' "$base_ref" "$target_ref" >&2; return 1; }
     
     return 0
 }
@@ -274,7 +301,7 @@ extract_cli_options() {
     
     # Get source files diff
     local srcdiff
-    srcdiff=$(git diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' 2>/dev/null || true)
+    srcdiff=$(git -c color.ui=false diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' 2>/dev/null || true)
     
     if [[ -z "$srcdiff" ]]; then
         printf 'short_options_before=\n'
@@ -343,7 +370,7 @@ extract_cli_options() {
     # Check for removed case labels in switch statements
     local removed_cases
     removed_cases=$(
-        git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
+        git -c color.ui=false diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
         | grep '^-[[:space:]]*case[[:space:]]' \
         | sed 's/^-[[:space:]]*case[[:space:]]*//' \
         | sort -u || printf ''
@@ -353,7 +380,7 @@ extract_cli_options() {
         # Check if corresponding +case appears for each removed case
         local added_cases
         added_cases=$(
-            git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
+            git -c color.ui=false diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
             | grep '^+[[:space:]]*case[[:space:]]' \
             | sed 's/^+[[:space:]]*case[[:space:]]*//' \
             | sort -u || printf ''
@@ -372,10 +399,11 @@ extract_cli_options() {
     local api_breaking=false
     local removed_prototypes
     # FIXED: Include both include/ and src/ directories for header prototype checks
+    # Restrict to header files and require semicolon ending for better prototype detection
     removed_prototypes=$(
-        git -c core.quotepath=false diff --unified=0 "$base_ref".."$target_ref" \
-            -- ':(glob)include/**/*.{h,hpp,hh}' ':(glob)src/**/*.{h,hpp,hh}' \
-        | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/' \
+        git -c color.ui=false diff --unified=0 "$base_ref".."$target_ref" \
+            -- ':(glob)include/**/*.{h,hpp,hh}' \
+        | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/' \
         | wc -l || printf '0'
     )
     
@@ -384,7 +412,7 @@ extract_cli_options() {
     # Check for explicit API-BREAKING comments
     local explicit_breaking
     explicit_breaking=$(
-        git diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
+        git -c color.ui=false diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
         | grep -i 'API-BREAKING:' | wc -l || printf '0'
     )
     
@@ -433,9 +461,10 @@ sum_numstat() {
 # Enhanced change analysis with better diff parsing and rename/copy handling
 analyze_changes() {
     local base_ref="$1"
+    local target_ref="$2"
     
     # Check if there are any changes
-    if git -c color.ui=false diff --quiet "$base_ref"..HEAD; then
+    if git -c color.ui=false diff --quiet "$base_ref".."$target_ref"; then
         printf 'Warning: No changes detected since %s\n' "$base_ref" >&2
         # Return early with zero values
         printf 'added_files=0\n'
@@ -488,7 +517,7 @@ analyze_changes() {
                 inc_counters_for "$file"
                 ;;
         esac
-    done < <(git -c color.ui=false -c core.quotepath=false diff --name-status -z "$base_ref"..HEAD 2>/dev/null)
+    done < <(git -c color.ui=false -c core.quotepath=false diff --name-status -z "$base_ref".."$target_ref" 2>/dev/null)
     
     # Extract CLI options for comparison
     local cli_analysis
@@ -510,10 +539,11 @@ analyze_changes() {
         cli_changes=true
         # Check for breaking changes (removed options) - FIXED: Harden comm inputs
         # Note: fold -w1 splits by bytes; multi-byte characters in long options not supported
+        # Filter colons from getopt strings to avoid false "removed option" detections
         local removed_short
         removed_short=$(
-            comm -23 <(printf '%s' "$short_before" | fold -w1 | sort -u) \
-                     <(printf '%s' "$short_after"  | fold -w1 | sort -u) 2>/dev/null || printf ''
+            comm -23 <(printf '%s' "$short_before" | tr -d ':' | fold -w1 | sort -u) \
+                     <(printf '%s' "$short_after"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null || printf ''
         )
         [[ -n "$removed_short" ]] && breaking_cli_changes=true
     fi
@@ -538,9 +568,9 @@ analyze_changes() {
     # Get diff size using numstat for stable parsing - FIXED: Binary-safe summation
     local diff_size
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        diff_size=$(sum_numstat git -c color.ui=false diff -w --numstat "$base_ref"..HEAD)
+        diff_size=$(sum_numstat git -c color.ui=false diff -w --numstat "$base_ref".."$target_ref")
     else
-        diff_size=$(sum_numstat git -c color.ui=false diff --numstat "$base_ref"..HEAD)
+        diff_size=$(sum_numstat git -c color.ui=false diff --numstat "$base_ref".."$target_ref")
     fi
     
     printf 'added_files=%s\n' "$added_files"
@@ -635,6 +665,44 @@ suggest_version_bump() {
     printf 'none'
 }
 
+# Determine the reason for the version bump suggestion
+get_bump_reason() {
+    local added_files="$1"
+    local modified_files="$2"
+    local deleted_files="$3"
+    local new_source_files="$4"
+    local new_test_files="$5"
+    local new_doc_files="$6"
+    local cli_changes="$7"
+    local breaking_cli_changes="$8"
+    local diff_size="$9"
+    local api_breaking="${10}"
+    local security_keywords="${11}"
+    
+    # MAJOR reasons
+    if [[ "$breaking_cli_changes" = "true" ]]; then printf 'breaking_cli'; return; fi
+    if [[ "$api_breaking" = "true" ]]; then printf 'api_break'; return; fi
+    if [[ "${security_keywords:-0}" -gt 0 ]]; then printf 'security_keywords'; return; fi
+    if [[ "${diff_size:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
+        if [[ "$REQ" != "true" && "$REQ" != "1" && "$REQ" != "yes" ]]; then
+            printf 'large_diff'; return
+        fi
+    fi
+    
+    # MINOR reasons
+    if [[ "$cli_changes" = "true" ]]; then printf 'cli_added'; return; fi
+    if [[ "${new_source_files:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then printf 'new_src'; return; fi
+    if [[ "${new_test_files:-0}" -ge "$MIN_NEW_TEST_FILES" ]]; then printf 'new_tests'; return; fi
+    if [[ "${new_doc_files:-0}" -ge "$MIN_NEW_DOC_FILES" ]]; then printf 'new_docs'; return; fi
+    
+    # PATCH reasons
+    if [[ "${modified_files:-0}" -ge "$MIN_PATCH_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
+        printf 'mods_only'; return
+    fi
+    
+    printf 'none'
+}
+
 # --- main ---------------------------------------------------------------------
 
 # Main analysis
@@ -644,22 +712,34 @@ main() {
     local base_ref ref_type
     IFS='|' read -r base_ref ref_type <<< "$base_ref_info"
     
+    # Set target reference (default to HEAD)
+    local target_ref="${TARGET_REF:-HEAD}"
+    if [[ -n "$TARGET_REF" ]]; then
+        verify_ref "$target_ref"
+    fi
+    
     # Check if there are commits in the range and handle disjoint branches
     local actual_base
-    actual_base=$(git -c color.ui=false merge-base "$base_ref" HEAD 2>/dev/null || printf '')
+    actual_base=$(git -c color.ui=false merge-base "$base_ref" "$target_ref" 2>/dev/null || printf '')
     if [[ -z "$actual_base" ]]; then
-        printf 'Error: No common ancestor found between %s and HEAD. Exiting.\n' "$base_ref" >&2
+        printf 'Error: No common ancestor found between %s and %s. Exiting.\n' "$base_ref" "$target_ref" >&2
         exit 1
     fi
     
-    # Use merge-base if it's different from the original base_ref
-    if [[ "$actual_base" != "$base_ref" ]]; then
+    # Use merge-base if it's different from the original base_ref and merge-base detection is enabled
+    if [[ "$actual_base" != "$base_ref" ]] && [[ "$NO_MERGE_BASE" != "true" ]]; then
         printf 'Info: Using merge-base %s instead of %s for disjoint branches\n' "$actual_base" "$base_ref" >&2
         base_ref="$actual_base"
     fi
     
-    if ! check_commit_range "$base_ref"; then
-        printf 'Error: No commits found between %s and HEAD. Exiting.\n' "$base_ref" >&2
+    # Handle --print-base option
+    if [[ "$PRINT_BASE" = "true" ]]; then
+        printf '%s\n' "$base_ref"
+        exit 0
+    fi
+    
+    if ! check_commit_range "$base_ref" "$target_ref"; then
+        printf 'Error: No commits found between %s and %s. Exiting.\n' "$base_ref" "$target_ref" >&2
         exit 1
     fi
 
@@ -672,7 +752,7 @@ main() {
     
     # Analyze changes
     local analysis
-    analysis=$(analyze_changes "$base_ref")
+    analysis=$(analyze_changes "$base_ref" "$target_ref")
     
     # Extract fields
     local added_files modified_files deleted_files
@@ -692,9 +772,12 @@ main() {
     api_breaking=$(printf '%s\n' "$analysis" | grep "^api_breaking=" | cut -d'=' -f2 | tr -d '\r')
     security_keywords=$(printf '%s\n' "$analysis" | grep "^security_keywords=" | cut -d'=' -f2 | tr -d '\r')
     
-    # Determine suggestion
+    # Determine suggestion and reason
     local suggestion
     suggestion=$(suggest_version_bump "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size" "$api_breaking" "$security_keywords")
+    
+    local reason
+    reason=$(get_bump_reason "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size" "$api_breaking" "$security_keywords")
     
     # Calculate next version
     local next_version
@@ -721,12 +804,14 @@ main() {
         
         printf '{\n'
         printf '  "suggestion": "%s",\n' "$suggestion"
+        printf '  "reason": "%s",\n' "$reason"
         printf '  "current_version": "%s",\n' "$current_version"
         if [[ -n "$next_version" ]] && [[ "$suggestion" != "none" ]]; then
             printf '  "next_version": "%s",\n' "$next_version"
         fi
         printf '  "base_ref": "%s",\n' "$base_ref"
         printf '  "base_ref_type": "%s",\n' "$ref_type"
+        printf '  "target_ref": "%s",\n' "$target_ref"
         printf '  "changes": {\n'
         printf '    "added_files": %s,\n' "$json_added_files"
         printf '    "modified_files": %s,\n' "$json_modified_files"
@@ -747,7 +832,7 @@ main() {
     else
         # Human-readable output
         printf '=== Semantic Version Analysis v3 ===\n'
-        printf 'Analyzing changes since: %s (%s)\n' "$base_ref" "$ref_type"
+        printf 'Analyzing changes: %s (%s) -> %s\n' "$base_ref" "$ref_type" "$target_ref"
         printf '\n'
         
         # Show base ref context in verbose mode
@@ -793,9 +878,9 @@ main() {
             
             # Show recent commits with proper error handling
             printf 'Recent commits:\n'
-            if git -c color.ui=false rev-list "$base_ref"..HEAD >/dev/null 2>&1; then
+            if git -c color.ui=false rev-list "$base_ref".."$target_ref" >/dev/null 2>&1; then
                 # Limit to last 20 commits for performance
-                git -c color.ui=false log --oneline "$base_ref"..HEAD 2>/dev/null | head -20 || printf 'No commits found\n'
+                git -c color.ui=false log --oneline "$base_ref".."$target_ref" 2>/dev/null | head -20 || printf 'No commits found\n'
             else
                 printf 'No commits in range\n'
             fi
