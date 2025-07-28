@@ -14,50 +14,69 @@ on:
   push:
     paths:
       - 'src/**'
+      - 'include/**'
       - 'CMakeLists.txt'
+      - '.clang-tidy'
       - '.github/workflows/clang-tidy.yml'
   pull_request:
     paths:
       - 'src/**'
+      - 'include/**'
       - 'CMakeLists.txt'
+      - '.clang-tidy'
       - '.github/workflows/clang-tidy.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   clang-tidy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake clang-tidy clang-tools
-      
-      - name: Configure CMake with Clang-Tidy
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build clang clang-tidy clang-tools
+          clang --version
+          clang++ --version
+          clang-tidy --version
+
+      - name: Configure (CMake + compile_commands.json)
         run: |
-          mkdir -p build-clang-tidy
-          cd build-clang-tidy
-          cmake -DCMAKE_CXX_CLANG_TIDY=clang-tidy \
-                -DCMAKE_CXX_STANDARD=20 \
-                -DCMAKE_CXX_STANDARD_REQUIRED=ON \
-                -DPERFORMANCE_BUILD=OFF \
-                -DWARNING_MODE=ON \
-                -DDEBUG_MODE=OFF \
-                -DBUILD_TESTS=ON \
-                ..
-      
-      - name: Run Clang-Tidy
+          cmake -S . -B build-clang-tidy -G Ninja \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+            -DPERFORMANCE_BUILD=OFF \
+            -DWARNING_MODE=ON \
+            -DDEBUG_MODE=OFF \
+            -DBUILD_TESTS=ON \
+            -DCMAKE_CXX_CLANG_TIDY="clang-tidy;-warnings-as-errors=*"
+
+      - name: Build (runs clang-tidy via CMake)
         run: |
-          cd build-clang-tidy
-          make -j$(nproc) 2>&1 | tee clang-tidy-output.txt || true
-          
-          # Check if there are any clang-tidy warnings/errors
-          if grep -q "warning\|error" clang-tidy-output.txt; then
-            echo "Clang-Tidy found issues:"
-            grep -E "(warning|error)" clang-tidy-output.txt || true
-            echo "Full output:"
-            cat clang-tidy-output.txt
-            exit 1
-          else
-            echo "Clang-Tidy analysis passed - no issues found"
-          fi 
+          set -o pipefail
+          cmake --build build-clang-tidy -j"$(nproc)" | tee build-clang-tidy/clang-tidy-output.txt
+
+      - name: Upload artifacts (clang-tidy logs & compile commands)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-tidy-artifacts
+          path: |
+            build-clang-tidy/clang-tidy-output.txt
+            build-clang-tidy/compile_commands.json
+          if-no-files-found: ignore
