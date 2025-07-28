@@ -15,9 +15,15 @@ export LC_ALL=C
 
 # --- early guards -------------------------------------------------------------
 
-# Auto-detect project root
-SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# Check git command first before any git usage
+if ! command -v git >/dev/null 2>&1; then
+    printf 'Error: git command not found\n' >&2
+    exit 1
+fi
+
+# Auto-detect project root using POSIX-friendly approach
+SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd -P)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
 cd "$PROJECT_ROOT"
 
 # Early repository guard
@@ -26,17 +32,11 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
     exit 1
 }
 
-# Early git command check
-if ! command -v git >/dev/null 2>&1; then
-    printf 'Error: git command not found\n' >&2
-    exit 1
-fi
-
 show_help() {
     cat << EOF
 Semantic Version Analyzer v3 for vglog-filter
 
-Usage: $0 [options]
+Usage: "$(basename "$0")" [options]
 
 Options:
   --since <tag>     Analyze changes since specific tag (default: last tag)
@@ -62,21 +62,26 @@ Environment Variables:
   MAJOR_REQUIRE_BREAKING   Require breaking changes for major (default: true)
 
 Examples:
-  $0 --since v1.1.0
-  $0 --since-date 2025-01-01
-  $0 --verbose
-  $0 --machine
-  $0 --json
+  "$(basename "$0")" --since v1.1.0
+  "$(basename "$0")" --since-date 2025-01-01
+  "$(basename "$0")" --verbose
+  "$(basename "$0")" --machine
+  "$(basename "$0")" --json
 
 Machine output examples:
-  $0 --machine | grep SUGGESTION
-  $0 --json | jq -r .suggestion
+  "$(basename "$0")" --machine | grep SUGGESTION
+  "$(basename "$0")" --json | jq -r .suggestion
 
 Exit codes:
   10 = major version bump suggested
   11 = minor version bump suggested
   12 = patch version bump suggested
   20 = no version bump suggested
+
+Notes:
+  - CLI option detection uses fold -w1 for short options (byte-based splitting)
+  - Multi-byte characters in long options are not supported
+  - All git commands use color.ui=false for consistent output
 
 EOF
 }
@@ -155,7 +160,7 @@ fi
 # Validate git reference
 verify_ref() {
     local ref="$1"
-    if ! git rev-parse -q --verify "$ref^{commit}" >/dev/null; then
+    if ! git -c color.ui=false rev-parse -q --verify "$ref^{commit}" >/dev/null; then
         printf 'Error: Invalid reference: %s\n' "$ref" >&2
         exit 1
     fi
@@ -170,13 +175,13 @@ get_base_reference() {
     elif [[ -n "$SINCE_DATE" ]]; then
         # Find the latest commit before the specified date
         local ref
-        ref=$(git rev-list -1 --before="$SINCE_DATE 23:59:59" HEAD 2>/dev/null || true)
+        ref=$(git -c color.ui=false rev-list -1 --before="$SINCE_DATE 23:59:59" HEAD 2>/dev/null || true)
         if [[ -n "$ref" ]]; then
             verify_ref "$ref"; printf '%s|date' "$ref"
         else
             printf 'Warning: No commits found before %s, using first commit\n' "$SINCE_DATE" >&2
             local first_commit
-            first_commit=$(git rev-list --max-parents=0 HEAD 2>/dev/null || true)
+            first_commit=$(git -c color.ui=false rev-list --max-parents=0 HEAD 2>/dev/null || true)
             [[ -n "$first_commit" ]] || { printf 'Error: No commits found in repository\n' >&2; exit 1; }
             printf '%s|first' "$first_commit"
         fi
@@ -185,19 +190,19 @@ get_base_reference() {
     
     # Default to last tag, fallback to HEAD~1 if no tags exist
     local last_tag
-    last_tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
+    last_tag=$(git -c color.ui=false describe --tags --abbrev=0 2>/dev/null || true)
     if [[ -n "$last_tag" ]]; then
         printf '%s|last_tag' "$last_tag"
     else
         # If no tags exist, use HEAD~1 instead of first commit
         local parent_commit
-        parent_commit=$(git rev-parse HEAD~1 2>/dev/null || true)
+        parent_commit=$(git -c color.ui=false rev-parse HEAD~1 2>/dev/null || true)
         if [[ -n "$parent_commit" ]]; then
             printf '%s|parent' "$parent_commit"
         else
             # Only use first commit if HEAD~1 doesn't exist (single commit repo)
             local first_commit
-            first_commit=$(git rev-list --max-parents=0 HEAD 2>/dev/null || true)
+            first_commit=$(git -c color.ui=false rev-list --max-parents=0 HEAD 2>/dev/null || true)
             [[ -n "$first_commit" ]] || { printf 'Error: No commits found in repository\n' >&2; exit 1; }
             printf '%s|first' "$first_commit"
         fi
@@ -209,10 +214,10 @@ check_commit_range() {
     local base_ref="$1"
     
     # Check if there are any commits between base_ref and HEAD
-    git rev-list "$base_ref"..HEAD >/dev/null 2>&1 || { printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2; return 1; }
+    git -c color.ui=false rev-list "$base_ref"..HEAD >/dev/null 2>&1 || { printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2; return 1; }
     
     local commit_count
-    commit_count=$(git rev-list --count "$base_ref"..HEAD 2>/dev/null || printf '0')
+    commit_count=$(git -c color.ui=false rev-list --count "$base_ref"..HEAD 2>/dev/null || printf '0')
     
     (( commit_count > 0 )) || { printf 'Warning: No commits found between %s and HEAD\n' "$base_ref" >&2; return 1; }
     
@@ -269,7 +274,7 @@ extract_cli_options() {
     
     # Get source files diff
     local srcdiff
-    srcdiff=$(git diff "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' 2>/dev/null || true)
+    srcdiff=$(git diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' 2>/dev/null || true)
     
     if [[ -z "$srcdiff" ]]; then
         printf 'short_options_before=\n'
@@ -289,12 +294,12 @@ extract_cli_options() {
     
     # Collect changed source files (NUL-safe; portable without mapfile)
     while IFS= read -r -d '' f; do changed_files+=("$f"); done \
-        < <(git -c core.quotepath=false diff -z --name-only "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' 2>/dev/null || printf '')
+        < <(git -c core.quotepath=false diff -z --name-only "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' 2>/dev/null || printf '')
     
     if (( ${#changed_files[@]} > 0 )); then
         short_before=$(
             for file in "${changed_files[@]}"; do
-                git show "$base_ref:$file" 2>/dev/null \
+                git -c color.ui=false show "$base_ref:$file" 2>/dev/null \
                 | grep -E 'getopt\(|getopt_long\(' \
                 | grep -o '"[^"]*"' \
                 | tr -d '"' || true
@@ -302,7 +307,7 @@ extract_cli_options() {
         )
         short_after=$(
             for file in "${changed_files[@]}"; do
-                git show "$target_ref:$file" 2>/dev/null \
+                git -c color.ui=false show "$target_ref:$file" 2>/dev/null \
                 | grep -E 'getopt\(|getopt_long\(' \
                 | grep -o '"[^"]*"' \
                 | tr -d '"' || true
@@ -312,8 +317,8 @@ extract_cli_options() {
         # Extract long options from struct option arrays - improved detection
         long_before=$(
             for file in "${changed_files[@]}"; do
-                git show "$base_ref:$file" 2>/dev/null \
-                | grep -A 20 'struct option.*long_options' \
+                git -c color.ui=false show "$base_ref:$file" 2>/dev/null \
+                | grep -A 30 'struct option' \
                 | grep '{"[^"]*"' \
                 | grep -o '"[^"]*"' \
                 | tr -d '"' || true
@@ -321,8 +326,8 @@ extract_cli_options() {
         )
         long_after=$(
             for file in "${changed_files[@]}"; do
-                git show "$target_ref:$file" 2>/dev/null \
-                | grep -A 20 'struct option.*long_options' \
+                git -c color.ui=false show "$target_ref:$file" 2>/dev/null \
+                | grep -A 30 'struct option' \
                 | grep '{"[^"]*"' \
                 | grep -o '"[^"]*"' \
                 | tr -d '"' || true
@@ -338,7 +343,7 @@ extract_cli_options() {
     # Check for removed case labels in switch statements
     local removed_cases
     removed_cases=$(
-        git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' \
+        git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
         | grep '^-[[:space:]]*case[[:space:]]' \
         | sed 's/^-[[:space:]]*case[[:space:]]*//' \
         | sort -u || printf ''
@@ -348,7 +353,7 @@ extract_cli_options() {
         # Check if corresponding +case appears for each removed case
         local added_cases
         added_cases=$(
-            git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' \
+            git diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
             | grep '^+[[:space:]]*case[[:space:]]' \
             | sed 's/^+[[:space:]]*case[[:space:]]*//' \
             | sort -u || printf ''
@@ -369,7 +374,7 @@ extract_cli_options() {
     # FIXED: Include both include/ and src/ directories for header prototype checks
     removed_prototypes=$(
         git -c core.quotepath=false diff --unified=0 "$base_ref".."$target_ref" \
-            -- ':(glob)include/*.{h,hpp,hh}' ':(glob)src/*.{h,hpp,hh}' \
+            -- ':(glob)include/**/*.{h,hpp,hh}' ':(glob)src/**/*.{h,hpp,hh}' \
         | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/' \
         | wc -l || printf '0'
     )
@@ -379,7 +384,7 @@ extract_cli_options() {
     # Check for explicit API-BREAKING comments
     local explicit_breaking
     explicit_breaking=$(
-        git diff "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx}' ':(glob)include/*.{h,hpp,hh}' \
+        git diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
         | grep -i 'API-BREAKING:' | wc -l || printf '0'
     )
     
@@ -390,14 +395,14 @@ extract_cli_options() {
     local has_code_changes=false
     
     # Check if there are code changes (src/ or include/ files)
-    if git diff --name-only "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx,h,hpp,hh}' ':(glob)include/*.{h,hpp,hh}' | grep -q .; then
+    if git -c color.ui=false diff --name-only "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx,h,hpp,hh}' ':(glob)include/**/*.{h,hpp,hh}' | grep -q .; then
         has_code_changes=true
     fi
     
     # Only count security keywords if there are code changes or API/CLI breakage
     if [[ "$has_code_changes" = "true" ]] || [[ "$api_breaking" = "true" ]] || [[ "$breaking_changes" = "true" ]]; then
         security_keywords=$(
-            git log --format="%s %b" "$base_ref".."$target_ref" \
+            git -c color.ui=false log --format="%s %b" "$base_ref".."$target_ref" \
             | grep -i -E '(security|cve|crash|segfault|uaf|overflow|xss|vulnerability)' \
             | wc -l || printf '0'
         )
@@ -430,7 +435,7 @@ analyze_changes() {
     local base_ref="$1"
     
     # Check if there are any changes
-    if git diff --quiet "$base_ref"..HEAD; then
+    if git -c color.ui=false diff --quiet "$base_ref"..HEAD; then
         printf 'Warning: No changes detected since %s\n' "$base_ref" >&2
         # Return early with zero values
         printf 'added_files=0\n'
@@ -483,7 +488,7 @@ analyze_changes() {
                 inc_counters_for "$file"
                 ;;
         esac
-    done < <(git -c core.quotepath=false diff --name-status -z "$base_ref"..HEAD 2>/dev/null)
+    done < <(git -c color.ui=false -c core.quotepath=false diff --name-status -z "$base_ref"..HEAD 2>/dev/null)
     
     # Extract CLI options for comparison
     local cli_analysis
@@ -504,6 +509,7 @@ analyze_changes() {
     if [[ -n "$short_after" ]] && [[ "$short_after" != "$short_before" ]]; then
         cli_changes=true
         # Check for breaking changes (removed options) - FIXED: Harden comm inputs
+        # Note: fold -w1 splits by bytes; multi-byte characters in long options not supported
         local removed_short
         removed_short=$(
             comm -23 <(printf '%s' "$short_before" | fold -w1 | sort -u) \
@@ -515,6 +521,7 @@ analyze_changes() {
     if [[ -n "$long_after" ]] && [[ "$long_after" != "$long_before" ]]; then
         cli_changes=true
         # Check for breaking changes (removed long options) - FIXED: Harden comm inputs
+        # Note: tr ',' '\n' handles comma-separated long options safely
         local removed_long
         removed_long=$(
             comm -23 <(printf '%s' "$long_before" | tr ',' '\n' | sort -u) \
@@ -531,9 +538,9 @@ analyze_changes() {
     # Get diff size using numstat for stable parsing - FIXED: Binary-safe summation
     local diff_size
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        diff_size=$(sum_numstat git diff -w --numstat "$base_ref"..HEAD)
+        diff_size=$(sum_numstat git -c color.ui=false diff -w --numstat "$base_ref"..HEAD)
     else
-        diff_size=$(sum_numstat git diff --numstat "$base_ref"..HEAD)
+        diff_size=$(sum_numstat git -c color.ui=false diff --numstat "$base_ref"..HEAD)
     fi
     
     printf 'added_files=%s\n' "$added_files"
@@ -639,7 +646,7 @@ main() {
     
     # Check if there are commits in the range and handle disjoint branches
     local actual_base
-    actual_base=$(git merge-base "$base_ref" HEAD 2>/dev/null || printf '')
+    actual_base=$(git -c color.ui=false merge-base "$base_ref" HEAD 2>/dev/null || printf '')
     if [[ -z "$actual_base" ]]; then
         printf 'Error: No common ancestor found between %s and HEAD. Exiting.\n' "$base_ref" >&2
         exit 1
@@ -699,6 +706,19 @@ main() {
         printf '%s\n' "$suggestion"
     elif [[ "$JSON_OUTPUT" = "true" ]]; then
         # JSON output for machine consumption
+        # Coerce empty strings to appropriate defaults for JSON safety
+        local json_added_files="${added_files:-0}"
+        local json_modified_files="${modified_files:-0}"
+        local json_deleted_files="${deleted_files:-0}"
+        local json_new_source_files="${new_source_files:-0}"
+        local json_new_test_files="${new_test_files:-0}"
+        local json_new_doc_files="${new_doc_files:-0}"
+        local json_cli_changes="${cli_changes:-false}"
+        local json_breaking_cli_changes="${breaking_cli_changes:-false}"
+        local json_diff_size="${diff_size:-0}"
+        local json_api_breaking="${api_breaking:-false}"
+        local json_security_keywords="${security_keywords:-0}"
+        
         printf '{\n'
         printf '  "suggestion": "%s",\n' "$suggestion"
         printf '  "current_version": "%s",\n' "$current_version"
@@ -708,17 +728,17 @@ main() {
         printf '  "base_ref": "%s",\n' "$base_ref"
         printf '  "base_ref_type": "%s",\n' "$ref_type"
         printf '  "changes": {\n'
-        printf '    "added_files": %s,\n' "$added_files"
-        printf '    "modified_files": %s,\n' "$modified_files"
-        printf '    "deleted_files": %s,\n' "$deleted_files"
-        printf '    "new_source_files": %s,\n' "$new_source_files"
-        printf '    "new_test_files": %s,\n' "$new_test_files"
-        printf '    "new_doc_files": %s,\n' "$new_doc_files"
-        printf '    "cli_changes": %s,\n' "$cli_changes"
-        printf '    "breaking_cli_changes": %s,\n' "$breaking_cli_changes"
-        printf '    "diff_size": %s,\n' "$diff_size"
-        printf '    "api_breaking": %s,\n' "${api_breaking:-false}"
-        printf '    "security_keywords": %s\n' "${security_keywords:-0}"
+        printf '    "added_files": %s,\n' "$json_added_files"
+        printf '    "modified_files": %s,\n' "$json_modified_files"
+        printf '    "deleted_files": %s,\n' "$json_deleted_files"
+        printf '    "new_source_files": %s,\n' "$json_new_source_files"
+        printf '    "new_test_files": %s,\n' "$json_new_test_files"
+        printf '    "new_doc_files": %s,\n' "$json_new_doc_files"
+        printf '    "cli_changes": %s,\n' "$json_cli_changes"
+        printf '    "breaking_cli_changes": %s,\n' "$json_breaking_cli_changes"
+        printf '    "diff_size": %s,\n' "$json_diff_size"
+        printf '    "api_breaking": %s,\n' "$json_api_breaking"
+        printf '    "security_keywords": %s\n' "$json_security_keywords"
         printf '  }\n'
         printf '}\n'
     elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
@@ -733,7 +753,7 @@ main() {
         # Show base ref context in verbose mode
         if [[ "$VERBOSE" = "true" ]]; then
             local base_commit_info
-            base_commit_info=$(git log -1 --format="%H %s (%ad)" --date=short "$base_ref" 2>/dev/null || printf 'Unknown')
+            base_commit_info=$(git -c color.ui=false log -1 --format="%H %s (%ad)" --date=short "$base_ref" 2>/dev/null || printf 'Unknown')
             printf 'Base reference: %s\n' "$base_commit_info"
             printf '\n'
         fi
@@ -773,9 +793,9 @@ main() {
             
             # Show recent commits with proper error handling
             printf 'Recent commits:\n'
-            if git rev-list "$base_ref"..HEAD >/dev/null 2>&1; then
+            if git -c color.ui=false rev-list "$base_ref"..HEAD >/dev/null 2>&1; then
                 # Limit to last 20 commits for performance
-                git log --oneline "$base_ref"..HEAD 2>/dev/null | head -20 || printf 'No commits found\n'
+                git -c color.ui=false log --oneline "$base_ref"..HEAD 2>/dev/null | head -20 || printf 'No commits found\n'
             else
                 printf 'No commits in range\n'
             fi
