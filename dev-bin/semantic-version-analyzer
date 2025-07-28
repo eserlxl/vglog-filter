@@ -91,6 +91,8 @@ Notes:
   - Colons are filtered from getopt strings to avoid false "removed option" detections
   - All git commands use color.ui=false for consistent output
   - Header prototype detection is restricted to include/** files with semicolon endings
+  - Manual argv parser detection (--verbose) scans for --[a-z0-9-]+ tokens in source files
+  - Short option change detection normalizes colons to handle argument requirement changes consistently
 
 EOF
 }
@@ -311,6 +313,11 @@ extract_cli_options() {
         printf 'breaking_changes=false\n'
         printf 'api_breaking=false\n'
         printf 'security_keywords=0\n'
+        printf 'manual_cli_changes=false\n'
+        printf 'removed_short_count=0\n'
+        printf 'added_short_count=0\n'
+        printf 'removed_long_count=0\n'
+        printf 'added_long_count=0\n'
         return
     fi
     
@@ -345,7 +352,7 @@ extract_cli_options() {
         long_before=$(
             for file in "${changed_files[@]}"; do
                 git -c color.ui=false show "$base_ref:$file" 2>/dev/null \
-                | grep -A 30 'struct option' \
+                | awk '/struct option/,/};/' \
                 | grep '{"[^"]*"' \
                 | grep -o '"[^"]*"' \
                 | tr -d '"' || true
@@ -354,7 +361,7 @@ extract_cli_options() {
         long_after=$(
             for file in "${changed_files[@]}"; do
                 git -c color.ui=false show "$target_ref:$file" 2>/dev/null \
-                | grep -A 30 'struct option' \
+                | awk '/struct option/,/};/' \
                 | grep '{"[^"]*"' \
                 | grep -o '"[^"]*"' \
                 | tr -d '"' || true
@@ -400,10 +407,11 @@ extract_cli_options() {
     local removed_prototypes
     # FIXED: Include both include/ and src/ directories for header prototype checks
     # Restrict to header files and require semicolon ending for better prototype detection
+    # ENHANCED: Avoid false positives on typedefs/macros by requiring semicolon and no leading typedef/#
     removed_prototypes=$(
         git -c color.ui=false diff --unified=0 "$base_ref".."$target_ref" \
             -- ':(glob)include/**/*.{h,hpp,hh}' \
-        | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/' \
+        | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/ && !/^-[[:space:]]*(typedef|#)/' \
         | wc -l || printf '0'
     )
     
@@ -436,6 +444,49 @@ extract_cli_options() {
         )
     fi
     
+    # Optional: Manual argv parser detection for tools that don't use getopt
+    # This is behind --verbose to avoid performance impact
+    local manual_cli_changes=false
+    if [[ "$VERBOSE" = "true" ]]; then
+        # Detect added/removed --[a-z0-9-]+ tokens in changed C/C++ files
+        local added_long_opts removed_long_opts
+        added_long_opts=$(
+            git -c color.ui=false diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
+            | grep -o '--[a-z0-9-]\+' | sort -u | wc -l || printf '0'
+        )
+        removed_long_opts=$(
+            git -c color.ui=false diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
+            | grep -o '--[a-z0-9-]\+' | sort -u | wc -l || printf '0'
+        )
+        (( added_long_opts > 0 || removed_long_opts > 0 )) && manual_cli_changes=true
+    fi
+    
+    # Calculate counts for removed/added options for CI messages
+    local removed_short_count=0 added_short_count=0
+    local removed_long_count=0 added_long_count=0
+    
+    if [[ -n "$short_before" ]] && [[ -n "$short_after" ]]; then
+        removed_short_count=$(
+            comm -23 <(printf '%s' "$short_before" | tr -d ':' | fold -w1 | sort -u) \
+                     <(printf '%s' "$short_after"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l || printf '0'
+        )
+        added_short_count=$(
+            comm -13 <(printf '%s' "$short_before" | tr -d ':' | fold -w1 | sort -u) \
+                     <(printf '%s' "$short_after"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l || printf '0'
+        )
+    fi
+    
+    if [[ -n "$long_before" ]] && [[ -n "$long_after" ]]; then
+        removed_long_count=$(
+            comm -23 <(printf '%s' "$long_before" | tr ',' '\n' | sort -u) \
+                     <(printf '%s' "$long_after"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l || printf '0'
+        )
+        added_long_count=$(
+            comm -13 <(printf '%s' "$long_before" | tr ',' '\n' | sort -u) \
+                     <(printf '%s' "$long_after"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l || printf '0'
+        )
+    fi
+    
     printf 'short_options_before=%s\n' "$short_before"
     printf 'short_options_after=%s\n' "$short_after"
     printf 'long_options_before=%s\n' "$long_before"
@@ -443,6 +494,11 @@ extract_cli_options() {
     printf 'breaking_changes=%s\n' "$breaking_changes"
     printf 'api_breaking=%s\n' "$api_breaking"
     printf 'security_keywords=%s\n' "$security_keywords"
+    printf 'manual_cli_changes=%s\n' "$manual_cli_changes"
+    printf 'removed_short_count=%s\n' "$removed_short_count"
+    printf 'added_short_count=%s\n' "$added_short_count"
+    printf 'removed_long_count=%s\n' "$removed_long_count"
+    printf 'added_long_count=%s\n' "$added_long_count"
 }
 
 # Binary-safe numstat summation function
@@ -478,6 +534,11 @@ analyze_changes() {
         printf 'diff_size=0\n'
         printf 'api_breaking=false\n'
         printf 'security_keywords=0\n'
+        printf 'manual_cli_changes=false\n'
+        printf 'removed_short_count=0\n'
+        printf 'added_short_count=0\n'
+        printf 'removed_long_count=0\n'
+        printf 'added_long_count=0\n'
         return
     fi
     
@@ -521,7 +582,7 @@ analyze_changes() {
     
     # Extract CLI options for comparison
     local cli_analysis
-    cli_analysis=$(extract_cli_options "$base_ref" "HEAD")
+    cli_analysis=$(extract_cli_options "$base_ref" "$target_ref")
     local short_before short_after long_before long_after
     short_before=$(printf '%s\n' "$cli_analysis" | grep "^short_options_before=" | cut -d'=' -f2)
     short_after=$(printf '%s\n' "$cli_analysis" | grep "^short_options_after=" | cut -d'=' -f2)
@@ -533,9 +594,24 @@ analyze_changes() {
     api_breaking=$(printf '%s\n' "$cli_analysis" | grep "^api_breaking=" | cut -d'=' -f2)
     local security_keywords
     security_keywords=$(printf '%s\n' "$cli_analysis" | grep "^security_keywords=" | cut -d'=' -f2)
+    local manual_cli_changes
+    manual_cli_changes=$(printf '%s\n' "$cli_analysis" | grep "^manual_cli_changes=" | cut -d'=' -f2)
+    local removed_short_count
+    removed_short_count=$(printf '%s\n' "$cli_analysis" | grep "^removed_short_count=" | cut -d'=' -f2)
+    local added_short_count
+    added_short_count=$(printf '%s\n' "$cli_analysis" | grep "^added_short_count=" | cut -d'=' -f2)
+    local removed_long_count
+    removed_long_count=$(printf '%s\n' "$cli_analysis" | grep "^removed_long_count=" | cut -d'=' -f2)
+    local added_long_count
+    added_long_count=$(printf '%s\n' "$cli_analysis" | grep "^added_long_count=" | cut -d'=' -f2)
     
     # Check for CLI changes by comparing option sets
-    if [[ -n "$short_after" ]] && [[ "$short_after" != "$short_before" ]]; then
+    # FIXED: Normalize strings for initial change test to handle colon-only changes consistently
+    local short_before_norm short_after_norm
+    short_before_norm=$(printf '%s' "$short_before" | tr -d ':')
+    short_after_norm=$(printf '%s' "$short_after" | tr -d ':')
+    
+    if [[ -n "$short_after" ]] && [[ "$short_after_norm" != "$short_before_norm" ]]; then
         cli_changes=true
         # Check for breaking changes (removed options) - FIXED: Harden comm inputs
         # Note: fold -w1 splits by bytes; multi-byte characters in long options not supported
@@ -584,6 +660,11 @@ analyze_changes() {
     printf 'diff_size=%s\n' "$diff_size"
     printf 'api_breaking=%s\n' "$api_breaking"
     printf 'security_keywords=%s\n' "$security_keywords"
+    printf 'manual_cli_changes=%s\n' "$manual_cli_changes"
+    printf 'removed_short_count=%s\n' "$removed_short_count"
+    printf 'added_short_count=%s\n' "$added_short_count"
+    printf 'removed_long_count=%s\n' "$removed_long_count"
+    printf 'added_long_count=%s\n' "$added_long_count"
 }
 
 # Calculate next version without external dependency
@@ -759,6 +840,9 @@ main() {
     local new_source_files new_test_files new_doc_files
     local cli_changes breaking_cli_changes diff_size
     local api_breaking security_keywords
+    local manual_cli_changes
+    local removed_short_count added_short_count
+    local removed_long_count added_long_count
 
     added_files=$(printf '%s\n' "$analysis" | grep "^added_files=" | cut -d'=' -f2 | tr -d '\r')
     modified_files=$(printf '%s\n' "$analysis" | grep "^modified_files=" | cut -d'=' -f2 | tr -d '\r')
@@ -771,6 +855,11 @@ main() {
     diff_size=$(printf '%s\n' "$analysis" | grep "^diff_size=" | cut -d'=' -f2 | tr -d '\r')
     api_breaking=$(printf '%s\n' "$analysis" | grep "^api_breaking=" | cut -d'=' -f2 | tr -d '\r')
     security_keywords=$(printf '%s\n' "$analysis" | grep "^security_keywords=" | cut -d'=' -f2 | tr -d '\r')
+    manual_cli_changes=$(printf '%s\n' "$analysis" | grep "^manual_cli_changes=" | cut -d'=' -f2 | tr -d '\r')
+    removed_short_count=$(printf '%s\n' "$analysis" | grep "^removed_short_count=" | cut -d'=' -f2 | tr -d '\r')
+    added_short_count=$(printf '%s\n' "$analysis" | grep "^added_short_count=" | cut -d'=' -f2 | tr -d '\r')
+    removed_long_count=$(printf '%s\n' "$analysis" | grep "^removed_long_count=" | cut -d'=' -f2 | tr -d '\r')
+    added_long_count=$(printf '%s\n' "$analysis" | grep "^added_long_count=" | cut -d'=' -f2 | tr -d '\r')
     
     # Determine suggestion and reason
     local suggestion
@@ -801,6 +890,11 @@ main() {
         local json_diff_size="${diff_size:-0}"
         local json_api_breaking="${api_breaking:-false}"
         local json_security_keywords="${security_keywords:-0}"
+        local json_manual_cli_changes="${manual_cli_changes:-false}"
+        local json_removed_short_count="${removed_short_count:-0}"
+        local json_added_short_count="${added_short_count:-0}"
+        local json_removed_long_count="${removed_long_count:-0}"
+        local json_added_long_count="${added_long_count:-0}"
         
         printf '{\n'
         printf '  "suggestion": "%s",\n' "$suggestion"
@@ -823,7 +917,12 @@ main() {
         printf '    "breaking_cli_changes": %s,\n' "$json_breaking_cli_changes"
         printf '    "diff_size": %s,\n' "$json_diff_size"
         printf '    "api_breaking": %s,\n' "$json_api_breaking"
-        printf '    "security_keywords": %s\n' "$json_security_keywords"
+        printf '    "security_keywords": %s,\n' "$json_security_keywords"
+        printf '    "manual_cli_changes": %s,\n' "$json_manual_cli_changes"
+        printf '    "removed_short_count": %s,\n' "$json_removed_short_count"
+        printf '    "added_short_count": %s,\n' "$json_added_short_count"
+        printf '    "removed_long_count": %s,\n' "$json_removed_long_count"
+        printf '    "added_long_count": %s\n' "$json_added_long_count"
         printf '  }\n'
         printf '}\n'
     elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
@@ -862,6 +961,11 @@ main() {
             printf 'CLI changes:\n'
             printf '  CLI interface changes: %s\n' "$cli_changes"
             printf '  Breaking CLI changes: %s\n' "$breaking_cli_changes"
+            printf '  Manual CLI changes: %s\n' "${manual_cli_changes:-false}"
+            printf '  Removed short options: %s\n' "${removed_short_count:-0}"
+            printf '  Added short options: %s\n' "${added_short_count:-0}"
+            printf '  Removed long options: %s\n' "${removed_long_count:-0}"
+            printf '  Added long options: %s\n' "${added_long_count:-0}"
             printf '\n'
             printf 'Change magnitude:\n'
             printf '  Diff size: %s lines\n' "$diff_size"
