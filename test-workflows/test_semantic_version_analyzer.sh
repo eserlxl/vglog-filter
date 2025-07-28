@@ -71,7 +71,7 @@ test_basic_functionality() {
     # Test help output
     run_test "Help output" \
         "$SCRIPT_PATH --help" \
-        "Semantic Version Analyzer v3"
+        "Semantic Version Analyzer v3 for vglog-filter"
     
     # Test machine output format
     run_test "Machine output format" \
