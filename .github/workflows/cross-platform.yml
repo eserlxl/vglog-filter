@@ -63,6 +63,12 @@ jobs:
           test -x ./build/bin/vglog-filter
           ./build/bin/vglog-filter --help
           echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
+          
+          # Test -k flag functionality
+          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
+          echo "==12345== Test input" >> test_k_flag.txt
+          ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
+          rm -f test_k_flag.txt
 
   test-arch:
     name: Arch Linux (container)
@@ -96,6 +102,12 @@ jobs:
           test -x ./build/bin/vglog-filter
           ./build/bin/vglog-filter --help
           echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
+          
+          # Test -k flag functionality
+          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
+          echo "==12345== Test input" >> test_k_flag.txt
+          ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
+          rm -f test_k_flag.txt
 
   test-fedora:
     name: Fedora (container)
@@ -129,6 +141,12 @@ jobs:
           test -x ./build/bin/vglog-filter
           ./build/bin/vglog-filter --help
           echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
+          
+          # Test -k flag functionality
+          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
+          echo "==12345== Test input" >> test_k_flag.txt
+          ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
+          rm -f test_k_flag.txt
 
   test-debian:
     name: Debian (container)
@@ -164,4 +182,10 @@ jobs:
           ./build.sh performance warnings clean
           test -x ./build/bin/vglog-filter
           ./build/bin/vglog-filter --help
-          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; } 
+          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
+          
+          # Test -k flag functionality
+          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
+          echo "==12345== Test input" >> test_k_flag.txt
+          ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
+          rm -f test_k_flag.txt 

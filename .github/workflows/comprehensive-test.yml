@@ -163,6 +163,13 @@ jobs:
           # Basic pipeline test
           echo "==12345== Test input" | "${BUILD_DIR}/bin/vglog-filter" > /dev/null
           echo "✓ Basic functionality works"
+          
+          # Test -k flag functionality
+          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
+          echo "==12345== Test input" >> test_k_flag.txt
+          "${BUILD_DIR}/bin/vglog-filter" -k test_k_flag.txt > /dev/null
+          echo "✓ -k flag functionality works"
+          rm -f test_k_flag.txt
 
           # Run tests if they were built
           if [[ "${{ matrix.build_config.name }}" == *"tests"* ]]; then
