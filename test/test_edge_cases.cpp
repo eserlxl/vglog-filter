@@ -453,8 +453,8 @@ bool test_large_file_processing() {
     std::ofstream test_log("test_large_file.tmp");
     
     // Create a file that's large enough to trigger stream processing (5MB threshold)
-    // Each line is approximately 80 bytes, so we need about 65,000 lines
-    const int target_lines = 70000;  // Slightly more than needed for 5MB
+    // Each line is approximately 80 bytes, so we need about 75,000 lines
+    const int target_lines = 80000;  // More than needed for 5MB
     
     for (int i = 0; i < target_lines; ++i) {
         test_log << "==12345== Line " << i << " with some content to test large file processing\n";
