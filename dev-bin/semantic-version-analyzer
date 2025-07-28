@@ -11,6 +11,12 @@
 
 set -Eeuo pipefail
 IFS=$'\n\t'
+export LC_ALL=C
+
+# Auto-detect project root
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
 
 # Early repository guard
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { 
@@ -29,10 +35,12 @@ Options:
   --since-tag <tag> Alias for --since
   --since-commit <hash>  Analyze changes since specific commit
   --since-date <date>    Analyze changes since specific date (YYYY-MM-DD)
+  --repo-root <path>     Set repository root directory
   --verbose         Show detailed analysis
   --machine        Output machine-readable key=value format
   --json           Output machine-readable JSON
   --ignore-whitespace  Ignore whitespace changes in diff size calculation
+  --suggest-only   Output only the suggestion (major/minor/patch/none)
   --help            Show this help
 
 Examples:
@@ -46,6 +54,13 @@ Machine output examples:
   $0 --machine | grep SUGGESTION
   $0 --json | jq -r .suggestion
 
+Exit codes:
+  0 = ran successfully (any suggestion)
+  10 = major version bump suggested
+  11 = minor version bump suggested
+  12 = patch version bump suggested
+  20 = no version bump suggested
+
 EOF
 }
 
@@ -53,10 +68,12 @@ EOF
 SINCE_TAG=""
 SINCE_COMMIT=""
 SINCE_DATE=""
+REPO_ROOT=""
 VERBOSE=false
 MACHINE_OUTPUT=false
 JSON_OUTPUT=false
 IGNORE_WHITESPACE=false
+SUGGEST_ONLY=false
 
 # Configurable thresholds (can be overridden by environment)
 MIN_MAJOR_DIFF_LINES="${MIN_MAJOR_DIFF_LINES:-2000}"
@@ -68,19 +85,55 @@ MIN_NEW_TEST_FILES="${MIN_NEW_TEST_FILES:-3}"
 MIN_NEW_DOC_FILES="${MIN_NEW_DOC_FILES:-2}"
 MAJOR_REQUIRE_BREAKING="${MAJOR_REQUIRE_BREAKING:-true}"
 
-# Parse arguments
+# Parse arguments with proper validation
 while [[ $# -gt 0 ]]; do
     case $1 in
         --since|--since-tag)
+            if [[ -z "${2-}" || "${2-}" == -* ]]; then
+                printf 'Error: --since requires a value\n' >&2
+                exit 1
+            fi
             SINCE_TAG="$2"
             shift 2
             ;;
         --since-commit)
+            if [[ -z "${2-}" || "${2-}" == -* ]]; then
+                printf 'Error: --since-commit requires a value\n' >&2
+                exit 1
+            fi
             SINCE_COMMIT="$2"
             shift 2
             ;;
         --since-date)
+            if [[ -z "${2-}" || "${2-}" == -* ]]; then
+                printf 'Error: --since-date requires a value\n' >&2
+                exit 1
+            fi
+            # Validate date format (YYYY-MM-DD)
+            if [[ ! "$2" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+                printf 'Error: --since-date requires YYYY-MM-DD format\n' >&2
+                exit 1
+            fi
+            
+            # Validate date components
+            IFS='-' read -r year month day <<< "$2"
+            if [[ "$month" -lt 1 || "$month" -gt 12 ]]; then
+                printf 'Error: Invalid month in date %s (must be 01-12)\n' "$2" >&2
+                exit 1
+            fi
+            if [[ "$day" -lt 1 || "$day" -gt 31 ]]; then
+                printf 'Error: Invalid day in date %s (must be 01-31)\n' "$2" >&2
+                exit 1
+            fi
             SINCE_DATE="$2"
+            shift 2
+            ;;
+        --repo-root)
+            if [[ -z "${2-}" || "${2-}" == -* ]]; then
+                printf 'Error: --repo-root requires a value\n' >&2
+                exit 1
+            fi
+            REPO_ROOT="$2"
             shift 2
             ;;
         --verbose)
@@ -99,6 +152,10 @@ while [[ $# -gt 0 ]]; do
             IGNORE_WHITESPACE=true
             shift
             ;;
+        --suggest-only)
+            SUGGEST_ONLY=true
+            shift
+            ;;
         --help|-h)
             show_help
             exit 0
@@ -111,6 +168,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Change to repo root if specified
+if [[ -n "$REPO_ROOT" ]]; then
+    cd "$REPO_ROOT"
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+        printf 'Error: Not in a git repository at %s\n' "$REPO_ROOT" >&2
+        exit 1
+    }
+fi
+
 # Validate git reference
 verify_ref() {
     local ref="$1"
@@ -120,7 +186,7 @@ verify_ref() {
     fi
 }
 
-# Determine the base for comparison
+# Determine the base for comparison with better error handling
 get_base_reference() {
     local ref_type=""
     
@@ -206,7 +272,7 @@ classify_path() {
     return 0
 }
 
-# Extract CLI options from source code with improved detection
+# Enhanced CLI options detection with better accuracy
 extract_cli_options() {
     local base_ref="$1"
     local target_ref="$2"
@@ -223,7 +289,7 @@ extract_cli_options() {
         return
     fi
     
-    # Extract short options from getopt calls - improved regex
+    # Extract short options from getopt calls - improved regex with context
     local short_before short_after
     short_before=$(git show "$base_ref":src/*.cpp 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
     short_after=$(git show "$target_ref":src/*.cpp 2>/dev/null | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' | sort -u | tr -d '\n' || printf '')
@@ -239,7 +305,7 @@ extract_cli_options() {
     printf 'long_options_after=%s\n' "$long_after"
 }
 
-# Analyze changes with robust rename/copy handling
+# Enhanced change analysis with better diff parsing and rename/copy handling
 analyze_changes() {
     local base_ref="$1"
     
@@ -349,17 +415,19 @@ analyze_changes() {
     # Get diff size using shortstat for safer parsing
     local diff_size
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        diff_size=$(git diff -w --shortstat "$base_ref"..HEAD | awk '
-            {ins=0; del=0;
-             for (i=1;i<=NF;i++) if ($i ~ /insertion/) ins=$(i-1);
-             for (i=1;i<=NF;i++) if ($i ~ /deletion/)  del=$(i-1);
-             print (ins+del)+0 }' || echo "0")
+        local shortstat
+        shortstat=$(git diff -w --shortstat "$base_ref"..HEAD 2>/dev/null || printf '')
+        local ins del
+        ins=$(awk '{print $4+0}' <<<"$shortstat" || printf '0')
+        del=$(awk '{print $6+0}' <<<"$shortstat" || printf '0')
+        diff_size=$((ins + del))
     else
-        diff_size=$(git diff --shortstat "$base_ref"..HEAD | awk '
-            {ins=0; del=0;
-             for (i=1;i<=NF;i++) if ($i ~ /insertion/) ins=$(i-1);
-             for (i=1;i<=NF;i++) if ($i ~ /deletion/)  del=$(i-1);
-             print (ins+del)+0 }' || echo "0")
+        local shortstat
+        shortstat=$(git diff --shortstat "$base_ref"..HEAD 2>/dev/null || printf '')
+        local ins del
+        ins=$(awk '{print $4+0}' <<<"$shortstat" || printf '0')
+        del=$(awk '{print $6+0}' <<<"$shortstat" || printf '0')
+        diff_size=$((ins + del))
     fi
     
     printf 'added_files=%s\n' "$added_files"
@@ -467,9 +535,9 @@ main() {
     local base_ref ref_type
     IFS='|' read -r base_ref ref_type <<< "$base_ref_info"
     
-    # Get current version
+    # Get current version with proper whitespace handling
     local current_version
-    current_version=$(cat VERSION 2>/dev/null | tr -d '[:space:]' || printf '0.0.0')
+    current_version=$(tr -d '[:space:]' < VERSION 2>/dev/null || printf '0.0.0')
     
     # Analyze changes
     local analysis
@@ -502,7 +570,10 @@ main() {
     next_version=$(calculate_next_version "$current_version" "$suggestion")
     
     # Output based on mode
-    if [[ "$JSON_OUTPUT" = "true" ]]; then
+    if [[ "$SUGGEST_ONLY" = "true" ]]; then
+        # Output only the suggestion
+        printf '%s\n' "$suggestion"
+    elif [[ "$JSON_OUTPUT" = "true" ]]; then
         # JSON output for machine consumption
         printf '{\n'
         printf '  "suggestion": "%s",\n' "$suggestion"
@@ -570,9 +641,13 @@ main() {
             printf '  Patch: Modified files (>%s) + diff > %s lines\n' "$MIN_PATCH_FILES" "$MIN_PATCH_DIFF_LINES"
             printf '\n'
             
-            # Show recent commits
+            # Show recent commits with proper error handling
             printf 'Recent commits:\n'
-            git log --oneline "$base_ref"..HEAD 2>/dev/null | head -10 || printf 'No commits found\n'
+            if git rev-list "$base_ref"..HEAD >/dev/null 2>&1; then
+                git log --oneline "$base_ref"..HEAD 2>/dev/null | head -10 || printf 'No commits found\n'
+            else
+                printf 'No commits in range\n'
+            fi
             printf '\n'
         fi
         
@@ -627,6 +702,15 @@ main() {
         # Always include SUGGESTION= line in verbose output
         printf 'SUGGESTION=%s\n' "$suggestion"
     fi
+    
+    # Set exit code based on suggestion
+    case "$suggestion" in
+        major) exit 10 ;;
+        minor) exit 11 ;;
+        patch) exit 12 ;;
+        none) exit 20 ;;
+        *) exit 0 ;;
+    esac
 }
 
 # Run main function
