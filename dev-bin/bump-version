@@ -84,11 +84,7 @@ check_dirty_tree() {
             suffix="CMakeLists.txt"
         fi
         
-        if [[ -n "$suffix" ]]; then
-            printf '%s\n' "${RED}Error:${RESET} working tree has changes other than ${suffix}. Use --allow-dirty to override." >&2
-        else
-            printf '%s\n' "${RED}Error:${RESET} working tree has changes. Use --allow-dirty to override." >&2
-        fi
+        printf '%s\n' "${RED}Error:${RESET} working tree has disallowed changes. Use --allow-dirty to override.$([[ -n "$suffix" ]] && printf ' Allowed: %s.' "$suffix")" >&2
         exit 1
     fi
     
@@ -264,7 +260,20 @@ create_commit() {
             commit_args+=(-m "$ANALYSIS_MESSAGE")
         fi
         
-        git commit "${commit_args[@]}"
+        # Restrict commit to only the files we staged (safety improvement)
+        local staged_files=()
+        if [[ "$NEW_VERSION" != *-* && -f "$VERSION_FILE" ]]; then
+            staged_files+=("$VERSION_FILE")
+        fi
+        if [[ "$UPDATE_CMAKE" == "true" && -f "$PROJECT_ROOT/CMakeLists.txt" ]]; then
+            staged_files+=("$PROJECT_ROOT/CMakeLists.txt")
+        fi
+        
+        if [[ ${#staged_files[@]} -gt 0 ]]; then
+            git commit "${commit_args[@]}" -- "${staged_files[@]}"
+        else
+            git commit "${commit_args[@]}"
+        fi
         printf '%s\n' "${GREEN}Created commit${RESET}" >&2
         
         # Print commit SHA for traceability
@@ -273,7 +282,20 @@ create_commit() {
         printf '%s\n' "${CYAN}Commit SHA: $commit_sha${RESET}" >&2
     else
         # Use custom message (ANALYSIS_MESSAGE is ignored when --message is provided)
-        git commit ${NO_VERIFY:+--no-verify} ${COMMIT_SIGN:+-S} -m "$msg"
+        # Restrict commit to only the files we staged (safety improvement)
+        local staged_files=()
+        if [[ "$NEW_VERSION" != *-* && -f "$VERSION_FILE" ]]; then
+            staged_files+=("$VERSION_FILE")
+        fi
+        if [[ "$UPDATE_CMAKE" == "true" && -f "$PROJECT_ROOT/CMakeLists.txt" ]]; then
+            staged_files+=("$PROJECT_ROOT/CMakeLists.txt")
+        fi
+        
+        if [[ ${#staged_files[@]} -gt 0 ]]; then
+            git commit ${NO_VERIFY:+--no-verify} ${COMMIT_SIGN:+-S} -m "$msg" -- "${staged_files[@]}"
+        else
+            git commit ${NO_VERIFY:+--no-verify} ${COMMIT_SIGN:+-S} -m "$msg"
+        fi
         printf '%s\n' "${GREEN}Created commit${RESET}" >&2
         
         # Print commit SHA for traceability
@@ -305,10 +327,10 @@ create_tag() {
     fi
     
     if [[ "$SIGNED_TAG" == "true" ]]; then
-        git tag -s "$tag_name" -m "Release ${NEW_VERSION}"
+        git tag -s "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
         printf '%s\n' "${GREEN}Created signed tag: $tag_name${RESET}" >&2
     elif [[ "$ANNOTATED_TAG" == "true" ]]; then
-        git tag -a "$tag_name" -m "Release ${NEW_VERSION}"
+        git tag -a "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
         printf '%s\n' "${GREEN}Created annotated tag: $tag_name${RESET}" >&2
     else
         git tag "$tag_name"
@@ -336,6 +358,11 @@ sanitize_tag_prefix() {
 
 # Function to check if new version is greater than last tag
 check_version_order() {
+    # Skip version order check for prerelease versions
+    if [[ "$NEW_VERSION" == *-* ]]; then
+        return 0
+    fi
+    
     local last_tag
     local sanitized_prefix
     sanitized_prefix=$(sanitize_tag_prefix "$TAG_PREFIX")
@@ -378,7 +405,7 @@ usage() {
     # Get current version for help display
     local help_version="N/A"
     if [[ -f "$VERSION_FILE" ]]; then
-        help_version=$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || echo "N/A")
+        help_version=$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null)
     fi
     cat << EOF
 Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push] [--push-tags] [--allow-nonmonotonic-tag] [--allow-prerelease] [--repo-root PATH]
@@ -467,7 +494,7 @@ Examples:
   ./dev-bin/bump-version patch --commit --push     # Bump, commit, and push (branch only)
   ./dev-bin/bump-version patch --push-tags         # Push existing tags without creating new ones
   ./dev-bin/bump-version --set 1.0.0-rc.1 --allow-prerelease --print # Print prerelease version
-  ./dev-bin/bump-version --set 1.0.0-rc.1 --allow-prerelease --commit # Set prerelease version
+  ./dev-bin/bump-version --set 1.0.0-rc.1 --allow-prerelease --commit # Set prerelease version (no files changed; commit is skipped)
   ./dev-bin/bump-version --set 1.0.0 --allow-nonmonotonic-tag --commit # Override tag ordering
   ./dev-bin/bump-version patch --repo-root /path/to/repo --commit # Use custom repo root
 
@@ -619,6 +646,55 @@ if [[ -n "$REPO_ROOT" ]]; then
     printf '%s\n' "${CYAN}Using repository root: $PROJECT_ROOT${RESET}" >&2
 fi
 
+# Handle print-only mode early (before any validation or computation)
+if [[ "$PRINT_ONLY" == "true" ]]; then
+    # For --print, we need to compute the version even without proper arguments
+    # This is a special case for quick version preview
+    if [[ -n "$SET_VERSION" ]]; then
+        printf '%s\n' "$SET_VERSION"
+        exit 0
+    elif [[ -n "$BUMP_TYPE" ]]; then
+        # Read current version for bump calculation
+        if [[ -f "$VERSION_FILE" ]]; then
+            CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
+            if [[ "$CURRENT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+                # Perform bump calculation
+                IFS='.' read -r current_major current_minor current_patch <<< "$CURRENT_VERSION"
+                
+                case "$BUMP_TYPE" in
+                    major)
+                        new_major=$((current_major + 1))
+                        new_minor=0
+                        new_patch=0
+                        ;;
+                    minor)
+                        new_major=$current_major
+                        new_minor=$((current_minor + 1))
+                        new_patch=0
+                        ;;
+                    patch)
+                        new_major=$current_major
+                        new_minor=$current_minor
+                        new_patch=$((current_patch + 1))
+                        ;;
+                    *)
+                        printf '%s\n' "${RED}Error: Invalid bump type '$BUMP_TYPE'${RESET}" >&2
+                        exit 1
+                        ;;
+                esac
+                
+                NEW_VERSION="$new_major.$new_minor.$new_patch"
+                printf '%s\n' "$NEW_VERSION"
+                exit 0
+            fi
+        fi
+    fi
+    
+    # If we get here, we can't compute the version for --print
+    printf '%s\n' "${RED}Error: Cannot compute version for --print. Need either --set VERSION or a valid bump type with existing VERSION file.${RESET}" >&2
+    exit 1
+fi
+
 # Validate TAG_PREFIX content early
 if [[ "$TAG_PREFIX" == *$'\n'* || "$TAG_PREFIX" == *$'\r'* ]]; then
     printf '%s\n' "${RED}Error: TAG_PREFIX contains newline characters${RESET}" >&2
@@ -665,13 +741,6 @@ else
     exit 1
 fi
 
-# Check if bump type was specified (unless using --set)
-if [[ -z "$BUMP_TYPE" && -z "$SET_VERSION" ]]; then
-    printf '%s\n' "${RED}Error: No bump type specified and no --set version provided${RESET}" >&2
-    usage
-    exit 1
-fi
-
 # Handle --set option
 if [[ -n "$SET_VERSION" ]]; then
     validate_version_format "$SET_VERSION" "$ALLOW_PRERELEASE"
@@ -681,6 +750,19 @@ else
     # Perform the version bump
     printf '%s\n' "${CYAN}Bumping version from $CURRENT_VERSION...${RESET}" >&2
     bump_version "$BUMP_TYPE"
+fi
+
+# No-op guard if version unchanged
+if [[ "$CURRENT_VERSION" == "$NEW_VERSION" ]]; then
+    printf '%s\n' "${YELLOW}Version unchanged ($CURRENT_VERSION); nothing to do.${RESET}" >&2
+    exit 0
+fi
+
+# Check if bump type was specified (unless using --set)
+if [[ -z "$BUMP_TYPE" && -z "$SET_VERSION" ]]; then
+    printf '%s\n' "${RED}Error: No bump type specified and no --set version provided${RESET}" >&2
+    usage
+    exit 1
 fi
 
 # Check for conflicting options
@@ -748,37 +830,24 @@ if [[ "$DO_COMMIT" == "true" && "$COMMIT_SIGN" != "true" ]] && git config --get 
     printf '%s\n' "${YELLOW}Source:${RESET} $(git config --show-origin --get commit.gpgSign)" >&2
 fi
 
+# Warn if --allow-prerelease is used without --set (it has no effect)
+if [[ "$ALLOW_PRERELEASE" == "true" && -z "$SET_VERSION" ]]; then
+    printf '%s\n' "${YELLOW}Warning:${RESET} --allow-prerelease has no effect without --set. Pre-releases are only supported with --set." >&2
+fi
+
 # Refresh git index before diff checks to handle timestamp skew
 if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
     git update-index -q --refresh || true
 fi
 
-# Protect against concurrent edits (local use)
-if [[ "$DO_COMMIT" == "true" && "$ALLOW_DIRTY" != "true" ]] && ! git diff --quiet --no-ext-diff; then
-    printf '%s\n' "${RED}Error:${RESET} working tree has unstaged changes; use --allow-dirty to override." >&2
-    exit 1
-fi
-
 # Safer dirty-tree guard using pathspec exclusion (for both commit and tag)
-if ([[ "$DO_COMMIT" == "true" ]] || [[ "$DO_TAG" == "true" ]]) && [[ "$ALLOW_DIRTY" != "true" ]]; then
+if ([[ "$DO_COMMIT" == "true" ]] || [[ "$DO_TAG" == "true" ]]) && [[ "$ALLOW_DIRTY" != "true" ]] && [[ "$DRY_RUN" != "true" ]]; then
     if [[ "$IN_GIT_REPO" != "true" ]]; then
         printf '%s\n' "${RED}Error: Not in a git repository${RESET}" >&2
         exit 1
     fi
     
     check_dirty_tree
-fi
-
-# Handle print-only mode
-if [[ "$PRINT_ONLY" == "true" ]]; then
-    printf '%s\n' "$NEW_VERSION"
-    exit 0
-fi
-
-# No-op guard if version unchanged
-if [[ "$CURRENT_VERSION" == "$NEW_VERSION" ]]; then
-    printf '%s\n' "${YELLOW}Version unchanged ($CURRENT_VERSION); nothing to do.${RESET}" >&2
-    exit 0
 fi
 
 # Handle dry-run mode
@@ -807,6 +876,19 @@ if [[ "$DRY_RUN" == "true" ]]; then
     fi
     if [[ "$DO_COMMIT" == "true" ]]; then
         printf '%s\n' "${YELLOW}DRY RUN: Would create commit: chore(release): ${TAG_PREFIX}${NEW_VERSION}${RESET}" >&2
+        # Show effective files being committed
+        effective_files=()
+        if [[ "$NEW_VERSION" != *-* ]]; then
+            effective_files+=("VERSION")
+        fi
+        if [[ "$UPDATE_CMAKE" == "true" && "$NEW_VERSION" != *-* ]]; then
+            effective_files+=("CMakeLists.txt")
+        fi
+        if [[ ${#effective_files[@]} -gt 0 ]]; then
+            printf '%s\n' "${YELLOW}DRY RUN: Would commit files: ${effective_files[*]}${RESET}" >&2
+        else
+            printf '%s\n' "${YELLOW}DRY RUN: Would skip commit (no files to commit)${RESET}" >&2
+        fi
     fi
     if [[ "$DO_TAG" == "true" ]]; then
         if [[ "$NEW_VERSION" == *-* ]]; then
@@ -870,7 +952,7 @@ if [[ "$DO_TAG" == "true" ]]; then
 fi
 
 # Warn about version ordering for --set even when not tagging
-if [[ -n "$SET_VERSION" && "$DO_TAG" != "true" ]]; then
+if [[ -n "$SET_VERSION" && "$DO_TAG" != "true" && "$NEW_VERSION" != *-* ]]; then
     sanitized_prefix=$(sanitize_tag_prefix "$TAG_PREFIX")
     last_tag=$(git tag --list "${sanitized_prefix}[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n1)
     if [[ -n "$last_tag" ]]; then
