@@ -94,6 +94,9 @@ MIN_NEW_TEST_FILES="${MIN_NEW_TEST_FILES:-3}"
 MIN_NEW_DOC_FILES="${MIN_NEW_DOC_FILES:-2}"
 MAJOR_REQUIRE_BREAKING="${MAJOR_REQUIRE_BREAKING:-true}"
 
+# Normalize MAJOR_REQUIRE_BREAKING once for consistency
+REQ="${MAJOR_REQUIRE_BREAKING,,}"
+
 # Parse arguments with proper validation
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -307,6 +310,16 @@ classify_path() {
     printf '0'
 }
 
+# Helper function to increment counters for new files
+inc_counters_for() {
+    local file="$1"
+    case "$(classify_path "$file")" in
+        30) ((new_source_files++)) ;;
+        10) ((new_test_files++)) ;;
+        20) ((new_doc_files++)) ;;
+    esac
+}
+
 # Enhanced CLI options detection with better accuracy - restrict to changed lines
 extract_cli_options() {
     local base_ref="$1"
@@ -366,7 +379,7 @@ extract_cli_options() {
         
         # If any removed case doesn't have a corresponding added case, it's breaking
         local missing_cases
-        missing_cases=$(comm -23 <(printf '%s' "$removed_cases" | tr '\n' '\n') <(printf '%s' "$added_cases" | tr '\n' '\n') 2>/dev/null || printf '')
+        missing_cases=$(comm -23 <(printf '%s' "$removed_cases" | tr '\n' '\n' | sort -u) <(printf '%s' "$added_cases" | tr '\n' '\n' | sort -u) 2>/dev/null || printf '')
         
         if [[ -n "$missing_cases" ]]; then
             breaking_changes=true
@@ -393,11 +406,19 @@ extract_cli_options() {
         api_breaking=true
     fi
     
-    # Security/crash detection in commit messages
-    # TODO: Consider gating with file changes (e.g., not only docs) or demoting to PATCH
-    # unless paired with API/CLI breakage to reduce noise
-    local security_keywords
-    security_keywords=$(git log --format="%s %b" "$base_ref".."$target_ref" | grep -i -E '(security|cve|crash|segfault|uaf|overflow|xss|vulnerability)' | wc -l || printf '0')
+    # Security/crash detection in commit messages - FIXED: Gate with code changes
+    local security_keywords=0
+    local has_code_changes=false
+    
+    # Check if there are code changes (src/ or include/ files)
+    if git diff --name-only "$base_ref".."$target_ref" -- ':(glob)src/*.{c,cc,cpp,cxx,h,hpp,hh}' ':(glob)include/*.{h,hpp,hh}' | grep -q .; then
+        has_code_changes=true
+    fi
+    
+    # Only count security keywords if there are code changes or API/CLI breakage
+    if [[ "$has_code_changes" = "true" ]] || [[ "$api_breaking" = "true" ]] || [[ "$breaking_changes" = "true" ]]; then
+        security_keywords=$(git log --format="%s %b" "$base_ref".."$target_ref" | grep -i -E '(security|cve|crash|segfault|uaf|overflow|xss|vulnerability)' | wc -l || printf '0')
+    fi
     
     printf 'short_options_before=%s\n' "$short_before"
     printf 'short_options_after=%s\n' "$short_after"
@@ -406,6 +427,19 @@ extract_cli_options() {
     printf 'breaking_changes=%s\n' "$breaking_changes"
     printf 'api_breaking=%s\n' "$api_breaking"
     printf 'security_keywords=%s\n' "$security_keywords"
+}
+
+# Binary-safe numstat summation function
+sum_numstat() {
+    local cmd=("$@")
+    local total_ins=0 total_del=0
+    while IFS=$'\t' read -r ins del _; do
+        [[ $ins =~ ^[0-9]+$ ]] || ins=0
+        [[ $del =~ ^[0-9]+$ ]] || del=0
+        total_ins=$((total_ins + ins))
+        total_del=$((total_del + del))
+    done < <("${cmd[@]}")
+    printf '%s' $((total_ins + total_del))
 }
 
 # Enhanced change analysis with better diff parsing and rename/copy handling
@@ -449,22 +483,14 @@ analyze_changes() {
         case "${status:0:1}" in
             A)
                 ((added_files++))
-                case "$(classify_path "$file")" in
-                    30) ((new_source_files++)) ;;
-                    10) ((new_test_files++)) ;;
-                    20) ((new_doc_files++)) ;;
-                esac
+                inc_counters_for "$file"
                 ;;
             M|T) ((modified_files++)) ;;
             D)   ((deleted_files++))  ;;
             R)   ((modified_files++)) ;;
             C)
                 ((added_files++))
-                case "$(classify_path "$file")" in
-                    30) ((new_source_files++)) ;;
-                    10) ((new_test_files++)) ;;
-                    20) ((new_doc_files++)) ;;
-                esac
+                inc_counters_for "$file"
                 ;;
         esac
     done < <(git -c core.quotepath=false diff --name-status -z "$base_ref"..HEAD 2>/dev/null)
@@ -487,9 +513,10 @@ analyze_changes() {
     # Check for CLI changes by comparing option sets
     if [[ -n "$short_after" ]] && [[ "$short_after" != "$short_before" ]]; then
         cli_changes=true
-        # Check for breaking changes (removed options)
+        # Check for breaking changes (removed options) - FIXED: Harden comm inputs
         local removed_short
-        removed_short=$(comm -23 <(printf '%s' "$short_before" | fold -w1 | sort) <(printf '%s' "$short_after" | fold -w1 | sort) 2>/dev/null || printf '')
+        removed_short=$(comm -23 <(printf '%s' "$short_before" | fold -w1 | sort -u) \
+                                      <(printf '%s' "$short_after"  | fold -w1 | sort -u) 2>/dev/null || printf '')
         if [[ -n "$removed_short" ]]; then
             breaking_cli_changes=true
         fi
@@ -497,9 +524,10 @@ analyze_changes() {
     
     if [[ -n "$long_after" ]] && [[ "$long_after" != "$long_before" ]]; then
         cli_changes=true
-        # Check for breaking changes (removed long options)
+        # Check for breaking changes (removed long options) - FIXED: Harden comm inputs
         local removed_long
-        removed_long=$(comm -23 <(printf '%s' "$long_before" | tr ',' '\n' | sort) <(printf '%s' "$long_after" | tr ',' '\n' | sort) 2>/dev/null || printf '')
+        removed_long=$(comm -23 <(printf '%s' "$long_before" | tr ',' '\n' | sort -u) \
+                                     <(printf '%s' "$long_after"  | tr ',' '\n' | sort -u) 2>/dev/null || printf '')
         if [[ -n "$removed_long" ]]; then
             breaking_cli_changes=true
         fi
@@ -510,22 +538,12 @@ analyze_changes() {
         breaking_cli_changes=true
     fi
     
-    # Get diff size using numstat for stable parsing
+    # Get diff size using numstat for stable parsing - FIXED: Binary-safe summation
     local diff_size
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        local total_ins=0 total_del=0
-        while IFS=$'\t' read -r ins del _; do
-            total_ins=$((total_ins + ins))
-            total_del=$((total_del + del))
-        done < <(git diff -w --numstat "$base_ref"..HEAD 2>/dev/null || printf '0\t0\t\n')
-        diff_size=$((total_ins + total_del))
+        diff_size=$(sum_numstat git diff -w --numstat "$base_ref"..HEAD)
     else
-        local total_ins=0 total_del=0
-        while IFS=$'\t' read -r ins del _; do
-            total_ins=$((total_ins + ins))
-            total_del=$((total_del + del))
-        done < <(git diff --numstat "$base_ref"..HEAD 2>/dev/null || printf '0\t0\t\n')
-        diff_size=$((total_ins + total_del))
+        diff_size=$(sum_numstat git diff --numstat "$base_ref"..HEAD)
     fi
     
     printf 'added_files=%s\n' "$added_files"
@@ -607,9 +625,8 @@ suggest_version_bump() {
     
     if [[ "${diff_size:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
         # Only suggest major for large diffs if breaking changes are not required
-        # FIXED: Normalize the value to handle various truth values
-        local req="${MAJOR_REQUIRE_BREAKING,,}"
-        if [[ "$req" != "true" && "$req" != "1" && "$req" != "yes" ]]; then
+        # FIXED: Use normalized REQ variable
+        if [[ "$REQ" != "true" && "$REQ" != "1" && "$REQ" != "yes" ]]; then
             printf 'major'
             return
         fi
@@ -671,9 +688,14 @@ main() {
         exit 1
     fi
 
-    # Get current version with proper whitespace handling
+    # Get current version with proper whitespace handling and validation
     local current_version
     current_version=$(tr -d '[:space:]' < VERSION 2>/dev/null || printf '0.0.0')
+    
+    # FIXED: Validate VERSION format
+    if [[ ! $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        current_version=0.0.0
+    fi
     
     # Analyze changes
     local analysis
@@ -811,7 +833,8 @@ main() {
                 else
                     printf 'Reason: Very large code changes (%s lines)\n' "$diff_size"
                 fi
-                printf 'Current: %s → New: %s\n' "$current_version" "$next_version"
+                # FIXED: Use ASCII arrow instead of Unicode
+                printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
                 ;;
             minor)
                 printf 'Suggested bump: MINOR version\n'
@@ -826,12 +849,14 @@ main() {
                 else
                     printf 'Reason: New features or significant additions\n'
                 fi
-                printf 'Current: %s → New: %s\n' "$current_version" "$next_version"
+                # FIXED: Use ASCII arrow instead of Unicode
+                printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
                 ;;
             patch)
                 printf 'Suggested bump: PATCH version\n'
                 printf 'Reason: Significant modifications (%s files, %s lines)\n' "$modified_files" "$diff_size"
-                printf 'Current: %s → New: %s\n' "$current_version" "$next_version"
+                # FIXED: Use ASCII arrow instead of Unicode
+                printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
                 ;;
             none)
                 printf 'Suggested bump: NONE\n'
@@ -848,7 +873,7 @@ main() {
                 printf '  ./dev-bin/bump-version %s --commit\n' "$suggestion"
                 printf '\n'
                 printf 'Or use GitHub Actions:\n'
-                printf '  Go to Actions → Auto Version Bump → Run workflow → Choose: %s\n' "$suggestion"
+                printf '  Go to Actions -> Auto Version Bump -> Run workflow -> Choose: %s\n' "$suggestion"
             else
                 printf 'Note: bump-version script not found at ./dev-bin/bump-version\n'
                 printf 'Preview unavailable - manual version update required\n'
