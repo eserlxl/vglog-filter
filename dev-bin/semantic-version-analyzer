@@ -33,6 +33,9 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
     exit 1
 }
 
+# Optional error trap for CI debugging (uncomment if needed)
+# trap 'printf "Error at line %d in %s\n" $LINENO "${BASH_SOURCE[0]}" >&2' ERR
+
 show_help() {
     cat << EOF
 Semantic Version Analyzer v3 for vglog-filter
@@ -311,7 +314,7 @@ extract_cli_options() {
     
     # Get source files diff
     local srcdiff
-    srcdiff=$(git -c color.ui=false --no-ext-diff -M -C diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' 2>/dev/null || true)
+    srcdiff=$(git -c color.ui=false diff --no-ext-diff -M -C "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' 2>/dev/null || true)
     
     if [[ -z "$srcdiff" ]]; then
         printf 'short_options_before=\n'
@@ -322,6 +325,8 @@ extract_cli_options() {
         printf 'api_breaking=false\n'
         printf 'security_keywords=0\n'
         printf 'manual_cli_changes=false\n'
+        printf 'manual_added_long_count=0\n'
+        printf 'manual_removed_long_count=0\n'
         printf 'removed_short_count=0\n'
         printf 'added_short_count=0\n'
         printf 'removed_long_count=0\n'
@@ -385,7 +390,7 @@ extract_cli_options() {
     # Check for removed case labels in switch statements
     local removed_cases
     removed_cases=$(
-        git -c color.ui=false --no-ext-diff -M -C diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
+        git -c color.ui=false diff --no-ext-diff -M -C --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
         | grep '^-[[:space:]]*case[[:space:]]' \
         | sed 's/^-[[:space:]]*case[[:space:]]*//' \
         | sort -u || printf ''
@@ -395,7 +400,7 @@ extract_cli_options() {
         # Check if corresponding +case appears for each removed case
         local added_cases
         added_cases=$(
-            git -c color.ui=false --no-ext-diff -M -C diff --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
+            git -c color.ui=false diff --no-ext-diff -M -C --unified=0 "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
             | grep '^+[[:space:]]*case[[:space:]]' \
             | sed 's/^+[[:space:]]*case[[:space:]]*//' \
             | sort -u || printf ''
@@ -417,7 +422,7 @@ extract_cli_options() {
     # Restrict to header files and require semicolon ending for better prototype detection
     # ENHANCED: Avoid false positives on typedefs/macros by requiring semicolon and no leading typedef/#
     removed_prototypes=$(
-        git -c color.ui=false --no-ext-diff -M -C diff --unified=0 "$base_ref".."$target_ref" \
+        git -c color.ui=false diff --no-ext-diff -M -C --unified=0 "$base_ref".."$target_ref" \
             -- ':(glob)include/**/*.{h,hpp,hh}' \
         | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/ && !/^-[[:space:]]*(typedef|#)/' \
         | wc -l || printf '0'
@@ -428,7 +433,7 @@ extract_cli_options() {
     # Check for explicit API-BREAKING comments
     local explicit_breaking
     explicit_breaking=$(
-        git -c color.ui=false --no-ext-diff -M -C diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
+        git -c color.ui=false diff --no-ext-diff -M -C "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' ':(glob)include/**/*.{h,hpp,hh}' \
         | grep -i 'API-BREAKING:' | wc -l || printf '0'
     )
     
@@ -439,7 +444,7 @@ extract_cli_options() {
     local has_code_changes=false
     
     # Check if there are code changes (src/ or include/ files)
-    if git -c color.ui=false --no-ext-diff -M -C diff --name-only "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx,h,hpp,hh}' ':(glob)include/**/*.{h,hpp,hh}' | grep -q .; then
+    if git -c color.ui=false diff --no-ext-diff -M -C --name-only "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx,h,hpp,hh}' ':(glob)include/**/*.{h,hpp,hh}' | grep -q .; then
         has_code_changes=true
     fi
     
@@ -464,17 +469,17 @@ extract_cli_options() {
         # Extract added long options (lines starting with +)
         local added_long_opts
         added_long_opts=$(
-            git -c color.ui=false --no-ext-diff -M -C diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
+            git -c color.ui=false diff --no-ext-diff -M -C "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
             | grep -E '^+[[:space:]]*--[[:alnum:]-]+' \
-            | grep -o '--[[:alnum:]-]+' | sort -u || printf ''
+            | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf ''
         )
         
         # Extract removed long options (lines starting with -)
         local removed_long_opts
         removed_long_opts=$(
-            git -c color.ui=false --no-ext-diff -M -C diff "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
+            git -c color.ui=false diff --no-ext-diff -M -C "$base_ref".."$target_ref" -- ':(glob)src/**/*.{c,cc,cpp,cxx}' \
             | grep -E '^-[[:space:]]*--[[:alnum:]-]+' \
-            | grep -o '--[[:alnum:]-]+' | sort -u || printf ''
+            | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf ''
         )
         
         # Count the options
@@ -528,6 +533,8 @@ extract_cli_options() {
     printf 'api_breaking=%s\n' "$api_breaking"
     printf 'security_keywords=%s\n' "$security_keywords"
     printf 'manual_cli_changes=%s\n' "$manual_cli_changes"
+    printf 'manual_added_long_count=%s\n' "$manual_added_long_count"
+    printf 'manual_removed_long_count=%s\n' "$manual_removed_long_count"
     printf 'removed_short_count=%s\n' "$removed_short_count"
     printf 'added_short_count=%s\n' "$added_short_count"
     printf 'removed_long_count=%s\n' "$removed_long_count"
@@ -553,7 +560,7 @@ analyze_changes() {
     local target_ref="$2"
     
     # Check if there are any changes
-    if git -c color.ui=false diff --quiet "$base_ref".."$target_ref"; then
+    if git -c color.ui=false diff --no-ext-diff -M -C --quiet "$base_ref".."$target_ref"; then
         printf 'Warning: No changes detected between %s and %s\n' "$base_ref" "$target_ref" >&2
         # Return early with zero values
         printf 'added_files=0\n'
@@ -568,6 +575,8 @@ analyze_changes() {
         printf 'api_breaking=false\n'
         printf 'security_keywords=0\n'
         printf 'manual_cli_changes=false\n'
+        printf 'manual_added_long_count=0\n'
+        printf 'manual_removed_long_count=0\n'
         printf 'removed_short_count=0\n'
         printf 'added_short_count=0\n'
         printf 'removed_long_count=0\n'
@@ -630,6 +639,10 @@ analyze_changes() {
     security_keywords=$(printf '%s\n' "$cli_analysis" | grep "^security_keywords=" | cut -d'=' -f2)
     local manual_cli_changes
     manual_cli_changes=$(printf '%s\n' "$cli_analysis" | grep "^manual_cli_changes=" | cut -d'=' -f2)
+    local manual_added_long_count
+    manual_added_long_count=$(printf '%s\n' "$cli_analysis" | grep "^manual_added_long_count=" | cut -d'=' -f2)
+    local manual_removed_long_count
+    manual_removed_long_count=$(printf '%s\n' "$cli_analysis" | grep "^manual_removed_long_count=" | cut -d'=' -f2)
     local removed_short_count
     removed_short_count=$(printf '%s\n' "$cli_analysis" | grep "^removed_short_count=" | cut -d'=' -f2)
     local added_short_count
@@ -678,9 +691,9 @@ analyze_changes() {
     # Get diff size using numstat for stable parsing - FIXED: Binary-safe summation
     local diff_size
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        diff_size=$(sum_numstat git -c color.ui=false --no-ext-diff -M -C diff -w --numstat "$base_ref".."$target_ref")
+        diff_size=$(sum_numstat git -c color.ui=false diff --no-ext-diff -M -C -w --numstat "$base_ref".."$target_ref")
     else
-        diff_size=$(sum_numstat git -c color.ui=false --no-ext-diff -M -C diff --numstat "$base_ref".."$target_ref")
+        diff_size=$(sum_numstat git -c color.ui=false diff --no-ext-diff -M -C --numstat "$base_ref".."$target_ref")
     fi
     
     printf 'added_files=%s\n' "$added_files"
@@ -695,6 +708,8 @@ analyze_changes() {
     printf 'api_breaking=%s\n' "$api_breaking"
     printf 'security_keywords=%s\n' "$security_keywords"
     printf 'manual_cli_changes=%s\n' "$manual_cli_changes"
+    printf 'manual_added_long_count=%s\n' "$manual_added_long_count"
+    printf 'manual_removed_long_count=%s\n' "$manual_removed_long_count"
     printf 'removed_short_count=%s\n' "$removed_short_count"
     printf 'added_short_count=%s\n' "$added_short_count"
     printf 'removed_long_count=%s\n' "$removed_long_count"
@@ -896,6 +911,8 @@ main() {
     api_breaking=$(printf '%s\n' "$analysis" | grep "^api_breaking=" | cut -d'=' -f2 | tr -d '\r')
     security_keywords=$(printf '%s\n' "$analysis" | grep "^security_keywords=" | cut -d'=' -f2 | tr -d '\r')
     manual_cli_changes=$(printf '%s\n' "$analysis" | grep "^manual_cli_changes=" | cut -d'=' -f2 | tr -d '\r')
+    manual_added_long_count=$(printf '%s\n' "$analysis" | grep "^manual_added_long_count=" | cut -d'=' -f2 | tr -d '\r')
+    manual_removed_long_count=$(printf '%s\n' "$analysis" | grep "^manual_removed_long_count=" | cut -d'=' -f2 | tr -d '\r')
     removed_short_count=$(printf '%s\n' "$analysis" | grep "^removed_short_count=" | cut -d'=' -f2 | tr -d '\r')
     added_short_count=$(printf '%s\n' "$analysis" | grep "^added_short_count=" | cut -d'=' -f2 | tr -d '\r')
     removed_long_count=$(printf '%s\n' "$analysis" | grep "^removed_long_count=" | cut -d'=' -f2 | tr -d '\r')
@@ -931,6 +948,8 @@ main() {
         local json_api_breaking="${api_breaking:-false}"
         local json_security_keywords="${security_keywords:-0}"
         local json_manual_cli_changes="${manual_cli_changes:-false}"
+        local json_manual_added_long_count="${manual_added_long_count:-0}"
+        local json_manual_removed_long_count="${manual_removed_long_count:-0}"
         local json_removed_short_count="${removed_short_count:-0}"
         local json_added_short_count="${added_short_count:-0}"
         local json_removed_long_count="${removed_long_count:-0}"
@@ -959,6 +978,8 @@ main() {
         printf '    "api_breaking": %s,\n' "$json_api_breaking"
         printf '    "security_keywords": %s,\n' "$json_security_keywords"
         printf '    "manual_cli_changes": %s,\n' "$json_manual_cli_changes"
+        printf '    "manual_added_long_count": %s,\n' "$json_manual_added_long_count"
+        printf '    "manual_removed_long_count": %s,\n' "$json_manual_removed_long_count"
         printf '    "removed_short_count": %s,\n' "$json_removed_short_count"
         printf '    "added_short_count": %s,\n' "$json_added_short_count"
         printf '    "removed_long_count": %s,\n' "$json_removed_long_count"
