@@ -1,0 +1,263 @@
+#!/bin/bash
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Test script for ERE fix and other improvements in semantic-version-analyzer
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd -P)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+cd "$PROJECT_ROOT"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Test counter
+TESTS_PASSED=0
+TESTS_FAILED=0
+
+# Helper function to run test
+run_test() {
+    local test_name="$1"
+    local test_cmd="$2"
+    local expected_exit="$3"
+    local expected_output="$4"
+    
+    printf "${YELLOW}Running: %s${NC}\n" "$test_name"
+    
+    # Run the test command
+    local output
+    output=$(eval "$test_cmd" 2>&1)
+    local exit_code=$?
+    
+    # Check exit code
+    if [[ $exit_code -eq $expected_exit ]]; then
+        printf "${GREEN}✓ Exit code correct (%d)${NC}\n" $exit_code
+    else
+        printf "${RED}✗ Exit code wrong: got %d, expected %d${NC}\n" $exit_code $expected_exit
+        ((TESTS_FAILED++))
+        return 1
+    fi
+    
+    # Check output if specified
+    if [[ -n "$expected_output" ]]; then
+        if echo "$output" | grep -q "$expected_output"; then
+            printf "${GREEN}✓ Output contains expected text${NC}\n"
+        else
+            printf "${RED}✗ Output missing expected text: %s${NC}\n" "$expected_output"
+            printf "Actual output:\n%s\n" "$output"
+            ((TESTS_FAILED++))
+            return 1
+        fi
+    fi
+    
+    ((TESTS_PASSED++))
+    printf "${GREEN}✓ Test passed${NC}\n\n"
+    return 0
+}
+
+# Test 1: ERE fix - manual CLI detection should work with escaped +
+printf "${YELLOW}=== Test 1: ERE Fix for Manual CLI Detection ===${NC}\n"
+
+# Create a test file with manual CLI parsing
+cat > test_manual_cli.c << 'EOF'
+#include <stdio.h>
+#include <string.h>
+
+int main(int argc, char *argv[]) {
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--help") == 0) {
+            printf("Help message\n");
+            return 0;
+        }
+        if (strcmp(argv[i], "--version") == 0) {
+            printf("Version 1.0.0\n");
+            return 0;
+        }
+        if (strcmp(argv[i], "--verbose") == 0) {
+            printf("Verbose mode\n");
+            return 0;
+        }
+    }
+    return 1;
+}
+EOF
+
+# Add the file
+git add test_manual_cli.c
+git commit -m "Add manual CLI parser test" --no-verify
+
+# Test that manual CLI detection works (should not crash with ERE error)
+run_test "Manual CLI detection with escaped +" \
+    "./dev-bin/semantic-version-analyzer --verbose --since HEAD~1" \
+    11 \
+    "manual_cli_changes=true"
+
+# Test 2: Manual counts should not be added to getopt totals
+printf "${YELLOW}=== Test 2: Manual Counts Separation ===${NC}\n"
+
+# Create a file with getopt
+cat > test_getopt.c << 'EOF'
+#include <stdio.h>
+#include <getopt.h>
+
+int main(int argc, char *argv[]) {
+    static struct option long_options[] = {
+        {"help", no_argument, 0, 'h'},
+        {"version", no_argument, 0, 'v'},
+        {0, 0, 0, 0}
+    };
+    
+    int c;
+    while ((c = getopt_long(argc, argv, "hv", long_options, NULL)) != -1) {
+        switch (c) {
+            case 'h':
+                printf("Help\n");
+                break;
+            case 'v':
+                printf("Version\n");
+                break;
+        }
+    }
+    return 0;
+}
+EOF
+
+git add test_getopt.c
+git commit -m "Add getopt test" --no-verify
+
+# Test that getopt and manual counts are separate
+run_test "Getopt and manual counts separation" \
+    "./dev-bin/semantic-version-analyzer --verbose --since HEAD~2 --json" \
+    11 \
+    '"manual_added_long_count": 0'
+
+# Test 3: Breaking changes detection
+printf "${YELLOW}=== Test 3: Breaking Changes Detection ===${NC}\n"
+
+# Remove a long option from getopt
+sed -i 's/"version"/"old-option"/' test_getopt.c
+git add test_getopt.c
+git commit -m "Remove --version option (breaking change)" --no-verify
+
+run_test "Breaking CLI change detection" \
+    "./dev-bin/semantic-version-analyzer --since HEAD~1" \
+    10 \
+    "breaking_cli"
+
+# Test 4: API breaking changes
+printf "${YELLOW}=== Test 4: API Breaking Changes ===${NC}\n"
+
+# Create header with prototype
+mkdir -p include
+cat > include/test.h << 'EOF'
+#ifndef TEST_H
+#define TEST_H
+
+int test_function(int param);
+void another_function(void);
+
+#endif
+EOF
+
+git add include/test.h
+git commit -m "Add header with prototypes" --no-verify
+
+# Remove a prototype
+sed -i '/another_function/d' include/test.h
+git add include/test.h
+git commit -m "Remove function prototype (API break)" --no-verify
+
+run_test "API breaking change detection" \
+    "./dev-bin/semantic-version-analyzer --since HEAD~1" \
+    10 \
+    "api_break"
+
+# Test 5: Whitespace-only changes with --ignore-whitespace
+printf "${YELLOW}=== Test 5: Whitespace Ignore ===${NC}\n"
+
+# Add whitespace-only changes
+echo "   " >> test_manual_cli.c
+git add test_manual_cli.c
+git commit -m "Add whitespace changes" --no-verify
+
+run_test "Whitespace ignore with --ignore-whitespace" \
+    "./dev-bin/semantic-version-analyzer --ignore-whitespace --since HEAD~1" \
+    20 \
+    "NONE"
+
+# Test 6: Repository without tags fallback
+printf "${YELLOW}=== Test 6: No Tags Fallback ===${NC}\n"
+
+# Create a temporary repo without tags
+TEMP_REPO=$(mktemp -d)
+cd "$TEMP_REPO"
+git init
+echo "test" > test.txt
+git add test.txt
+git commit -m "Initial commit"
+echo "test2" > test2.txt
+git add test2.txt
+git commit -m "Second commit"
+
+# Copy the analyzer script
+cp "$PROJECT_ROOT/dev-bin/semantic-version-analyzer" .
+
+run_test "No tags fallback to HEAD~1" \
+    "./semantic-version-analyzer --print-base" \
+    0 \
+    ""
+
+# Cleanup
+cd "$PROJECT_ROOT"
+rm -rf "$TEMP_REPO"
+
+# Test 7: MAJOR_REQUIRE_BREAKING environment variable
+printf "${YELLOW}=== Test 7: MAJOR_REQUIRE_BREAKING Environment Variable ===${NC}\n"
+
+# Test with different truthy values
+run_test "MAJOR_REQUIRE_BREAKING=true" \
+    "MAJOR_REQUIRE_BREAKING=true ./dev-bin/semantic-version-analyzer --since HEAD~3" \
+    10 \
+    ""
+
+run_test "MAJOR_REQUIRE_BREAKING=1" \
+    "MAJOR_REQUIRE_BREAKING=1 ./dev-bin/semantic-version-analyzer --since HEAD~3" \
+    10 \
+    ""
+
+run_test "MAJOR_REQUIRE_BREAKING=yes" \
+    "MAJOR_REQUIRE_BREAKING=yes ./dev-bin/semantic-version-analyzer --since HEAD~3" \
+    10 \
+    ""
+
+# Test 8: JSON output includes manual fields
+printf "${YELLOW}=== Test 8: JSON Output Fields ===${NC}\n"
+
+run_test "JSON includes manual CLI fields" \
+    "./dev-bin/semantic-version-analyzer --verbose --since HEAD~4 --json" \
+    11 \
+    '"manual_added_long_count"'
+
+# Cleanup test files
+git reset --hard HEAD~4
+rm -f test_manual_cli.c test_getopt.c
+rm -rf include
+
+# Summary
+printf "${YELLOW}=== Test Summary ===${NC}\n"
+printf "${GREEN}Tests passed: %d${NC}\n" $TESTS_PASSED
+printf "${RED}Tests failed: %d${NC}\n" $TESTS_FAILED
+
+if [[ $TESTS_FAILED -eq 0 ]]; then
+    printf "${GREEN}All tests passed!${NC}\n"
+    exit 0
+else
+    printf "${RED}Some tests failed!${NC}\n"
+    exit 1
+fi 
