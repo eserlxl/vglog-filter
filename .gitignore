@@ -61,6 +61,10 @@ cmake-build-*/
 build/
 build-*/
 
+# Test results
+test_results/
+test_results_*/
+
 # Backups
 *.bak
 Backups/
