@@ -44,12 +44,12 @@ struct Options {
 class CLIParser {
 private:
     std::vector<std::string> args_;
-    int current_arg_ = 0;
+    size_t current_arg_ = 0;
 
 public:
     CLIParser(const std::vector<std::string>& args) : args_(args) {}
     
-    bool has_next() const { return current_arg_ < static_cast<int>(args_.size()); }
+    bool has_next() const { return current_arg_ < args_.size(); }
     
     std::string next() {
         if (!has_next()) return "";
@@ -63,8 +63,8 @@ public:
     
     void reset() { current_arg_ = 0; }
     
-    int position() const { return current_arg_; }
-    int size() const { return static_cast<int>(args_.size()); }
+    size_t position() const { return current_arg_; }
+    size_t size() const { return args_.size(); }
 };
 
 // Test helper function to simulate argument parsing
