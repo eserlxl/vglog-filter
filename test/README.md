@@ -24,7 +24,7 @@ This directory contains the C++ unit tests for the vglog-filter project.
 ./run_tests.sh
 
 # Run only C++ tests
-./test/run_all_tests.sh
+./test/run_unit_tests.sh
 
 # Manual build and run
 mkdir -p build-test && cd build-test

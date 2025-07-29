@@ -101,7 +101,7 @@ This will run both the test-workflows tests and the C++ tests in sequence.
 To run only the C++ tests:
 
 ```bash
-./test/run_all_tests.sh
+./test/run_unit_tests.sh
 ```
 
 #### Test Workflows Only
@@ -109,7 +109,7 @@ To run only the C++ tests:
 To run only the test-workflows tests:
 
 ```bash
-./test-workflows/run_all_tests.sh
+./test-workflows/run_workflow_tests.sh
 ```
 
 ### Manual Testing
@@ -208,7 +208,7 @@ To add new test workflows:
 1. Create test scripts in appropriate subdirectories
 2. Follow the existing naming conventions
 3. Ensure scripts are executable (`chmod +x`)
-4. Update `test-workflows/run_all_tests.sh` if needed
+4. Update `test-workflows/run_workflow_tests.sh` if needed
 
 ## CI/CD Testing
 
@@ -279,7 +279,7 @@ For debugging test workflow failures:
 ./test-workflows/cli-tests/test_extract.sh
 
 # Enable debug output
-bash -x ./test-workflows/run_all_tests.sh
+bash -x ./test-workflows/run_workflow_tests.sh
 ```
 
 ### Common Issues
@@ -305,7 +305,7 @@ The CI/CD includes automated performance testing:
 ./build.sh tests performance
 
 # Monitor memory usage
-./test/run_all_tests.sh  # Includes memory monitoring
+./test/run_unit_tests.sh  # Includes memory monitoring
 ```
 
 ## Quality Assurance

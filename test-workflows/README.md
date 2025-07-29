@@ -121,10 +121,10 @@ cleanup_temp_test_env "$TEMP_DIR"
 
 ## Test Execution
 
-Use the `run_all_tests.sh` script to execute all tests in the organized structure:
+Use the `run_workflow_tests.sh` script to execute all tests in the organized structure:
 
 ```bash
-./test-workflows/run_all_tests.sh
+./test-workflows/run_workflow_tests.sh
 ```
 
 This will run tests from all categories and provide a comprehensive summary of results. Tests use the `PROJECT_ROOT` environment variable to access dev-bin scripts.

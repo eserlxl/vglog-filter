@@ -46,8 +46,8 @@ OVERALL_RESULT=0
 print_status "Phase 1: Running test-workflows tests..."
 echo ""
 
-if [ -f "./test-workflows/run_all_tests.sh" ]; then
-    ./test-workflows/run_all_tests.sh
+if [ -f "./test-workflows/run_workflow_tests.sh" ]; then
+    ./test-workflows/run_workflow_tests.sh
     WORKFLOW_RESULT=$?
     if [ $WORKFLOW_RESULT -ne 0 ]; then
         print_error "test-workflows tests failed"
@@ -56,7 +56,7 @@ if [ -f "./test-workflows/run_all_tests.sh" ]; then
         print_success "test-workflows tests passed"
     fi
 else
-    print_error "test-workflows/run_all_tests.sh not found"
+    print_error "test-workflows/run_workflow_tests.sh not found"
     OVERALL_RESULT=1
 fi
 
@@ -68,8 +68,8 @@ echo ""
 print_status "Phase 2: Running C++ tests..."
 echo ""
 
-if [ -f "./test/run_all_tests.sh" ]; then
-    ./test/run_all_tests.sh
+if [ -f "./test/run_unit_tests.sh" ]; then
+    ./test/run_unit_tests.sh
     CPP_RESULT=$?
     if [ $CPP_RESULT -ne 0 ]; then
         print_error "C++ tests failed"
@@ -78,7 +78,7 @@ if [ -f "./test/run_all_tests.sh" ]; then
         print_success "C++ tests passed"
     fi
 else
-    print_error "test/run_all_tests.sh not found"
+    print_error "test/run_unit_tests.sh not found"
     OVERALL_RESULT=1
 fi
 

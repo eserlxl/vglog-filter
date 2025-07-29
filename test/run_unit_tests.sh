@@ -10,7 +10,7 @@
 #
 # Test runner for the test/ folder
 # Builds and runs all C++ tests using CMake and CTest
-# Usage: ./test/run_all_tests.sh
+# Usage: ./test/run_unit_tests.sh
 
 set -e
 

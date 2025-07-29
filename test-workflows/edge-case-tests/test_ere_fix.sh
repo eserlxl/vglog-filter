@@ -99,9 +99,13 @@ EOF
 git add test-workflows/source-fixtures/cli/simple_cli_test.c
 git commit -m "Add manual CLI parser test" --no-verify
 
+# Get the commit hashes
+first_commit=$(git rev-parse HEAD~1)
+second_commit=$(git rev-parse HEAD)
+
 # Test that manual CLI detection works (should not crash with ERE error)
 run_test "Manual CLI detection with escaped +" \
-    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --verbose --since HEAD~1 --repo-root '$temp_dir'" \
+    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --verbose --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
     11 \
     "manual_cli_changes=true"
 
@@ -138,9 +142,13 @@ EOF
 git add test_getopt.c
 git commit -m "Add getopt test" --no-verify
 
+# Get the commit hashes
+first_commit=$(git rev-parse HEAD~2)
+second_commit=$(git rev-parse HEAD)
+
 # Test that getopt and manual counts are separate
 run_test "Getopt and manual counts separation" \
-    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --verbose --since HEAD~2 --json --repo-root '$temp_dir'" \
+    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --verbose --base '$first_commit' --target '$second_commit' --json --repo-root '$temp_dir'" \
     11 \
     '"manual_added_long_count": 0'
 
@@ -152,8 +160,12 @@ sed -i 's/"version"/"old-option"/' test_getopt.c
 git add test_getopt.c
 git commit -m "Remove --version option (breaking change)" --no-verify
 
+# Get the commit hashes
+first_commit=$(git rev-parse HEAD~1)
+second_commit=$(git rev-parse HEAD)
+
 run_test "Breaking CLI change detection" \
-    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --since HEAD~1 --repo-root '$temp_dir'" \
+    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
     10 \
     "breaking_cli"
 
@@ -180,8 +192,12 @@ sed -i '/another_function/d' include/test.h
 git add include/test.h
 git commit -m "Remove function prototype (API break)" --no-verify
 
+# Get the commit hashes
+first_commit=$(git rev-parse HEAD~1)
+second_commit=$(git rev-parse HEAD)
+
 run_test "API breaking change detection" \
-    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --since HEAD~1 --repo-root '$temp_dir'" \
+    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
     10 \
     "api_break"
 
@@ -193,8 +209,12 @@ echo "   " >> test-workflows/source-fixtures/cli/simple_cli_test.c
 git add test-workflows/source-fixtures/cli/simple_cli_test.c
 git commit -m "Add whitespace changes" --no-verify
 
+# Get the commit hashes
+first_commit=$(git rev-parse HEAD~1)
+second_commit=$(git rev-parse HEAD)
+
 run_test "Whitespace ignore with --ignore-whitespace" \
-    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --ignore-whitespace --since HEAD~1 --repo-root '$temp_dir'" \
+    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --ignore-whitespace --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
     20 \
     "NONE"
 
@@ -228,8 +248,12 @@ rm -rf "$TEMP_REPO"
 printf '%s=== Test 7: MAJOR_REQUIRE_BREAKING Environment Variable ===%s\n' "${YELLOW}" "${NC}"
 
 # Test with different truthy values
+# Get the commit hashes
+first_commit=$(git rev-parse HEAD~3)
+second_commit=$(git rev-parse HEAD)
+
 run_test "MAJOR_REQUIRE_BREAKING=true" \
-    "cd '$PROJECT_ROOT' && MAJOR_REQUIRE_BREAKING=true ./dev-bin/semantic-version-analyzer --since HEAD~3 --repo-root '$temp_dir'" \
+    "cd '$PROJECT_ROOT' && MAJOR_REQUIRE_BREAKING=true ./dev-bin/semantic-version-analyzer --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
     10 \
     ""
 

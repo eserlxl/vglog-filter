@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # Source test helper functions
 source "$SCRIPT_DIR/../test_helper.sh"
@@ -90,8 +90,14 @@ git log --oneline
 ls -la src/
 cat src/test_switch.c
 
+# Get the commit hashes
+first_commit=$(git rev-parse HEAD~1)
+second_commit=$(git rev-parse HEAD)
+
 # Run semantic version analyzer from the original project directory
-result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
+
+
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")

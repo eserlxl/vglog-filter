@@ -10,7 +10,7 @@ set -euo pipefail
 
 # Get the script directory and project root
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # Source test helper functions
 source "$SCRIPT_DIR/../test_helper.sh"
@@ -52,8 +52,12 @@ EOF
 git add main.c
 git commit -m "Add CLI with new option"
 
+# Get the commit hashes
+first_commit=$(git rev-parse HEAD~1)
+second_commit=$(git rev-parse HEAD)
+
 # Run semantic version analyzer
-result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "^SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
@@ -99,8 +103,12 @@ EOF
 git add header.h
 git commit -m "Remove function prototype (breaking change)"
 
+# Get the commit hashes
+first_commit=$(git rev-parse HEAD~1)
+second_commit=$(git rev-parse HEAD)
+
 # Run semantic version analyzer
-result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "^SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
@@ -155,8 +163,12 @@ EOF
 git add cli.c
 git commit -m "Remove --bar option"
 
+# Get the commit hashes
+first_commit=$(git rev-parse HEAD~1)
+second_commit=$(git rev-parse HEAD)
+
 # Run semantic version analyzer
-result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "^SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
@@ -194,8 +206,12 @@ EOF
 git add test.c
 git commit -m "Change whitespace only"
 
+# Get the commit hashes
+first_commit=$(git rev-parse HEAD~1)
+second_commit=$(git rev-parse HEAD)
+
 # Run semantic version analyzer with --ignore-whitespace
-result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD --ignore-whitespace 2>/dev/null || true)
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" --ignore-whitespace 2>&1 || true)
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "^SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
@@ -214,7 +230,7 @@ echo "Test 5: --print-base functionality"
 cd "$PROJECT_ROOT"
 
 # Run --print-base
-base_ref=$(./dev-bin/semantic-version-analyzer --print-base 2>/dev/null || echo "unknown")
+base_ref=$(./dev-bin/semantic-version-analyzer --print-base 2>&1 || echo "unknown")
 
 if [[ "$base_ref" != "unknown" ]] && [[ "$base_ref" =~ ^[a-f0-9]+$ ]]; then
     echo "✅ PASS: --print-base returned valid SHA: $base_ref"
