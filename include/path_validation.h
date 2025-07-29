@@ -99,8 +99,11 @@ std::string validate_file_path(const std::string& input_path) {
             return ".";
         }
         
-        // Construct the full path for realpath validation
-        std::string full_path = base_dir + "/" + normalized_str;
+        // Construct the full path for realpath validation using filesystem::path
+        std::filesystem::path base_path(base_dir);
+        std::filesystem::path normalized_path_obj(normalized_str);
+        std::filesystem::path full_path_obj = base_path / normalized_path_obj;
+        std::string full_path = full_path_obj.string();
         
         // Use realpath to resolve any remaining path traversal and get canonical path
         char resolved_path[PATH_MAX];
@@ -118,7 +121,9 @@ std::string validate_file_path(const std::string& input_path) {
                 // Skip validation if parent is current directory
                 if (normalized_parent_str != "." && !normalized_parent_str.empty()) {
                     // Check if the parent directory exists and is within the base directory
-                    std::string parent_full_path = base_dir + "/" + normalized_parent_str;
+                    std::filesystem::path parent_path_obj_safe(normalized_parent_str);
+                    std::filesystem::path parent_full_path_obj = base_path / parent_path_obj_safe;
+                    std::string parent_full_path = parent_full_path_obj.string();
                     if (realpath(parent_full_path.c_str(), resolved_path) != nullptr) {
                         // Parent directory exists, check it's within base directory
                         std::string resolved_parent = std::string(resolved_path);
@@ -172,11 +177,19 @@ FILE* safe_fopen(const std::string& filename, const char* mode) {
         return nullptr;
     }
     
-    // Construct full path for fopen
+    // Use filesystem::path for safe path construction
     std::string base_dir = get_safe_base_directory();
-    std::string full_path = base_dir + "/" + validated_path;
+    std::filesystem::path base_path(base_dir);
+    std::filesystem::path file_path(validated_path);
+    std::filesystem::path full_path = base_path / file_path;
     
-    return fopen(full_path.c_str(), mode);
+    // Additional safety check: ensure the constructed path is within base directory
+    std::string full_path_str = full_path.string();
+    if (full_path_str.find(base_dir) != 0) {
+        throw std::runtime_error("Path construction resulted in unsafe path: " + full_path_str);
+    }
+    
+    return fopen(full_path_str.c_str(), mode);
 }
 
 // Safe file stream opening with path validation
@@ -188,11 +201,19 @@ std::ifstream safe_ifstream(const std::string& filename) {
         throw std::runtime_error("stdin not supported for ifstream");
     }
     
-    // Construct full path for ifstream
+    // Use filesystem::path for safe path construction
     std::string base_dir = get_safe_base_directory();
-    std::string full_path = base_dir + "/" + validated_path;
+    std::filesystem::path base_path(base_dir);
+    std::filesystem::path file_path(validated_path);
+    std::filesystem::path full_path = base_path / file_path;
     
-    return std::ifstream(full_path);
+    // Additional safety check: ensure the constructed path is within base directory
+    std::string full_path_str = full_path.string();
+    if (full_path_str.find(base_dir) != 0) {
+        throw std::runtime_error("Path construction resulted in unsafe path: " + full_path_str);
+    }
+    
+    return std::ifstream(full_path_str);
 }
 
 // Safe stat with path validation
@@ -204,11 +225,19 @@ int safe_stat(const std::string& filename, struct stat* st) {
         return -1;
     }
     
-    // Construct full path for stat
+    // Use filesystem::path for safe path construction
     std::string base_dir = get_safe_base_directory();
-    std::string full_path = base_dir + "/" + validated_path;
+    std::filesystem::path base_path(base_dir);
+    std::filesystem::path file_path(validated_path);
+    std::filesystem::path full_path = base_path / file_path;
     
-    return stat(full_path.c_str(), st);
+    // Additional safety check: ensure the constructed path is within base directory
+    std::string full_path_str = full_path.string();
+    if (full_path_str.find(base_dir) != 0) {
+        throw std::runtime_error("Path construction resulted in unsafe path: " + full_path_str);
+    }
+    
+    return stat(full_path_str.c_str(), st);
 }
 
 #endif // PATH_VALIDATION_H 
