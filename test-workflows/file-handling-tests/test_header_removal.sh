@@ -1,10 +1,17 @@
 #!/bin/bash
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
 # Test header prototype removal detection in semantic-version-analyzer
 # This test verifies that removing a prototype in ../source-fixtures/test_header.h triggers api_breaking=true
 
 set -Eeuo pipefail
 
-SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Source test helper functions
@@ -64,4 +71,6 @@ else
 fi
 
 # Clean up
-cleanup_temp_test_env "$temp_dir" 
+cleanup_temp_test_env "$temp_dir"
+
+exit $exit_code 

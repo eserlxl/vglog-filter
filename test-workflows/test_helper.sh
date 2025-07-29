@@ -1,5 +1,11 @@
 #!/bin/bash
-
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
 # Test helper script for vglog-filter tests
 # Provides utilities for creating temporary test environments
 
@@ -12,7 +18,7 @@ NC='\033[0m' # No Color
 
 # Function to create a temporary test environment
 create_temp_test_env() {
-    local test_name="$1"
+    local test_name="${1:-default}"
     local temp_dir="/tmp/vglog-filter-test-${test_name}-$$"
     
     # Create temporary directory
@@ -20,7 +26,7 @@ create_temp_test_env() {
     
     # Get the project root (use environment variable if available, otherwise calculate from script location)
     local project_root
-    project_root="${PROJECT_ROOT:-$(dirname "$(dirname "$(realpath "$0")")")}"
+    project_root="${PROJECT_ROOT:-$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")}"
     
     # Create a minimal project structure
     cd "$temp_dir"

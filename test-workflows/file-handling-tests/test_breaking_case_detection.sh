@@ -1,10 +1,17 @@
 #!/bin/bash
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
 # Test for breaking case detection across C file extensions
 # Verifies that removing a case in .c files triggers major version bump
 
 set -euo pipefail
 
-SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Source test helper functions
@@ -46,6 +53,11 @@ EOF
 git add src/test_switch.c
 git commit -m "Add test C file with switch statement"
 
+# Debug: Check the commit
+echo "Debug: First commit created"
+git log --oneline
+ls -la src/
+
 # Remove a case (breaking change)
 cat > src/test_switch.c << 'EOF'
 #include <stdio.h>
@@ -72,6 +84,12 @@ EOF
 git add src/test_switch.c
 git commit -m "Remove case 2 (breaking change)"
 
+# Debug: Check the commits
+echo "Debug: Second commit created"
+git log --oneline
+ls -la src/
+cat src/test_switch.c
+
 # Run semantic version analyzer from the original project directory
 result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
 
@@ -90,6 +108,8 @@ else
 fi
 
 # Clean up
-cleanup_temp_test_env "$temp_dir"
+# cleanup_temp_test_env "$temp_dir"  # Commented out for debugging
 
+echo "Test directory: $temp_dir"
+echo "Exit code: $exit_code"
 exit $exit_code

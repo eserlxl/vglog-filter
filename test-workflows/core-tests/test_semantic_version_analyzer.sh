@@ -21,7 +21,7 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 # Script path
-SCRIPT_PATH="$(realpath ../../dev-bin/semantic-version-analyzer)"
+SCRIPT_PATH="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
 
 # Helper functions
 log_info() {

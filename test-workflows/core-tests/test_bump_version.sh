@@ -64,7 +64,7 @@ setup_test() {
 
 # Store the original directory for script path
 ORIGINAL_DIR="$(pwd)"
-BUMP_VERSION_SCRIPT="$ORIGINAL_DIR/dev-bin/bump-version"
+BUMP_VERSION_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/bump-version"
 
 # Function to cleanup test environment
 cleanup_test() {
