@@ -27,7 +27,7 @@
 #include <filesystem>    // path validation
 #include <limits.h>      // PATH_MAX
 #include <libgen.h>      // dirname, basename
-#include <vglog-filter/path_validation.h>  // path validation functions
+#include <path_validation.h>  // path validation functions
 
 using Str      = std::string;
 using StrView  = std::string_view;

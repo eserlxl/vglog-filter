@@ -17,7 +17,7 @@
 #include <limits.h>
 #include <stdexcept>
 #include <sys/stat.h>
-#include <vglog-filter/path_validation.h>
+#include <path_validation.h>
 
 // Simple test framework
 #define TEST_ASSERT(condition, message) \
