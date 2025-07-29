@@ -35,6 +35,7 @@ git mv test-workflows/source-fixtures/test_content_simple.txt test-workflows/sou
 git commit -m "Rename test file"
 
 # Run semantic version analyzer from the original project directory
+# Note: Using '|| true' to capture output even if command fails (intentional)
 result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
 
 # Extract suggestion

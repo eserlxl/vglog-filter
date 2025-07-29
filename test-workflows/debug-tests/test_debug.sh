@@ -11,7 +11,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# Note: PROJECT_ROOT is defined but not used in this test
+# PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Source test helper functions
 source "$SCRIPT_DIR/../test_helper.sh"

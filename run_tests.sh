@@ -37,7 +37,7 @@ echo "=========================================="
 echo ""
 
 # Change to the directory where this script is located
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 # Track overall test results
 OVERALL_RESULT=0
@@ -154,7 +154,7 @@ fi
     echo "  Passed: $WORKFLOW_PASSED"
     echo "  Failed: $WORKFLOW_FAILED"
     echo "  Skipped: $WORKFLOW_SKIPPED"
-    if [ $WORKFLOW_TOTAL -gt 0 ]; then
+    if [ "$WORKFLOW_TOTAL" -gt 0 ]; then
         WORKFLOW_RATE=$((WORKFLOW_PASSED * 100 / WORKFLOW_TOTAL))
         echo "  Success rate: $WORKFLOW_RATE%"
     fi

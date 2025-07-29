@@ -53,7 +53,8 @@ run_test() {
     local output
     # Use direct command execution instead of eval to avoid hanging
     output=$($test_command 2>&1)
-    local exit_code=$?
+    # Note: exit_code is captured but not used in this test
+    # local exit_code=$?
     
     if [[ "$output" == *"$expected_output"* ]]; then
         log_success "$test_name"
@@ -74,7 +75,8 @@ test_basic_functionality() {
     log_info "Running test: Help output"
     local output
     output=$("$SCRIPT_PATH" --help 2>&1)
-    local exit_code=$?
+    # Note: exit_code is captured but not used in this test
+    # local exit_code=$?
     
     if [[ "$output" == *"Semantic Version Analyzer v3 for vglog-filter"* ]]; then
         log_success "Help output"
@@ -88,7 +90,8 @@ test_basic_functionality() {
     log_info "Running test: Machine output format"
     local output
     output=$("$SCRIPT_PATH" --machine 2>&1)
-    local exit_code=$?
+    # Note: exit_code is captured but not used in this test
+    # local exit_code=$?
     
     if [[ "$output" == *"SUGGESTION="* ]]; then
         log_success "Machine output format"
@@ -159,7 +162,7 @@ test_path_classification() {
     fi
     
     # Cleanup
-    cd - >/dev/null 2>&1
+    cd - >/dev/null 2>&1 || exit
     rm -rf "$test_dir"
 }
 
@@ -211,7 +214,7 @@ test_file_paths_with_spaces() {
     fi
     
     # Cleanup
-    cd - >/dev/null 2>&1
+    cd - >/dev/null 2>&1 || exit
     rm -rf "$test_dir"
 }
 
@@ -251,7 +254,7 @@ test_rename_and_copy() {
     fi
     
     # Cleanup
-    cd - >/dev/null 2>&1
+    cd - >/dev/null 2>&1 || exit
     rm -rf "$test_dir"
 }
 
@@ -334,7 +337,7 @@ EOF
     fi
     
     # Cleanup
-    cd - >/dev/null 2>&1
+    cd - >/dev/null 2>&1 || exit
     rm -rf "$test_dir"
 }
 
@@ -417,7 +420,7 @@ EOF
     fi
     
     # Cleanup
-    cd - >/dev/null 2>&1
+    cd - >/dev/null 2>&1 || exit
     rm -rf "$test_dir"
 }
 
@@ -449,7 +452,7 @@ test_no_changes() {
     fi
     
     # Cleanup
-    cd - >/dev/null 2>&1
+    cd - >/dev/null 2>&1 || exit
     rm -rf "$test_dir"
 }
 
@@ -500,7 +503,7 @@ test_threshold_configuration() {
     fi
     
     # Cleanup
-    cd - >/dev/null 2>&1
+    cd - >/dev/null 2>&1 || exit
     rm -rf "$test_dir"
 }
 
@@ -523,7 +526,7 @@ test_error_handling() {
     fi
     
     # Cleanup
-    cd - >/dev/null 2>&1
+    cd - >/dev/null 2>&1 || exit
     rm -rf "$test_dir"
 }
 
@@ -563,7 +566,7 @@ test_json_output() {
     fi
     
     # Cleanup
-    cd - >/dev/null 2>&1
+    cd - >/dev/null 2>&1 || exit
     rm -rf "$test_dir"
 }
 

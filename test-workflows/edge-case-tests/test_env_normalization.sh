@@ -34,16 +34,19 @@ git commit -m "Second commit" >/dev/null 2>&1
 
 # Test with MAJOR_REQUIRE_BREAKING=TRUE
 echo "Testing MAJOR_REQUIRE_BREAKING=TRUE..."
+# Note: Using '|| true' to capture output even if command fails (intentional)
 result1=$(cd "$PROJECT_ROOT" && MAJOR_REQUIRE_BREAKING=TRUE ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" 2>/dev/null || true)
 suggestion1=$(echo "$result1" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
 
 # Test with MAJOR_REQUIRE_BREAKING=1
 echo "Testing MAJOR_REQUIRE_BREAKING=1..."
+# Note: Using '|| true' to capture output even if command fails (intentional)
 result2=$(cd "$PROJECT_ROOT" && MAJOR_REQUIRE_BREAKING=1 ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" 2>/dev/null || true)
 suggestion2=$(echo "$result2" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
 
 # Test with MAJOR_REQUIRE_BREAKING=true (default)
 echo "Testing MAJOR_REQUIRE_BREAKING=true (default)..."
+# Note: Using '|| true' to capture output even if command fails (intentional)
 result3=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" 2>/dev/null || true)
 suggestion3=$(echo "$result3" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
 
