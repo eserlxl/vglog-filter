@@ -1,5 +1,13 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
+# vglog-filter test runner script
+#
 # Test runner for the test/ folder
 # Builds and runs all C++ tests using CMake and CTest
 # Usage: ./test/run_all_tests.sh
