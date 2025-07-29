@@ -82,6 +82,43 @@ These test files are organized to support various testing scenarios:
 
 Each subdirectory focuses on a specific testing domain to maintain clear organization and facilitate test maintenance.
 
+## Test Environment
+
+Tests are run with the `PROJECT_ROOT` environment variable set to the project root directory. This allows tests to access the dev-bin scripts without copying them to temporary locations. The approach ensures that:
+
+- Tests use the actual dev-bin scripts from the project
+- No copying or symlinking of scripts is needed
+- Tests can access project files and fixtures
+- The main project's git state is not affected by test execution
+
+### Test Helper Script
+
+The `test_helper.sh` script provides utilities for creating temporary test environments:
+
+```bash
+# Source the test helper
+source "test-workflows/test_helper.sh"
+
+# Create a temporary test environment
+TEMP_DIR=$(create_temp_test_env "my_test_name")
+cd "$TEMP_DIR"
+
+# Run your test operations here
+# ...
+
+# Cleanup when done
+cleanup_temp_test_env "$TEMP_DIR"
+```
+
+### Available Helper Functions
+
+- `create_temp_test_env(test_name)` - Creates a temporary directory with project structure
+- `cleanup_temp_test_env(temp_dir)` - Cleans up the temporary directory
+- `is_git_repo()` - Checks if current directory is a git repository
+- `safe_git(...)` - Safely runs git commands with error checking
+- `create_test_file(path, content)` - Creates a test file with content
+- `commit_test_files(message, ...files)` - Commits multiple files with a message
+
 ## Test Execution
 
 Use the `run_all_tests.sh` script to execute all tests in the organized structure:
@@ -90,4 +127,15 @@ Use the `run_all_tests.sh` script to execute all tests in the organized structur
 ./test-workflows/run_all_tests.sh
 ```
 
-This will run tests from all categories and provide a comprehensive summary of results. 
+This will run tests from all categories and provide a comprehensive summary of results. Tests use the `PROJECT_ROOT` environment variable to access dev-bin scripts.
+
+### Manual Test Execution
+
+For individual tests, you can run them manually:
+
+```bash
+# Set the project root and run a test
+PROJECT_ROOT="$(pwd)" bash test-workflows/core-tests/test_bump_version.sh
+```
+
+This ensures that tests can find the dev-bin scripts correctly. 
