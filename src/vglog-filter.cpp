@@ -24,6 +24,10 @@
 #include <sys/stat.h>    // stat()
 #include <sys/resource.h> // memory monitoring
 #include <unistd.h>      // getopt_long()
+#include <filesystem>    // path validation
+#include <limits.h>      // PATH_MAX
+#include <libgen.h>      // dirname, basename
+#include <vglog-filter/path_validation.h>  // path validation functions
 
 using Str      = std::string;
 using StrView  = std::string_view;
@@ -72,6 +76,11 @@ void usage(const char* prog) {
 }
 
 // ---------- helpers ---------------------------------------------------------
+
+// Forward declarations for path validation functions
+FILE* safe_fopen(const Str& filename, const char* mode);
+std::ifstream safe_ifstream(const Str& filename);
+int safe_stat(const Str& filename, struct stat* st);
 
 // Removed unused function is_space
 
@@ -324,7 +333,7 @@ void process(std::istream& in, const Options& opt)
 
 VecS read_file_lines(const Str& fname)
 {
-    FILE* file = fopen(fname.c_str(), "r");
+    FILE* file = safe_fopen(fname, "r");
     if (!file) throw std::runtime_error(create_error_message("opening file", fname));
 
     VecS lines;
@@ -357,7 +366,7 @@ VecS read_file_lines(const Str& fname)
 // Check if file is large enough to warrant stream processing
 bool is_large_file(const Str& fname, size_t threshold_mb = 5) {
     struct stat st{};
-    if (stat(fname.c_str(), &st) != 0) return false;
+    if (safe_stat(fname, &st) != 0) return false;
     if (!S_ISREG(st.st_mode))         return false;
     size_t file_size_mb = static_cast<size_t>(st.st_size) / (1024 * 1024);
     return file_size_mb >= threshold_mb;
@@ -380,7 +389,7 @@ void process_stream(std::istream& in, const Options& opt) {
     bool marker_found      = false;
 
     if (opt.show_progress && !opt.use_stdin) {
-        std::ifstream count_file(opt.filename);
+        std::ifstream count_file = safe_ifstream(opt.filename);
         if (count_file) {
             total_lines = static_cast<size_t>(
                 std::count(std::istreambuf_iterator<char>(count_file),
@@ -485,7 +494,7 @@ void process_stream(std::istream& in, const Options& opt) {
 
 // Stream wrapper for files
 void process_file_stream(const Str& fname, const Options& opt) {
-    std::ifstream file(fname);
+    std::ifstream file = safe_ifstream(fname);
     if (!file) throw std::runtime_error(create_error_message("opening file", fname));
     process_stream(file, opt);
 }
@@ -501,7 +510,7 @@ Str get_version()
     };
     
     for (const auto& path : paths) {
-        FILE* version_file = fopen(path.c_str(), "r");
+        FILE* version_file = safe_fopen(path, "r");
         if (version_file) {
             char* line_buffer = nullptr;
             size_t line_buffer_size = 0;
@@ -533,6 +542,8 @@ Str get_version()
     }
     return "unknown";
 }
+
+
 
 int main(int argc, char* argv[])
 {
@@ -604,7 +615,7 @@ int main(int argc, char* argv[])
         if (opt.filename == "-") {
             opt.use_stdin = true;
         } else {
-            FILE* test_file = fopen(opt.filename.c_str(), "r");
+            FILE* test_file = safe_fopen(opt.filename, "r");
             if (!test_file) {
                 std::cerr << create_error_message("opening file", opt.filename) << "\n";
                 std::cerr << "Please check that the file exists and is readable\n";

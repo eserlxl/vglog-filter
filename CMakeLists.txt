@@ -46,6 +46,10 @@ endif()
 # ---- Helper interface targets ------------------------------------------------
 # project_options: optimization/sanitizer/defines that apply to all targets
 add_library(project_options INTERFACE)
+target_include_directories(project_options INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
 
 # project_warnings: warning levels per compiler
 add_library(project_warnings INTERFACE)
@@ -138,11 +142,14 @@ if (BUILD_TESTING)
     endif()
   endfunction()
 
+
+
   add_test_exe(test_basic           "test/test_basic.cpp")
   add_test_exe(test_integration     "test/test_integration.cpp")
   add_test_exe(test_comprehensive   "test/test_comprehensive.cpp")
   add_test_exe(test_edge_cases      "test/test_edge_cases.cpp")
   add_test_exe(test_memory_leaks    "test/test_memory_leaks.cpp")
+  add_test_exe(test_path_validation "test/test_path_validation.cpp")
 
   # Convenience target to run tests with nice output
   add_custom_target(run-tests
