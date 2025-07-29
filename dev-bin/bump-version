@@ -320,7 +320,7 @@ create_tag() {
     local tag_name="${TAG_PREFIX}${NEW_VERSION}"
 
     if [[ "$NEW_VERSION" == *-* ]]; then
-        printf '%s\n' "${RED}Error: Cannot create tag for pre-release $NEW_VERSION${RESET}" >&2
+        printf '%s\n' "${RED}Error: Cannot create tag for pre-release version${RESET}" >&2
         printf '%s\n' "${YELLOW}Pre-release versions should not be tagged${RESET}" >&2
         exit 1
     fi
@@ -426,6 +426,11 @@ Behavior notes:
   • --print computes the version and exits early without validations or git checks.
   • --dry-run prints actions and skips dirty-tree enforcement.
   • Commits only include VERSION and CMakeLists.txt (if updated).
+
+File Tracking Requirements:
+  • VERSION file must be tracked in git for version bumps
+  • CMakeLists.txt is automatically updated if it contains a version field
+  • Only tracked files are included in version bump commits
 
 Arguments:
   major | minor | patch
@@ -708,7 +713,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
                 if has_cmake_version_field; then
                     printf '%s\n' "${YELLOW}DRY RUN: Would update CMakeLists.txt to $NEW_VERSION${RESET}" >&2
                 else
-                    printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists (no recognizable version field)${RESET}" >&2
+                    printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (no recognizable version field)${RESET}" >&2
                 fi
             else
                 printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists (file not found)${RESET}" >&2
