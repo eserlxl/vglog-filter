@@ -37,6 +37,9 @@ Located in the `test/` directory, these tests cover core functionality:
 - **`test_edge_cases.cpp`** - Edge case and boundary condition tests
 - **`test_integration.cpp`** - Integration tests
 - **`test_memory_leaks.cpp`** - Memory leak detection tests
+- **`test_path_validation.cpp`** - Path validation security tests
+- **`test_regex_patterns.cpp`** - Regex pattern matching and replacement tests
+- **`test_cli_options.cpp`** - Command-line argument parsing tests
 
 #### Test Configuration
 
