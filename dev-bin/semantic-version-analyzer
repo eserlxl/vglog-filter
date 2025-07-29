@@ -417,7 +417,7 @@ extract_cli_options() {
             'include/**/*.h' 'include/**/*.hpp' 'include/**/*.hh' \
             'src/**/*.h'     'src/**/*.hpp'     'src/**/*.hh' \
         | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/ && !/^-[[:space:]]*(typedef|#)/' \
-        | wc -l || printf '0'
+        | wc -l | tr -d ' ' || printf '0'
     )
     if [[ "${removed_prototypes:-0}" -gt 0 ]]; then
         api_breaking=true
@@ -429,8 +429,9 @@ extract_cli_options() {
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/**/*.c' 'src/**/*.cc' 'src/**/*.cpp' 'src/**/*.cxx' \
             'include/**/*.h' 'include/**/*.hpp' 'include/**/*.hh' \
-        | grep -ci 'API-BREAKING:' 2>/dev/null || printf '0'
+        | grep -ci 'API-BREAKING:' 2>/dev/null | tr -d ' ' || printf '0'
     )
+    explicit_breaking=${explicit_breaking:-0}
     if [[ "${explicit_breaking:-0}" -gt 0 ]]; then
         api_breaking=true
     fi
@@ -470,8 +471,8 @@ extract_cli_options() {
         | grep -E '^-.*--[[:alnum:]-]+' \
         | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf ''
     )
-    manual_added_long_count=$(printf '%s\n' "$added_long_opts"   | wc -l || printf '0')
-    manual_removed_long_count=$(printf '%s\n' "$removed_long_opts" | wc -l || printf '0')
+    manual_added_long_count=$(printf '%s\n' "$added_long_opts"   | wc -l | tr -d ' ' || printf '0')
+    manual_removed_long_count=$(printf '%s\n' "$removed_long_opts" | wc -l | tr -d ' ' || printf '0')
     # Ensure variables are numeric for arithmetic
     manual_added_long_count=${manual_added_long_count:-0}
     manual_removed_long_count=${manual_removed_long_count:-0}
@@ -484,22 +485,22 @@ extract_cli_options() {
     if [[ -n "$short_before" ]] || [[ -n "$short_after" ]]; then
         removed_short_count=$(
             comm -23 <(printf '%s' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) \
-                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l || printf '0'
+                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
         )
         added_short_count=$(
             comm -13 <(printf '%s' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) \
-                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l || printf '0'
+                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
         )
     fi
 
     if [[ -n "$long_before" ]] || [[ -n "$long_after" ]]; then
         removed_long_count=$(
             comm -23 <(printf '%s' "${long_before:-}" | tr ',' '\n' | sort -u) \
-                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l || printf '0'
+                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
         )
         added_long_count=$(
             comm -13 <(printf '%s' "${long_before:-}" | tr ',' '\n' | sort -u) \
-                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l || printf '0'
+                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
         )
     fi
 
@@ -610,7 +611,7 @@ analyze_changes() {
     local manual_added_long_count
     manual_added_long_count=$(printf '%s\n' "$cli_analysis" | grep "^manual_added_long_count=" | cut -d'=' -f2)
     local manual_removed_long_count
-    manual_removed_long_count=$(printf '%s\n' "$cli_analysis" | grep "^manual_removed_long_count="| cut -d'=' -f2 | tr -d '\r')
+    manual_removed_long_count=$(printf '%s\n' "$cli_analysis"| grep "^manual_removed_long_count="| cut -d'=' -f2 | tr -d '\r')
     local removed_short_count
     removed_short_count=$(printf '%s\n' "$cli_analysis" | grep "^removed_short_count=" | cut -d'=' -f2)
     local added_short_count
