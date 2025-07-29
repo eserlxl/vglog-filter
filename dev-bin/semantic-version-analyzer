@@ -600,7 +600,12 @@ extract_cli_options() {
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
-            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;/ && !/^-[[:space:]]*(typedef|#)/ {
+            # Look for struct/class member declarations (type name; pattern)
+            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;/ && 
+             !/^-[[:space:]]*(typedef|#)/ && 
+             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&
+             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ &&
+             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
                 # Extract member name
                 gsub(/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+/, "")
                 gsub(/[[:space:]]*;.*$/, "")
@@ -618,7 +623,12 @@ extract_cli_options() {
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
-            /^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;/ && !/^\+[[:space:]]*(typedef|#)/ {
+            # Look for struct/class member declarations (type name; pattern)
+            /^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;/ && 
+             !/^\+[[:space:]]*(typedef|#)/ && 
+             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&
+             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ &&
+             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
                 # Extract member name
                 gsub(/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+/, "")
                 gsub(/[[:space:]]*;.*$/, "")
@@ -650,7 +660,11 @@ extract_cli_options() {
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
-            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\)[[:space:]]*{/ {
+            # Look for actual function definitions (type name(params) { pattern)
+            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && 
+             /\)[[:space:]]*{/ && 
+             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&
+             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
                 # Extract function signature
                 gsub(/^-[[:space:]]*/, "")
                 gsub(/[[:space:]]*{.*$/, "")
@@ -667,7 +681,11 @@ extract_cli_options() {
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
-            /^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\)[[:space:]]*{/ {
+            # Look for actual function definitions (type name(params) { pattern)
+            /^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && 
+             /\)[[:space:]]*{/ && 
+             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&
+             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
                 # Extract function signature
                 gsub(/^\+[[:space:]]*/, "")
                 gsub(/[[:space:]]*{.*$/, "")
@@ -881,17 +899,23 @@ extract_cli_options() {
     manual_added_long_count=0
     manual_removed_long_count=0
 
+    # Get all changed source files (including those with spaces in names)
+    local -a changed_source_files=()
+    while IFS= read -r -d '' f; do 
+        if [[ "$f" =~ \.(c|cc|cpp|cxx)$ ]]; then
+            changed_source_files+=("$f")
+        fi
+    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" 2>/dev/null || printf '')
+
     local added_long_opts
     added_long_opts=$(
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | grep -E '^\+.*--[[:alnum:]-]+' \
         | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf ''
     )
     local removed_long_opts
     removed_long_opts=$(
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | grep -E '^-.*--[[:alnum:]-]+' \
         | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf ''
     )
@@ -906,16 +930,14 @@ extract_cli_options() {
     # Check for getopt_long usage changes
     local getopt_changes
     getopt_changes=$(
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | grep -c -E '(getopt_long|getopt)' || printf '0'
     )
     
     # Check for argument parsing changes
     local arg_parsing_changes
     arg_parsing_changes=$(
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | awk '
             /^[+-][[:space:]]*if[[:space:]]*\([[:space:]]*argc/ || 
              /^[+-][[:space:]]*while[[:space:]]*\([[:space:]]*argc/ ||
@@ -929,16 +951,14 @@ extract_cli_options() {
     # Check for help text changes (indicates CLI changes)
     local help_text_changes
     help_text_changes=$(
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | grep -c -i -E '(usage|help|option|argument)' || printf '0'
     )
     
     # Check for main function signature changes
     local main_signature_changes
     main_signature_changes=$(
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | awk '
             /^[+-][[:space:]]*int[[:space:]]+main[[:space:]]*\(/ {
                 print $0
@@ -949,8 +969,7 @@ extract_cli_options() {
     # Enhanced manual CLI detection for more patterns
     local enhanced_cli_patterns
     enhanced_cli_patterns=$(
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | awk '
             # Check for short option patterns (-x)
             /^[+-][[:space:]]*.*-[[:alpha:]]/ && !/^[+-][[:space:]]*\/\// {
@@ -1178,7 +1197,7 @@ analyze_changes() {
     fi
 
     # Propagate other breaking signals
-    if [[ "$breaking_changes" = "true" ]] || [[ "$api_breaking" = "true" ]]; then
+    if [[ "$breaking_changes" = "true" ]]; then
         breaking_cli_changes=true
     fi
 
