@@ -62,8 +62,6 @@ setup_test() {
     git commit --quiet -m "Initial version" 2>/dev/null || true
 }
 
-# Store the original directory for script path
-ORIGINAL_DIR="$(pwd)"
 BUMP_VERSION_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/bump-version"
 
 # Function to cleanup test environment

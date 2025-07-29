@@ -17,7 +17,6 @@ set -e
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
@@ -30,9 +29,7 @@ print_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
@@ -62,15 +59,13 @@ print_status "Configuring CMake with testing enabled..."
 cd "$BUILD_DIR"
 
 # Configure with testing enabled
-cmake .. \
+if ! cmake .. \
     -DBUILD_TESTING=ON \
     -DCMAKE_BUILD_TYPE=Debug \
     -DWARNING_MODE=ON \
     -DDEBUG_MODE=ON \
     -DPERFORMANCE_BUILD=OFF \
-    -DENABLE_SANITIZERS=ON
-
-if [ $? -ne 0 ]; then
+    -DENABLE_SANITIZERS=ON; then
     print_error "CMake configuration failed"
     exit 1
 fi
@@ -79,9 +74,7 @@ print_success "CMake configuration completed"
 
 # Build tests
 print_status "Building tests..."
-make -j20
-
-if [ $? -ne 0 ]; then
+if ! make -j20; then
     print_error "Build failed"
     exit 1
 fi
@@ -112,8 +105,7 @@ echo ""
 for test_exe in test_*; do
     if [ -f "$test_exe" ] && [ -x "$test_exe" ]; then
         print_status "Running $test_exe..."
-        ./"$test_exe"
-        if [ $? -eq 0 ]; then
+        if ./"$test_exe"; then
             print_success "$test_exe passed"
         else
             print_error "$test_exe failed"

@@ -448,7 +448,8 @@ extract_cli_options() {
         | grep -ci 'API-BREAKING:' 2>/dev/null | tr -d ' ' || printf '0'
     )
     explicit_breaking=${explicit_breaking:-0}
-    if [[ "${explicit_breaking:-0}" -gt 0 ]]; then
+    explicit_breaking=$(printf '%s' "$explicit_breaking" | tr -cd '0-9' || printf '0')
+    if [[ "$explicit_breaking" -gt 0 ]]; then
         api_breaking=true
     fi
 
@@ -491,10 +492,12 @@ extract_cli_options() {
     )
     
     # Check if any cases were removed without being added back
-    local net_removed_cases
-    net_removed_cases=$(
-        comm -23 <(printf '%s\n' "$removed_switch_cases" | sort -u) <(printf '%s\n' "$added_switch_cases" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
-    )
+    local net_removed_cases=0
+    if [[ -n "$removed_switch_cases" ]]; then
+        net_removed_cases=$(
+            comm -23 <(printf '%s\n' "$removed_switch_cases" | sort -u) <(printf '%s\n' "$added_switch_cases" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+        )
+    fi
     
     # Ensure net_removed_cases is numeric
     net_removed_cases=${net_removed_cases:-0}
@@ -879,7 +882,7 @@ extract_cli_options() {
     getopt_changes=$(
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-        | grep -E '(getopt_long|getopt)' | wc -l | tr -d ' ' || printf '0'
+        | grep -c -E '(getopt_long|getopt)' || printf '0'
     )
     
     # Check for argument parsing changes
@@ -902,7 +905,7 @@ extract_cli_options() {
     help_text_changes=$(
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-        | grep -i -E '(usage|help|option|argument)' | wc -l | tr -d ' ' || printf '0'
+        | grep -c -i -E '(usage|help|option|argument)' || printf '0'
     )
     
     # Check for main function signature changes
@@ -944,14 +947,21 @@ extract_cli_options() {
     
     # Combine all CLI change indicators
     local total_cli_indicators=0
-    # Ensure all variables are numeric
+    # Ensure all variables are numeric and sanitized
     manual_added_long_count=${manual_added_long_count:-0}
+    manual_added_long_count=$(printf '%s' "$manual_added_long_count" | tr -cd '0-9' || printf '0')
     manual_removed_long_count=${manual_removed_long_count:-0}
+    manual_removed_long_count=$(printf '%s' "$manual_removed_long_count" | tr -cd '0-9' || printf '0')
     getopt_changes=${getopt_changes:-0}
+    getopt_changes=$(printf '%s' "$getopt_changes" | tr -cd '0-9' || printf '0')
     arg_parsing_changes=${arg_parsing_changes:-0}
+    arg_parsing_changes=$(printf '%s' "$arg_parsing_changes" | tr -cd '0-9' || printf '0')
     help_text_changes=${help_text_changes:-0}
+    help_text_changes=$(printf '%s' "$help_text_changes" | tr -cd '0-9' || printf '0')
     main_signature_changes=${main_signature_changes:-0}
+    main_signature_changes=$(printf '%s' "$main_signature_changes" | tr -cd '0-9' || printf '0')
     enhanced_cli_patterns=${enhanced_cli_patterns:-0}
+    enhanced_cli_patterns=$(printf '%s' "$enhanced_cli_patterns" | tr -cd '0-9' || printf '0')
     
     total_cli_indicators=$((manual_added_long_count + manual_removed_long_count + getopt_changes + arg_parsing_changes + help_text_changes + main_signature_changes + enhanced_cli_patterns))
     

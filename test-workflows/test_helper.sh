@@ -12,8 +12,6 @@
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Function to create a temporary test environment
@@ -29,7 +27,7 @@ create_temp_test_env() {
     project_root="${PROJECT_ROOT:-$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")}"
     
     # Create a minimal project structure
-    cd "$temp_dir"
+    cd "$temp_dir" || exit 1
     
     # Copy essential project files
     cp "$project_root/VERSION" . 2>/dev/null || echo "1.0.0" > VERSION
@@ -74,7 +72,7 @@ run_test_in_temp_env() {
     temp_dir=$(create_temp_test_env "$test_name")
     
     # Change to temporary directory
-    cd "$temp_dir"
+    cd "$temp_dir" || exit 1
     
     # Run the test script
     local exit_code=0
