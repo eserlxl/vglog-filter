@@ -32,7 +32,7 @@ rm -rf "$TEST_OUTPUT_DIR"
 mkdir -p "$TEST_OUTPUT_DIR"
 
 echo "=========================================="
-echo "    VGLOG-FILTER TEST SUITE RUNNER"
+echo "    VGLOG-FILTER WORKFLOW TEST SUITE"
 echo "=========================================="
 echo "Output directory: $TEST_OUTPUT_DIR"
 echo "Summary file: $SUMMARY_FILE"
@@ -176,7 +176,7 @@ run_tests_in_directory "test-workflows"
 # Generate summary
 echo ""
 echo "=========================================="
-echo "              TEST SUMMARY"
+echo "          WORKFLOW TEST SUMMARY"
 echo "=========================================="
 echo "Total tests: $TOTAL_TESTS"
 echo -e "Passed: ${GREEN}$PASSED_TESTS${NC}"
@@ -191,7 +191,7 @@ fi
 
 # Save summary to file
 {
-    echo "VGLOG-FILTER TEST SUITE SUMMARY"
+    echo "VGLOG-FILTER WORKFLOW TEST SUITE SUMMARY"
     echo "Generated: $(date)"
     echo ""
     echo "Total tests: $TOTAL_TESTS"
