@@ -3,14 +3,14 @@
 echo "=== Testing Semantic Version Analyzer Fixes ==="
 
 # Test 1: Manual CLI detection in nested directories
-echo "Test 1: Manual CLI detection (nested src/tools/cli/main.c)"
+echo "Test 1: Manual CLI detection (nested test-workflows/source-fixtures/cli/main.c)"
 ./dev-bin/semantic-version-analyzer --base 502a359 --target d7db5a8 --suggest-only
 echo "Expected: minor (manual_cli_changes=true, manual_added_long_count=1)"
 
 echo
 
 # Test 2: API breaking changes detection
-echo "Test 2: API breaking changes (removed prototype from src/internal/header.hh)"
+echo "Test 2: API breaking changes (removed prototype from test-workflows/source-fixtures/internal/header.hh)"
 ./dev-bin/semantic-version-analyzer --base c6734e6 --target 4683934 --suggest-only
 echo "Expected: major (reason=api_break)"
 

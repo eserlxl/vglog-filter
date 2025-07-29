@@ -72,8 +72,8 @@ Contains test fixtures and sample data:
 
 #### `source-fixtures/`
 Contains copies of source files used for testing:
-- `internal/header.hh` - Internal header file for API testing
-- `cli/main.c` - CLI main file for testing
+- `test-workflows/source-fixtures/internal/header.hh` - Internal header file for API testing
+- `test-workflows/source-fixtures/cli/main.c` - CLI main file for testing
 - `cli/simple_cli_test.c` - Simple CLI test program with basic argument handling
 - `test_content_simple.txt` - Simple test content file for basic file processing tests
 - `test_content_renamed.txt` - Test content file for rename handling tests

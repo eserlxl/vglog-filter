@@ -150,6 +150,10 @@ echo "Starting test execution at $(date)"
 echo ""
 
 # Run tests in each subdirectory
+run_tests_in_directory "test-workflows/core-tests"
+run_tests_in_directory "test-workflows/file-handling-tests"
+run_tests_in_directory "test-workflows/edge-case-tests"
+run_tests_in_directory "test-workflows/utility-tests"
 run_tests_in_directory "test-workflows/cli-tests"
 run_tests_in_directory "test-workflows/debug-tests"
 run_tests_in_directory "test-workflows/ere-tests"

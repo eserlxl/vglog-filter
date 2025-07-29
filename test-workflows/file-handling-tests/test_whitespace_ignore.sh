@@ -11,7 +11,7 @@ cd "$PROJECT_ROOT"
 echo "=== Testing Whitespace Ignore ==="
 
 # Create a test source file
-cat > src/test_whitespace.cpp << 'EOF'
+cat > test-workflows/source-fixtures/test_whitespace.cpp << 'EOF'
 #include <iostream>
 
 int main() {
@@ -21,11 +21,11 @@ int main() {
 EOF
 
 # Add and commit the file
-git add src/test_whitespace.cpp
+git add test-workflows/source-fixtures/test_whitespace.cpp
 git commit -m "Add test file for whitespace test"
 
 # Make whitespace-only changes
-cat > src/test_whitespace.cpp << 'EOF'
+cat > test-workflows/source-fixtures/test_whitespace.cpp << 'EOF'
 #include <iostream>
 
 int main() {
@@ -35,7 +35,7 @@ int main() {
 EOF
 
 # Commit the whitespace changes
-git add src/test_whitespace.cpp
+git add test-workflows/source-fixtures/test_whitespace.cpp
 git commit -m "Whitespace-only changes"
 
 # Run semantic version analyzer without --ignore-whitespace

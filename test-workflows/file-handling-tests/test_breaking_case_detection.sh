@@ -14,7 +14,7 @@ echo "Testing breaking case detection across C file extensions..."
 git checkout -b test-breaking-case-detection 2>/dev/null || git checkout test-breaking-case-detection
 
 # Create a test C file with a switch statement
-cat > src/test_switch.c << 'EOF'
+cat > test-workflows/source-fixtures/test_switch.c << 'EOF'
 #include <stdio.h>
 
 int main(int argc, char *argv[]) {
@@ -39,11 +39,11 @@ int main(int argc, char *argv[]) {
 }
 EOF
 
-git add src/test_switch.c
+git add test-workflows/source-fixtures/test_switch.c
 git commit -m "Add test C file with switch statement"
 
 # Remove a case (breaking change)
-cat > src/test_switch.c << 'EOF'
+cat > test-workflows/source-fixtures/test_switch.c << 'EOF'
 #include <stdio.h>
 
 int main(int argc, char *argv[]) {
@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 }
 EOF
 
-git add src/test_switch.c
+git add test-workflows/source-fixtures/test_switch.c
 git commit -m "Remove case 2 (breaking change)"
 
 # Run semantic version analyzer
@@ -88,6 +88,6 @@ fi
 # Clean up
 git checkout main
 git branch -D test-breaking-case-detection 2>/dev/null || true
-rm -f src/test_switch.c
+rm -f test-workflows/source-fixtures/test_switch.c
 
 exit $exit_code

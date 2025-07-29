@@ -11,7 +11,7 @@ cd "$PROJECT_ROOT"
 echo "=== Testing NUL-Safe File Handling ==="
 
 # Create a test source file with space in name
-cat > "src/file with space.cpp" << 'EOF'
+cat > "test-workflows/source-fixtures/file with space.cpp" << 'EOF'
 #include <iostream>
 
 int main() {
@@ -21,11 +21,11 @@ int main() {
 EOF
 
 # Add and commit the file
-git add "src/file with space.cpp"
+git add "test-workflows/source-fixtures/file with space.cpp"
 git commit -m "Add source file with space in name"
 
 # Modify the file to add CLI options
-cat > "src/file with space.cpp" << 'EOF'
+cat > "test-workflows/source-fixtures/file with space.cpp" << 'EOF'
 #include <iostream>
 #include <getopt.h>
 
@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
 EOF
 
 # Commit the modification
-git add "src/file with space.cpp"
+git add "test-workflows/source-fixtures/file with space.cpp"
 git commit -m "Add CLI options to source file"
 
 # Run semantic version analyzer
