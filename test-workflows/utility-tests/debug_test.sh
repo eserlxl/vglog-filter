@@ -13,6 +13,7 @@ SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 # PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Source test helper functions
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/../test_helper.sh"
 
 echo "Testing debug functionality..."

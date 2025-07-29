@@ -15,6 +15,7 @@ SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Source test helper functions
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/../test_helper.sh"
 
 echo "=== Testing Rename Handling ==="
@@ -36,7 +37,11 @@ git commit -m "Rename test file"
 
 # Run semantic version analyzer from the original project directory
 # Note: Using '|| true' to capture output even if command fails (intentional)
-result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+if cd "$PROJECT_ROOT"; then
+    result=$(./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+else
+    result=""
+fi
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")

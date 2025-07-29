@@ -15,6 +15,7 @@ SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Source test helper functions
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/../test_helper.sh"
 
 echo "=== Testing Whitespace Ignore ==="
@@ -48,12 +49,20 @@ git commit -m "Whitespace-only changes"
 # Run semantic version analyzer without --ignore-whitespace
 echo "Running semantic version analyzer (without --ignore-whitespace)..."
 # Note: Using '|| true' to capture output even if command fails (intentional)
-result1=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+if cd "$PROJECT_ROOT"; then
+    result1=$(./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+else
+    result1=""
+fi
 
 echo ""
 echo "Running semantic version analyzer (with --ignore-whitespace)..."
 # Note: Using '|| true' to capture output even if command fails (intentional)
-result2=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --ignore-whitespace --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+if cd "$PROJECT_ROOT"; then
+    result2=$(./dev-bin/semantic-version-analyzer --ignore-whitespace --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+else
+    result2=""
+fi
 
 # Extract suggestions
 suggestion1=$(echo "$result1" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
