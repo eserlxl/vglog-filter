@@ -9,7 +9,9 @@ IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd -P)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
-cd "$PROJECT_ROOT"
+
+# Source test helper functions
+source "$SCRIPT_DIR/../test_helper.sh"
 
 # Colors for output
 RED='\033[0;31m'
@@ -61,6 +63,10 @@ run_test() {
     return 0
 }
 
+# Create temporary test environment
+temp_dir=$(create_temp_test_env "ere-fix")
+cd "$temp_dir"
+
 # Test 1: ERE fix - manual CLI detection should work with escaped +
 printf '%s=== Test 1: ERE Fix for Manual CLI Detection ===%s\n' "${YELLOW}" "${NC}"
 
@@ -94,7 +100,7 @@ git commit -m "Add manual CLI parser test" --no-verify
 
 # Test that manual CLI detection works (should not crash with ERE error)
 run_test "Manual CLI detection with escaped +" \
-    "./dev-bin/semantic-version-analyzer --verbose --since HEAD~1" \
+    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --verbose --since HEAD~1 --repo-root '$temp_dir'" \
     11 \
     "manual_cli_changes=true"
 
@@ -133,7 +139,7 @@ git commit -m "Add getopt test" --no-verify
 
 # Test that getopt and manual counts are separate
 run_test "Getopt and manual counts separation" \
-    "./dev-bin/semantic-version-analyzer --verbose --since HEAD~2 --json" \
+    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --verbose --since HEAD~2 --json --repo-root '$temp_dir'" \
     11 \
     '"manual_added_long_count": 0'
 
@@ -146,7 +152,7 @@ git add test_getopt.c
 git commit -m "Remove --version option (breaking change)" --no-verify
 
 run_test "Breaking CLI change detection" \
-    "./dev-bin/semantic-version-analyzer --since HEAD~1" \
+    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --since HEAD~1 --repo-root '$temp_dir'" \
     10 \
     "breaking_cli"
 
@@ -174,7 +180,7 @@ git add include/test.h
 git commit -m "Remove function prototype (API break)" --no-verify
 
 run_test "API breaking change detection" \
-    "./dev-bin/semantic-version-analyzer --since HEAD~1" \
+    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --since HEAD~1 --repo-root '$temp_dir'" \
     10 \
     "api_break"
 
@@ -187,7 +193,7 @@ git add test-workflows/source-fixtures/cli/simple_cli_test.c
 git commit -m "Add whitespace changes" --no-verify
 
 run_test "Whitespace ignore with --ignore-whitespace" \
-    "./dev-bin/semantic-version-analyzer --ignore-whitespace --since HEAD~1" \
+    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --ignore-whitespace --since HEAD~1 --repo-root '$temp_dir'" \
     20 \
     "NONE"
 
@@ -222,17 +228,17 @@ printf '%s=== Test 7: MAJOR_REQUIRE_BREAKING Environment Variable ===%s\n' "${YE
 
 # Test with different truthy values
 run_test "MAJOR_REQUIRE_BREAKING=true" \
-    "MAJOR_REQUIRE_BREAKING=true ./dev-bin/semantic-version-analyzer --since HEAD~3" \
+    "cd '$PROJECT_ROOT' && MAJOR_REQUIRE_BREAKING=true ./dev-bin/semantic-version-analyzer --since HEAD~3 --repo-root '$temp_dir'" \
     10 \
     ""
 
 run_test "MAJOR_REQUIRE_BREAKING=1" \
-    "MAJOR_REQUIRE_BREAKING=1 ./dev-bin/semantic-version-analyzer --since HEAD~3" \
+    "cd '$PROJECT_ROOT' && MAJOR_REQUIRE_BREAKING=1 ./dev-bin/semantic-version-analyzer --since HEAD~3 --repo-root '$temp_dir'" \
     10 \
     ""
 
 run_test "MAJOR_REQUIRE_BREAKING=yes" \
-    "MAJOR_REQUIRE_BREAKING=yes ./dev-bin/semantic-version-analyzer --since HEAD~3" \
+    "cd '$PROJECT_ROOT' && MAJOR_REQUIRE_BREAKING=yes ./dev-bin/semantic-version-analyzer --since HEAD~3 --repo-root '$temp_dir'" \
     10 \
     ""
 
@@ -240,14 +246,12 @@ run_test "MAJOR_REQUIRE_BREAKING=yes" \
 printf '%s=== Test 8: JSON Output Fields ===%s\n' "${YELLOW}" "${NC}"
 
 run_test "JSON includes manual CLI fields" \
-    "./dev-bin/semantic-version-analyzer --verbose --since HEAD~4 --json" \
+    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --verbose --since HEAD~4 --json --repo-root '$temp_dir'" \
     11 \
     '"manual_added_long_count"'
 
 # Cleanup test files
-git reset --hard HEAD~4
-rm -f test-workflows/source-fixtures/cli/simple_cli_test.c test_getopt.c
-rm -rf include
+cleanup_temp_test_env "$temp_dir"
 
 # Summary
 printf '%s=== Test Summary ===%s\n' "${YELLOW}" "${NC}"

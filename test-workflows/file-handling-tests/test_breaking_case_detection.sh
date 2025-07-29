@@ -6,12 +6,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-cd "$PROJECT_ROOT"
+
+# Source test helper functions
+source "$SCRIPT_DIR/../test_helper.sh"
 
 echo "Testing breaking case detection across C file extensions..."
 
-# Create a test branch
-git checkout -b test-breaking-case-detection 2>/dev/null || git checkout test-breaking-case-detection
+# Create temporary test environment
+temp_dir=$(create_temp_test_env "breaking-case-detection")
+cd "$temp_dir"
 
 # Create a test C file with a switch statement
 cat > test-workflows/source-fixtures/test_switch.c << 'EOF'
@@ -68,8 +71,8 @@ EOF
 git add test-workflows/source-fixtures/test_switch.c
 git commit -m "Remove case 2 (breaking change)"
 
-# Run semantic version analyzer
-result=$(./dev-bin/semantic-version-analyzer --machine 2>/dev/null || true)
+# Run semantic version analyzer from the original project directory
+result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" 2>/dev/null || true)
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
@@ -86,8 +89,6 @@ else
 fi
 
 # Clean up
-git checkout main
-git branch -D test-breaking-case-detection 2>/dev/null || true
-rm -f test-workflows/source-fixtures/test_switch.c
+cleanup_temp_test_env "$temp_dir"
 
 exit $exit_code

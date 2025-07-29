@@ -6,9 +6,15 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-cd "$PROJECT_ROOT"
+
+# Source test helper functions
+source "$SCRIPT_DIR/../test_helper.sh"
 
 echo "=== Testing NUL-Safe File Handling ==="
+
+# Create temporary test environment
+temp_dir=$(create_temp_test_env "nul-safety")
+cd "$temp_dir"
 
 # Create a test source file with space in name
 cat > "test-workflows/source-fixtures/file with space.cpp" << 'EOF'
@@ -52,8 +58,12 @@ git commit -m "Add CLI options to source file"
 
 # Run semantic version analyzer
 echo "Running semantic version analyzer..."
-./dev-bin/semantic-version-analyzer --verbose
+cd "$PROJECT_ROOT"
+./dev-bin/semantic-version-analyzer --verbose --repo-root "$temp_dir"
 
 echo "=== Test Complete ==="
 echo "Expected: Should detect CLI changes and suggest minor version bump"
-echo "Check the output above to verify NUL-safe handling works correctly." 
+echo "Check the output above to verify NUL-safe handling works correctly."
+
+# Clean up
+cleanup_temp_test_env "$temp_dir" 

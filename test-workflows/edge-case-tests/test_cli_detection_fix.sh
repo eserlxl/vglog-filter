@@ -6,23 +6,32 @@ set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-cd "$PROJECT_ROOT"
+
+# Source test helper functions
+source "$SCRIPT_DIR/../test_helper.sh"
 
 echo "Testing CLI change detection fix..."
 
-# Create a test branch from a clean state
-git checkout -b test-cli-detection-fix 2>/dev/null || git checkout test-cli-detection-fix
+# Create temporary test environment
+temp_dir=$(create_temp_test_env "cli-detection-fix")
+cd "$temp_dir"
 
-# Reset to a clean state (first commit or a known good state)
-git reset --hard HEAD~10 2>/dev/null || git reset --hard HEAD~5 2>/dev/null || true
+# Create a minimal project structure
+mkdir -p src include
+echo "int main() { return 0; }" > src/main.cpp
+echo "int helper();" > include/helper.h
+
+# Initial commit
+git add .
+git commit -m "Initial commit" >/dev/null 2>&1
 
 # Make a minimal change to a non-source file (README.md)
 echo "# Test change" >> README.md
 git add README.md
 git commit -m "Test: Update README only"
 
-# Run semantic version analyzer
-result=$(./dev-bin/semantic-version-analyzer --machine 2>/dev/null || true)
+# Run semantic version analyzer from the original project directory
+result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" 2>/dev/null || true)
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
@@ -40,7 +49,6 @@ else
 fi
 
 # Clean up
-git checkout main
-git branch -D test-cli-detection-fix 2>/dev/null || true
+cleanup_temp_test_env "$temp_dir"
 
 exit $exit_code
