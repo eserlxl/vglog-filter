@@ -13,6 +13,8 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
+# Prevent any pager and avoid unnecessary repo locks for better performance.
+export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
 # --- early guards -------------------------------------------------------------
 
@@ -49,10 +51,12 @@ Options:
   --repo-root <path>       Set repository root directory
   --no-merge-base          Disable automatic merge-base detection for disjoint branches
   --print-base             Output the chosen base reference SHA on a single line
+  --only-paths <globs>     Restrict analysis to comma-separated path globs
+                           (e.g. "src/**,include/**,tools/**")
   --verbose                Show detailed analysis
   --machine                Output machine-readable key=value format (SUGGESTION only)
   --json                   Output machine-readable JSON
-  --ignore-whitespace      Ignore whitespace changes in diff size calculation
+  --ignore-whitespace      Ignore whitespace changes in diff size and signals
   --suggest-only           Output only the suggestion (major/minor/patch/none)
   --help, -h               Show this help
 
@@ -71,6 +75,7 @@ Examples:
   $(basename "$0") --since-date 2025-01-01
   $(basename "$0") --base HEAD~5 --target HEAD
   $(basename "$0") --base v1.0.0 --target v1.1.0
+  $(basename "$0") --only-paths "src/**,include/**"
   $(basename "$0") --verbose
   $(basename "$0") --machine
   $(basename "$0") --json
@@ -111,6 +116,7 @@ MACHINE_OUTPUT=false
 JSON_OUTPUT=false
 IGNORE_WHITESPACE=false
 SUGGEST_ONLY=false
+ONLY_PATHS=""
 
 # --- defaults / config --------------------------------------------------------
 
@@ -126,6 +132,22 @@ MAJOR_REQUIRE_BREAKING="${MAJOR_REQUIRE_BREAKING:-true}"
 
 # Normalize MAJOR_REQUIRE_BREAKING once for consistency
 REQ="${MAJOR_REQUIRE_BREAKING,,}"
+
+# Build a global PATH_ARGS array from --only-paths (applied to ALL diffs)
+PATH_ARGS=()
+build_path_args() {
+    PATH_ARGS=()
+    if [[ -n "$ONLY_PATHS" ]]; then
+        IFS=',' read -r -a tmp <<< "$ONLY_PATHS"
+        PATH_ARGS+=(--)
+        for g in "${tmp[@]}"; do
+            # Trim surrounding spaces
+            g="${g##+([[:space:]])}"
+            g="${g%%+([[:space:]])}"
+            [[ -n "$g" ]] && PATH_ARGS+=("$g")
+        done
+    fi
+}
 
 # --- arg parsing --------------------------------------------------------------
 
@@ -162,10 +184,14 @@ while [[ $# -gt 0 ]]; do
         --json)          JSON_OUTPUT=true; shift;;
         --ignore-whitespace) IGNORE_WHITESPACE=true; shift;;
         --suggest-only)  SUGGEST_ONLY=true; shift;;
+        --only-paths)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --only-paths requires a comma-separated globs list\n' >&2; exit 1; }
+            ONLY_PATHS="$2"; shift 2;;
         --help|-h)       show_help; exit 0;;
         *) printf 'Error: Unknown option: %s\n' "$1" >&2; show_help; exit 1;;
     esac
 done
+build_path_args
 
 # Early repository guard (if not disabled by --repo-root)
 if [[ "$EARLY_REPO_CHECK" = "true" ]]; then
@@ -1303,6 +1329,14 @@ get_bump_reason() {
     printf 'none'
 }
 
+# Simple JSON string escaper for safe values (quotes and backslashes)
+json_escape() {
+    local s=${1-}
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    printf '%s' "$s"
+}
+
 # --- main ---------------------------------------------------------------------
 
 # Main analysis
@@ -1415,15 +1449,15 @@ main() {
         local json_added_long_count="${added_long_count:-0}"
 
         printf '{\n'
-        printf '  "suggestion": "%s",\n' "$suggestion"
-        printf '  "reason": "%s",\n' "$reason"
-        printf '  "current_version": "%s",\n' "$current_version"
+        printf '  "suggestion": "%s",\n' "$(json_escape "$suggestion")"
+        printf '  "reason": "%s",\n' "$(json_escape "$reason")"
+        printf '  "current_version": "%s",\n' "$(json_escape "$current_version")"
         if [[ -n "$next_version" ]] && [[ "$suggestion" != "none" ]]; then
-            printf '  "next_version": "%s",\n' "$next_version"
+            printf '  "next_version": "%s",\n' "$(json_escape "$next_version")"
         fi
-        printf '  "base_ref": "%s",\n' "$base_ref"
-        printf '  "base_ref_type": "%s",\n' "$ref_type"
-        printf '  "target_ref": "%s",\n' "$target_ref"
+        printf '  "base_ref": "%s",\n' "$(json_escape "$base_ref")"
+        printf '  "base_ref_type": "%s",\n' "$(json_escape "$ref_type")"
+        printf '  "target_ref": "%s",\n' "$(json_escape "$target_ref")"
         printf '  "changes": {\n'
         printf '    "added_files": %s,\n' "$json_added_files"
         printf '    "modified_files": %s,\n' "$json_modified_files"
