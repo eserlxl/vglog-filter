@@ -71,6 +71,7 @@ cd "$temp_dir"
 printf '%s=== Test 1: ERE Fix for Manual CLI Detection ===%s\n' "${YELLOW}" "${NC}"
 
 # Create a test file with manual CLI parsing
+mkdir -p test-workflows/source-fixtures/cli
 cat > test-workflows/source-fixtures/cli/simple_cli_test.c << 'EOF'
 #include <stdio.h>
 #include <string.h>

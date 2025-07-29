@@ -17,7 +17,8 @@ temp_dir=$(create_temp_test_env "breaking-case-detection")
 cd "$temp_dir"
 
 # Create a test C file with a switch statement
-cat > test-workflows/source-fixtures/test_switch.c << 'EOF'
+mkdir -p src
+cat > src/test_switch.c << 'EOF'
 #include <stdio.h>
 
 int main(int argc, char *argv[]) {
@@ -42,11 +43,11 @@ int main(int argc, char *argv[]) {
 }
 EOF
 
-git add test-workflows/source-fixtures/test_switch.c
+git add src/test_switch.c
 git commit -m "Add test C file with switch statement"
 
 # Remove a case (breaking change)
-cat > test-workflows/source-fixtures/test_switch.c << 'EOF'
+cat > src/test_switch.c << 'EOF'
 #include <stdio.h>
 
 int main(int argc, char *argv[]) {
@@ -68,11 +69,11 @@ int main(int argc, char *argv[]) {
 }
 EOF
 
-git add test-workflows/source-fixtures/test_switch.c
+git add src/test_switch.c
 git commit -m "Remove case 2 (breaking change)"
 
 # Run semantic version analyzer from the original project directory
-result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" 2>/dev/null || true)
+result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")

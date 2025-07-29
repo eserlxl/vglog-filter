@@ -1,6 +1,6 @@
 #!/bin/bash
 # Test header prototype removal detection in semantic-version-analyzer
-# This test verifies that removing a prototype in test-workflows/source-fixtures/test_header.h triggers api_breaking=true
+# This test verifies that removing a prototype in ../source-fixtures/test_header.h triggers api_breaking=true
 
 set -Eeuo pipefail
 
@@ -17,7 +17,8 @@ temp_dir=$(create_temp_test_env "header-removal")
 cd "$temp_dir"
 
 # Create a test header file with a prototype
-cat > test-workflows/source-fixtures/test_header.h << 'EOF'
+mkdir -p include
+cat > include/test_header.h << 'EOF'
 #ifndef TEST_HEADER_H
 #define TEST_HEADER_H
 
@@ -28,11 +29,11 @@ int test_function(int param1, const char* param2);
 EOF
 
 # Add and commit the header
-git add test-workflows/source-fixtures/test_header.h
+git add include/test_header.h
 git commit -m "Add test header with prototype"
 
 # Remove the prototype
-cat > test-workflows/source-fixtures/test_header.h << 'EOF'
+cat > include/test_header.h << 'EOF'
 #ifndef TEST_HEADER_H
 #define TEST_HEADER_H
 
@@ -42,17 +43,25 @@ cat > test-workflows/source-fixtures/test_header.h << 'EOF'
 EOF
 
 # Commit the removal
-git add test-workflows/source-fixtures/test_header.h
+git add include/test_header.h
 git commit -m "Remove function prototype"
 
-# Run semantic version analyzer
-echo "Running semantic version analyzer..."
-cd "$PROJECT_ROOT"
-./dev-bin/semantic-version-analyzer --verbose --repo-root "$temp_dir"
+# Run semantic version analyzer from the original project directory
+result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
 
-echo "=== Test Complete ==="
-echo "Expected: Should show api_breaking=true and suggest major version bump"
-echo "Check the output above to verify header removal detection works correctly."
+# Extract suggestion
+suggestion=$(echo "$result" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
+
+echo "Version bump suggestion: $suggestion"
+
+# Verify that removing a prototype triggers major version bump
+if [[ "$suggestion" = "major" ]]; then
+    echo "✅ PASS: Removing prototype correctly triggers major version bump"
+    exit_code=0
+else
+    echo "❌ FAIL: Removing prototype should trigger major version bump, got: $suggestion"
+    exit_code=1
+fi
 
 # Clean up
 cleanup_temp_test_env "$temp_dir" 

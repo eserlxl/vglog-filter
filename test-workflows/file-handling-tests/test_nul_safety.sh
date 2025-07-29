@@ -17,7 +17,8 @@ temp_dir=$(create_temp_test_env "nul-safety")
 cd "$temp_dir"
 
 # Create a test source file with space in name
-cat > "test-workflows/source-fixtures/file with space.cpp" << 'EOF'
+mkdir -p src
+cat > "src/file with space.cpp" << 'EOF'
 #include <iostream>
 
 int main() {
@@ -27,11 +28,11 @@ int main() {
 EOF
 
 # Add and commit the file
-git add "test-workflows/source-fixtures/file with space.cpp"
+git add "src/file with space.cpp"
 git commit -m "Add source file with space in name"
 
 # Modify the file to add CLI options
-cat > "test-workflows/source-fixtures/file with space.cpp" << 'EOF'
+cat > "src/file with space.cpp" << 'EOF'
 #include <iostream>
 #include <getopt.h>
 
@@ -53,17 +54,25 @@ int main(int argc, char* argv[]) {
 EOF
 
 # Commit the modification
-git add "test-workflows/source-fixtures/file with space.cpp"
+git add "src/file with space.cpp"
 git commit -m "Add CLI options to source file"
 
-# Run semantic version analyzer
-echo "Running semantic version analyzer..."
-cd "$PROJECT_ROOT"
-./dev-bin/semantic-version-analyzer --verbose --repo-root "$temp_dir"
+# Run semantic version analyzer from the original project directory
+result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
 
-echo "=== Test Complete ==="
-echo "Expected: Should detect CLI changes and suggest minor version bump"
-echo "Check the output above to verify NUL-safe handling works correctly."
+# Extract suggestion
+suggestion=$(echo "$result" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
+
+echo "Version bump suggestion: $suggestion"
+
+# Verify that CLI changes trigger minor version bump
+if [[ "$suggestion" = "minor" ]]; then
+    echo "✅ PASS: CLI changes correctly trigger minor version bump"
+    exit_code=0
+else
+    echo "❌ FAIL: CLI changes should trigger minor version bump, got: $suggestion"
+    exit_code=1
+fi
 
 # Clean up
 cleanup_temp_test_env "$temp_dir" 

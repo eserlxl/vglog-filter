@@ -27,14 +27,22 @@ git commit -m "Add test file for rename test"
 git mv test-workflows/source-fixtures/test_content_simple.txt test-workflows/source-fixtures/test_content_renamed.txt
 git commit -m "Rename test file"
 
-# Run semantic version analyzer
-echo "Running semantic version analyzer..."
-cd "$PROJECT_ROOT"
-./dev-bin/semantic-version-analyzer --verbose --repo-root "$temp_dir"
+# Run semantic version analyzer from the original project directory
+result=$(cd "$PROJECT_ROOT" && ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
 
-echo "=== Test Complete ==="
-echo "Expected: Should show 1 modified file (not 1 added file)"
-echo "Check the output above to verify rename handling works correctly."
+# Extract suggestion
+suggestion=$(echo "$result" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
+
+echo "Version bump suggestion: $suggestion"
+
+# Verify that rename is handled correctly (should be minor or none, not major)
+if [[ "$suggestion" = "major" ]]; then
+    echo "❌ FAIL: Rename should not trigger major version bump, got: $suggestion"
+    exit_code=1
+else
+    echo "✅ PASS: Rename handled correctly, got: $suggestion"
+    exit_code=0
+fi
 
 # Clean up
 cleanup_temp_test_env "$temp_dir" 

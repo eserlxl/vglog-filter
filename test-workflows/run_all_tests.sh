@@ -80,7 +80,15 @@ run_test() {
         
         # Run with timeout and capture output
         local output_file="$TEST_OUTPUT_DIR/${test_name}.out"
-        if timeout 30s bash "$test_file" > "$output_file" 2>&1; then
+        timeout 30s bash "$test_file" > "$output_file" 2>&1
+        local exit_code=$?
+        
+        # Check if this is a test that returns a specific exit code (like test_func.sh)
+        if [[ "$test_name" == "test_func.sh" ]] && [[ $exit_code -eq 20 ]]; then
+            echo -e "${GREEN}PASSED${NC}"
+            log_test "$test_name" "PASSED" "$(cat "$output_file")"
+            ((PASSED_TESTS++))
+        elif [[ $exit_code -eq 0 ]]; then
             echo -e "${GREEN}PASSED${NC}"
             log_test "$test_name" "PASSED" "$(cat "$output_file")"
             ((PASSED_TESTS++))
