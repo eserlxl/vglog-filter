@@ -29,9 +29,8 @@ if ! command -v git >/dev/null 2>&1; then
     exit 1
 fi
 
-# Auto-detect project root using POSIX-friendly approach
+# Auto-detect script directory using POSIX-friendly approach
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd -P)"
-PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
 
 # Early repository guard (only if --repo-root is not specified)
 # We'll check for --repo-root in the argument parsing loop
@@ -200,7 +199,7 @@ build_path_args
 
 # Early repository guard (if not disabled by --repo-root)
 if [[ "$EARLY_REPO_CHECK" = "true" ]]; then
-    # Check for git repository in current directory, not PROJECT_ROOT
+    # Check for git repository in current directory
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
         printf 'Not in a git repository\n' >&2
         exit 1
