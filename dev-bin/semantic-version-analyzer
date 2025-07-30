@@ -200,7 +200,7 @@ build_path_args
 
 # Early repository guard (if not disabled by --repo-root)
 if [[ "$EARLY_REPO_CHECK" = "true" ]]; then
-    cd "$PROJECT_ROOT"
+    # Check for git repository in current directory, not PROJECT_ROOT
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
         printf 'Not in a git repository\n' >&2
         exit 1
@@ -291,6 +291,8 @@ check_commit_range() {
 # Classify file path - improved to handle multiple folder patterns and nested directories
 classify_path() {
     local path="$1"
+    local path_lower
+    path_lower=$(printf '%s' "$path" | tr '[:upper:]' '[:lower:]')
 
     # Skip noise directories and binary/lock artifacts (including nested ones)
     if [[ "$path" =~ /(build|dist|out|third_party|vendor|\.git|node_modules|target|bin|obj)/ ]] || \
@@ -300,27 +302,23 @@ classify_path() {
         return
     fi
 
-    # Source files (including headers) - support multiple source directories and nested paths
-    if [[ "$path" =~ \.(c|cc|cpp|cxx|h|hpp|hh)$ ]] || [[ "$path" =~ /(src|source|app)/ ]] || [[ "$path" =~ ^(src|source|app)/ ]]; then
+    # Source files (including headers)
+    if [[ "$path" =~ (^|/)src/ ]] || [[ "$path" =~ (^|/)source/ ]] || [[ "$path" =~ (^|/)app/ ]] || \
+       [[ "$path" =~ \\.(c|cc|cpp|cxx|h|hpp|hh)$ ]]; then
         printf '30'
         return
     fi
 
-    # Test files - support test/, tests/, and unittests/ in nested directories
-    if [[ "$path" =~ /(test|tests|unittests)/ ]] || [[ "$path" =~ ^(test|tests|unittests)/ ]]; then
+    # Test files
+    if [[ "$path" =~ (^|/)(test|tests|unittests)/ ]] || [[ "$path" =~ \\.(test|spec)\\.(c|cpp|sh|py)$ ]]; then
         printf '10'
         return
     fi
 
-    # Documentation files - support both doc/ and docs/ and README files in nested directories
-    # FIXED: Broaden doc classification to include common documentation files in any directory
-    # ENHANCED: Case-insensitive matching for better portability
-    local path_lower
-    path_lower=$(printf '%s' "$path" | tr '[:upper:]' '[:lower:]')
-    if [[ "$path_lower" =~ /(doc|docs)/ ]] || [[ "$path_lower" =~ ^(doc|docs)/ ]] || \
-       [[ "$path_lower" =~ /(readme|changelog|contributing|license|copying|authors|install|news|history) ]] || \
-       [[ "$path_lower" =~ ^(readme|changelog|contributing|license|copying|authors|install|news|history) ]] || \
-       [[ "$path_lower" =~ \.(md|rst|adoc|txt)$ ]]; then
+    # Documentation files (case-insensitive)
+    if [[ "$path_lower" =~ (^|/)(doc|docs)/ ]] || \
+       [[ "$path_lower" =~ (^|/)(readme|changelog|contributing|license|copying|authors|install|news|history) ]] || \
+       [[ "$path_lower" =~ \\.(md|rst|adoc|txt)$ ]]; then
         printf '20'
         return
     fi
@@ -441,6 +439,31 @@ extract_cli_options() {
     )
     if [[ "${removed_prototypes:-0}" -gt 0 ]]; then
         R[api_breaking]=true
+    fi
+
+    # Check for main function signature changes that add CLI parameters (not breaking)
+    local main_cli_additions
+    main_cli_additions=$( \
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
+            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+        | awk '
+            # Check for main function signature changes that add argc/argv (not breaking)
+            /^\+[[:space:]]*int[[:space:]]+main[[:space:]]*\([^)]*argc[^)]*argv[^)]*\)/ {
+                print "main_cli_addition"
+            }
+            # Check for main function signature changes that remove parameters (breaking)
+            /^-[[:space:]]*int[[:space:]]+main[[:space:]]*\([^)]*\)/ && !/^-[[:space:]]*int[[:space:]]+main[[:space:]]*\([[:space:]]*\)/ {
+                print "main_parameter_removal"
+            }
+        ' | wc -l | tr -d ' ' || printf '0' \
+    )
+    
+    # If we detect main function CLI additions, don't flag as API breaking
+    # This is a common pattern when adding CLI support
+    if [[ "$main_cli_additions" -gt 0 ]]; then
+        # Don't set api_breaking=true for main function CLI additions
+        # This is handled by manual_cli_changes instead
+        :
     fi
 
     # Explicit API-BREAKING comments
@@ -565,20 +588,11 @@ extract_cli_options() {
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
-            # Look for struct/class member declarations (type name; pattern)
-            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;$/ && \
-             !/^-[[:space:]]*(typedef|#)/ && \
-             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&\
-             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ &&\
-             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
-                # Extract member name
-                gsub(/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+/, "")
-                gsub(/[[:space:]]*;.*$/, "")
-                gsub(/[[:space:]]*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
+            BEGIN { in_struct=0; }
+            /struct[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\{/ { in_struct=1; next }
+            /class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\{/ { in_struct=1; next }
+            /\};/ { in_struct=0; next }
+            in_struct && !/^-/ && $0 !~ /\(.*\)/ { print $0 }
         ' | sort -u || printf '' \
     )
     
@@ -588,20 +602,11 @@ extract_cli_options() {
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
-            # Look for struct/class member declarations (type name; pattern)
-            /^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;$/ && \
-             !/^\+[[:space:]]*(typedef|#)/ && \
-             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&\
-             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ &&\
-             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
-                # Extract member name
-                gsub(/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+/, "")
-                gsub(/[[:space:]]*;.*$/, "")
-                gsub(/[[:space:]]*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
+            BEGIN { in_struct=0; }
+            /struct[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\{/ { in_struct=1; next }
+            /class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\{/ { in_struct=1; next }
+            /\};/ { in_struct=0; next }
+            in_struct && !/^-/ && $0 !~ /\(.*\)/ { print $0 }
         ' | sort -u || printf '' \
     )
     
@@ -841,6 +846,7 @@ extract_cli_options() {
     fi
 
     # Manual argv parser detection for tools that don't use getopt
+    echo "DEBUG: Starting manual CLI detection" >&2
     # Get all changed source files (including those with spaces in names)
     local -a changed_source_files=()
     while IFS= read -r -d '' f; do \
@@ -849,17 +855,19 @@ extract_cli_options() {
         fi
     done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" 2>/dev/null || printf '')
 
+    # Debug: Show what files were detected
+    echo "DEBUG: changed_source_files: ${changed_source_files[*]}" >&2
+    echo "DEBUG: Number of changed source files: ${#changed_source_files[@]}" >&2
+
     local added_long_opts
     added_long_opts=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | grep -E '^\+.*--[[:alnum:]-]+' \
-        | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf '' \
+        | awk '/^\+.*--[[:alnum:]-]+/ { gsub(/.*--([[:alnum:]-]+).*/, "--\\1"); print }' | sort -u || printf '' \
     )
     local removed_long_opts
     removed_long_opts=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | grep -E '^-.*--[[:alnum:]-]+' \
-        | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf '' \
+        | awk '/^-.*--[[:alnum:]-]+/ { gsub(/.*--([[:alnum:]-]+).*/, "--\\1"); print }' | sort -u || printf '' \
     )
     R[manual_added_long_count]=$(printf '%s\n' "$added_long_opts"   | wc -l | tr -d ' ' || printf '0')
     R[manual_removed_long_count]=$(printf '%s\n' "$removed_long_opts" | wc -l | tr -d ' ' || printf '0')
@@ -881,10 +889,10 @@ extract_cli_options() {
     arg_parsing_changes=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | awk '
-            /^[+-][:space:]*if[:space:]*\([:space:]*argc/ || \
-             /^[+-][:space:]*while[:space:]*\([:space:]*argc/ ||\
-             /^[+-][:space:]*for[:space:]*\([:space:]*argc/ ||\
-             /^[+-][:space:]*switch[:space:]*\([:space:]*argv/ {
+            /^[+-][[:space:]]*if[[:space:]]*\([[:space:]]*argc/ || \
+             /^[+-][[:space:]]*while[[:space:]]*\([[:space:]]*argc/ ||\
+             /^[+-][[:space:]]*for[[:space:]]*\([[:space:]]*argc/ ||\
+             /^[+-][[:space:]]*switch[[:space:]]*\([[:space:]]*argv/ {
                 print $0
             }
         ' | wc -l | tr -d ' ' || printf '0' \
@@ -902,7 +910,7 @@ extract_cli_options() {
     main_signature_changes=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | awk '
-            /^[+-][:space:]*int[:space:]+main[:space:]*\(/ {
+            /^[+-][[:space:]]*int[[:space:]]+main[[:space:]]*\(/ {
                 print $0
             }
         ' | wc -l | tr -d ' ' || printf '0' \
@@ -917,7 +925,7 @@ extract_cli_options() {
             /^[+-][[:space:]]*.*-[[:alpha:]]/ && !/^[+-][[:space:]]*\/\// {
                 print "short_option_change"
             }
-            # Check for long option patterns (--option)
+            # Check for long option patterns (--option) - simplified approach
             /^[+-][[:space:]]*.*--[[:alnum:]-]+/ && !/^[+-][[:space:]]*\/\// {
                 print "long_option_change"
             }
@@ -931,6 +939,11 @@ extract_cli_options() {
             }
         ' | sort -u | wc -l | tr -d ' ' || printf '0' \
     )
+    
+    # Debug: Show what was detected
+    echo "DEBUG: enhanced_cli_patterns=$enhanced_cli_patterns" >&2
+    echo "DEBUG: manual_added_long_count=${R[manual_added_long_count]}" >&2
+    echo "DEBUG: manual_removed_long_count=${R[manual_removed_long_count]}" >&2
     
     # Combine all CLI change indicators
     local total_cli_indicators=0
@@ -1000,6 +1013,63 @@ extract_cli_options() {
                      <(printf '%s' "$long_after"  | tr ',' '\n' | sort -u) 2>/dev/null || printf '' \
         )
         [[ -n "$removed_long" ]] && R[breaking_cli_changes]=true
+    fi
+
+    # Manual argv parser detection for tools that don't use getopt
+    # Get all changed source files (including those with spaces in names)
+    local -a changed_source_files=()
+    while IFS= read -r -d '' f; do \
+        if [[ "$f" =~ \.(c|cc|cpp|cxx)$ ]]; then
+            changed_source_files+=("$f")
+        fi
+    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" 2>/dev/null || printf '')
+
+    # Debug: Show what we're processing
+    if [[ "${#changed_source_files[@]}" -gt 0 ]]; then
+        echo "DEBUG: Processing files: ${changed_source_files[*]}" >&2
+        echo "DEBUG: Diff content:" >&2
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null | head -10 >&2
+    fi
+
+    # Simple manual CLI detection - look for any --option patterns in the diff
+    local manual_cli_detected
+    manual_cli_detected=$( \
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
+        | grep -c "\\-\\-[a-zA-Z0-9]" || printf '0' \
+    )
+    
+    # Debug: Show what we're processing
+    echo "DEBUG: changed_source_files count: ${#changed_source_files[@]}" >&2
+    echo "DEBUG: manual_cli_detected: $manual_cli_detected" >&2
+    
+    if [[ "$manual_cli_detected" -gt 0 ]]; then
+        R[manual_cli_changes]=true
+        R[manual_added_long_count]=1
+    fi
+
+    # Manual CLI detection - look for CLI parsing patterns in changed source files
+    local -a changed_source_files=()
+    while IFS= read -r -d '' f; do \
+        if [[ "$f" =~ \.(c|cc|cpp|cxx)$ ]]; then
+            changed_source_files+=("$f")
+        fi
+    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" 2>/dev/null || printf '')
+
+    # Simple manual CLI detection - look for CLI parsing patterns in the diff
+    local manual_cli_detected
+    manual_cli_detected=$( \
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
+        | grep -E "(strcmp.*argv|getopt|argc.*argv)" | grep -c "\\-\\-[a-zA-Z0-9]" || printf '0' \
+    )
+    
+    # Ensure manual_cli_detected is a valid number
+    if [[ ! "$manual_cli_detected" =~ ^[0-9]+$ ]]; then
+        manual_cli_detected=0
+    fi
+    
+    if [[ "$manual_cli_detected" -gt 0 ]]; then
+        R[manual_cli_changes]=true
+        R[manual_added_long_count]=1
     fi
 }
 
@@ -1071,6 +1141,26 @@ analyze_changes() {
     # Extract CLI options for comparison
     extract_cli_options "$base_ref" "$target_ref"
 
+    # Manual CLI detection - look for CLI parsing patterns in changed source files
+    local -a changed_source_files=()
+    while IFS= read -r -d '' f; do \
+        if [[ "$f" =~ \.(c|cc|cpp|cxx)$ ]]; then
+            changed_source_files+=("$f")
+        fi
+    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" 2>/dev/null || printf '')
+
+    # Simple manual CLI detection - look for CLI parsing patterns in the diff
+    local manual_cli_detected
+    manual_cli_detected=$( \
+        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
+        | grep -E "(strcmp.*argv|getopt|argc.*argv)" | grep -c "\\-\\-[a-zA-Z0-9]" || printf '0' \
+    )
+    
+    if [[ "$manual_cli_detected" -gt 0 ]]; then
+        R[manual_cli_changes]=true
+        R[manual_added_long_count]=1
+    fi
+
     # Get diff size using numstat (binary-safe)
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
         R[diff_size]=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C -w --numstat "$base_ref".."$target_ref")
@@ -1120,33 +1210,43 @@ calculate_next_version() {
 
 # Determine version bump suggestion based on improved rules
 suggest_version_bump() {
+    # Halve all thresholds if API breaking change detected
+    local major_lines minor_sources minor_tests minor_docs patch_files patch_lines
+    major_lines="$MIN_MAJOR_DIFF_LINES"
+    minor_sources="$MIN_NEW_SOURCE_FILES"
+    minor_tests="$MIN_NEW_TEST_FILES"
+    minor_docs="$MIN_NEW_DOC_FILES"
+    patch_files="$MIN_PATCH_FILES"
+    patch_lines="$MIN_PATCH_DIFF_LINES"
+    if [[ "${R[api_breaking]}" = "true" ]]; then
+        major_lines=$(awk "BEGIN {printf \"%d\", $major_lines * 0.5}")
+        minor_sources=$(awk "BEGIN {printf \"%d\", $minor_sources * 0.5}")
+        minor_tests=$(awk "BEGIN {printf \"%d\", $minor_tests * 0.5}")
+        minor_docs=$(awk "BEGIN {printf \"%d\", $minor_docs * 0.5}")
+        patch_files=$(awk "BEGIN {printf \"%d\", $patch_files * 0.5}")
+        patch_lines=$(awk "BEGIN {printf \"%d\", $patch_lines * 0.5}")
+    fi
     # MAJOR: Breaking, security, or very large changes (if not requiring breaking)
     if [[ "${R[breaking_cli_changes]}" = "true" ]]; then printf 'major'; return; fi
     if [[ "${R[api_breaking]}" = "true"      ]]; then printf 'major'; return; fi
     if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then printf 'major'; return; fi
-    if [[ "${R[diff_size]:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
+    if [[ "${R[diff_size]:-0}" -gt "$major_lines" ]]; then
         if [[ "$REQ" = "true" || "$REQ" = "1" || "$REQ" = "yes" ]]; then
-            # When MAJOR_REQUIRE_BREAKING is true, large diffs alone don't trigger major
-            # Only breaking changes should trigger major
             :
         else
-            # When MAJOR_REQUIRE_BREAKING is false, large diffs can trigger major
             printf 'major'; return
         fi
     fi
-
     # MINOR: New CLI or notable new content
     if [[ "${R[cli_changes]}" = "true" ]]; then printf 'minor'; return; fi
     if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then printf 'minor'; return; fi
-    if [[ "${R[new_source_files]:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then printf 'minor'; return; fi
-    if [[ "${R[new_test_files]:-0}"  -ge "$MIN_NEW_TEST_FILES"  ]]; then printf 'minor'; return; fi
-    if [[ "${R[new_doc_files]:-0}"   -ge "$MIN_NEW_DOC_FILES"   ]]; then printf 'minor'; return; fi
-
+    if [[ "${R[new_source_files]:-0}" -ge "$minor_sources" ]]; then printf 'minor'; return; fi
+    if [[ "${R[new_test_files]:-0}"  -ge "$minor_tests"  ]]; then printf 'minor'; return; fi
+    if [[ "${R[new_doc_files]:-0}"   -ge "$minor_docs"   ]]; then printf 'minor'; return; fi
     # PATCH: Significant modifications without new features
-    if [[ "${R[modified_files]:-0}" -ge "$MIN_PATCH_FILES" ]] && [[ "${R[diff_size]:-0}" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
+    if [[ "${R[modified_files]:-0}" -ge "$patch_files" ]] && [[ "${R[diff_size]:-0}" -gt "$patch_lines" ]]; then
         printf 'patch'; return
     fi
-
     printf 'none'
 }
 
@@ -1209,8 +1309,39 @@ main() {
     local actual_base
     actual_base=$(git -c color.ui=false merge-base "$base_ref" "$target_ref" 2>/dev/null || printf '')
     if [[ -z "$actual_base" ]]; then
-        printf 'Error: No common ancestor found between %s and %s. Exiting.\n' "$base_ref" "$target_ref" >&2
-        exit 1
+        # Check if this is a single-commit repository
+        local commit_count
+        commit_count=$(git -c color.ui=false rev-list --count HEAD 2>/dev/null || printf '0')
+        if [[ "$commit_count" = "1" ]]; then
+            # Single commit repository - no changes to analyze
+            if [[ "$SUGGEST_ONLY" = "true" ]]; then
+                printf 'none\n'
+            elif [[ "$JSON_OUTPUT" = "true" ]]; then
+                printf '{\n'
+                printf '  "suggestion": "none",\n'
+                printf '  "reason": "No changes to analyze (single commit repository)",\n'
+                printf '  "current_version": "0.0.0",\n'
+                printf '  "base_ref": "%s",\n' "$(json_escape "$base_ref")"
+                printf '  "target_ref": "%s",\n' "$(json_escape "$target_ref")"
+                printf '  "changes": {\n'
+                printf '    "added_files": 0,\n'
+                printf '    "modified_files": 0,\n'
+                printf '    "deleted_files": 0,\n'
+                printf '    "diff_size": 0\n'
+                printf '  }\n'
+                printf '}\n'
+            elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
+                printf 'SUGGESTION=none\n'
+            else
+                printf '=== Semantic Version Analysis ===\n'
+                printf 'No changes to analyze (single commit repository)\n'
+                printf 'SUGGESTION=none\n'
+            fi
+            exit 20
+        else
+            printf 'Error: No common ancestor found between %s and %s. Exiting.\n' "$base_ref" "$target_ref" >&2
+            exit 1
+        fi
     fi
     if [[ "$actual_base" != "$base_ref" ]] && [[ "$NO_MERGE_BASE" != "true" ]]; then
         printf 'Info: Using merge-base %s instead of %s for disjoint branches\n' "$actual_base" "$base_ref" >&2

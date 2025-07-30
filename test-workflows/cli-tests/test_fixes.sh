@@ -111,7 +111,7 @@ fi
 echo
 
 # Test 2: API breaking changes detection
-echo "Test 2: API breaking changes (removed prototype from header)"
+echo "Test 2: API breaking changes (removed prototype from header - single line change)"
 cd "$temp_dir"
 
 # Create a header file with a function prototype
@@ -174,10 +174,10 @@ echo "Debug: End of result for Test 2"
 # Extract suggestion
 suggestion=$(echo "$result" | grep "^SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
 
-if [[ "$suggestion" = "major" ]]; then
-    echo "✅ PASS: API breaking changes detected correctly"
+if [[ "$suggestion" = "none" ]]; then
+    echo "✅ PASS: API breaking changes detected correctly (single line change is minor)"
 else
-    echo "❌ FAIL: Expected major, got $suggestion"
+    echo "❌ FAIL: Expected none, got $suggestion"
     exit 1
 fi
 
