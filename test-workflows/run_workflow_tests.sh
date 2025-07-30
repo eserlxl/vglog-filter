@@ -9,6 +9,8 @@
 # Test runner for all tests in test-workflows directory
 # This script executes all test files and provides a summary of results
 
+set -Euo pipefail
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -22,21 +24,23 @@ PASSED_TESTS=0
 FAILED_TESTS=0
 SKIPPED_TESTS=0
 
-# Fixed output directory
-TEST_OUTPUT_DIR="test_results"
-SUMMARY_FILE="$TEST_OUTPUT_DIR/summary.txt"
-DETAILED_LOG="$TEST_OUTPUT_DIR/detailed.log"
+# Configuration
+TEST_TIMEOUT=${TEST_TIMEOUT:-30}  # Default 30 seconds timeout
+FIXED_OUTPUT_DIR="test_results"
+SUMMARY_FILE="$FIXED_OUTPUT_DIR/summary.txt"
+DETAILED_LOG="$FIXED_OUTPUT_DIR/detailed.log"
 
 # Clean and recreate output directory
-rm -rf "$TEST_OUTPUT_DIR"
-mkdir -p "$TEST_OUTPUT_DIR"
+rm -rf "$FIXED_OUTPUT_DIR"
+mkdir -p "$FIXED_OUTPUT_DIR"
 
 echo "=========================================="
 echo "    VGLOG-FILTER WORKFLOW TEST SUITE"
 echo "=========================================="
-echo "Output directory: $TEST_OUTPUT_DIR"
+echo "Output directory: $FIXED_OUTPUT_DIR"
 echo "Summary file: $SUMMARY_FILE"
 echo "Detailed log: $DETAILED_LOG"
+echo "Test timeout: ${TEST_TIMEOUT}s"
 echo ""
 
 # Function to log test results
@@ -44,9 +48,10 @@ log_test() {
     local test_name="$1"
     local status="$2"
     local output="$3"
+    local duration="$4"
     
     {
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $test_name: $status"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $test_name: $status (${duration}s)"
         if [[ -n "$output" ]]; then
             echo "Output:"
             echo "$output"
@@ -71,11 +76,15 @@ run_test() {
     # Check if file exists
     if [[ ! -f "$test_file" ]]; then
         echo -e "${YELLOW}SKIPPED (file not found)${NC}"
-        log_test "$test_name" "SKIPPED" "File not found"
+        log_test "$test_name" "SKIPPED" "File not found" "0"
         ((SKIPPED_TESTS++))
         ((TOTAL_TESTS++))
         return
     fi
+    
+    # Record start time
+    local start_time
+    start_time=$(date +%s)
     
     # Run the test based on file type
     if [[ "$test_file" == *.sh ]]; then
@@ -85,51 +94,72 @@ run_test() {
         fi
         
         # Run with timeout and capture output
-        local output_file="$TEST_OUTPUT_DIR/${test_name}.out"
-        timeout 30s bash "$test_file" > "$output_file" 2>&1
+        local output_file="$FIXED_OUTPUT_DIR/${test_name}.out"
+        timeout "${TEST_TIMEOUT}s" bash "$test_file" > "$output_file" 2>&1
         local exit_code=$?
+        
+        # Calculate duration
+        local end_time
+        end_time=$(date +%s)
+        local duration=$((end_time - start_time))
         
         # Check if this is a test that returns a specific exit code (like test_func.sh)
         if [[ "$test_name" == "test_func.sh" ]] && [[ $exit_code -eq 20 ]]; then
             echo -e "${GREEN}PASSED${NC}"
-            log_test "$test_name" "PASSED" "$(cat "$output_file")"
+            log_test "$test_name" "PASSED" "$(cat "$output_file")" "$duration"
             ((PASSED_TESTS++))
         elif [[ "$test_name" == "test_ere_fix.sh" ]] && [[ $exit_code -eq 11 ]]; then
             echo -e "${GREEN}PASSED${NC}"
-            log_test "$test_name" "PASSED" "$(cat "$output_file")"
+            log_test "$test_name" "PASSED" "$(cat "$output_file")" "$duration"
             ((PASSED_TESTS++))
         elif [[ $exit_code -eq 0 ]]; then
             echo -e "${GREEN}PASSED${NC}"
-            log_test "$test_name" "PASSED" "$(cat "$output_file")"
+            log_test "$test_name" "PASSED" "$(cat "$output_file")" "$duration"
             ((PASSED_TESTS++))
+        elif [[ $exit_code -eq 124 ]]; then
+            echo -e "${RED}TIMEOUT${NC}"
+            log_test "$test_name" "TIMEOUT" "$(cat "$output_file")" "$duration"
+            ((FAILED_TESTS++))
         else
             echo -e "${RED}FAILED${NC}"
-            log_test "$test_name" "FAILED" "$(cat "$output_file")"
+            log_test "$test_name" "FAILED" "$(cat "$output_file")" "$duration"
             ((FAILED_TESTS++))
         fi
     elif [[ "$test_file" == *.c ]]; then
         # C file test - compile and run if possible
-        local test_bin="$TEST_OUTPUT_DIR/${test_name%.c}"
-        local output_file="$TEST_OUTPUT_DIR/${test_name}.out"
+        local test_bin="$FIXED_OUTPUT_DIR/${test_name%.c}"
+        local output_file="$FIXED_OUTPUT_DIR/${test_name}.out"
         
         if gcc -o "$test_bin" "$test_file" > "$output_file" 2>&1; then
-            if timeout 30s "$test_bin" > "$output_file" 2>&1; then
+            if timeout "${TEST_TIMEOUT}s" "$test_bin" > "$output_file" 2>&1; then
+                local end_time
+                end_time=$(date +%s)
+                local duration=$((end_time - start_time))
                 echo -e "${GREEN}PASSED${NC}"
-                log_test "$test_name" "PASSED" "$(cat "$output_file")"
+                log_test "$test_name" "PASSED" "$(cat "$output_file")" "$duration"
                 ((PASSED_TESTS++))
             else
+                local end_time
+                end_time=$(date +%s)
+                local duration=$((end_time - start_time))
                 echo -e "${RED}FAILED${NC}"
-                log_test "$test_name" "FAILED" "$(cat "$output_file")"
+                log_test "$test_name" "FAILED" "$(cat "$output_file")" "$duration"
                 ((FAILED_TESTS++))
             fi
         else
+            local end_time
+            end_time=$(date +%s)
+            local duration=$((end_time - start_time))
             echo -e "${YELLOW}SKIPPED (compilation failed)${NC}"
-            log_test "$test_name" "SKIPPED" "Compilation failed: $(cat "$output_file")"
+            log_test "$test_name" "SKIPPED" "Compilation failed: $(cat "$output_file")" "$duration"
             ((SKIPPED_TESTS++))
         fi
     else
+        local end_time
+        end_time=$(date +%s)
+        local duration=$((end_time - start_time))
         echo -e "${YELLOW}SKIPPED (unknown file type)${NC}"
-        log_test "$test_name" "SKIPPED" "Unknown file type"
+        log_test "$test_name" "SKIPPED" "Unknown file type" "$duration"
         ((SKIPPED_TESTS++))
     fi
     
@@ -207,13 +237,13 @@ fi
     fi
     echo ""
     echo "Detailed results available in: $DETAILED_LOG"
-    echo "Test outputs available in: $TEST_OUTPUT_DIR/"
+    echo "Test outputs available in: $FIXED_OUTPUT_DIR/"
 } > "$SUMMARY_FILE"
 
 echo ""
 echo "Summary saved to: $SUMMARY_FILE"
 echo "Detailed log: $DETAILED_LOG"
-echo "Test outputs: $TEST_OUTPUT_DIR/"
+echo "Test outputs: $FIXED_OUTPUT_DIR/"
 
 # Exit with appropriate code
 if [[ $FAILED_TESTS -gt 0 ]]; then

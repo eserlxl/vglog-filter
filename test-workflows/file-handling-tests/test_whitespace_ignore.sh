@@ -20,70 +20,205 @@ source "$SCRIPT_DIR/../test_helper.sh"
 
 echo "=== Testing Whitespace Ignore ==="
 
-# Create temporary test environment
-temp_dir=$(create_temp_test_env "whitespace-ignore")
-cd "$temp_dir"
+# Test counter
+TESTS_PASSED=0
+TESTS_FAILED=0
 
-# Create a test source file
-mkdir -p src
-{
-    generate_license_header "cpp" "Test fixture for whitespace change detection"
-    cat << 'EOF'
-#include <iostream>
-
-int main() {
-    std::cout << "Hello, World!" << std::endl;
-    return 0;
+# Function to run a whitespace test
+run_whitespace_test() {
+    local test_name="$1"
+    local test_description="$2"
+    local original_content="$3"
+    local modified_content="$4"
+    local expected_behavior="$5"
+    
+    echo "Running test: $test_name"
+    echo "Description: $test_description"
+    
+    # Create temporary test environment
+    local temp_dir
+    temp_dir=$(create_temp_test_env "whitespace-${test_name}")
+    
+    if [[ $? -ne 0 ]]; then
+        echo -e "\033[0;31m✗ Failed to create test environment\033[0m"
+        ((TESTS_FAILED++))
+        return 1
+    fi
+    
+    # Change to temporary directory
+    if ! cd "$temp_dir"; then
+        echo -e "\033[0;31m✗ Failed to change to test directory\033[0m"
+        cleanup_temp_test_env "$temp_dir"
+        ((TESTS_FAILED++))
+        return 1
+    fi
+    
+    # Create test source file
+    mkdir -p src
+    echo "$original_content" > src/test_file.cpp
+    
+    # Add and commit the original file
+    git add src/test_file.cpp
+    if ! git commit -m "Add original test file" >/dev/null 2>&1; then
+        echo -e "\033[0;31m✗ Failed to commit original file\033[0m"
+        cleanup_temp_test_env "$temp_dir"
+        ((TESTS_FAILED++))
+        return 1
+    fi
+    
+    # Store the original commit hash
+    local base_ref
+    base_ref=$(git rev-parse HEAD)
+    
+    # Make the modification
+    echo "$modified_content" > src/test_file.cpp
+    git add src/test_file.cpp
+    if ! git commit -m "Apply modification" >/dev/null 2>&1; then
+        echo -e "\033[0;31m✗ Failed to commit modified file\033[0m"
+        cleanup_temp_test_env "$temp_dir"
+        ((TESTS_FAILED++))
+        return 1
+    fi
+    
+    # Store the modified commit hash
+    local target_ref
+    target_ref=$(git rev-parse HEAD)
+    
+    # Run semantic version analyzer without --ignore-whitespace
+    local result1
+    if cd "$PROJECT_ROOT"; then
+        result1=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" --base "$base_ref" --target "$target_ref" 2>/dev/null || true)
+    else
+        result1=""
+    fi
+    
+    # Run semantic version analyzer with --ignore-whitespace
+    local result2
+    if cd "$PROJECT_ROOT"; then
+        result2=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --ignore-whitespace --machine --repo-root "$temp_dir" --base "$base_ref" --target "$target_ref" 2>/dev/null || true)
+    else
+        result2=""
+    fi
+    
+    # Extract suggestions
+    local suggestion1 suggestion2
+    suggestion1=$(echo "$result1" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
+    suggestion2=$(echo "$result2" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
+    
+    echo "Without --ignore-whitespace: $suggestion1"
+    echo "With --ignore-whitespace: $suggestion2"
+    
+    # Verify the expected behavior
+    local test_passed=false
+    case "$expected_behavior" in
+        "same")
+            if [[ "$suggestion1" = "$suggestion2" ]]; then
+                test_passed=true
+            fi
+            ;;
+        "different")
+            if [[ "$suggestion1" != "$suggestion2" ]]; then
+                test_passed=true
+            fi
+            ;;
+        "whitespace_ignored")
+            if [[ "$suggestion2" = "none" || "$suggestion2" = "patch" ]]; then
+                test_passed=true
+            fi
+            ;;
+    esac
+    
+    if [[ "$test_passed" = true ]]; then
+        echo -e "\033[0;32m✓ Test passed: $test_name\033[0m"
+        ((TESTS_PASSED++))
+    else
+        echo -e "\033[0;31m✗ Test failed: $test_name\033[0m"
+        echo "Expected behavior: $expected_behavior"
+        ((TESTS_FAILED++))
+    fi
+    
+    # Clean up
+    cleanup_temp_test_env "$temp_dir"
+    echo ""
 }
-EOF
-} > src/test_whitespace.cpp
 
-# Add and commit the file
-git add src/test_whitespace.cpp
-git commit -m "Add test file for whitespace test"
+# Test 1: Simple indentation change
+run_whitespace_test \
+    "simple_indent" \
+    "Simple indentation change should be ignored" \
+    "int main() {
+    std::cout << \"Hello, World!\" << std::endl;
+    return 0;
+}" \
+    "int main() {
+        std::cout << \"Hello, World!\" << std::endl;
+        return 0;
+}" \
+    "same"
 
-# Make whitespace-only changes
-sed -i 's/    std::cout/        std::cout/' src/test_whitespace.cpp
+# Test 2: Mixed whitespace and content changes
+run_whitespace_test \
+    "mixed_changes" \
+    "Mixed whitespace and content changes should not be ignored" \
+    "int main() {
+    std::cout << \"Hello, World!\" << std::endl;
+    return 0;
+}" \
+    "int main() {
+        std::cout << \"Hello, Updated World!\" << std::endl;
+        return 0;
+}" \
+    "different"
 
-# Commit the whitespace changes
-git add src/test_whitespace.cpp
-git commit -m "Whitespace-only changes"
+# Test 3: Only trailing whitespace
+run_whitespace_test \
+    "trailing_whitespace" \
+    "Trailing whitespace changes should be ignored" \
+    "int main() {
+    return 0;
+}" \
+    "int main() {
+    return 0;  
+}" \
+    "same"
 
-# Run semantic version analyzer without --ignore-whitespace
-echo "Running semantic version analyzer (without --ignore-whitespace)..."
-# Note: Using '|| true' to capture output even if command fails (intentional)
-if cd "$PROJECT_ROOT"; then
-    result1=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+# Test 4: No whitespace changes
+run_whitespace_test \
+    "no_whitespace_changes" \
+    "No whitespace changes should produce same result" \
+    "int main() {
+    return 0;
+}" \
+    "int main() {
+    return 0;
+}" \
+    "same"
+
+# Test 5: Complex whitespace changes
+run_whitespace_test \
+    "complex_whitespace" \
+    "Complex whitespace changes should be ignored" \
+    "int main() {
+    std::cout << \"Hello\" << std::endl;
+    std::cout << \"World\" << std::endl;
+    return 0;
+}" \
+    "int main() {
+        std::cout << \"Hello\" << std::endl;
+        std::cout << \"World\" << std::endl;
+        return 0;
+}" \
+    "same"
+
+# Print summary
+echo "=== Whitespace Ignore Test Summary ==="
+echo -e "\033[0;32mTests passed: $TESTS_PASSED\033[0m"
+echo -e "\033[0;31mTests failed: $TESTS_FAILED\033[0m"
+
+if [[ $TESTS_FAILED -eq 0 ]]; then
+    echo -e "\033[0;32mAll whitespace ignore tests passed!\033[0m"
+    exit 0
 else
-    result1=""
-fi
-
-echo ""
-echo "Running semantic version analyzer (with --ignore-whitespace)..."
-# Note: Using '|| true' to capture output even if command fails (intentional)
-if cd "$PROJECT_ROOT"; then
-    result2=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --ignore-whitespace --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
-else
-    result2=""
-fi
-
-# Extract suggestions
-suggestion1=$(echo "$result1" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
-suggestion2=$(echo "$result2" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
-
-echo "Without --ignore-whitespace: $suggestion1"
-echo "With --ignore-whitespace: $suggestion2"
-
-# Verify that whitespace ignore works correctly
-if [[ "$suggestion1" = "$suggestion2" ]]; then
-    echo "✅ PASS: Whitespace ignore works correctly"
-    exit_code=0
-else
-    echo "❌ FAIL: Whitespace ignore should not change suggestion, got: $suggestion1 vs $suggestion2"
-    exit_code=1
-fi
-
-# Clean up
-cleanup_temp_test_env "$temp_dir"
-
-exit $exit_code 
+    echo -e "\033[0;31mSome whitespace ignore tests failed!\033[0m"
+    exit 1
+fi 
