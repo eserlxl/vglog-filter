@@ -74,6 +74,15 @@ printf '%s=== Test 1: ERE Fix for Manual CLI Detection ===%s\n' "${YELLOW}" "${N
 # Create a test file with manual CLI parsing
 mkdir -p test-workflows/source-fixtures/cli
 cat > test-workflows/source-fixtures/cli/simple_cli_test.c << 'EOF'
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+//
+// Test fixture for CLI detection testing
+
 #include <stdio.h>
 #include <string.h>
 
@@ -115,6 +124,15 @@ printf '%s=== Test 2: Manual Counts Separation ===%s\n' "${YELLOW}" "${NC}"
 
 # Create a file with getopt
 cat > test_getopt.c << 'EOF'
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+//
+// Test fixture for getopt CLI detection
+
 #include <stdio.h>
 #include <getopt.h>
 
@@ -176,6 +194,15 @@ printf '%s=== Test 4: API Breaking Changes ===%s\n' "${YELLOW}" "${NC}"
 # Create header with prototype
 mkdir -p include
 cat > include/test.h << 'EOF'
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+//
+// Test fixture for API breaking change detection
+
 #ifndef TEST_H
 #define TEST_H
 

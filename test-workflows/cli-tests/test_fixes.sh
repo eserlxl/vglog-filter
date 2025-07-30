@@ -28,6 +28,15 @@ cd "$temp_dir"
 
 # Create a basic main function first
 cat > main.c << 'EOF'
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+//
+// Test fixture for CLI detection
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -42,6 +51,15 @@ git commit -m "Add basic main function"
 
 # Now add CLI options
 cat > main.c << 'EOF'
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+//
+// Test fixture for CLI detection
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,6 +116,15 @@ cd "$temp_dir"
 
 # Create a header file with a function prototype
 cat > header.h << 'EOF'
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+//
+// Test fixture for API breaking change detection
+
 #ifndef HEADER_H
 #define HEADER_H
 
@@ -112,6 +139,15 @@ git commit -m "Add header with function prototypes"
 
 # Remove a function prototype
 cat > header.h << 'EOF'
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+//
+// Test fixture for API breaking change detection
+
 #ifndef HEADER_H
 #define HEADER_H
 

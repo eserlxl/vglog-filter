@@ -27,6 +27,15 @@ cd "$temp_dir"
 # Create a test source file with space in name
 mkdir -p src
 cat > "src/file with space.cpp" << 'EOF'
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+//
+// Test fixture for filename with space handling
+
 #include <iostream>
 
 int main() {
@@ -41,6 +50,15 @@ git commit -m "Add source file with space in name"
 
 # Modify the file to add CLI options
 cat > "src/file with space.cpp" << 'EOF'
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+//
+// Test fixture for filename with space handling
+
 #include <iostream>
 #include <getopt.h>
 

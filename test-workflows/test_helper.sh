@@ -124,6 +124,27 @@ commit_test_files() {
     git commit -m "$message" >/dev/null 2>&1 || true
 }
 
+# Function to generate license header for test source files
+generate_license_header() {
+    local file_type="$1"  # "c", "cpp", "h", "hh", etc.
+    local description="$2"  # Optional description of the file's purpose
+    
+    cat << EOF
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+EOF
+    
+    if [[ -n "$description" ]]; then
+        echo "//"
+        echo "// $description"
+    fi
+    echo ""
+}
+
 # Export functions for use in test scripts
 export -f create_temp_test_env
 export -f cleanup_temp_test_env

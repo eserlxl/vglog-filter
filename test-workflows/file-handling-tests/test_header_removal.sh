@@ -27,6 +27,15 @@ cd "$temp_dir"
 # Create a test header file with a prototype
 mkdir -p include
 cat > include/test_header.h << 'EOF'
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+//
+// Test fixture for API breaking change detection
+
 #ifndef TEST_HEADER_H
 #define TEST_HEADER_H
 
@@ -42,6 +51,15 @@ git commit -m "Add test header with prototype"
 
 # Remove the prototype
 cat > include/test_header.h << 'EOF'
+// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+//
+// Test fixture for API breaking change detection
+
 #ifndef TEST_HEADER_H
 #define TEST_HEADER_H
 
