@@ -279,11 +279,16 @@ public:
 
         if (opt.show_progress && !opt.use_stdin) {
             // This is inefficient for large files, but it's for progress reporting only
-            std::ifstream count_file(opt.filename);
-            if (count_file) {
-                total_lines = static_cast<size_t>(
-                    std::count(std::istreambuf_iterator<char>(count_file),
-                               std::istreambuf_iterator<char>(), '\n'));
+            try {
+                std::ifstream count_file = safe_ifstream(opt.filename);
+                if (count_file) {
+                    total_lines = static_cast<size_t>(
+                        std::count(std::istreambuf_iterator<char>(count_file),
+                                   std::istreambuf_iterator<char>(), '\n'));
+                }
+            } catch (const std::exception& e) {
+                // If path validation fails, skip progress reporting but continue processing
+                std::cerr << "Warning: Could not count lines for progress reporting: " << e.what() << "\n";
             }
         }
 
@@ -448,25 +453,30 @@ Str get_version()
     };
     
     for (const auto& path : paths) {
-        std::ifstream version_file(path);
-        if (version_file.is_open()) {
-            Str version;
-            if (std::getline(version_file, version)) {
-                // Remove any whitespace safely
-                if (!version.empty()) {
-                    size_t start = version.find_first_not_of(" \t\r\n");
-                    if (start != Str::npos) {
-                        version.erase(0, start);
+        try {
+            std::ifstream version_file = safe_ifstream(path);
+            if (version_file.is_open()) {
+                Str version;
+                if (std::getline(version_file, version)) {
+                    // Remove any whitespace safely
+                    if (!version.empty()) {
+                        size_t start = version.find_first_not_of(" \t\r\n");
+                        if (start != Str::npos) {
+                            version.erase(0, start);
+                        }
+                        size_t end = version.find_last_not_of(" \t\r\n");
+                        if (end != Str::npos) {
+                            version.erase(end + 1);
+                        }
                     }
-                    size_t end = version.find_last_not_of(" \t\r\n");
-                    if (end != Str::npos) {
-                        version.erase(end + 1);
+                    if (!version.empty()) {
+                        return version;
                     }
-                }
-                if (!version.empty()) {
-                    return version;
                 }
             }
+        } catch (const std::exception&) {
+            // Continue to next path if this one fails validation
+            continue;
         }
     }
     return "unknown";
@@ -543,10 +553,16 @@ int main(int argc, char* argv[])
             opt.use_stdin = true;
         }
         else {
-            std::ifstream test_file(opt.filename);
-            if (!test_file) {
-                std::cerr << create_error_message("opening file", opt.filename) << "\n";
-                std::cerr << "Please check that the file exists and is readable\n";
+            try {
+                std::ifstream test_file = safe_ifstream(opt.filename);
+                if (!test_file) {
+                    std::cerr << create_error_message("opening file", opt.filename) << "\n";
+                    std::cerr << "Please check that the file exists and is readable\n";
+                    return 1;
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "Error: " << e.what() << "\n";
+                std::cerr << "Please check that the file path is valid and accessible\n";
                 return 1;
             }
         }
