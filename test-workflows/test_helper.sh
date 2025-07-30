@@ -152,4 +152,5 @@ export -f run_test_in_temp_env
 export -f is_git_repo
 export -f safe_git
 export -f create_test_file
-export -f commit_test_files 
+export -f commit_test_files
+export -f generate_license_header 

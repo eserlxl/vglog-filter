@@ -26,16 +26,9 @@ cd "$temp_dir"
 
 # Create a test source file
 mkdir -p src
-cat > src/test_whitespace.cpp << 'EOF'
-// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
-// SPDX-License-Identifier: GPL-3.0-or-later
-//
-// This file is part of vglog-filter test suite and is licensed under
-// the GNU General Public License v3.0 or later.
-// See the LICENSE file in the project root for details.
-//
-// Test fixture for whitespace change detection
-
+{
+    generate_license_header "cpp" "Test fixture for whitespace change detection"
+    cat << 'EOF'
 #include <iostream>
 
 int main() {
@@ -43,6 +36,7 @@ int main() {
     return 0;
 }
 EOF
+} > src/test_whitespace.cpp
 
 # Add and commit the file
 git add src/test_whitespace.cpp
