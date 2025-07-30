@@ -2,10 +2,11 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
+# This file is part of vglog-filter test suite and is licensed under
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
 #
+# Test fixture for CLI detection
 set -euo pipefail
 
 # Get the script directory and project root
@@ -27,16 +28,8 @@ echo "Test 1: Manual CLI detection (nested test-workflows/source-fixtures/cli/ma
 cd "$temp_dir"
 
 # Create a basic main function first
-cat > main.c << 'EOF'
-// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
-// SPDX-License-Identifier: GPL-3.0-or-later
-//
-// This file is part of vglog-filter test suite and is licensed under
-// the GNU General Public License v3.0 or later.
-// See the LICENSE file in the project root for details.
-//
-// Test fixture for CLI detection
-
+cat > main.c << EOF
+$(generate_license_header "c" "Test fixture for CLI detection")
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -50,16 +43,8 @@ git add main.c
 git commit -m "Add basic main function"
 
 # Now add CLI options
-cat > main.c << 'EOF'
-// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
-// SPDX-License-Identifier: GPL-3.0-or-later
-//
-// This file is part of vglog-filter test suite and is licensed under
-// the GNU General Public License v3.0 or later.
-// See the LICENSE file in the project root for details.
-//
-// Test fixture for CLI detection
-
+cat > main.c << EOF
+$(generate_license_header "c" "Test fixture for CLI detection")
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -115,16 +100,8 @@ echo "Test 2: API breaking changes (removed prototype from header - single line 
 cd "$temp_dir"
 
 # Create a header file with a function prototype
-cat > header.h << 'EOF'
-// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
-// SPDX-License-Identifier: GPL-3.0-or-later
-//
-// This file is part of vglog-filter test suite and is licensed under
-// the GNU General Public License v3.0 or later.
-// See the LICENSE file in the project root for details.
-//
-// Test fixture for API breaking change detection
-
+cat > header.h << EOF
+$(generate_license_header "h" "Test fixture for API breaking change detection")
 #ifndef HEADER_H
 #define HEADER_H
 
@@ -138,16 +115,8 @@ git add header.h
 git commit -m "Add header with function prototypes"
 
 # Remove a function prototype
-cat > header.h << 'EOF'
-// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
-// SPDX-License-Identifier: GPL-3.0-or-later
-//
-// This file is part of vglog-filter test suite and is licensed under
-// the GNU General Public License v3.0 or later.
-// See the LICENSE file in the project root for details.
-//
-// Test fixture for API breaking change detection
-
+cat > header.h << EOF
+$(generate_license_header "h" "Test fixture for API breaking change detection")
 #ifndef HEADER_H
 #define HEADER_H
 
@@ -188,7 +157,8 @@ echo "Test 3: CLI breaking changes (removed --bar option)"
 cd "$temp_dir"
 
 # Create a CLI file with an option
-cat > cli.c << 'EOF'
+cat > cli.c << EOF
+$(generate_license_header "c" "Test fixture for CLI breaking change detection")
 #include <stdio.h>
 
 int main(int argc, char *argv[]) {
@@ -207,7 +177,8 @@ git add cli.c
 git commit -m "Add CLI with --bar option"
 
 # Remove the --bar option
-cat > cli.c << 'EOF'
+cat > cli.c << EOF
+$(generate_license_header "c" "Test fixture for CLI breaking change detection")
 #include <stdio.h>
 
 int main(int argc, char *argv[]) {
@@ -248,7 +219,8 @@ echo "Test 4: Whitespace-only changes with --ignore-whitespace"
 cd "$temp_dir"
 
 # Create a file with some content
-cat > test.c << 'EOF'
+cat > test.c << EOF
+$(generate_license_header "c" "Test fixture for whitespace handling")
 int main() {
     return 0;
 }
@@ -258,7 +230,8 @@ git add test.c
 git commit -m "Add test file"
 
 # Change only whitespace
-cat > test.c << 'EOF'
+cat > test.c << EOF
+$(generate_license_header "c" "Test fixture for whitespace handling")
 int main() {
     return 0;
 }
