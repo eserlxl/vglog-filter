@@ -133,9 +133,7 @@ run_test_in_temp_env() {
     
     echo "Setting up temporary environment for $test_name..."
     local temp_dir
-    temp_dir=$(create_temp_test_env "$test_name")
-    
-    if [[ $? -ne 0 ]]; then
+    if ! temp_dir=$(create_temp_test_env "$test_name"); then
         echo "Error: Failed to create temporary environment" >&2
         return 1
     fi

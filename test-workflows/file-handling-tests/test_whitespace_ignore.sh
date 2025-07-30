@@ -35,9 +35,7 @@ run_whitespace_test() {
     
     # Create temporary test environment
     local temp_dir
-    temp_dir=$(create_temp_test_env "whitespace-${test_name}")
-    
-    if [[ $? -ne 0 ]]; then
+    if ! temp_dir=$(create_temp_test_env "whitespace-${test_name}"); then
         echo -e "\033[0;31m✗ Failed to create test environment\033[0m"
         ((TESTS_FAILED++))
         return 0  # Don't exit, just return
