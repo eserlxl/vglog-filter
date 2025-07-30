@@ -129,8 +129,15 @@ generate_license_header() {
     local file_type="$1"  # "c", "cpp", "h", "hh", etc.
     local description="$2"  # Optional description of the file's purpose
     
+    # Get current year, with minimum of 2025
+    local current_year
+    current_year=$(date +%Y)
+    if [[ "$current_year" -lt 2025 ]]; then
+        current_year=2025
+    fi
+    
     cat << EOF
-// Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+// Copyright © $current_year Eser KUBALI <lxldev.contact@gmail.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // This file is part of vglog-filter test suite and is licensed under
