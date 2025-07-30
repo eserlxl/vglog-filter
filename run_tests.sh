@@ -31,7 +31,8 @@ count_cpp_tests() {
     fi
     
     # Count add_test_exe lines in CMakeLists.txt
-    local count=$(grep -c "^[[:space:]]*add_test_exe(" "$cmake_file" 2>/dev/null || echo "0")
+    local count
+    count=$(grep -c "^[[:space:]]*add_test_exe(" "$cmake_file" 2>/dev/null || echo "0")
     echo "$count"
 }
 
@@ -44,7 +45,8 @@ count_workflow_tests() {
     fi
     
     # Count all .sh files in test-workflows and subdirectories
-    local count=$(find "$test_dir" -name "*.sh" -type f | wc -l)
+    local count
+    count=$(find "$test_dir" -name "*.sh" -type f | wc -l)
     echo "$count"
 }
 
@@ -447,7 +449,7 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "C++ Unit" ]]; then
         
         # Calculate C++ success rate
         CPP_SUCCESS_RATE=100
-        if [ $CPP_TOTAL -gt 0 ]; then
+        if [ "$CPP_TOTAL" -gt 0 ]; then
             CPP_SUCCESS_RATE=$((CPP_PASSED * 100 / CPP_TOTAL))
         fi
         
@@ -563,7 +565,7 @@ fi
     echo "  Passed: $CPP_PASSED"
     echo "  Failed: $CPP_FAILED"
     echo "  Skipped: 0"
-    if [ $CPP_TOTAL -gt 0 ]; then
+    if [ "$CPP_TOTAL" -gt 0 ]; then
         CPP_RATE=$((CPP_PASSED * 100 / CPP_TOTAL))
         echo "  Success rate: $CPP_RATE%"
     fi

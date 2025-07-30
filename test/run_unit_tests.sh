@@ -16,7 +16,6 @@ set -euo pipefail
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Function to count C++ tests by parsing CMakeLists.txt
@@ -28,7 +27,8 @@ count_cpp_tests() {
     fi
     
     # Count add_test_exe lines in CMakeLists.txt
-    local count=$(grep -c "^[[:space:]]*add_test_exe(" "$cmake_file" 2>/dev/null || echo "0")
+    local count
+    count=$(grep -c "^[[:space:]]*add_test_exe(" "$cmake_file" 2>/dev/null || echo "0")
     echo "$count"
 }
 
@@ -157,8 +157,7 @@ if [ -d "$BUILD_DIR/bin/Debug" ]; then
 fi
 
 # Sort test executables for consistent output
-IFS=$'\n' TEST_EXECUTABLES=($(sort <<<"${TEST_EXECUTABLES[*]}"))
-unset IFS
+mapfile -t TEST_EXECUTABLES < <(printf '%s\n' "${TEST_EXECUTABLES[@]}" | sort)
 
 # Run each test executable
 for test_exe in "${TEST_EXECUTABLES[@]}"; do
