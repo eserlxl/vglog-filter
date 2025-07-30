@@ -44,26 +44,26 @@ bool test_contains_path_traversal() {
     std::cout << "\n=== Testing contains_path_traversal() ===" << std::endl;
     
     // Test dangerous patterns
-    TEST_ASSERT(contains_path_traversal(".."), "Should detect parent directory");
-    TEST_ASSERT(contains_path_traversal("../file.txt"), "Should detect parent directory with file");
-    TEST_ASSERT(contains_path_traversal("../../file.txt"), "Should detect double parent directory");
-    TEST_ASSERT(contains_path_traversal("~"), "Should detect home directory");
-    TEST_ASSERT(contains_path_traversal("~/file.txt"), "Should detect home directory with file");
-    TEST_ASSERT(contains_path_traversal("//"), "Should detect multiple slashes");
-    TEST_ASSERT(contains_path_traversal("//file.txt"), "Should detect multiple slashes with file");
-    TEST_ASSERT(contains_path_traversal("\\"), "Should detect backslash");
-    TEST_ASSERT(contains_path_traversal("\\file.txt"), "Should detect backslash with file");
+    TEST_ASSERT(path_validation::contains_path_traversal(".."), "Should detect parent directory");
+    TEST_ASSERT(path_validation::contains_path_traversal("../file.txt"), "Should detect parent directory with file");
+    TEST_ASSERT(path_validation::contains_path_traversal("../../file.txt"), "Should detect double parent directory");
+    TEST_ASSERT(path_validation::contains_path_traversal("~"), "Should detect home directory");
+    TEST_ASSERT(path_validation::contains_path_traversal("~/file.txt"), "Should detect home directory with file");
+    TEST_ASSERT(path_validation::contains_path_traversal("//"), "Should detect multiple slashes");
+    TEST_ASSERT(path_validation::contains_path_traversal("//file.txt"), "Should detect multiple slashes with file");
+    TEST_ASSERT(path_validation::contains_path_traversal("\\"), "Should detect backslash");
+    TEST_ASSERT(path_validation::contains_path_traversal("\\file.txt"), "Should detect backslash with file");
     
     // Test safe patterns
-    TEST_ASSERT(!contains_path_traversal("-"), "Should allow stdin indicator");
-    TEST_ASSERT(!contains_path_traversal("file.txt"), "Should allow simple filename");
-    TEST_ASSERT(!contains_path_traversal("test/file.txt"), "Should allow relative path");
-    TEST_ASSERT(!contains_path_traversal(""), "Should allow empty string");
+    TEST_ASSERT(!path_validation::contains_path_traversal("-"), "Should allow stdin indicator");
+    TEST_ASSERT(!path_validation::contains_path_traversal("file.txt"), "Should allow simple filename");
+    TEST_ASSERT(!path_validation::contains_path_traversal("test/file.txt"), "Should allow relative path");
+    TEST_ASSERT(!path_validation::contains_path_traversal(""), "Should allow empty string");
     
     // Test absolute paths (should be blocked)
-    TEST_ASSERT(contains_path_traversal("/"), "Should block root directory");
-    TEST_ASSERT(contains_path_traversal("/etc/passwd"), "Should block absolute path");
-    TEST_ASSERT(contains_path_traversal("/home/user/file.txt"), "Should block absolute path with user");
+    TEST_ASSERT(path_validation::contains_path_traversal("/"), "Should block root directory");
+    TEST_ASSERT(path_validation::contains_path_traversal("/etc/passwd"), "Should block absolute path");
+    TEST_ASSERT(path_validation::contains_path_traversal("/home/user/file.txt"), "Should block absolute path with user");
     
     TEST_PASS("contains_path_traversal() tests completed");
     return true;
@@ -74,7 +74,7 @@ bool test_validate_file_path() {
     
     // Test stdin indicator (should pass)
     try {
-        std::string result = validate_file_path("-");
+        std::string result = path_validation::validate_file_path("-");
         TEST_ASSERT(result == "-", "Stdin indicator should be preserved");
         TEST_PASS("Stdin indicator validation");
     } catch (const std::exception& e) {
@@ -84,7 +84,7 @@ bool test_validate_file_path() {
     
     // Test simple filename (should pass)
     try {
-        std::string result = validate_file_path("test.txt");
+        std::string result = path_validation::validate_file_path("test.txt");
         TEST_ASSERT(result == "test.txt", "Simple filename should be preserved");
         TEST_PASS("Simple filename validation");
     } catch (const std::exception& e) {
@@ -94,56 +94,56 @@ bool test_validate_file_path() {
     
     // Test path traversal attempts (should throw)
     TEST_EXPECT_EXCEPTION(
-        validate_file_path(".."),
+        path_validation::validate_file_path(".."),
         std::runtime_error,
         "Parent directory traversal should be blocked"
     );
     
     TEST_EXPECT_EXCEPTION(
-        validate_file_path("../file.txt"),
+        path_validation::validate_file_path("../file.txt"),
         std::runtime_error,
         "Parent directory with file should be blocked"
     );
     
     TEST_EXPECT_EXCEPTION(
-        validate_file_path("../../file.txt"),
+        path_validation::validate_file_path("../../file.txt"),
         std::runtime_error,
         "Double parent directory should be blocked"
     );
     
     TEST_EXPECT_EXCEPTION(
-        validate_file_path("~"),
+        path_validation::validate_file_path("~"),
         std::runtime_error,
         "Home directory should be blocked"
     );
     
     TEST_EXPECT_EXCEPTION(
-        validate_file_path("~/file.txt"),
+        path_validation::validate_file_path("~/file.txt"),
         std::runtime_error,
         "Home directory with file should be blocked"
     );
     
     TEST_EXPECT_EXCEPTION(
-        validate_file_path("//"),
+        path_validation::validate_file_path("//"),
         std::runtime_error,
         "Multiple slashes should be blocked"
     );
     
     TEST_EXPECT_EXCEPTION(
-        validate_file_path("\\"),
+        path_validation::validate_file_path("\\"),
         std::runtime_error,
         "Backslash should be blocked"
     );
     
     // Test absolute paths (should throw)
     TEST_EXPECT_EXCEPTION(
-        validate_file_path("/"),
+        path_validation::validate_file_path("/"),
         std::runtime_error,
         "Root directory should be blocked"
     );
     
     TEST_EXPECT_EXCEPTION(
-        validate_file_path("/etc/passwd"),
+        path_validation::validate_file_path("/etc/passwd"),
         std::runtime_error,
         "Absolute path should be blocked"
     );
@@ -153,7 +153,7 @@ bool test_validate_file_path() {
     path_with_null += '\0';
     path_with_null += ".txt";
     TEST_EXPECT_EXCEPTION(
-        validate_file_path(path_with_null),
+        path_validation::validate_file_path(path_with_null),
         std::runtime_error,
         "Null bytes should be blocked"
     );
@@ -161,7 +161,7 @@ bool test_validate_file_path() {
     // Test extremely long path (should throw)
     std::string long_path(PATH_MAX + 1, 'a');
     TEST_EXPECT_EXCEPTION(
-        validate_file_path(long_path),
+        path_validation::validate_file_path(long_path),
         std::runtime_error,
         "Path too long should be blocked"
     );
@@ -180,7 +180,7 @@ bool test_safe_file_operations() {
     
     // Test safe_fopen with valid file
     try {
-        FILE* file = safe_fopen("test_safe_ops.txt", "r");
+        FILE* file = path_validation::safe_fopen("test_safe_ops.txt", "r");
         TEST_ASSERT(file != nullptr, "safe_fopen should succeed with valid file");
         fclose(file);
         TEST_PASS("safe_fopen with valid file");
@@ -191,7 +191,7 @@ bool test_safe_file_operations() {
     
     // Test safe_ifstream with valid file
     try {
-        std::ifstream file = safe_ifstream("test_safe_ops.txt");
+        std::ifstream file = path_validation::safe_ifstream("test_safe_ops.txt");
         TEST_ASSERT(file.is_open(), "safe_ifstream should open valid file");
         TEST_PASS("safe_ifstream with valid file");
     } catch (const std::exception& e) {
@@ -202,7 +202,7 @@ bool test_safe_file_operations() {
     // Test safe_stat with valid file
     try {
         struct stat st;
-        int result = safe_stat("test_safe_ops.txt", &st);
+        int result = path_validation::safe_stat("test_safe_ops.txt", &st);
         TEST_ASSERT(result == 0, "safe_stat should succeed with valid file");
         TEST_PASS("safe_stat with valid file");
     } catch (const std::exception& e) {
@@ -212,21 +212,21 @@ bool test_safe_file_operations() {
     
     // Test safe_fopen with path traversal (should throw)
     TEST_EXPECT_EXCEPTION(
-        safe_fopen("../test_safe_ops.txt", "r"),
+        path_validation::safe_fopen("../test_safe_ops.txt", "r"),
         std::runtime_error,
         "safe_fopen should block path traversal"
     );
     
     // Test safe_ifstream with path traversal (should throw)
     TEST_EXPECT_EXCEPTION(
-        safe_ifstream("../test_safe_ops.txt"),
+        path_validation::safe_ifstream("../test_safe_ops.txt"),
         std::runtime_error,
         "safe_ifstream should block path traversal"
     );
     
     // Test safe_stat with path traversal (should throw)
     TEST_EXPECT_EXCEPTION(
-        safe_stat("../test_safe_ops.txt", nullptr),
+        path_validation::safe_stat("../test_safe_ops.txt", nullptr),
         std::runtime_error,
         "safe_stat should block path traversal"
     );
@@ -242,33 +242,33 @@ bool test_edge_cases() {
     std::cout << "\n=== Testing edge cases ===" << std::endl;
     
     // Test empty string
-    TEST_ASSERT(!contains_path_traversal(""), "Empty string should be safe");
+    TEST_ASSERT(!path_validation::contains_path_traversal(""), "Empty string should be safe");
     
     // Test single character
-    TEST_ASSERT(!contains_path_traversal("a"), "Single character should be safe");
+    TEST_ASSERT(!path_validation::contains_path_traversal("a"), "Single character should be safe");
     
     // Test string with only dots (not parent directory)
     // Note: "..." contains ".." so it will be detected as path traversal
-    TEST_ASSERT(contains_path_traversal("..."), "Three dots should be detected as path traversal");
-    TEST_ASSERT(contains_path_traversal("...."), "Four dots should be detected as path traversal");
+    TEST_ASSERT(path_validation::contains_path_traversal("..."), "Three dots should be detected as path traversal");
+    TEST_ASSERT(path_validation::contains_path_traversal("...."), "Four dots should be detected as path traversal");
     
     // Test string with dots in middle
     // Note: "file..txt" contains ".." so it will be detected as path traversal
-    TEST_ASSERT(contains_path_traversal("file..txt"), "Dots in middle should be detected as path traversal");
-    TEST_ASSERT(contains_path_traversal("file...txt"), "Three dots in middle should be detected as path traversal");
+    TEST_ASSERT(path_validation::contains_path_traversal("file..txt"), "Dots in middle should be detected as path traversal");
+    TEST_ASSERT(path_validation::contains_path_traversal("file...txt"), "Three dots in middle should be detected as path traversal");
     
     // Test string starting with dots but not parent directory
-    TEST_ASSERT(!contains_path_traversal(".hidden"), "Hidden file should be safe");
+    TEST_ASSERT(!path_validation::contains_path_traversal(".hidden"), "Hidden file should be safe");
     // Note: "..hidden" contains ".." so it will be detected as path traversal
-    TEST_ASSERT(contains_path_traversal("..hidden"), "Double dot hidden file should be detected as path traversal");
+    TEST_ASSERT(path_validation::contains_path_traversal("..hidden"), "Double dot hidden file should be detected as path traversal");
     
     // Test mixed separators
-    TEST_ASSERT(contains_path_traversal("file\\..\\..\\etc\\passwd"), "Mixed separators with traversal should be blocked");
-    TEST_ASSERT(contains_path_traversal("file//..//..//etc//passwd"), "Multiple slashes with traversal should be blocked");
+    TEST_ASSERT(path_validation::contains_path_traversal("file\\..\\..\\etc\\passwd"), "Mixed separators with traversal should be blocked");
+    TEST_ASSERT(path_validation::contains_path_traversal("file//..//..//etc//passwd"), "Multiple slashes with traversal should be blocked");
     
     // Test normalization edge cases
     try {
-        std::string result = validate_file_path("test/./file.txt");
+        std::string result = path_validation::validate_file_path("test/./file.txt");
         TEST_ASSERT(result.find("..") == std::string::npos, "Normalized path should not contain ..");
         TEST_PASS("Path normalization with ./");
     } catch (const std::exception& e) {
@@ -285,7 +285,7 @@ bool test_error_messages() {
     
     // Test that error messages contain the problematic path
     try {
-        validate_file_path("../malicious.txt");
+        path_validation::validate_file_path("../malicious.txt");
         std::cerr << "FAIL: Should have thrown exception" << std::endl;
         return false;
     } catch (const std::runtime_error& e) {
@@ -300,7 +300,7 @@ bool test_error_messages() {
     path_with_null += '\0';
     path_with_null += ".txt";
     try {
-        validate_file_path(path_with_null);
+        path_validation::validate_file_path(path_with_null);
         std::cerr << "FAIL: Should have thrown exception" << std::endl;
         return false;
     } catch (const std::runtime_error& e) {
@@ -313,7 +313,7 @@ bool test_error_messages() {
     // Test path too long error message
     std::string long_path(PATH_MAX + 1, 'a');
     try {
-        validate_file_path(long_path);
+        path_validation::validate_file_path(long_path);
         std::cerr << "FAIL: Should have thrown exception" << std::endl;
         return false;
     } catch (const std::runtime_error& e) {

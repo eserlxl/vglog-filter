@@ -78,10 +78,7 @@ void usage(const char* prog) {
 
 // ---------- helpers ---------------------------------------------------------
 
-// Forward declarations for path validation functions
-FILE* safe_fopen(const Str& filename, const char* mode);
-std::ifstream safe_ifstream(const Str& filename);
-int safe_stat(const Str& filename, struct stat* st);
+// Path validation functions are now in the path_validation namespace
 
 // Helper function to create detailed error messages
 Str create_error_message(const Str& operation, const Str& filename, const Str& details = "") {
@@ -280,7 +277,7 @@ public:
         if (opt.show_progress && !opt.use_stdin) {
             // This is inefficient for large files, but it's for progress reporting only
             try {
-                std::ifstream count_file = safe_ifstream(opt.filename);
+                std::ifstream count_file = path_validation::safe_ifstream(opt.filename);
                 if (count_file) {
                     total_lines = static_cast<size_t>(
                         std::count(std::istreambuf_iterator<char>(count_file),
@@ -412,7 +409,7 @@ void process_stream(std::istream& in, const Options& opt) {
 
 VecS read_file_lines(const Str& fname)
 {
-    std::ifstream file = safe_ifstream(fname);
+    std::ifstream file = path_validation::safe_ifstream(fname);
     if (!file) throw std::runtime_error(create_error_message("opening file", fname));
 
     VecS lines;
@@ -429,7 +426,7 @@ VecS read_file_lines(const Str& fname)
 // Check if file is large enough to warrant stream processing
 bool is_large_file(const Str& fname) {
     struct stat st{};
-    if (safe_stat(fname, &st) != 0) return false;
+    if (path_validation::safe_stat(fname, &st) != 0) return false;
     if (!S_ISREG(st.st_mode))         return false;
     size_t file_size_mb = static_cast<size_t>(st.st_size) / (1024 * 1024);
     return file_size_mb >= LARGE_FILE_THRESHOLD_MB;
@@ -437,7 +434,7 @@ bool is_large_file(const Str& fname) {
 
 // Stream wrapper for files
 void process_file_stream(const Str& fname, const Options& opt) {
-    std::ifstream file = safe_ifstream(fname);
+    std::ifstream file = path_validation::safe_ifstream(fname);
     if (!file) throw std::runtime_error(create_error_message("opening file", fname));
     process_stream(file, opt);
 }
@@ -454,7 +451,7 @@ Str get_version()
     
     for (const auto& path : paths) {
         try {
-            std::ifstream version_file = safe_ifstream(path);
+            std::ifstream version_file = path_validation::safe_ifstream(path);
             if (version_file.is_open()) {
                 Str version;
                 if (std::getline(version_file, version)) {
@@ -554,7 +551,7 @@ int main(int argc, char* argv[])
         }
         else {
             try {
-                std::ifstream test_file = safe_ifstream(opt.filename);
+                std::ifstream test_file = path_validation::safe_ifstream(opt.filename);
                 if (!test_file) {
                     std::cerr << create_error_message("opening file", opt.filename) << "\n";
                     std::cerr << "Please check that the file exists and is readable\n";
