@@ -16,6 +16,11 @@ export LC_ALL=C
 # Prevent any pager and avoid unnecessary repo locks for better performance.
 export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
+# --- Global Analysis Results ---
+# We use a global associative array to store analysis results.
+# This avoids complex string parsing between functions.
+declare -A R
+
 # --- early guards -------------------------------------------------------------
 
 # Check git command first before any git usage
@@ -327,9 +332,9 @@ classify_path() {
 inc_counters_for() {
     local file="$1"
     case "$(classify_path "$file")" in
-        30) ((new_source_files++)) ;;
-        10) ((new_test_files++)) ;;
-        20) ((new_doc_files++)) ;;
+        30) R[new_source_files]=$((R[new_source_files] + 1)) ;;
+        10) R[new_test_files]=$((R[new_test_files] + 1)) ;;
+        20) R[new_doc_files]=$((R[new_doc_files] + 1)) ;;
     esac
 }
 
@@ -343,20 +348,6 @@ extract_cli_options() {
     srcdiff=$(git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- 'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' 'include/*.h' 'include/*.hpp' 'include/*.hh' 2>/dev/null || true)
 
     if [[ -z "$srcdiff" ]]; then
-        printf 'short_options_before=\n'
-        printf 'short_options_after=\n'
-        printf 'long_options_before=\n'
-        printf 'long_options_after=\n'
-        printf 'breaking_changes=false\n'
-        printf 'api_breaking=false\n'
-        printf 'security_keywords=0\n'
-        printf 'manual_cli_changes=false\n'
-        printf 'manual_added_long_count=0\n'
-        printf 'manual_removed_long_count=0\n'
-        printf 'removed_short_count=0\n'
-        printf 'added_short_count=0\n'
-        printf 'removed_long_count=0\n'
-        printf 'added_long_count=0\n'
         return
     fi
 
@@ -371,16 +362,16 @@ extract_cli_options() {
             'include/*.h' 'include/*.hpp' 'include/*.hh' 2>/dev/null || printf '')
 
     if (( ${#changed_files[@]} > 0 )); then
-        short_before=$(
-            for file in "${changed_files[@]}"; do
+        short_before=$( \
+            for file in "${changed_files[@]}"; do \
                 git -c color.ui=false show "$base_ref:$file" 2>/dev/null \
                 | grep -E 'getopt\(|getopt_long\(' \
                 | grep -o '"[^"]*"' \
                 | tr -d '"' || true
             done | sort -u | tr -d '\n' || printf ''
         )
-        short_after=$(
-            for file in "${changed_files[@]}"; do
+        short_after=$( \
+            for file in "${changed_files[@]}"; do \
                 git -c color.ui=false show "$target_ref:$file" 2>/dev/null \
                 | grep -E 'getopt\(|getopt_long\(' \
                 | grep -o '"[^"]*"' \
@@ -389,8 +380,8 @@ extract_cli_options() {
         )
 
         # Extract long options from struct option arrays
-        long_before=$(
-            for file in "${changed_files[@]}"; do
+        long_before=$( \
+            for file in "${changed_files[@]}"; do \
                 git -c color.ui=false show "$base_ref:$file" 2>/dev/null \
                 | awk '/struct option/,/};/' \
                 | grep '{"[^"]*"' \
@@ -398,8 +389,8 @@ extract_cli_options() {
                 | tr -d '"' || true
             done | sort -u | tr '\n' ',' | sed 's/,$//' || printf ''
         )
-        long_after=$(
-            for file in "${changed_files[@]}"; do
+        long_after=$( \
+            for file in "${changed_files[@]}"; do \
                 git -c color.ui=false show "$target_ref:$file" 2>/dev/null \
                 | awk '/struct option/,/};/' \
                 | grep '{"[^"]*"' \
@@ -412,77 +403,64 @@ extract_cli_options() {
     fi
 
     # Enhanced breaking change detection: look for removed case labels
-    local breaking_changes=false
-
-    # Debug: Check if function is being called
-    if [[ "$VERBOSE" = "true" ]]; then
-        printf '  Debug: extract_cli_options function called\n' >&2
-    fi
-
     local removed_cases
-    removed_cases=$(
+    removed_cases=$( \
         git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | grep -E '^-[[:space:]]*case[[:space:]]' \
         | sed 's/^-[[:space:]]*case[[:space:]]*//' \
-        | sort -u || printf ''
+        | sort -u || printf '' \
     )
     
-    # Debug: Check removed_cases
-    if [[ "$VERBOSE" = "true" ]]; then
-        printf '  Debug: removed_cases="%s"\n' "$removed_cases" >&2
-    fi
-
     if [[ -n "$removed_cases" ]]; then
         local added_cases
-        added_cases=$(
+        added_cases=$( \
             git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
                 'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
                 'include/*.h' 'include/*.hpp' 'include/*.hh' \
             | grep -E '^\+[[:space:]]*case[[:space:]]' \
-            | sed 's/^+[[:space:]]*case[[:space:]]*//' \
-            | sort -u || printf ''
+            | sed 's/^\+[[:space:]]*case[[:space:]]*//' \
+            | sort -u || printf '' \
         )
         local missing_cases
-        missing_cases=$(
-            comm -23 <(printf '%s\n' "$removed_cases" | sort -u) <(printf '%s\n' "$added_cases" | sort -u) 2>/dev/null || printf ''
+        missing_cases=$( \
+            comm -23 <(printf '%s\n' "$removed_cases" | sort -u) <(printf '%s\n' "$added_cases" | sort -u) 2>/dev/null || printf '' \
         )
-        [[ -n "$missing_cases" ]] && breaking_changes=true
+        [[ -n "$missing_cases" ]] && R[breaking_cli_changes]=true
     fi
 
     # Check for API-breaking hints in headers
-    local api_breaking=false
     local removed_prototypes
-    removed_prototypes=$(
+    removed_prototypes=$( \
         git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
             'src/*.h'     'src/*.hpp'     'src/*.hh' \
         | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/ && !/^-[[:space:]]*(typedef|#)/' \
-        | wc -l | tr -d ' ' || printf '0'
+        | wc -l | tr -d ' ' || printf '0' \
     )
     if [[ "${removed_prototypes:-0}" -gt 0 ]]; then
-        api_breaking=true
+        R[api_breaking]=true
     fi
 
     # Explicit API-BREAKING comments
     local explicit_breaking
-    explicit_breaking=$(
+    explicit_breaking=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | grep -ci 'API-BREAKING:' 2>/dev/null | tr -d ' ' || printf '0'
+        | grep -ci 'API-BREAKING:' 2>/dev/null | tr -d ' ' || printf '0' \
     )
     explicit_breaking=${explicit_breaking:-0}
     explicit_breaking=$(printf '%s' "$explicit_breaking" | tr -cd '0-9' || printf '0')
     if [[ "$explicit_breaking" -gt 0 ]]; then
-        api_breaking=true
+        R[api_breaking]=true
     fi
 
     # Enhanced API breaking change detection
     # Check for switch statement case removal (breaking change)
     local removed_switch_cases
-    removed_switch_cases=$(
+    removed_switch_cases=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
@@ -496,11 +474,11 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     local added_switch_cases
-    added_switch_cases=$(
+    added_switch_cases=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
@@ -514,14 +492,14 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     # Check if any cases were removed without being added back
     local net_removed_cases=0
     if [[ -n "$removed_switch_cases" ]]; then
-        net_removed_cases=$(
-            comm -23 <(printf '%s\n' "$removed_switch_cases" | sort -u) <(printf '%s\n' "$added_switch_cases" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+        net_removed_cases=$( \
+            comm -23 <(printf '%s\n' "$removed_switch_cases" | sort -u) <(printf '%s\n' "$added_switch_cases" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
         )
     fi
     
@@ -530,22 +508,12 @@ extract_cli_options() {
     net_removed_cases=$(printf '%s' "$net_removed_cases" | tr -cd '0-9' || printf '0')
     
     if [[ "$net_removed_cases" -gt 0 ]]; then
-        api_breaking=true
-        if [[ "$VERBOSE" = "true" ]]; then
-            printf '  Switch case removal detected: %d cases removed\n' "$net_removed_cases" >&2
-        fi
-    fi
-    
-    # Debug output for switch case detection
-    if [[ "$VERBOSE" = "true" ]]; then
-        printf '  Debug: removed_switch_cases="%s"\n' "$removed_switch_cases" >&2
-        printf '  Debug: added_switch_cases="%s"\n' "$added_switch_cases" >&2
-        printf '  Debug: net_removed_cases=%s\n' "$net_removed_cases" >&2
+        R[api_breaking]=true
     fi
 
     # Check for enum value removal (breaking change)
     local removed_enum_values
-    removed_enum_values=$(
+    removed_enum_values=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
@@ -559,11 +527,11 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     local added_enum_values
-    added_enum_values=$(
+    added_enum_values=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
@@ -577,34 +545,31 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     # Check if any enum values were removed without being added back
     local net_removed_enums
-    net_removed_enums=$(
-        comm -23 <(printf '%s\n' "$removed_enum_values" | sort -u) <(printf '%s\n' "$added_enum_values" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+    net_removed_enums=$( \
+        comm -23 <(printf '%s\n' "$removed_enum_values" | sort -u) <(printf '%s\n' "$added_enum_values" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
     )
     
     if [[ "${net_removed_enums:-0}" -gt 0 ]]; then
-        api_breaking=true
-        if [[ "$VERBOSE" = "true" ]]; then
-            printf '  Enum value removal detected: %d values removed\n' "$net_removed_enums" >&2
-        fi
+        R[api_breaking]=true
     fi
 
     # Check for struct/class member removal (breaking change)
     local removed_members
-    removed_members=$(
+    removed_members=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
             # Look for struct/class member declarations (type name; pattern)
-            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;/ && 
-             !/^-[[:space:]]*(typedef|#)/ && 
-             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&
-             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ &&
+            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;$/ && \
+             !/^-[[:space:]]*(typedef|#)/ && \
+             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&\
+             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ &&\
              !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
                 # Extract member name
                 gsub(/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+/, "")
@@ -614,20 +579,20 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     local added_members
-    added_members=$(
+    added_members=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
             # Look for struct/class member declarations (type name; pattern)
-            /^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;/ && 
-             !/^\+[[:space:]]*(typedef|#)/ && 
-             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&
-             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ &&
+            /^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;$/ && \
+             !/^\+[[:space:]]*(typedef|#)/ && \
+             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&\
+             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ &&\
              !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
                 # Extract member name
                 gsub(/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+/, "")
@@ -637,33 +602,30 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     # Check if any members were removed without being added back
     local net_removed_members
-    net_removed_members=$(
-        comm -23 <(printf '%s\n' "$removed_members" | sort -u) <(printf '%s\n' "$added_members" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+    net_removed_members=$( \
+        comm -23 <(printf '%s\n' "$removed_members" | sort -u) <(printf '%s\n' "$added_members" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
     )
     
     if [[ "${net_removed_members:-0}" -gt 0 ]]; then
-        api_breaking=true
-        if [[ "$VERBOSE" = "true" ]]; then
-            printf '  Struct/class member removal detected: %d members removed\n' "$net_removed_members" >&2
-        fi
+        R[api_breaking]=true
     fi
 
     # Check for function signature changes (breaking change)
     local function_signature_changes
-    function_signature_changes=$(
+    function_signature_changes=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
             # Look for actual function definitions (type name(params) { pattern)
-            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && 
-             /\)[[:space:]]*{/ && 
-             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&
+            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && \
+             /\)[[:space:]]*{/ && \
+             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&\
              !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
                 # Extract function signature
                 gsub(/^-[[:space:]]*/, "")
@@ -672,19 +634,19 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     local function_signature_additions
-    function_signature_additions=$(
+    function_signature_additions=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
             # Look for actual function definitions (type name(params) { pattern)
-            /^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && 
-             /\)[[:space:]]*{/ && 
-             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&
+            /^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && \
+             /\)[[:space:]]*{/ && \
+             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&\
              !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
                 # Extract function signature
                 gsub(/^\+[[:space:]]*/, "")
@@ -693,48 +655,42 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     # Check for function signature changes (different signatures for same function name)
     local function_name_changes
-    function_name_changes=$(
+    function_name_changes=$( \
         comm -12 <(printf '%s\n' "$function_signature_changes" | awk '{print $2}' | sort -u) \
-                 <(printf '%s\n' "$function_signature_additions" | awk '{print $2}' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+                 <(printf '%s\n' "$function_signature_additions" | awk '{print $2}' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
     )
     
     if [[ "${function_name_changes:-0}" -gt 0 ]]; then
-        api_breaking=true
-        if [[ "$VERBOSE" = "true" ]]; then
-            printf '  Function signature changes detected: %d functions modified\n' "$function_name_changes" >&2
-        fi
+        R[api_breaking]=true
     fi
 
     # Check for configuration file format changes (breaking change)
     local config_format_changes
-    config_format_changes=$(
+    config_format_changes=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             '*.conf' '*.cfg' '*.ini' '*.json' '*.yaml' '*.yml' '*.toml' \
             'config/**/*' 'etc/**/*' \
         | awk '
-            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ || 
-             /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*:/ ||
+            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ || \
+             /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*:/ ||\
              /^-[[:space:]]*"[A-Za-z_][A-Za-z0-9_]*"[[:space:]]*:/ {
                 print "config_key_removed"
             }
-        ' | wc -l | tr -d ' ' || printf '0'
+        ' | wc -l | tr -d ' ' || printf '0' \
     )
     
     if [[ "${config_format_changes:-0}" -gt 0 ]]; then
-        api_breaking=true
-        if [[ "$VERBOSE" = "true" ]]; then
-            printf '  Configuration format changes detected: %d keys removed\n' "$config_format_changes" >&2
-        fi
+        R[api_breaking]=true
     fi
 
     # Check for macro/define changes (breaking change)
     local macro_changes
-    macro_changes=$(
+    macro_changes=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
@@ -747,11 +703,11 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     local macro_additions
-    macro_additions=$(
+    macro_additions=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
@@ -764,30 +720,27 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     # Check if any macros were removed without being added back
     local net_removed_macros
-    net_removed_macros=$(
-        comm -23 <(printf '%s\n' "$macro_changes" | sort -u) <(printf '%s\n' "$macro_additions" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+    net_removed_macros=$( \
+        comm -23 <(printf '%s\n' "$macro_changes" | sort -u) <(printf '%s\n' "$macro_additions" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
     )
     
     if [[ "${net_removed_macros:-0}" -gt 0 ]]; then
-        api_breaking=true
-        if [[ "$VERBOSE" = "true" ]]; then
-            printf '  Macro removal detected: %d macros removed\n' "$net_removed_macros" >&2
-        fi
+        R[api_breaking]=true
     fi
 
     # Check for type definition changes (breaking change)
     local typedef_changes
-    typedef_changes=$(
+    typedef_changes=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
-            /^-[[:space:]]*typedef[[:space:]]+.*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;/ {
+            /^-[[:space:]]*typedef[[:space:]]+.*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;$/ {
                 # Extract typedef name
                 gsub(/^-[[:space:]]*typedef[[:space:]]+.*[[:space:]]+/, "")
                 gsub(/[[:space:]]*;.*$/, "")
@@ -795,16 +748,16 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     local typedef_additions
-    typedef_additions=$(
+    typedef_additions=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
-            /^\+[[:space:]]*typedef[[:space:]]+.*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;/ {
+            /^\+[[:space:]]*typedef[[:space:]]+.*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;$/ {
                 # Extract typedef name
                 gsub(/^\+[[:space:]]*typedef[[:space:]]+.*[[:space:]]+/, "")
                 gsub(/[[:space:]]*;.*$/, "")
@@ -812,30 +765,27 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     # Check if any typedefs were removed without being added back
     local net_removed_typedefs
-    net_removed_typedefs=$(
-        comm -23 <(printf '%s\n' "$typedef_changes" | sort -u) <(printf '%s\n' "$typedef_additions" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+    net_removed_typedefs=$( \
+        comm -23 <(printf '%s\n' "$typedef_changes" | sort -u) <(printf '%s\n' "$typedef_additions" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
     )
     
     if [[ "${net_removed_typedefs:-0}" -gt 0 ]]; then
-        api_breaking=true
-        if [[ "$VERBOSE" = "true" ]]; then
-            printf '  Type definition removal detected: %d typedefs removed\n' "$net_removed_typedefs" >&2
-        fi
+        R[api_breaking]=true
     fi
 
     # Check for constant value changes (breaking change)
     local const_changes
-    const_changes=$(
+    const_changes=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
-            /^-[[:space:]]*const[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ ||
+            /^-[[:space:]]*const[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ ||\
              /^-[[:space:]]*static[[:space:]]+const[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ {
                 # Extract constant name
                 gsub(/^-[[:space:]]*(const|static[[:space:]]+const)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+/, "")
@@ -844,16 +794,16 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     local const_additions
-    const_additions=$(
+    const_additions=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
             'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
         | awk '
-            /^\+[[:space:]]*const[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ ||
+            /^\+[[:space:]]*const[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ ||\
              /^\+[[:space:]]*static[[:space:]]+const[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ {
                 # Extract constant name
                 gsub(/^\+[[:space:]]*(const|static[[:space:]]+const)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+/, "")
@@ -862,24 +812,20 @@ extract_cli_options() {
                     print $0
                 }
             }
-        ' | sort -u || printf ''
+        ' | sort -u || printf '' \
     )
     
     # Check if any constants were removed without being added back
     local net_removed_constants
-    net_removed_constants=$(
-        comm -23 <(printf '%s\n' "$const_changes" | sort -u) <(printf '%s\n' "$const_additions" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+    net_removed_constants=$( \
+        comm -23 <(printf '%s\n' "$const_changes" | sort -u) <(printf '%s\n' "$const_additions" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
     )
     
     if [[ "${net_removed_constants:-0}" -gt 0 ]]; then
-        api_breaking=true
-        if [[ "$VERBOSE" = "true" ]]; then
-            printf '  Constant removal detected: %d constants removed\n' "$net_removed_constants" >&2
-        fi
+        R[api_breaking]=true
     fi
 
     # Security/crash detection in commit messages (gated on code/API/CLI change)
-    local security_keywords=0
     local has_code_changes=false
     if git -c color.ui=false diff -M -C --name-only "$base_ref".."$target_ref" -- \
          'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
@@ -887,88 +833,84 @@ extract_cli_options() {
          'include/*.h' 'include/*.hpp' 'include/*.hh' | grep -q .; then
         has_code_changes=true
     fi
-    if [[ "$has_code_changes" = "true" ]] || [[ "$api_breaking" = "true" ]] || [[ "$breaking_changes" = "true" ]]; then
-        security_keywords=$(
+    if [[ "$has_code_changes" = "true" ]] || [[ "${R[api_breaking]}" = "true" ]] || [[ "${R[breaking_cli_changes]}" = "true" ]]; then
+        R[security_keywords]=$( \
             git -c color.ui=false log --format="%s %b" "$base_ref".."$target_ref" \
-            | grep -ci -E '(security|cve|crash|segfault|uaf|overflow|xss|vulnerability)' || printf '0'
+            | grep -ci -E '(security|cve|crash|segfault|uaf|overflow|xss|vulnerability)' || printf '0' \
         )
     fi
 
     # Manual argv parser detection for tools that don't use getopt
-    manual_cli_changes=false
-    manual_added_long_count=0
-    manual_removed_long_count=0
-
     # Get all changed source files (including those with spaces in names)
     local -a changed_source_files=()
-    while IFS= read -r -d '' f; do 
+    while IFS= read -r -d '' f; do \
         if [[ "$f" =~ \.(c|cc|cpp|cxx)$ ]]; then
             changed_source_files+=("$f")
         fi
     done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" 2>/dev/null || printf '')
 
     local added_long_opts
-    added_long_opts=$(
+    added_long_opts=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | grep -E '^\+.*--[[:alnum:]-]+' \
-        | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf ''
+        | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf '' \
     )
     local removed_long_opts
-    removed_long_opts=$(
+    removed_long_opts=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | grep -E '^-.*--[[:alnum:]-]+' \
-        | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf ''
+        | sed -n 's/.*\(--[[:alnum:]-]\+\).*/\1/p' | sort -u || printf '' \
     )
-    manual_added_long_count=$(printf '%s\n' "$added_long_opts"   | wc -l | tr -d ' ' || printf '0')
-    manual_removed_long_count=$(printf '%s\n' "$removed_long_opts" | wc -l | tr -d ' ' || printf '0')
+    R[manual_added_long_count]=$(printf '%s\n' "$added_long_opts"   | wc -l | tr -d ' ' || printf '0')
+    R[manual_removed_long_count]=$(printf '%s\n' "$removed_long_opts" | wc -l | tr -d ' ' || printf '0')
     # Ensure variables are numeric for arithmetic
-    manual_added_long_count=${manual_added_long_count:-0}
-    manual_removed_long_count=${manual_removed_long_count:-0}
-    (( manual_added_long_count > 0 || manual_removed_long_count > 0 )) && manual_cli_changes=true
+    R[manual_added_long_count]=${R[manual_added_long_count]:-0}
+    R[manual_removed_long_count]=${R[manual_removed_long_count]:-0}
+    (( R[manual_added_long_count] > 0 || R[manual_removed_long_count] > 0 )) && R[manual_cli_changes]=true
 
     # Enhanced CLI detection for various patterns
     # Check for getopt_long usage changes
     local getopt_changes
-    getopt_changes=$(
+    getopt_changes=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | grep -c -E '(getopt_long|getopt)' || printf '0'
+        | grep -c -E '(getopt_long|getopt)' || printf '0' \
     )
     
     # Check for argument parsing changes
     local arg_parsing_changes
-    arg_parsing_changes=$(
+    arg_parsing_changes=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | awk '
-            /^[+-][[:space:]]*if[[:space:]]*\([[:space:]]*argc/ || 
-             /^[+-][[:space:]]*while[[:space:]]*\([[:space:]]*argc/ ||
-             /^[+-][[:space:]]*for[[:space:]]*\([[:space:]]*argc/ ||
-             /^[+-][[:space:]]*switch[[:space:]]*\([[:space:]]*argv/ {
+            /^[+-][:space:]*if[:space:]*\([:space:]*argc/ || \
+             /^[+-][:space:]*while[:space:]*\([:space:]*argc/ ||\
+             /^[+-][:space:]*for[:space:]*\([:space:]*argc/ ||\
+             /^[+-][:space:]*switch[:space:]*\([:space:]*argv/ {
                 print $0
             }
-        ' | wc -l | tr -d ' ' || printf '0'
+        ' | wc -l | tr -d ' ' || printf '0' \
     )
     
     # Check for help text changes (indicates CLI changes)
     local help_text_changes
-    help_text_changes=$(
+    help_text_changes=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | grep -c -i -E '(usage|help|option|argument)' || printf '0'
+        | grep -c -i -E '(usage|help|option|argument)' || printf '0' \
     )
     
     # Check for main function signature changes
     local main_signature_changes
-    main_signature_changes=$(
+    main_signature_changes=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | awk '
-            /^[+-][[:space:]]*int[[:space:]]+main[[:space:]]*\(/ {
+            /^[+-][:space:]*int[:space:]+main[:space:]*\(/ {
                 print $0
             }
-        ' | wc -l | tr -d ' ' || printf '0'
+        ' | wc -l | tr -d ' ' || printf '0' \
     )
     
     # Enhanced manual CLI detection for more patterns
     local enhanced_cli_patterns
-    enhanced_cli_patterns=$(
+    enhanced_cli_patterns=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | awk '
             # Check for short option patterns (-x)
@@ -987,16 +929,14 @@ extract_cli_options() {
             /^[+-][[:space:]]*.*argv\[/ {
                 print "argv_access_change"
             }
-        ' | sort -u | wc -l | tr -d ' ' || printf '0'
+        ' | sort -u | wc -l | tr -d ' ' || printf '0' \
     )
     
     # Combine all CLI change indicators
     local total_cli_indicators=0
     # Ensure all variables are numeric and sanitized
-    manual_added_long_count=${manual_added_long_count:-0}
-    manual_added_long_count=$(printf '%s' "$manual_added_long_count" | tr -cd '0-9' || printf '0')
-    manual_removed_long_count=${manual_removed_long_count:-0}
-    manual_removed_long_count=$(printf '%s' "$manual_removed_long_count" | tr -cd '0-9' || printf '0')
+    R[manual_added_long_count]=$(printf '%s' "${R[manual_added_long_count]}" | tr -cd '0-9' || printf '0')
+    R[manual_removed_long_count]=$(printf '%s' "${R[manual_removed_long_count]}" | tr -cd '0-9' || printf '0')
     getopt_changes=${getopt_changes:-0}
     getopt_changes=$(printf '%s' "$getopt_changes" | tr -cd '0-9' || printf '0')
     arg_parsing_changes=${arg_parsing_changes:-0}
@@ -1008,55 +948,59 @@ extract_cli_options() {
     enhanced_cli_patterns=${enhanced_cli_patterns:-0}
     enhanced_cli_patterns=$(printf '%s' "$enhanced_cli_patterns" | tr -cd '0-9' || printf '0')
     
-    total_cli_indicators=$((manual_added_long_count + manual_removed_long_count + getopt_changes + arg_parsing_changes + help_text_changes + main_signature_changes + enhanced_cli_patterns))
+    total_cli_indicators=$((R[manual_added_long_count] + R[manual_removed_long_count] + getopt_changes + arg_parsing_changes + help_text_changes + main_signature_changes + enhanced_cli_patterns))
     
     if [[ "$total_cli_indicators" -gt 0 ]]; then
-        manual_cli_changes=true
-        if [[ "$VERBOSE" = "true" ]]; then
-            printf '  Enhanced CLI changes detected: %d indicators\n' "$total_cli_indicators" >&2
-        fi
+        R[manual_cli_changes]=true
     fi
 
     # Compute counts for removed/added options
-    local removed_short_count=0 added_short_count=0
-    local removed_long_count=0  added_long_count=0
-
     if [[ -n "$short_before" ]] || [[ -n "$short_after" ]]; then
-        removed_short_count=$(
+        R[removed_short_count]=$( \
             comm -23 <(printf '%s' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) \
-                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
         )
-        added_short_count=$(
+        R[added_short_count]=$( \
             comm -13 <(printf '%s' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) \
-                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
         )
     fi
 
     if [[ -n "$long_before" ]] || [[ -n "$long_after" ]]; then
-        removed_long_count=$(
+        R[removed_long_count]=$( \
             comm -23 <(printf '%s' "${long_before:-}" | tr ',' '\n' | sort -u) \
-                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
         )
-        added_long_count=$(
+        R[added_long_count]=$( \
             comm -13 <(printf '%s' "${long_before:-}" | tr ',' '\n' | sort -u) \
-                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0'
+                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
         )
     fi
 
-    printf 'short_options_before=%s\n' "$short_before"
-    printf 'short_options_after=%s\n' "$short_after"
-    printf 'long_options_before=%s\n' "$long_before"
-    printf 'long_options_after=%s\n' "$long_after"
-    printf 'breaking_changes=%s\n' "$breaking_changes"
-    printf 'api_breaking=%s\n' "$api_breaking"
-    printf 'security_keywords=%s\n' "$security_keywords"
-    printf 'manual_cli_changes=%s\n' "$manual_cli_changes"
-    printf 'manual_added_long_count=%s\n' "$manual_added_long_count"
-    printf 'manual_removed_long_count=%s\n' "$manual_removed_long_count"
-    printf 'removed_short_count=%s\n' "$removed_short_count"
-    printf 'added_short_count=%s\n' "$added_short_count"
-    printf 'removed_long_count=%s\n' "$removed_long_count"
-    printf 'added_long_count=%s\n' "$added_long_count"
+    # Check for CLI changes by comparing option sets (normalize colons)
+    local short_before_norm short_after_norm
+    short_before_norm=$(printf '%s' "$short_before" | tr -d ':')
+    short_after_norm=$(printf '%s' "$short_after" | tr -d ':')
+
+    if [[ -n "$short_after" ]] && [[ "$short_after_norm" != "$short_before_norm" ]]; then
+        R[cli_changes]=true
+        local removed_short
+        removed_short=$( \
+            comm -23 <(printf '%s' "$short_before" | tr -d ':' | fold -w1 | sort -u) \
+                     <(printf '%s' "$short_after"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null || printf '' \
+        )
+        [[ -n "$removed_short" ]] && R[breaking_cli_changes]=true
+    fi
+
+    if [[ -n "$long_after" ]] && [[ "$long_after" != "$long_before" ]]; then
+        R[cli_changes]=true
+        local removed_long
+        removed_long=$( \
+            comm -23 <(printf '%s' "$long_before" | tr ',' '\n' | sort -u) \
+                     <(printf '%s' "$long_after"  | tr ',' '\n' | sort -u) 2>/dev/null || printf '' \
+        )
+        [[ -n "$removed_long" ]] && R[breaking_cli_changes]=true
+    fi
 }
 
 # Binary-safe numstat summation function
@@ -1077,38 +1021,31 @@ analyze_changes() {
     local base_ref="$1"
     local target_ref="$2"
 
+    # Initialize results
+    R[added_files]=0
+    R[modified_files]=0
+    R[deleted_files]=0
+    R[new_source_files]=0
+    R[new_test_files]=0
+    R[new_doc_files]=0
+    R[cli_changes]=false
+    R[breaking_cli_changes]=false
+    R[diff_size]=0
+    R[api_breaking]=false
+    R[security_keywords]=0
+    R[manual_cli_changes]=false
+    R[manual_added_long_count]=0
+    R[manual_removed_long_count]=0
+    R[removed_short_count]=0
+    R[added_short_count]=0
+    R[removed_long_count]=0
+    R[added_long_count]=0
+
     # Check if there are any changes
     if git -c color.ui=false diff -M -C --quiet "$base_ref".."$target_ref"; then
         printf 'Warning: No changes detected between %s and %s\n' "$base_ref" "$target_ref" >&2
-        printf 'added_files=0\n'
-        printf 'modified_files=0\n'
-        printf 'deleted_files=0\n'
-        printf 'new_source_files=0\n'
-        printf 'new_test_files=0\n'
-        printf 'new_doc_files=0\n'
-        printf 'cli_changes=false\n'
-        printf 'breaking_cli_changes=false\n'
-        printf 'diff_size=0\n'
-        printf 'api_breaking=false\n'
-        printf 'security_keywords=0\n'
-        printf 'manual_cli_changes=false\n'
-        printf 'manual_added_long_count=0\n'
-        printf 'manual_removed_long_count=0\n'
-        printf 'removed_short_count=0\n'
-        printf 'added_short_count=0\n'
-        printf 'removed_long_count=0\n'
-        printf 'added_long_count=0\n'
         return
     fi
-
-    local added_files=0
-    local modified_files=0
-    local deleted_files=0
-    local new_source_files=0
-    local new_test_files=0
-    local new_doc_files=0
-    local cli_changes=false
-    local breaking_cli_changes=false
 
     # NUL-delimited, handle renames/copies
     while IFS= read -r -d '' status; do
@@ -1123,110 +1060,23 @@ analyze_changes() {
         esac
 
         case "${status:0:1}" in
-            A) ((added_files++)); inc_counters_for "$file" ;;
-            M|T) ((modified_files++)) ;;
-            D)   ((deleted_files++)) ;;
-            R)   ((modified_files++)) ;;
-            C)   ((added_files++)); inc_counters_for "$file" ;;
+            A) R[added_files]=$((R[added_files] + 1)); inc_counters_for "$file" ;;
+            M|T) R[modified_files]=$((R[modified_files] + 1)) ;;
+            D)   R[deleted_files]=$((R[deleted_files] + 1)) ;;
+            R)   R[modified_files]=$((R[modified_files] + 1)) ;;
+            C)   R[added_files]=$((R[added_files] + 1)); inc_counters_for "$file" ;;
         esac
     done < <(git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" 2>/dev/null)
 
     # Extract CLI options for comparison
-    local cli_analysis
-    cli_analysis=$(extract_cli_options "$base_ref" "$target_ref")
-    
-    # Debug: Check if function was called
-    if [[ "$VERBOSE" = "true" ]]; then
-        printf '  Debug: extract_cli_options called, output length: %d\n' "${#cli_analysis}" >&2
-        printf '  Debug: cli_analysis output:\n%s\n' "$cli_analysis" >&2
-    fi
-    local short_before short_after long_before long_after
-    short_before=$(printf '%s\n' "$cli_analysis" | grep "^short_options_before=" | cut -d'=' -f2)
-    short_after=$(printf '%s\n' "$cli_analysis" | grep "^short_options_after="  | cut -d'=' -f2)
-    long_before=$(printf '%s\n' "$cli_analysis"  | grep "^long_options_before=" | cut -d'=' -f2)
-    long_after=$(printf '%s\n' "$cli_analysis"   | grep "^long_options_after="  | cut -d'=' -f2)
-    local breaking_changes
-    breaking_changes=$(printf '%s\n' "$cli_analysis" | grep "^breaking_changes=" | cut -d'=' -f2)
-    
-    # Debug: Check breaking_changes value
-    if [[ "$VERBOSE" = "true" ]]; then
-        printf '  Debug: breaking_changes="%s"\n' "$breaking_changes" >&2
-    fi
-    local api_breaking
-    api_breaking=$(printf '%s\n' "$cli_analysis" | grep "^api_breaking=" | cut -d'=' -f2)
-    local security_keywords
-    security_keywords=$(printf '%s\n' "$cli_analysis" | grep "^security_keywords=" | cut -d'=' -f2)
-    local manual_cli_changes
-    manual_cli_changes=$(printf '%s\n' "$cli_analysis" | grep "^manual_cli_changes=" | cut -d'=' -f2)
-    local manual_added_long_count
-    manual_added_long_count=$(printf '%s\n' "$cli_analysis" | grep "^manual_added_long_count=" | cut -d'=' -f2)
-    local manual_removed_long_count
-    manual_removed_long_count=$(printf '%s\n' "$cli_analysis"| grep "^manual_removed_long_count="| cut -d'=' -f2 | tr -d '\r')
-    local removed_short_count
-    removed_short_count=$(printf '%s\n' "$cli_analysis" | grep "^removed_short_count=" | cut -d'=' -f2)
-    local added_short_count
-    added_short_count=$(printf '%s\n' "$cli_analysis" | grep "^added_short_count=" | cut -d'=' -f2)
-    local removed_long_count
-    removed_long_count=$(printf '%s\n' "$cli_analysis" | grep "^removed_long_count=" | cut -d'=' -f2)
-    local added_long_count
-    added_long_count=$(printf '%s\n' "$cli_analysis" | grep "^added_long_count=" | cut -d'=' -f2)
-
-    # Check for CLI changes by comparing option sets (normalize colons)
-    local short_before_norm short_after_norm
-    short_before_norm=$(printf '%s' "$short_before" | tr -d ':')
-    short_after_norm=$(printf '%s' "$short_after" | tr -d ':')
-
-    if [[ -n "$short_after" ]] && [[ "$short_after_norm" != "$short_before_norm" ]]; then
-        cli_changes=true
-        local removed_short
-        removed_short=$(
-            comm -23 <(printf '%s' "$short_before" | tr -d ':' | fold -w1 | sort -u) \
-                     <(printf '%s' "$short_after"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null || printf ''
-        )
-        [[ -n "$removed_short" ]] && breaking_cli_changes=true
-    fi
-
-    if [[ -n "$long_after" ]] && [[ "$long_after" != "$long_before" ]]; then
-        cli_changes=true
-        local removed_long
-        removed_long=$(
-            comm -23 <(printf '%s' "$long_before" | tr ',' '\n' | sort -u) \
-                     <(printf '%s' "$long_after"  | tr ',' '\n' | sort -u) 2>/dev/null || printf ''
-        )
-        [[ -n "$removed_long" ]] && breaking_cli_changes=true
-    fi
-
-    # Propagate other breaking signals
-    if [[ "$breaking_changes" = "true" ]]; then
-        breaking_cli_changes=true
-    fi
+    extract_cli_options "$base_ref" "$target_ref"
 
     # Get diff size using numstat (binary-safe)
-    local diff_size
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        diff_size=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C -w --numstat "$base_ref".."$target_ref")
+        R[diff_size]=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C -w --numstat "$base_ref".."$target_ref")
     else
-        diff_size=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C    --numstat "$base_ref".."$target_ref")
+        R[diff_size]=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C    --numstat "$base_ref".."$target_ref")
     fi
-
-    printf 'added_files=%s\n' "$added_files"
-    printf 'modified_files=%s\n' "$modified_files"
-    printf 'deleted_files=%s\n' "$deleted_files"
-    printf 'new_source_files=%s\n' "$new_source_files"
-    printf 'new_test_files=%s\n' "$new_test_files"
-    printf 'new_doc_files=%s\n' "$new_doc_files"
-    printf 'cli_changes=%s\n' "$cli_changes"
-    printf 'breaking_cli_changes=%s\n' "$breaking_cli_changes"
-    printf 'diff_size=%s\n' "$diff_size"
-    printf 'api_breaking=%s\n' "$api_breaking"
-    printf 'security_keywords=%s\n' "$security_keywords"
-    printf 'manual_cli_changes=%s\n' "$manual_cli_changes"
-    printf 'manual_added_long_count=%s\n' "$manual_added_long_count"
-    printf 'manual_removed_long_count=%s\n' "$manual_removed_long_count"
-    printf 'removed_short_count=%s\n' "$removed_short_count"
-    printf 'added_short_count=%s\n' "$added_short_count"
-    printf 'removed_long_count=%s\n' "$removed_long_count"
-    printf 'added_long_count=%s\n' "$added_long_count"
 }
 
 # Calculate next version without external dependency
@@ -1270,38 +1120,25 @@ calculate_next_version() {
 
 # Determine version bump suggestion based on improved rules
 suggest_version_bump() {
-    local added_files="$1"
-    local modified_files="$2"
-    local deleted_files="$3"
-    local new_source_files="$4"
-    local new_test_files="$5"
-    local new_doc_files="$6"
-    local cli_changes="$7"
-    local breaking_cli_changes="$8"
-    local diff_size="$9"
-    local api_breaking="${10}"
-    local security_keywords="${11}"
-    local manual_cli_changes="${12}"
-
     # MAJOR: Breaking, security, or very large changes (if not requiring breaking)
-    if [[ "$breaking_cli_changes" = "true" ]]; then printf 'major'; return; fi
-    if [[ "$api_breaking" = "true"      ]]; then printf 'major'; return; fi
-    if [[ "${security_keywords:-0}" -gt 0 ]]; then printf 'major'; return; fi
-    if [[ "${diff_size:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
+    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then printf 'major'; return; fi
+    if [[ "${R[api_breaking]}" = "true"      ]]; then printf 'major'; return; fi
+    if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then printf 'major'; return; fi
+    if [[ "${R[diff_size]:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
         if [[ "$REQ" != "true" && "$REQ" != "1" && "$REQ" != "yes" ]]; then
             printf 'major'; return
         fi
     fi
 
     # MINOR: New CLI or notable new content
-    if [[ "$cli_changes" = "true" ]]; then printf 'minor'; return; fi
-    if [[ "${manual_cli_changes:-false}" = "true" ]]; then printf 'minor'; return; fi
-    if [[ "${new_source_files:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then printf 'minor'; return; fi
-    if [[ "${new_test_files:-0}"  -ge "$MIN_NEW_TEST_FILES"  ]]; then printf 'minor'; return; fi
-    if [[ "${new_doc_files:-0}"   -ge "$MIN_NEW_DOC_FILES"   ]]; then printf 'minor'; return; fi
+    if [[ "${R[cli_changes]}" = "true" ]]; then printf 'minor'; return; fi
+    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then printf 'minor'; return; fi
+    if [[ "${R[new_source_files]:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then printf 'minor'; return; fi
+    if [[ "${R[new_test_files]:-0}"  -ge "$MIN_NEW_TEST_FILES"  ]]; then printf 'minor'; return; fi
+    if [[ "${R[new_doc_files]:-0}"   -ge "$MIN_NEW_DOC_FILES"   ]]; then printf 'minor'; return; fi
 
     # PATCH: Significant modifications without new features
-    if [[ "${modified_files:-0}" -ge "$MIN_PATCH_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
+    if [[ "${R[modified_files]:-0}" -ge "$MIN_PATCH_FILES" ]] && [[ "${R[diff_size]:-0}" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
         printf 'patch'; return
     fi
 
@@ -1310,38 +1147,25 @@ suggest_version_bump() {
 
 # Determine the reason for the version bump suggestion
 get_bump_reason() {
-    local added_files="$1"
-    local modified_files="$2"
-    local deleted_files="$3"
-    local new_source_files="$4"
-    local new_test_files="$5"
-    local new_doc_files="$6"
-    local cli_changes="$7"
-    local breaking_cli_changes="$8"
-    local diff_size="$9"
-    local api_breaking="${10}"
-    local security_keywords="${11}"
-    local manual_cli_changes="${12}"
-
     # MAJOR reasons
-    if [[ "$breaking_cli_changes" = "true" ]]; then printf 'breaking_cli'; return; fi
-    if [[ "$api_breaking" = "true"      ]]; then printf 'api_break';    return; fi
-    if [[ "${security_keywords:-0}" -gt 0 ]]; then printf 'security_keywords'; return; fi
-    if [[ "${diff_size:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
+    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then printf 'breaking_cli'; return; fi
+    if [[ "${R[api_breaking]}" = "true"      ]]; then printf 'api_break';    return; fi
+    if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then printf 'security_keywords'; return; fi
+    if [[ "${R[diff_size]:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
         if [[ "$REQ" != "true" && "$REQ" != "1" && "$REQ" != "yes" ]]; then
             printf 'large_diff'; return
         fi
     fi
 
     # MINOR reasons
-    if [[ "$cli_changes" = "true" ]]; then printf 'cli_added'; return; fi
-    if [[ "${manual_cli_changes:-false}" = "true" ]]; then printf 'cli_added'; return; fi
-    if [[ "${new_source_files:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then printf 'new_src';   return; fi
-    if [[ "${new_test_files:-0}"  -ge "$MIN_NEW_TEST_FILES"  ]]; then printf 'new_tests'; return; fi
-    if [[ "${new_doc_files:-0}"   -ge "$MIN_NEW_DOC_FILES"   ]]; then printf 'new_docs';  return; fi
+    if [[ "${R[cli_changes]}" = "true" ]]; then printf 'cli_added'; return; fi
+    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then printf 'cli_added'; return; fi
+    if [[ "${R[new_source_files]:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then printf 'new_src';   return; fi
+    if [[ "${R[new_test_files]:-0}"  -ge "$MIN_NEW_TEST_FILES"  ]]; then printf 'new_tests'; return; fi
+    if [[ "${R[new_doc_files]:-0}"   -ge "$MIN_NEW_DOC_FILES"   ]]; then printf 'new_docs';  return; fi
 
     # PATCH reasons
-    if [[ "${modified_files:-0}" -ge "$MIN_PATCH_FILES" ]] && [[ "${diff_size:-0}" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
+    if [[ "${R[modified_files]:-0}" -ge "$MIN_PATCH_FILES" ]] && [[ "${R[diff_size]:-0}" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
         printf 'mods_only'; return
     fi
 
@@ -1400,43 +1224,14 @@ main() {
     [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || current_version=0.0.0
 
     # Analyze changes
-    local analysis
-    analysis=$(analyze_changes "$base_ref" "$target_ref")
-
-    # Extract fields
-    local added_files modified_files deleted_files
-    local new_source_files new_test_files new_doc_files
-    local cli_changes breaking_cli_changes diff_size
-    local api_breaking security_keywords
-    local manual_cli_changes
-    local removed_short_count added_short_count
-    local removed_long_count added_long_count
-
-    added_files=$(           printf '%s\n' "$analysis" | grep "^added_files="            | cut -d'=' -f2 | tr -d '\r')
-    modified_files=$(        printf '%s\n' "$analysis" | grep "^modified_files="         | cut -d'=' -f2 | tr -d '\r')
-    deleted_files=$(         printf '%s\n' "$analysis" | grep "^deleted_files="          | cut -d'=' -f2 | tr -d '\r')
-    new_source_files=$(      printf '%s\n' "$analysis" | grep "^new_source_files="       | cut -d'=' -f2 | tr -d '\r')
-    new_test_files=$(        printf '%s\n' "$analysis" | grep "^new_test_files="         | cut -d'=' -f2 | tr -d '\r')
-    new_doc_files=$(         printf '%s\n' "$analysis" | grep "^new_doc_files="          | cut -d'=' -f2 | tr -d '\r')
-    cli_changes=$(           printf '%s\n' "$analysis" | grep "^cli_changes="            | cut -d'=' -f2 | tr -d '\r')
-    breaking_cli_changes=$(  printf '%s\n' "$analysis" | grep "^breaking_cli_changes="   | cut -d'=' -f2 | tr -d '\r')
-    diff_size=$(             printf '%s\n' "$analysis" | grep "^diff_size="              | cut -d'=' -f2 | tr -d '\r')
-    api_breaking=$(          printf '%s\n' "$analysis" | grep "^api_breaking="           | cut -d'=' -f2 | tr -d '\r')
-    security_keywords=$(     printf '%s\n' "$analysis" | grep "^security_keywords="      | cut -d'=' -f2 | tr -d '\r')
-    manual_cli_changes=$(    printf '%s\n' "$analysis" | grep "^manual_cli_changes="     | cut -d'=' -f2 | tr -d '\r')
-    manual_added_long_count=$(printf '%s\n' "$analysis" | grep "^manual_added_long_count="| cut -d'=' -f2 | tr -d '\r')
-    manual_removed_long_count=$(printf '%s\n' "$analysis"| grep "^manual_removed_long_count="| cut -d'=' -f2 | tr -d '\r')
-    removed_short_count=$(   printf '%s\n' "$analysis" | grep "^removed_short_count="    | cut -d'=' -f2 | tr -d '\r')
-    added_short_count=$(     printf '%s\n' "$analysis" | grep "^added_short_count="      | cut -d'=' -f2 | tr -d '\r')
-    removed_long_count=$(    printf '%s\n' "$analysis" | grep "^removed_long_count="     | cut -d'=' -f2 | tr -d '\r')
-    added_long_count=$(      printf '%s\n' "$analysis" | grep "^added_long_count="       | cut -d'=' -f2 | tr -d '\r')
+    analyze_changes "$base_ref" "$target_ref"
 
     # Determine suggestion and reason
     local suggestion
-    suggestion=$(suggest_version_bump "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size" "$api_breaking" "$security_keywords" "$manual_cli_changes")
+    suggestion=$(suggest_version_bump)
 
     local reason
-    reason=$(get_bump_reason "$added_files" "$modified_files" "$deleted_files" "$new_source_files" "$new_test_files" "$new_doc_files" "$cli_changes" "$breaking_cli_changes" "$diff_size" "$api_breaking" "$security_keywords" "$manual_cli_changes")
+    reason=$(get_bump_reason)
 
     # Calculate next version
     local next_version
@@ -1448,25 +1243,6 @@ main() {
         printf '%s\n' "$suggestion"
     elif [[ "$JSON_OUTPUT" = "true" ]]; then
         # JSON output for machine consumption
-        local json_added_files="${added_files:-0}"
-        local json_modified_files="${modified_files:-0}"
-        local json_deleted_files="${deleted_files:-0}"
-        local json_new_source_files="${new_source_files:-0}"
-        local json_new_test_files="${new_test_files:-0}"
-        local json_new_doc_files="${new_doc_files:-0}"
-        local json_cli_changes="${cli_changes:-false}"
-        local json_breaking_cli_changes="${breaking_cli_changes:-false}"
-        local json_diff_size="${diff_size:-0}"
-        local json_api_breaking="${api_breaking:-false}"
-        local json_security_keywords="${security_keywords:-0}"
-        local json_manual_cli_changes="${manual_cli_changes:-false}"
-        local json_manual_added_long_count="${manual_added_long_count:-0}"
-        local json_manual_removed_long_count="${manual_removed_long_count:-0}"
-        local json_removed_short_count="${removed_short_count:-0}"
-        local json_added_short_count="${added_short_count:-0}"
-        local json_removed_long_count="${removed_long_count:-0}"
-        local json_added_long_count="${added_long_count:-0}"
-
         printf '{\n'
         printf '  "suggestion": "%s",\n' "$(json_escape "$suggestion")"
         printf '  "reason": "%s",\n' "$(json_escape "$reason")"
@@ -1478,24 +1254,24 @@ main() {
         printf '  "base_ref_type": "%s",\n' "$(json_escape "$ref_type")"
         printf '  "target_ref": "%s",\n' "$(json_escape "$target_ref")"
         printf '  "changes": {\n'
-        printf '    "added_files": %s,\n' "$json_added_files"
-        printf '    "modified_files": %s,\n' "$json_modified_files"
-        printf '    "deleted_files": %s,\n' "$json_deleted_files"
-        printf '    "new_source_files": %s,\n' "$json_new_source_files"
-        printf '    "new_test_files": %s,\n' "$json_new_test_files"
-        printf '    "new_doc_files": %s,\n' "$json_new_doc_files"
-        printf '    "cli_changes": %s,\n' "$json_cli_changes"
-        printf '    "breaking_cli_changes": %s,\n' "$json_breaking_cli_changes"
-        printf '    "diff_size": %s,\n' "$json_diff_size"
-        printf '    "api_breaking": %s,\n' "$json_api_breaking"
-        printf '    "security_keywords": %s,\n' "$json_security_keywords"
-        printf '    "manual_cli_changes": %s,\n' "$json_manual_cli_changes"
-        printf '    "manual_added_long_count": %s,\n' "$json_manual_added_long_count"
-        printf '    "manual_removed_long_count": %s,\n' "$json_manual_removed_long_count"
-        printf '    "removed_short_count": %s,\n' "$json_removed_short_count"
-        printf '    "added_short_count": %s,\n' "$json_added_short_count"
-        printf '    "removed_long_count": %s,\n' "$json_removed_long_count"
-        printf '    "added_long_count": %s\n' "$json_added_long_count"
+        printf '    "added_files": %s,\n' "${R[added_files]:-0}"
+        printf '    "modified_files": %s,\n' "${R[modified_files]:-0}"
+        printf '    "deleted_files": %s,\n' "${R[deleted_files]:-0}"
+        printf '    "new_source_files": %s,\n' "${R[new_source_files]:-0}"
+        printf '    "new_test_files": %s,\n' "${R[new_test_files]:-0}"
+        printf '    "new_doc_files": %s,\n' "${R[new_doc_files]:-0}"
+        printf '    "cli_changes": %s,\n' "${R[cli_changes]:-false}"
+        printf '    "breaking_cli_changes": %s,\n' "${R[breaking_cli_changes]:-false}"
+        printf '    "diff_size": %s,\n' "${R[diff_size]:-0}"
+        printf '    "api_breaking": %s,\n' "${R[api_breaking]:-false}"
+        printf '    "security_keywords": %s,\n' "${R[security_keywords]:-0}"
+        printf '    "manual_cli_changes": %s,\n' "${R[manual_cli_changes]:-false}"
+        printf '    "manual_added_long_count": %s,\n' "${R[manual_added_long_count]:-0}"
+        printf '    "manual_removed_long_count": %s,\n' "${R[manual_removed_long_count]:-0}"
+        printf '    "removed_short_count": %s,\n' "${R[removed_short_count]:-0}"
+        printf '    "added_short_count": %s,\n' "${R[added_short_count]:-0}"
+        printf '    "removed_long_count": %s,\n' "${R[removed_long_count]:-0}"
+        printf '    "added_long_count": %s\n' "${R[added_long_count]:-0}"
         printf '  }\n'
         printf '}\n'
     elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
@@ -1520,30 +1296,30 @@ main() {
         if [[ "$VERBOSE" = "true" ]]; then
             printf '=== Detailed Analysis ===\n'
             printf 'File changes:\n'
-            printf '  Added files: %s\n' "$added_files"
-            printf '  Modified files: %s\n' "$modified_files"
-            printf '  Deleted files: %s\n' "$deleted_files"
+            printf '  Added files: %s\n' "${R[added_files]}"
+            printf '  Modified files: %s\n' "${R[modified_files]}"
+            printf '  Deleted files: %s\n' "${R[deleted_files]}"
             printf '\n'
             printf 'New content:\n'
-            printf '  New source files: %s\n' "$new_source_files"
-            printf '  New test files: %s\n' "$new_test_files"
-            printf '  New doc files: %s\n' "$new_doc_files"
+            printf '  New source files: %s\n' "${R[new_source_files]}"
+            printf '  New test files: %s\n' "${R[new_test_files]}"
+            printf '  New doc files: %s\n' "${R[new_doc_files]}"
             printf '\n'
             printf 'CLI changes:\n'
-            printf '  CLI interface changes: %s\n' "$cli_changes"
-            printf '  Breaking CLI changes: %s\n' "$breaking_cli_changes"
-            printf '  Manual CLI changes: %s\n' "${manual_cli_changes:-false}"
-            printf '  Removed short options: %s\n' "${removed_short_count:-0}"
-            printf '  Added short options: %s\n' "${added_short_count:-0}"
-            printf '  Removed long options: %s\n' "${removed_long_count:-0}"
-            printf '  Added long options: %s\n' "${added_long_count:-0}"
+            printf '  CLI interface changes: %s\n' "${R[cli_changes]}"
+            printf '  Breaking CLI changes: %s\n' "${R[breaking_cli_changes]}"
+            printf '  Manual CLI changes: %s\n' "${R[manual_cli_changes]}"
+            printf '  Removed short options: %s\n' "${R[removed_short_count]}"
+            printf '  Added short options: %s\n' "${R[added_short_count]}"
+            printf '  Removed long options: %s\n' "${R[removed_long_count]}"
+            printf '  Added long options: %s\n' "${R[added_long_count]}"
             printf '\n'
             printf 'Change magnitude:\n'
-            printf '  Diff size: %s lines\n' "$diff_size"
+            printf '  Diff size: %s lines\n' "${R[diff_size]}"
             printf '\n'
             printf 'Advanced analysis:\n'
-            printf '  API breaking changes: %s\n' "${api_breaking:-false}"
-            printf '  Security/crash keywords: %s\n' "${security_keywords:-0}"
+            printf '  API breaking changes: %s\n' "${R[api_breaking]}"
+            printf '  Security/crash keywords: %s\n' "${R[security_keywords]}"
             printf '\n'
             printf 'Thresholds:\n'
             printf '  Major: Breaking CLI changes or diff > %s lines (MAJOR_REQUIRE_BREAKING=%s)\n' "$MIN_MAJOR_DIFF_LINES" "$MAJOR_REQUIRE_BREAKING"
@@ -1563,29 +1339,29 @@ main() {
         case "$suggestion" in
             major)
                 printf 'Suggested bump: MAJOR version\n'
-                if [[ "$breaking_cli_changes" = "true" ]]; then
+                if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
                     printf 'Reason: Breaking CLI changes detected\n'
-                elif [[ "$api_breaking" = "true" ]]; then
+                elif [[ "${R[api_breaking]}" = "true" ]]; then
                     printf 'Reason: API breaking changes detected\n'
-                elif [[ "${security_keywords:-0}" -gt 0 ]]; then
-                    printf 'Reason: Security/crash-related changes detected (%s keywords)\n' "$security_keywords"
+                elif [[ "${R[security_keywords]:-0}" -gt 0 ]]; then
+                    printf 'Reason: Security/crash-related changes detected (%s keywords)\n' "${R[security_keywords]}"
                 else
-                    printf 'Reason: Very large code changes (%s lines)\n' "$diff_size"
+                    printf 'Reason: Very large code changes (%s lines)\n' "${R[diff_size]}"
                 fi
                 printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
                 ;;
             minor)
                 printf 'Suggested bump: MINOR version\n'
-                if [[ "$cli_changes" = "true" ]]; then
+                if [[ "${R[cli_changes]}" = "true" ]]; then
                     printf 'Reason: New CLI options added\n'
-                elif [[ "${manual_cli_changes:-false}" = "true" ]]; then
+                elif [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
                     printf 'Reason: Manual CLI changes detected\n'
-                elif [[ "${new_source_files:-0}" -gt 0 ]]; then
-                    printf 'Reason: New source files added (%s)\n' "$new_source_files"
-                elif [[ "${new_test_files:-0}" -gt 0 ]]; then
-                    printf 'Reason: New test files added (%s)\n' "$new_test_files"
-                elif [[ "${new_doc_files:-0}" -gt 0 ]]; then
-                    printf 'Reason: New documentation added (%s)\n' "$new_doc_files"
+                elif [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
+                    printf 'Reason: New source files added (%s)\n' "${R[new_source_files]}"
+                elif [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
+                    printf 'Reason: New test files added (%s)\n' "${R[new_test_files]}"
+                elif [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
+                    printf 'Reason: New documentation added (%s)\n' "${R[new_doc_files]}"
                 else
                     printf 'Reason: New features or significant additions\n'
                 fi
@@ -1593,7 +1369,7 @@ main() {
                 ;;
             patch)
                 printf 'Suggested bump: PATCH version\n'
-                printf 'Reason: Significant modifications (%s files, %s lines)\n' "$modified_files" "$diff_size"
+                printf 'Reason: Significant modifications (%s files, %s lines)\n' "${R[modified_files]}" "${R[diff_size]}"
                 printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
                 ;;
             none)
