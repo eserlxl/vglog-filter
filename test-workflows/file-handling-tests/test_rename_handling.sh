@@ -12,7 +12,7 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # Source test helper functions
 # shellcheck disable=SC1091
@@ -24,15 +24,15 @@ echo "=== Testing Rename Handling ==="
 temp_dir=$(create_temp_test_env "rename-handling")
 cd "$temp_dir"
 
-# Create a test file
-echo "test content" > test-workflows/source-fixtures/test_content_simple.txt
+# Create a test file (use a unique name to avoid conflicts)
+echo "test content for rename" > test-workflows/source-fixtures/rename_test_original.txt
 
 # Add and commit the file
-git add test-workflows/source-fixtures/test_content_simple.txt
+git add test-workflows/source-fixtures/rename_test_original.txt
 git commit -m "Add test file for rename test"
 
 # Rename the file
-git mv test-workflows/source-fixtures/test_content_simple.txt test-workflows/source-fixtures/test_content_renamed.txt
+git mv test-workflows/source-fixtures/rename_test_original.txt test-workflows/source-fixtures/rename_test_renamed.txt
 git commit -m "Rename test file"
 
 # Run semantic version analyzer from the original project directory

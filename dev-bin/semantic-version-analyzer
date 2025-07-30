@@ -29,8 +29,7 @@ if ! command -v git >/dev/null 2>&1; then
     exit 1
 fi
 
-# Auto-detect script directory using POSIX-friendly approach
-SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd -P)"
+
 
 # Early repository guard (only if --repo-root is not specified)
 # We'll check for --repo-root in the argument parsing loop
