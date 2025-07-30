@@ -62,6 +62,28 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Function to cleanup test artifacts
+cleanup_test_artifacts() {
+    echo -e "${BLUE}[INFO]${NC} Cleaning up test artifacts..."
+    
+    # Remove Valgrind concurrent test files
+    rm -f test_concurrent_*.tmp 2>/dev/null
+    
+    # Remove any test files that might have been created in root directory
+    rm -f test_safe_ops.txt 2>/dev/null
+    rm -f test_*.txt 2>/dev/null
+    rm -f test_*.tmp 2>/dev/null
+    
+    # Remove any temporary executables (but keep build directory intact)
+    find . -maxdepth 1 -name "test_*" -type f -exec rm -f {} \; 2>/dev/null
+    find . -maxdepth 1 -name "vglog-filter" -type f -exec rm -f {} \; 2>/dev/null
+    
+    # Remove any .o files in root (but keep build directory)
+    find . -maxdepth 1 -name "*.o" -type f -exec rm -f {} \; 2>/dev/null
+    
+    echo -e "${GREEN}[SUCCESS]${NC} Test artifacts cleaned up"
+}
+
 print_header() {
     echo -e "${BOLD}${CYAN}============================================================${NC}"
     echo -e "${BOLD}${CYAN}       VGLOG-FILTER — Comprehensive Test Suite Results${NC}"
@@ -558,5 +580,8 @@ fi
 } > "$COMPREHENSIVE_SUMMARY"
 
 print_final_footer
+
+# Cleanup test artifacts
+cleanup_test_artifacts
 
 exit $OVERALL_RESULT 
