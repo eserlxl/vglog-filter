@@ -12,20 +12,7 @@
 #include <cassert>
 #include <sstream>
 #include <cstring>
-
-// Simple test framework
-#define TEST_ASSERT(condition, message) \
-    do { \
-        if (!(condition)) { \
-            std::cerr << "FAIL: " << message << std::endl; \
-            return false; \
-        } \
-    } while(0)
-
-#define TEST_PASS(message) \
-    do { \
-        std::cout << "PASS: " << message << std::endl; \
-    } while(0)
+#include "test_helpers.h"
 
 // Mock Options struct for testing (simplified version of the real one)
 struct Options {

@@ -152,6 +152,7 @@ if (BUILD_TESTING)
   add_test_exe(test_path_validation "test/test_path_validation.cpp")
   add_test_exe(test_regex_patterns  "test/test_regex_patterns.cpp")
   add_test_exe(test_cli_options     "test/test_cli_options.cpp")
+  add_test_exe(test_edge_utf8_perm  "test/test_edge_utf8_perm.cpp")
 
   # Convenience target to run tests with nice output
   add_custom_target(run-tests

@@ -10,25 +10,13 @@
 #include <string_view>
 #include <regex>
 #include <cassert>
+#include "test_helpers.h"
 
 // Simple test framework
-#define TEST_ASSERT(condition, message) \
-    do { \
-        if (!(condition)) { \
-            std::cerr << "FAIL: " << message << std::endl; \
-            return false; \
-        } \
-    } while(0)
-
-#define TEST_PASS(message) \
-    do { \
-        std::cout << "PASS: " << message << std::endl; \
-    } while(0)
+// Remove TEST_ASSERT, TEST_PASS, trim, regex_replace_all, canon definitions
 
 // Test helper functions (simplified versions of the main functions)
-std::string regex_replace_all(std::string_view src, const std::regex& re, std::string_view repl) {
-    return std::regex_replace(std::string(src), re, std::string(repl));
-}
+// Remove TEST_ASSERT, TEST_PASS, trim, regex_replace_all, canon definitions
 
 // Simplified regex patterns for testing (matching the ones in vglog-filter.cpp)
 static const std::regex& get_re_addr() {

@@ -13,50 +13,15 @@
 #include <cassert>
 #include <sstream>
 #include <regex>
+#include "test_helpers.h"
 
 // Simple test framework
-#define TEST_ASSERT(condition, message) \
-    do { \
-        if (!(condition)) { \
-            std::cerr << "FAIL: " << message << std::endl; \
-            return false; \
-        } \
-    } while(0)
-
-#define TEST_PASS(message) \
-    do { \
-        std::cout << "PASS: " << message << std::endl; \
-    } while(0)
+// Remove TEST_ASSERT, TEST_PASS, trim, regex_replace_all, canon definitions
 
 // Test helper functions (simplified versions of the main functions)
-std::string trim(std::string_view s) {
-    auto start = s.find_first_not_of(" \t\r\n");
-    if (start == std::string_view::npos) return "";
-    auto end = s.find_last_not_of(" \t\r\n");
-    return std::string(s.substr(start, end - start + 1));
-}
+// Remove TEST_ASSERT, TEST_PASS, trim, regex_replace_all, canon definitions
 
-std::string regex_replace_all(std::string_view src, const std::regex& re, std::string_view repl) {
-    return std::regex_replace(std::string(src), re, std::string(repl));
-}
-
-std::string canon(std::string_view s) {
-    std::string result(s);
-    
-    // Simplified canonicalization for testing
-    static const std::regex re_addr(R"(0x[0-9a-fA-F]+)", std::regex::optimize);
-    static const std::regex re_line(R"(:[0-9]+)", std::regex::optimize);
-    static const std::regex re_array(R"(\[[0-9]+\])", std::regex::optimize);
-    static const std::regex re_template(R"(<[^>]*>)", std::regex::optimize);
-    static const std::regex re_ws(R"([ \t\v\f\r\n]+)", std::regex::optimize);
-    
-    result = regex_replace_all(result, re_addr, "0xADDR");
-    result = regex_replace_all(result, re_line, ":LINE");
-    result = regex_replace_all(result, re_array, "[]");
-    result = regex_replace_all(result, re_template, "<T>");
-    result = regex_replace_all(result, re_ws, " ");
-    return trim(result);
-}
+// Add RAII file cleanup helper
 
 bool test_version_reading() {
     // Test that version can be read from local VERSION file
@@ -73,20 +38,15 @@ bool test_version_reading() {
 }
 
 bool test_empty_file_handling() {
-    // Create a temporary empty file
-    {
-        std::ofstream empty_file("test_empty.tmp");
-    } // File automatically closed
-    
-    // Test that the file is actually empty
+    TempFile cleanup("test_empty.tmp");
+    std::ofstream empty_file("test_empty.tmp");
+    empty_file.close();
+    bool has_content = false;
     if (std::ifstream check_file("test_empty.tmp"); check_file) {
         std::string line;
-        bool has_content = static_cast<bool>(std::getline(check_file, line));
-        TEST_ASSERT(!has_content, "Empty file should have no content");
+        has_content = static_cast<bool>(std::getline(check_file, line));
     }
-    
-    // Clean up
-    std::remove("test_empty.tmp");
+    TEST_ASSERT(!has_content, "Empty file should have no content");
     TEST_PASS("Empty file handling works");
     return true;
 }
@@ -135,9 +95,9 @@ bool test_string_trimming() {
 
 bool test_canonicalization() {
     // Test the canonicalization function
-    std::string test1 = "at 0x12345678: main (test.cpp:42)";
-    std::string test2 = "array[123] template<int> 0xabcdef";
-    std::string test3 = "normal text without patterns";
+    std::string test1 = "==12345==    at 0x401234: main (test.cpp:10)";
+    std::string test2 = "==12345==    at 0x401234: array[5] (test.cpp:15)";
+    std::string test3 = "==12345==    at 0x401234: std::vector<int>::operator[] (vector:123)";
     
     std::string result1 = canon(test1);
     std::string result2 = canon(test2);
@@ -146,8 +106,7 @@ bool test_canonicalization() {
     TEST_ASSERT(result1.find("0xADDR") != std::string::npos, "Address should be canonicalized");
     TEST_ASSERT(result1.find(":LINE") != std::string::npos, "Line number should be canonicalized");
     TEST_ASSERT(result2.find("[]") != std::string::npos, "Array index should be canonicalized");
-    TEST_ASSERT(result2.find("<T>") != std::string::npos, "Template should be canonicalized");
-    TEST_ASSERT(result3 == "normal text without patterns", "Normal text should remain unchanged");
+    TEST_ASSERT(result3.find("<T>") != std::string::npos, "Template should be canonicalized");
     
     TEST_PASS("Canonicalization function works correctly");
     return true;

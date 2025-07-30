@@ -18,20 +18,10 @@
 #include <stdexcept>
 #include <sys/stat.h>
 #include <path_validation.h>
+#include "test_helpers.h"
 
 // Simple test framework
-#define TEST_ASSERT(condition, message) \
-    do { \
-        if (!(condition)) { \
-            std::cerr << "FAIL: " << message << std::endl; \
-            return false; \
-        } \
-    } while(0)
-
-#define TEST_PASS(message) \
-    do { \
-        std::cout << "PASS: " << message << std::endl; \
-    } while(0)
+// Remove TEST_ASSERT, TEST_PASS, trim, regex_replace_all, canon definitions
 
 #define TEST_EXPECT_EXCEPTION(expr, exception_type, message) \
     do { \

@@ -22,6 +22,32 @@ MAGENTA='\033[0;35m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
+# Function to count C++ tests by parsing CMakeLists.txt
+count_cpp_tests() {
+    local cmake_file="CMakeLists.txt"
+    if [ ! -f "$cmake_file" ]; then
+        echo "Error: CMakeLists.txt not found at $cmake_file" >&2
+        return 1
+    fi
+    
+    # Count add_test_exe lines in CMakeLists.txt
+    local count=$(grep -c "^[[:space:]]*add_test_exe(" "$cmake_file" 2>/dev/null || echo "0")
+    echo "$count"
+}
+
+# Function to count workflow tests by scanning test-workflows directory
+count_workflow_tests() {
+    local test_dir="test-workflows"
+    if [ ! -d "$test_dir" ]; then
+        echo "0"
+        return
+    fi
+    
+    # Count all .sh files in test-workflows and subdirectories
+    local count=$(find "$test_dir" -name "*.sh" -type f | wc -l)
+    echo "$count"
+}
+
 # Function to print colored output
 # Note: These functions are defined for potential future use but not currently called
 # print_status() {
@@ -195,9 +221,20 @@ WORKFLOW_PASSED=0
 WORKFLOW_FAILED=0
 WORKFLOW_SKIPPED=0
 
+# Count tests automatically
+CPP_TOTAL=$(count_cpp_tests)
+WORKFLOW_TOTAL=$(count_workflow_tests)
+
+if [ "$CPP_TOTAL" -eq 0 ]; then
+    echo "Warning: No C++ tests found in CMakeLists.txt" >&2
+fi
+
+if [ "$WORKFLOW_TOTAL" -eq 0 ]; then
+    echo "Warning: No workflow tests found in test-workflows directory" >&2
+fi
+
 # Initialize C++ test counters
-CPP_TOTAL=8
-CPP_PASSED=8
+CPP_PASSED=$CPP_TOTAL
 CPP_FAILED=0
 
 print_header
@@ -380,11 +417,11 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "C++ Unit" ]]; then
         ./test/run_unit_tests.sh >/dev/null 2>&1
         CPP_RESULT=$?
         
-        # Parse C++ test results from summary if it exists
-        if [ -f "test_results/cpp_unit_test_summary.txt" ]; then
-            CPP_PASSED=$(grep "Passed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "8")
-            CPP_FAILED=$(grep "Failed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
-        fi
+                    # Parse C++ test results from summary if it exists
+            if [ -f "test_results/cpp_unit_test_summary.txt" ]; then
+                CPP_PASSED=$(grep "Passed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "$CPP_TOTAL")
+                CPP_FAILED=$(grep "Failed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
+            fi
         
         # Calculate C++ success rate
         CPP_SUCCESS_RATE=100
