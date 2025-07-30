@@ -8,8 +8,6 @@
 #
 # Test the extract_cli_options function with proper test environment
 
-set -Eeuo pipefail
-
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
@@ -40,7 +38,7 @@ run_cli_extraction_test() {
     if [[ $? -ne 0 ]]; then
         echo -e "\033[0;31m✗ Failed to create test environment\033[0m"
         ((TESTS_FAILED++))
-        return 1
+        return 0  # Don't exit, just return
     fi
     
     # Change to temporary directory
@@ -48,7 +46,7 @@ run_cli_extraction_test() {
         echo -e "\033[0;31m✗ Failed to change to test directory\033[0m"
         cleanup_temp_test_env "$temp_dir"
         ((TESTS_FAILED++))
-        return 1
+        return 0  # Don't exit, just return
     fi
     
     # Create test source file
@@ -61,7 +59,7 @@ run_cli_extraction_test() {
         echo -e "\033[0;31m✗ Failed to commit original file\033[0m"
         cleanup_temp_test_env "$temp_dir"
         ((TESTS_FAILED++))
-        return 1
+        return 0  # Don't exit, just return
     fi
     
     # Store the original commit hash
@@ -75,7 +73,7 @@ run_cli_extraction_test() {
         echo -e "\033[0;31m✗ Failed to commit modified file\033[0m"
         cleanup_temp_test_env "$temp_dir"
         ((TESTS_FAILED++))
-        return 1
+        return 0  # Don't exit, just return
     fi
     
     # Store the modified commit hash
@@ -195,7 +193,7 @@ int main(int argc, char *argv[]) {
         std::cout << \"Help message\" << std::endl;
         return 0;
     }
-    return 0;
+    return 0; // No change
 }"
 
 # Print summary
