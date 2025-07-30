@@ -8,7 +8,7 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd -P)"
-PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
 
 # Source test helper functions
 # shellcheck disable=SC1091
@@ -71,8 +71,25 @@ cd "$temp_dir"
 # Test 1: ERE fix - manual CLI detection should work with escaped +
 printf '%s=== Test 1: ERE Fix for Manual CLI Detection ===%s\n' "${YELLOW}" "${NC}"
 
-# Create a test file with manual CLI parsing
+# Create a test file without CLI parsing first
 mkdir -p test-workflows/source-fixtures/cli
+{
+    generate_license_header "c" "Test fixture for CLI detection testing"
+    cat << 'EOF'
+#include <stdio.h>
+
+int main(int argc, char *argv[]) {
+    printf("Hello, world!\n");
+    return 0;
+}
+EOF
+} > test-workflows/source-fixtures/cli/simple_cli_test.c
+
+# Add the file without CLI
+git add test-workflows/source-fixtures/cli/simple_cli_test.c
+git commit -m "Add basic test file" --no-verify
+
+# Now add CLI parsing
 {
     generate_license_header "c" "Test fixture for CLI detection testing"
     cat << 'EOF'
@@ -99,7 +116,7 @@ int main(int argc, char *argv[]) {
 EOF
 } > test-workflows/source-fixtures/cli/simple_cli_test.c
 
-# Add the file
+# Commit the CLI changes
 git add test-workflows/source-fixtures/cli/simple_cli_test.c
 git commit -m "Add manual CLI parser test" --no-verify
 

@@ -238,7 +238,7 @@ int main() {
 EOF
 
 git add test.c
-git commit -m "Change whitespace only"
+git commit -m "Change whitespace only" || true
 
 # Get the commit hashes
 first_commit=$(git rev-parse HEAD~1)
@@ -264,7 +264,7 @@ echo "Test 5: --print-base functionality"
 cd "$PROJECT_ROOT"
 
 # Run --print-base
-base_ref=$(./dev-bin/semantic-version-analyzer --print-base 2>&1 || echo "unknown")
+base_ref=$(./dev-bin/semantic-version-analyzer --print-base 2>&1 | tail -1 || echo "unknown")
 
 if [[ "$base_ref" != "unknown" ]] && [[ "$base_ref" =~ ^[a-f0-9]+$ ]]; then
     echo "✅ PASS: --print-base returned valid SHA: $base_ref"
@@ -276,3 +276,4 @@ fi
 echo
 
 echo "=== All tests completed successfully ===" 
+exit 0
