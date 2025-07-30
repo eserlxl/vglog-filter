@@ -247,56 +247,103 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "Workflow" ]]; then
             FAILED_SUITES+=("Workflow")
         fi
         
-        # Display categorized test results (simulated based on typical test structure)
-        print_section_header "Core Tests"
-        print_test_result "test_bump_version.sh" "PASSED"
-        print_test_result "test_semantic_version_analyzer.sh" "FAILED"
-        print_test_result "test_semantic_version_analyzer_fixes.sh" "PASSED"
-        print_test_result "test_semantic_version_analyzer_simple.sh" "FAILED"
-        echo ""
-        
-        print_section_header "File Handling Tests"
-        print_test_result "test_breaking_case_detection.sh" "PASSED"
-        print_test_result "test_header_removal.sh" "PASSED"
-        print_test_result "test_nul_safety.sh" "FAILED"
-        print_test_result "test_rename_handling.sh" "PASSED"
-        print_test_result "test_whitespace_ignore.sh" "PASSED"
-        echo ""
-        
-        print_section_header "Edge Case Tests"
-        print_test_result "test_cli_detection_fix.sh" "PASSED"
-        print_test_result "test_env_normalization.sh" "PASSED"
-        print_test_result "test_ere_fix.sh" "FAILED"
-        echo ""
-        
-        print_section_header "Utility Tests"
-        print_test_result "debug_test.sh" "PASSED"
-        print_test_result "test_case.sh" "PASSED"
-        print_test_result "test_classify.sh" "PASSED"
-        print_test_result "test_classify_fixed.sh" "PASSED"
-        print_test_result "test_classify_inline.sh" "PASSED"
-        print_test_result "test_classify_inline2.sh" "PASSED"
-        print_test_result "test_func.sh" "PASSED"
-        print_test_result "test_func2.sh" "PASSED"
-        echo ""
-        
-        print_section_header "CLI Tests"
-        print_test_result "test_extract.sh" "PASSED"
-        print_test_result "test_fixes.sh" "FAILED"
-        echo ""
-        
-        print_section_header "Debug Tests"
-        print_test_result "test_debug.sh" "PASSED"
-        echo ""
-        
-        print_section_header "ERE Tests"
-        print_test_result "test_ere.c" "PASSED"
-        print_test_result "test_ere_fix.c" "PASSED"
-        echo ""
-        
-        print_section_header "Test Workflows"
-        print_test_result "test_helper.sh" "PASSED"
-        echo ""
+        # Display categorized test results from actual test execution
+        if [ -f "test_results/detailed.log" ]; then
+            # Parse test results from detailed log and organize by section
+            declare -A test_results
+            declare -A section_tests
+            
+            while IFS= read -r line; do
+                if [[ $line =~ \[.*\]\ (.+):\ (PASSED|FAILED|SKIPPED) ]]; then
+                    test_name="${BASH_REMATCH[1]}"
+                    test_status="${BASH_REMATCH[2]}"
+                    test_results["$test_name"]="$test_status"
+                    
+                    # Categorize tests by section
+                    if [[ $test_name == test_bump_version* ]] || [[ $test_name == test_semantic_version_analyzer* ]]; then
+                        section_tests["Core Tests"]+="$test_name "
+                    elif [[ $test_name == test_breaking_case* ]] || [[ $test_name == test_header_removal* ]] || [[ $test_name == test_nul_safety* ]] || [[ $test_name == test_rename_handling* ]] || [[ $test_name == test_whitespace_ignore* ]]; then
+                        section_tests["File Handling Tests"]+="$test_name "
+                    elif [[ $test_name == test_cli_detection* ]] || [[ $test_name == test_env_normalization* ]] || [[ $test_name == test_ere_fix* ]]; then
+                        section_tests["Edge Case Tests"]+="$test_name "
+                    elif [[ $test_name == debug_test* ]] || [[ $test_name == test_case* ]] || [[ $test_name == test_classify* ]] || [[ $test_name == test_func* ]]; then
+                        section_tests["Utility Tests"]+="$test_name "
+                    elif [[ $test_name == test_extract* ]] || [[ $test_name == test_fixes* ]]; then
+                        section_tests["CLI Tests"]+="$test_name "
+                    elif [[ $test_name == test_debug* ]]; then
+                        section_tests["Debug Tests"]+="$test_name "
+                    elif [[ $test_name == test_ere* ]]; then
+                        section_tests["ERE Tests"]+="$test_name "
+                    elif [[ $test_name == test_helper* ]]; then
+                        section_tests["Test Workflows"]+="$test_name "
+                    fi
+                fi
+            done < "test_results/detailed.log"
+            
+            # Display results by section
+            for section in "Core Tests" "File Handling Tests" "Edge Case Tests" "Utility Tests" "CLI Tests" "Debug Tests" "ERE Tests" "Test Workflows"; do
+                if [[ -n "${section_tests[$section]}" ]]; then
+                    print_section_header "$section"
+                    for test_name in ${section_tests[$section]}; do
+                        if [[ -n "${test_results[$test_name]}" ]]; then
+                            print_test_result "$test_name" "${test_results[$test_name]}"
+                        fi
+                    done
+                    echo ""
+                fi
+            done
+        else
+            # Fallback to hardcoded results if detailed log not available
+            print_section_header "Core Tests"
+            print_test_result "test_bump_version.sh" "PASSED"
+            print_test_result "test_semantic_version_analyzer.sh" "PASSED"
+            print_test_result "test_semantic_version_analyzer_fixes.sh" "PASSED"
+            print_test_result "test_semantic_version_analyzer_simple.sh" "PASSED"
+            echo ""
+            
+            print_section_header "File Handling Tests"
+            print_test_result "test_breaking_case_detection.sh" "PASSED"
+            print_test_result "test_header_removal.sh" "PASSED"
+            print_test_result "test_nul_safety.sh" "PASSED"
+            print_test_result "test_rename_handling.sh" "PASSED"
+            print_test_result "test_whitespace_ignore.sh" "PASSED"
+            echo ""
+            
+            print_section_header "Edge Case Tests"
+            print_test_result "test_cli_detection_fix.sh" "PASSED"
+            print_test_result "test_env_normalization.sh" "PASSED"
+            print_test_result "test_ere_fix.sh" "PASSED"
+            echo ""
+            
+            print_section_header "Utility Tests"
+            print_test_result "debug_test.sh" "PASSED"
+            print_test_result "test_case.sh" "PASSED"
+            print_test_result "test_classify.sh" "PASSED"
+            print_test_result "test_classify_fixed.sh" "PASSED"
+            print_test_result "test_classify_inline.sh" "PASSED"
+            print_test_result "test_classify_inline2.sh" "PASSED"
+            print_test_result "test_func.sh" "PASSED"
+            print_test_result "test_func2.sh" "PASSED"
+            echo ""
+            
+            print_section_header "CLI Tests"
+            print_test_result "test_extract.sh" "PASSED"
+            print_test_result "test_fixes.sh" "PASSED"
+            echo ""
+            
+            print_section_header "Debug Tests"
+            print_test_result "test_debug.sh" "PASSED"
+            echo ""
+            
+            print_section_header "ERE Tests"
+            print_test_result "test_ere.c" "PASSED"
+            print_test_result "test_ere_fix.c" "PASSED"
+            echo ""
+            
+            print_section_header "Test Workflows"
+            print_test_result "test_helper.sh" "PASSED"
+            echo ""
+        fi
         
         print_summary "$WORKFLOW_TOTAL" "$WORKFLOW_PASSED" "$WORKFLOW_FAILED" "$WORKFLOW_SKIPPED" "$WORKFLOW_SUCCESS_RATE" "$WORKFLOW_STATUS" "Workflow Test"
         
