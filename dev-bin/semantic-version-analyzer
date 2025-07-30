@@ -1153,8 +1153,13 @@ analyze_changes() {
     local manual_cli_detected
     manual_cli_detected=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | grep -E "(strcmp.*argv|getopt|argc.*argv)" | grep -c "\\-\\-[a-zA-Z0-9]" || printf '0' \
+        | grep -E "(strcmp.*argv|getopt|argc.*argv)" | grep -c "\\-\\-[a-zA-Z0-9]" 2>/dev/null || printf '0' \
     )
+    
+    # Ensure manual_cli_detected is numeric
+    if [[ ! "$manual_cli_detected" =~ ^[0-9]+$ ]]; then
+        manual_cli_detected=0
+    fi
     
     if [[ "$manual_cli_detected" -gt 0 ]]; then
         R[manual_cli_changes]=true
@@ -1229,8 +1234,20 @@ suggest_version_bump() {
     # MAJOR: Breaking, security, or very large changes (if not requiring breaking)
     if [[ "${R[breaking_cli_changes]}" = "true" ]]; then printf 'major'; return; fi
     if [[ "${R[api_breaking]}" = "true"      ]]; then printf 'major'; return; fi
-    if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then printf 'major'; return; fi
-    if [[ "${R[diff_size]:-0}" -gt "$major_lines" ]]; then
+    
+    # Ensure security_keywords is numeric
+    local security_keywords="${R[security_keywords]:-0}"
+    if [[ ! "$security_keywords" =~ ^[0-9]+$ ]]; then
+        security_keywords=0
+    fi
+    if [[ "$security_keywords" -gt 0 ]]; then printf 'major'; return; fi
+    
+    # Ensure diff_size is numeric
+    local diff_size="${R[diff_size]:-0}"
+    if [[ ! "$diff_size" =~ ^[0-9]+$ ]]; then
+        diff_size=0
+    fi
+    if [[ "$diff_size" -gt "$major_lines" ]]; then
         if [[ "$REQ" = "true" || "$REQ" = "1" || "$REQ" = "yes" ]]; then
             :
         else
@@ -1244,7 +1261,11 @@ suggest_version_bump() {
     if [[ "${R[new_test_files]:-0}"  -ge "$minor_tests"  ]]; then printf 'minor'; return; fi
     if [[ "${R[new_doc_files]:-0}"   -ge "$minor_docs"   ]]; then printf 'minor'; return; fi
     # PATCH: Significant modifications without new features
-    if [[ "${R[modified_files]:-0}" -ge "$patch_files" ]] && [[ "${R[diff_size]:-0}" -gt "$patch_lines" ]]; then
+    local modified_files="${R[modified_files]:-0}"
+    if [[ ! "$modified_files" =~ ^[0-9]+$ ]]; then
+        modified_files=0
+    fi
+    if [[ "$modified_files" -ge "$patch_files" ]] && [[ "$diff_size" -gt "$patch_lines" ]]; then
         printf 'patch'; return
     fi
     printf 'none'
@@ -1255,8 +1276,20 @@ get_bump_reason() {
     # MAJOR reasons
     if [[ "${R[breaking_cli_changes]}" = "true" ]]; then printf 'breaking_cli'; return; fi
     if [[ "${R[api_breaking]}" = "true"      ]]; then printf 'api_break';    return; fi
-    if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then printf 'security_keywords'; return; fi
-    if [[ "${R[diff_size]:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
+    
+    # Ensure security_keywords is numeric for get_bump_reason
+    local security_keywords_reason="${R[security_keywords]:-0}"
+    if [[ ! "$security_keywords_reason" =~ ^[0-9]+$ ]]; then
+        security_keywords_reason=0
+    fi
+    if [[ "$security_keywords_reason" -gt 0 ]]; then printf 'security_keywords'; return; fi
+    
+    # Ensure diff_size is numeric for get_bump_reason
+    local diff_size_reason="${R[diff_size]:-0}"
+    if [[ ! "$diff_size_reason" =~ ^[0-9]+$ ]]; then
+        diff_size_reason=0
+    fi
+    if [[ "$diff_size_reason" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
         if [[ "$REQ" = "true" || "$REQ" = "1" || "$REQ" = "yes" ]]; then
             # When MAJOR_REQUIRE_BREAKING is true, large diffs alone don't trigger major
             # Only breaking changes should trigger major
@@ -1275,7 +1308,11 @@ get_bump_reason() {
     if [[ "${R[new_doc_files]:-0}"   -ge "$MIN_NEW_DOC_FILES"   ]]; then printf 'new_docs';  return; fi
 
     # PATCH reasons
-    if [[ "${R[modified_files]:-0}" -ge "$MIN_PATCH_FILES" ]] && [[ "${R[diff_size]:-0}" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
+    local modified_files_reason="${R[modified_files]:-0}"
+    if [[ ! "$modified_files_reason" =~ ^[0-9]+$ ]]; then
+        modified_files_reason=0
+    fi
+    if [[ "$modified_files_reason" -ge "$MIN_PATCH_FILES" ]] && [[ "$diff_size_reason" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
         printf 'mods_only'; return
     fi
 
@@ -1355,8 +1392,31 @@ main() {
     fi
 
     if ! check_commit_range "$base_ref" "$target_ref"; then
-        printf 'Error: No commits found between %s and %s. Exiting.\n' "$base_ref" "$target_ref" >&2
-        exit 1
+        if [[ "$MACHINE_OUTPUT" = "true" ]]; then
+            printf 'SUGGESTION=none\n'
+            exit 0
+        elif [[ "$SUGGEST_ONLY" = "true" ]]; then
+            printf 'none\n'
+            exit 0
+        elif [[ "$JSON_OUTPUT" = "true" ]]; then
+            printf '{\n'
+            printf '  "suggestion": "none",\n'
+            printf '  "reason": "No commits found between %s and %s",\n' "$base_ref" "$target_ref"
+            printf '  "current_version": "0.0.0",\n'
+            printf '  "base_ref": "%s",\n' "$(json_escape "$base_ref")"
+            printf '  "target_ref": "%s",\n' "$(json_escape "$target_ref")"
+            printf '  "changes": {\n'
+            printf '    "added_files": 0,\n'
+            printf '    "modified_files": 0,\n'
+            printf '    "deleted_files": 0,\n'
+            printf '    "diff_size": 0\n'
+            printf '  }\n'
+            printf '}\n'
+            exit 0
+        else
+            printf 'Error: No commits found between %s and %s. Exiting.\n' "$base_ref" "$target_ref" >&2
+            exit 1
+        fi
     fi
 
     # Get current version with proper whitespace handling and validation
@@ -1484,8 +1544,8 @@ main() {
                     printf 'Reason: Breaking CLI changes detected\n'
                 elif [[ "${R[api_breaking]}" = "true" ]]; then
                     printf 'Reason: API breaking changes detected\n'
-                elif [[ "${R[security_keywords]:-0}" -gt 0 ]]; then
-                    printf 'Reason: Security/crash-related changes detected (%s keywords)\n' "${R[security_keywords]}"
+                elif [[ "$security_keywords" -gt 0 ]]; then
+                    printf 'Reason: Security/crash-related changes detected (%s keywords)\n' "$security_keywords"
                 else
                     printf 'Reason: Very large code changes (%s lines)\n' "${R[diff_size]}"
                 fi

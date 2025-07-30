@@ -109,7 +109,7 @@ second_commit=$(git rev-parse HEAD)
 
 # Test that manual CLI detection works (should not crash with ERE error)
 run_test "Manual CLI detection with escaped +" \
-    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --verbose --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
+    "$PROJECT_ROOT/dev-bin/semantic-version-analyzer --verbose --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
     11 \
     "manual_cli_changes=true"
 
@@ -155,7 +155,7 @@ second_commit=$(git rev-parse HEAD)
 
 # Test that getopt and manual counts are separate
 run_test "Getopt and manual counts separation" \
-    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --verbose --base '$first_commit' --target '$second_commit' --json --repo-root '$temp_dir'" \
+    "$PROJECT_ROOT/dev-bin/semantic-version-analyzer --verbose --base '$first_commit' --target '$second_commit' --json --repo-root '$temp_dir'" \
     11 \
     '"manual_added_long_count": 0'
 
@@ -172,7 +172,7 @@ first_commit=$(git rev-parse HEAD~1)
 second_commit=$(git rev-parse HEAD)
 
 run_test "Breaking CLI change detection" \
-    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
+    "$PROJECT_ROOT/dev-bin/semantic-version-analyzer --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
     10 \
     "breaking_cli"
 
@@ -207,7 +207,7 @@ first_commit=$(git rev-parse HEAD~1)
 second_commit=$(git rev-parse HEAD)
 
 run_test "API breaking change detection" \
-    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
+    "$PROJECT_ROOT/dev-bin/semantic-version-analyzer --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
     10 \
     "api_break"
 
@@ -224,7 +224,7 @@ first_commit=$(git rev-parse HEAD~1)
 second_commit=$(git rev-parse HEAD)
 
 run_test "Whitespace ignore with --ignore-whitespace" \
-    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --ignore-whitespace --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
+    "$PROJECT_ROOT/dev-bin/semantic-version-analyzer --ignore-whitespace --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
     20 \
     "NONE"
 
@@ -263,17 +263,17 @@ first_commit=$(git rev-parse HEAD~3)
 second_commit=$(git rev-parse HEAD)
 
 run_test "MAJOR_REQUIRE_BREAKING=true" \
-    "cd '$PROJECT_ROOT' && MAJOR_REQUIRE_BREAKING=true ./dev-bin/semantic-version-analyzer --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
+    "MAJOR_REQUIRE_BREAKING=true $PROJECT_ROOT/dev-bin/semantic-version-analyzer --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
     10 \
     ""
 
 run_test "MAJOR_REQUIRE_BREAKING=1" \
-    "cd '$PROJECT_ROOT' && MAJOR_REQUIRE_BREAKING=1 ./dev-bin/semantic-version-analyzer --since HEAD~3 --repo-root '$temp_dir'" \
+    "MAJOR_REQUIRE_BREAKING=1 $PROJECT_ROOT/dev-bin/semantic-version-analyzer --since HEAD~3 --repo-root '$temp_dir'" \
     10 \
     ""
 
 run_test "MAJOR_REQUIRE_BREAKING=yes" \
-    "cd '$PROJECT_ROOT' && MAJOR_REQUIRE_BREAKING=yes ./dev-bin/semantic-version-analyzer --since HEAD~3 --repo-root '$temp_dir'" \
+    "MAJOR_REQUIRE_BREAKING=yes $PROJECT_ROOT/dev-bin/semantic-version-analyzer --since HEAD~3 --repo-root '$temp_dir'" \
     10 \
     ""
 
@@ -281,7 +281,7 @@ run_test "MAJOR_REQUIRE_BREAKING=yes" \
 printf '%s=== Test 8: JSON Output Fields ===%s\n' "${YELLOW}" "${NC}"
 
 run_test "JSON includes manual CLI fields" \
-    "cd '$PROJECT_ROOT' && ./dev-bin/semantic-version-analyzer --verbose --since HEAD~4 --json --repo-root '$temp_dir'" \
+    "$PROJECT_ROOT/dev-bin/semantic-version-analyzer --verbose --since HEAD~4 --json --repo-root '$temp_dir'" \
     11 \
     '"manual_added_long_count"'
 

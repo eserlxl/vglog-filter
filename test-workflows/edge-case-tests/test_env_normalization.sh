@@ -37,7 +37,7 @@ git commit -m "Second commit" >/dev/null 2>&1
 echo "Testing MAJOR_REQUIRE_BREAKING=TRUE..."
 # Note: Using '|| true' to capture output even if command fails (intentional)
 if cd "$PROJECT_ROOT"; then
-    result1=$(MAJOR_REQUIRE_BREAKING=TRUE ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" 2>/dev/null || true)
+    result1=$(MAJOR_REQUIRE_BREAKING=TRUE "$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" 2>/dev/null || true)
 else
     result1=""
 fi
@@ -47,7 +47,7 @@ suggestion1=$(echo "$result1" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unkn
 echo "Testing MAJOR_REQUIRE_BREAKING=1..."
 # Note: Using '|| true' to capture output even if command fails (intentional)
 if cd "$PROJECT_ROOT"; then
-    result2=$(MAJOR_REQUIRE_BREAKING=1 ./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" 2>/dev/null || true)
+    result2=$(MAJOR_REQUIRE_BREAKING=1 "$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" 2>/dev/null || true)
 else
     result2=""
 fi
@@ -57,7 +57,7 @@ suggestion2=$(echo "$result2" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unkn
 echo "Testing MAJOR_REQUIRE_BREAKING=true (default)..."
 # Note: Using '|| true' to capture output even if command fails (intentional)
 if cd "$PROJECT_ROOT"; then
-    result3=$(./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" 2>/dev/null || true)
+    result3=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" 2>/dev/null || true)
 else
     result3=""
 fi

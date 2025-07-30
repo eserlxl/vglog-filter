@@ -53,7 +53,7 @@ git commit -m "Whitespace-only changes"
 echo "Running semantic version analyzer (without --ignore-whitespace)..."
 # Note: Using '|| true' to capture output even if command fails (intentional)
 if cd "$PROJECT_ROOT"; then
-    result1=$(./dev-bin/semantic-version-analyzer --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+    result1=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
 else
     result1=""
 fi
@@ -62,7 +62,7 @@ echo ""
 echo "Running semantic version analyzer (with --ignore-whitespace)..."
 # Note: Using '|| true' to capture output even if command fails (intentional)
 if cd "$PROJECT_ROOT"; then
-    result2=$(./dev-bin/semantic-version-analyzer --ignore-whitespace --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
+    result2=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --ignore-whitespace --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
 else
     result2=""
 fi
