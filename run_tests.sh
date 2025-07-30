@@ -23,13 +23,14 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Function to print colored output
-print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+# Note: These functions are defined for potential future use but not currently called
+# print_status() {
+#     echo -e "${BLUE}[INFO]${NC} $1"
+# }
 
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
+# print_success() {
+#     echo -e "${GREEN}[SUCCESS]${NC} $1"
+# }
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
@@ -162,7 +163,7 @@ if [[ -n "$TEST_SUITE" ]]; then
 else
     # Show menu and prompt
     print_suite_menu
-    read -t 5 -p "Enter your choice [0-$(( ${#AVAILABLE_SUITES[@]} - 1 ))]: " SUITE_CHOICE
+    read -r -t 5 -p "Enter your choice [0-$(( ${#AVAILABLE_SUITES[@]} - 1 ))]: " SUITE_CHOICE
     if [[ -z "$SUITE_CHOICE" ]]; then
         SUITE_CHOICE=0
     fi
@@ -218,7 +219,9 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "Workflow" ]]; then
     # Run workflow tests and capture results
     if [ -f "./test-workflows/run_workflow_tests.sh" ]; then
         # Capture the output and exit code
-        WORKFLOW_OUTPUT=$(./test-workflows/run_workflow_tests.sh 2>&1)
+        # Note: Output is captured but not currently used - kept for potential future logging
+        # WORKFLOW_OUTPUT=$(./test-workflows/run_workflow_tests.sh 2>&1)
+        ./test-workflows/run_workflow_tests.sh >/dev/null 2>&1
         WORKFLOW_RESULT=$?
         
         # Parse workflow test results from summary.txt if it exists
@@ -325,7 +328,9 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "C++ Unit" ]]; then
     # Run C++ tests
     if [ -f "./test/run_unit_tests.sh" ]; then
         # Capture the output and exit code
-        CPP_OUTPUT=$(./test/run_unit_tests.sh 2>&1)
+        # Note: Output is captured but not currently used - kept for potential future logging
+        # CPP_OUTPUT=$(./test/run_unit_tests.sh 2>&1)
+        ./test/run_unit_tests.sh >/dev/null 2>&1
         CPP_RESULT=$?
         
         # Parse C++ test results from summary if it exists
