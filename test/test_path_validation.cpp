@@ -124,6 +124,18 @@ bool test_validate_file_path() {
     );
     
     TEST_EXPECT_EXCEPTION(
+        path_validation::validate_file_path("~/config"),
+        std::runtime_error,
+        "Home directory with config should be blocked"
+    );
+    
+    TEST_EXPECT_EXCEPTION(
+        path_validation::validate_file_path("~/.bashrc"),
+        std::runtime_error,
+        "Home directory with dotfile should be blocked"
+    );
+    
+    TEST_EXPECT_EXCEPTION(
         path_validation::validate_file_path("//"),
         std::runtime_error,
         "Multiple slashes should be blocked"
@@ -238,6 +250,45 @@ bool test_safe_file_operations() {
     return true;
 }
 
+bool test_tilde_protection() {
+    std::cout << "\n=== Testing tilde protection ===" << std::endl;
+    
+    // Test various tilde patterns that should be blocked
+    const std::vector<std::string> tilde_patterns = {
+        "~",
+        "~/",
+        "~/file.txt",
+        "~/config",
+        "~/.bashrc",
+        "~/.ssh/id_rsa",
+        "~/Documents/file.txt",
+        "~user/file.txt",  // User-specific home directory
+        "~root/",
+        "~admin/config"
+    };
+    
+    for (const auto& path : tilde_patterns) {
+        try {
+            std::string result = path_validation::validate_file_path(path);
+            std::cerr << "FAIL: Tilde path '" << path << "' was allowed, returned: " << result << std::endl;
+            return false;
+        } catch (const std::runtime_error& e) {
+            std::cout << "PASS: Tilde path '" << path << "' was blocked: " << e.what() << std::endl;
+        }
+    }
+    
+    // Test that tilde detection works in contains_path_traversal
+    for (const auto& path : tilde_patterns) {
+        if (!path_validation::contains_path_traversal(path)) {
+            std::cerr << "FAIL: contains_path_traversal should detect tilde in '" << path << "'" << std::endl;
+            return false;
+        }
+    }
+    
+    TEST_PASS("tilde protection tests completed");
+    return true;
+}
+
 bool test_edge_cases() {
     std::cout << "\n=== Testing edge cases ===" << std::endl;
     
@@ -335,6 +386,7 @@ int main() {
     all_passed &= test_contains_path_traversal();
     all_passed &= test_validate_file_path();
     all_passed &= test_safe_file_operations();
+    all_passed &= test_tilde_protection();
     all_passed &= test_edge_cases();
     all_passed &= test_error_messages();
     
