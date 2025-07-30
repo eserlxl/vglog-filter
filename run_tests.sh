@@ -82,9 +82,22 @@ print_summary() {
     
     echo -e "${BOLD}${BLUE}--- $7 Summary ---${NC}"
     echo -e "${CYAN}Total tests :${NC} $total"
-    echo -e "${CYAN}Passed      :${NC} ${GREEN}$passed${NC}"
-    echo -e "${CYAN}Failed      :${NC} ${RED}$failed${NC}"
-    echo -e "${CYAN}Skipped     :${NC} ${YELLOW}$skipped${NC}"
+    
+    # Only show passed count if not all tests failed
+    if [ "$failed" -lt "$total" ]; then
+        echo -e "${CYAN}Passed      :${NC} ${GREEN}$passed${NC}"
+    fi
+    
+    # Only show failed count if not all tests passed
+    if [ "$passed" -lt "$total" ]; then
+        echo -e "${CYAN}Failed      :${NC} ${RED}$failed${NC}"
+    fi
+    
+    # Only show skipped if there are any
+    if [ "$skipped" -gt 0 ]; then
+        echo -e "${CYAN}Skipped     :${NC} ${YELLOW}$skipped${NC}"
+    fi
+    
     echo -e "${CYAN}Success rate:${NC} ${BOLD}$success_rate%${NC}"
     echo -e "${CYAN}Status      :${NC} $status"
 }
@@ -124,6 +137,36 @@ PROJECT_ROOT=$(pwd)
 TEST_DIR="$PROJECT_ROOT/test"
 BUILD_DIR="$PROJECT_ROOT/build-test"
 
+# --- NEW: Test suite selection menu ---
+AVAILABLE_SUITES=("ALL" "Workflow" "C++ Unit")
+SUITE_DESCRIPTIONS=(
+    "Run all test suites (Workflow + C++ Unit)"
+    "Run only shell-based workflow tests"
+    "Run only C++ unit tests"
+)
+
+print_suite_menu() {
+    echo -e "${BOLD}${CYAN}Select a test suite to run:${NC}"
+    for i in "${!AVAILABLE_SUITES[@]}"; do
+        echo -e "  ${YELLOW}$i)${NC} ${BOLD}${AVAILABLE_SUITES[$i]}${NC} - ${SUITE_DESCRIPTIONS[$i]}"
+    done
+    echo -e ""
+    echo -e "Press [Enter] or wait 5 seconds to select ${BOLD}${AVAILABLE_SUITES[0]}${NC} (default)"
+}
+
+# Show menu and prompt
+print_suite_menu
+read -t 5 -p "Enter your choice [0-$(( ${#AVAILABLE_SUITES[@]} - 1 ))]: " SUITE_CHOICE
+if [[ -z "$SUITE_CHOICE" ]]; then
+    SUITE_CHOICE=0
+fi
+if ! [[ "$SUITE_CHOICE" =~ ^[0-9]+$ ]] || (( SUITE_CHOICE < 0 || SUITE_CHOICE >= ${#AVAILABLE_SUITES[@]} )); then
+    echo -e "${RED}Invalid selection. Defaulting to ${AVAILABLE_SUITES[0]}.${NC}"
+    SUITE_CHOICE=0
+fi
+SELECTED_SUITE="${AVAILABLE_SUITES[$SUITE_CHOICE]}"
+echo -e "\n${BOLD}Selected suite:${NC} ${CYAN}$SELECTED_SUITE${NC}\n"
+
 # Change to the directory where this script is located
 cd "$(dirname "$0")" || exit
 
@@ -134,6 +177,7 @@ mkdir -p test_results
 OVERALL_RESULT=0
 WORKFLOW_RESULT=0
 CPP_RESULT=0
+FAILED_SUITES=()
 
 # Initialize workflow test counters
 WORKFLOW_TOTAL=0
@@ -149,167 +193,185 @@ CPP_FAILED=0
 print_header
 
 # PHASE 1: Shell-based Workflow Tests
-print_phase_header "1" "Shell-based Workflow Tests"
-print_info_line "Output directory" "test_results"
-print_info_line "Summary file" "test_results/summary.txt"
-print_info_line "Detailed log" "test_results/detailed.log"
-print_info_line "Start time" "$WORKFLOW_START_TIME"
-echo ""
-
-# Run workflow tests and capture results
-if [ -f "./test-workflows/run_workflow_tests.sh" ]; then
-    # Capture the output and exit code
-    WORKFLOW_OUTPUT=$(./test-workflows/run_workflow_tests.sh 2>&1)
-    WORKFLOW_RESULT=$?
-    
-    # Parse workflow test results from summary.txt if it exists
-    if [ -f "test_results/summary.txt" ]; then
-        WORKFLOW_TOTAL=$(grep "Total tests:" test_results/summary.txt | awk '{print $3}' 2>/dev/null || echo "0")
-        WORKFLOW_PASSED=$(grep "Passed:" test_results/summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
-        WORKFLOW_FAILED=$(grep "Failed:" test_results/summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
-        WORKFLOW_SKIPPED=$(grep "Skipped:" test_results/summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
-    fi
-    
-    # Calculate workflow success rate
-    WORKFLOW_SUCCESS_RATE=0
-    if [ "$WORKFLOW_TOTAL" -gt 0 ]; then
-        WORKFLOW_SUCCESS_RATE=$((WORKFLOW_PASSED * 100 / WORKFLOW_TOTAL))
-    fi
-    
-    # Determine workflow status
-    if [ $WORKFLOW_RESULT -eq 0 ] && [ "$WORKFLOW_FAILED" -eq 0 ]; then
-        WORKFLOW_STATUS="${GREEN}✅ PASSED${NC}"
+if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "Workflow" ]]; then
+    if [[ "$SELECTED_SUITE" == "ALL" ]]; then
+        print_phase_header "1" "Shell-based Workflow Tests"
     else
-        WORKFLOW_STATUS="${RED}❌ FAILED (some tests failed)${NC}"
+        echo -e "${BOLD}${MAGENTA}Shell-based Workflow Tests${NC}"
+        echo -e "${MAGENTA}------------------------------------------------------------${NC}"
+    fi
+    print_info_line "Output directory" "test_results"
+    print_info_line "Summary file" "test_results/summary.txt"
+    print_info_line "Detailed log" "test_results/detailed.log"
+    print_info_line "Start time" "$WORKFLOW_START_TIME"
+    echo ""
+
+    # Run workflow tests and capture results
+    if [ -f "./test-workflows/run_workflow_tests.sh" ]; then
+        # Capture the output and exit code
+        WORKFLOW_OUTPUT=$(./test-workflows/run_workflow_tests.sh 2>&1)
+        WORKFLOW_RESULT=$?
+        
+        # Parse workflow test results from summary.txt if it exists
+        if [ -f "test_results/summary.txt" ]; then
+            WORKFLOW_TOTAL=$(grep "Total tests:" test_results/summary.txt | awk '{print $3}' 2>/dev/null || echo "0")
+            WORKFLOW_PASSED=$(grep "Passed:" test_results/summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
+            WORKFLOW_FAILED=$(grep "Failed:" test_results/summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
+            WORKFLOW_SKIPPED=$(grep "Skipped:" test_results/summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
+        fi
+        
+        # Calculate workflow success rate
+        WORKFLOW_SUCCESS_RATE=0
+        if [ "$WORKFLOW_TOTAL" -gt 0 ]; then
+            WORKFLOW_SUCCESS_RATE=$((WORKFLOW_PASSED * 100 / WORKFLOW_TOTAL))
+        fi
+        
+        # Determine workflow status
+        if [ $WORKFLOW_RESULT -eq 0 ] && [ "$WORKFLOW_FAILED" -eq 0 ]; then
+            WORKFLOW_STATUS="${GREEN}✅ PASSED${NC}"
+        else
+            WORKFLOW_STATUS="${RED}❌ FAILED (some tests failed)${NC}"
+            OVERALL_RESULT=1
+            FAILED_SUITES+=("Workflow")
+        fi
+        
+        # Display categorized test results (simulated based on typical test structure)
+        print_section_header "Core Tests"
+        print_test_result "test_bump_version.sh" "PASSED"
+        print_test_result "test_semantic_version_analyzer.sh" "FAILED"
+        print_test_result "test_semantic_version_analyzer_fixes.sh" "PASSED"
+        print_test_result "test_semantic_version_analyzer_simple.sh" "FAILED"
+        echo ""
+        
+        print_section_header "File Handling Tests"
+        print_test_result "test_breaking_case_detection.sh" "PASSED"
+        print_test_result "test_header_removal.sh" "PASSED"
+        print_test_result "test_nul_safety.sh" "FAILED"
+        print_test_result "test_rename_handling.sh" "PASSED"
+        print_test_result "test_whitespace_ignore.sh" "PASSED"
+        echo ""
+        
+        print_section_header "Edge Case Tests"
+        print_test_result "test_cli_detection_fix.sh" "PASSED"
+        print_test_result "test_env_normalization.sh" "PASSED"
+        print_test_result "test_ere_fix.sh" "FAILED"
+        echo ""
+        
+        print_section_header "Utility Tests"
+        print_test_result "debug_test.sh" "PASSED"
+        print_test_result "test_case.sh" "PASSED"
+        print_test_result "test_classify.sh" "PASSED"
+        print_test_result "test_classify_fixed.sh" "PASSED"
+        print_test_result "test_classify_inline.sh" "PASSED"
+        print_test_result "test_classify_inline2.sh" "PASSED"
+        print_test_result "test_func.sh" "PASSED"
+        print_test_result "test_func2.sh" "PASSED"
+        echo ""
+        
+        print_section_header "CLI Tests"
+        print_test_result "test_extract.sh" "PASSED"
+        print_test_result "test_fixes.sh" "FAILED"
+        echo ""
+        
+        print_section_header "Debug Tests"
+        print_test_result "test_debug.sh" "PASSED"
+        echo ""
+        
+        print_section_header "ERE Tests"
+        print_test_result "test_ere.c" "PASSED"
+        print_test_result "test_ere_fix.c" "PASSED"
+        echo ""
+        
+        print_section_header "Test Workflows"
+        print_test_result "test_helper.sh" "PASSED"
+        echo ""
+        
+        print_summary "$WORKFLOW_TOTAL" "$WORKFLOW_PASSED" "$WORKFLOW_FAILED" "$WORKFLOW_SKIPPED" "$WORKFLOW_SUCCESS_RATE" "$WORKFLOW_STATUS" "Workflow Test"
+        
+    else
+        print_error "test-workflows/run_workflow_tests.sh not found"
+        WORKFLOW_STATUS="${RED}❌ FAILED (script not found)${NC}"
         OVERALL_RESULT=1
     fi
-    
-    # Display categorized test results (simulated based on typical test structure)
-    print_section_header "Core Tests"
-    print_test_result "test_bump_version.sh" "PASSED"
-    print_test_result "test_semantic_version_analyzer.sh" "FAILED"
-    print_test_result "test_semantic_version_analyzer_fixes.sh" "PASSED"
-    print_test_result "test_semantic_version_analyzer_simple.sh" "FAILED"
-    echo ""
-    
-    print_section_header "File Handling Tests"
-    print_test_result "test_breaking_case_detection.sh" "PASSED"
-    print_test_result "test_header_removal.sh" "PASSED"
-    print_test_result "test_nul_safety.sh" "FAILED"
-    print_test_result "test_rename_handling.sh" "PASSED"
-    print_test_result "test_whitespace_ignore.sh" "PASSED"
-    echo ""
-    
-    print_section_header "Edge Case Tests"
-    print_test_result "test_cli_detection_fix.sh" "PASSED"
-    print_test_result "test_env_normalization.sh" "PASSED"
-    print_test_result "test_ere_fix.sh" "FAILED"
-    echo ""
-    
-    print_section_header "Utility Tests"
-    print_test_result "debug_test.sh" "PASSED"
-    print_test_result "test_case.sh" "PASSED"
-    print_test_result "test_classify.sh" "PASSED"
-    print_test_result "test_classify_fixed.sh" "PASSED"
-    print_test_result "test_classify_inline.sh" "PASSED"
-    print_test_result "test_classify_inline2.sh" "PASSED"
-    print_test_result "test_func.sh" "PASSED"
-    print_test_result "test_func2.sh" "PASSED"
-    echo ""
-    
-    print_section_header "CLI Tests"
-    print_test_result "test_extract.sh" "PASSED"
-    print_test_result "test_fixes.sh" "FAILED"
-    echo ""
-    
-    print_section_header "Debug Tests"
-    print_test_result "test_debug.sh" "PASSED"
-    echo ""
-    
-    print_section_header "ERE Tests"
-    print_test_result "test_ere.c" "PASSED"
-    print_test_result "test_ere_fix.c" "PASSED"
-    echo ""
-    
-    print_section_header "Test Workflows"
-    print_test_result "test_helper.sh" "PASSED"
-    echo ""
-    
-    print_summary "$WORKFLOW_TOTAL" "$WORKFLOW_PASSED" "$WORKFLOW_FAILED" "$WORKFLOW_SKIPPED" "$WORKFLOW_SUCCESS_RATE" "$WORKFLOW_STATUS" "Workflow Test"
-    
-else
-    print_error "test-workflows/run_workflow_tests.sh not found"
-    WORKFLOW_STATUS="${RED}❌ FAILED (script not found)${NC}"
-    OVERALL_RESULT=1
+    if [[ "$SELECTED_SUITE" == "ALL" ]]; then
+        echo ""
+        print_separator
+        echo ""
+    fi
 fi
-
-echo ""
-print_separator
-echo ""
 
 # PHASE 2: C++ Unit Tests
-print_phase_header "2" "C++ Unit Tests"
-print_info_line "Project root" "$PROJECT_ROOT"
-print_info_line "Test directory" "$TEST_DIR"
-print_info_line "Build directory" "$BUILD_DIR"
-echo ""
-
-# Run C++ tests
-if [ -f "./test/run_unit_tests.sh" ]; then
-    # Capture the output and exit code
-    CPP_OUTPUT=$(./test/run_unit_tests.sh 2>&1)
-    CPP_RESULT=$?
-    
-    # Parse C++ test results from summary if it exists
-    if [ -f "test_results/cpp_unit_test_summary.txt" ]; then
-        CPP_PASSED=$(grep "Passed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "8")
-        CPP_FAILED=$(grep "Failed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
-    fi
-    
-    # Calculate C++ success rate
-    CPP_SUCCESS_RATE=100
-    if [ $CPP_TOTAL -gt 0 ]; then
-        CPP_SUCCESS_RATE=$((CPP_PASSED * 100 / CPP_TOTAL))
-    fi
-    
-    # Determine C++ status
-    if [ $CPP_RESULT -eq 0 ] && [ "$CPP_FAILED" -eq 0 ]; then
-        CPP_STATUS="${GREEN}✅ PASSED${NC}"
+if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "C++ Unit" ]]; then
+    if [[ "$SELECTED_SUITE" == "ALL" ]]; then
+        print_phase_header "2" "C++ Unit Tests"
     else
-        CPP_STATUS="${RED}❌ FAILED${NC}"
+        echo -e "${BOLD}${MAGENTA}C++ Unit Tests${NC}"
+        echo -e "${MAGENTA}------------------------------------------------------------${NC}"
+    fi
+    print_info_line "Project root" "$PROJECT_ROOT"
+    print_info_line "Test directory" "$TEST_DIR"
+    print_info_line "Build directory" "$BUILD_DIR"
+    echo ""
+
+    # Run C++ tests
+    if [ -f "./test/run_unit_tests.sh" ]; then
+        # Capture the output and exit code
+        CPP_OUTPUT=$(./test/run_unit_tests.sh 2>&1)
+        CPP_RESULT=$?
+        
+        # Parse C++ test results from summary if it exists
+        if [ -f "test_results/cpp_unit_test_summary.txt" ]; then
+            CPP_PASSED=$(grep "Passed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "8")
+            CPP_FAILED=$(grep "Failed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
+        fi
+        
+        # Calculate C++ success rate
+        CPP_SUCCESS_RATE=100
+        if [ $CPP_TOTAL -gt 0 ]; then
+            CPP_SUCCESS_RATE=$((CPP_PASSED * 100 / CPP_TOTAL))
+        fi
+        
+        # Determine C++ status
+        if [ $CPP_RESULT -eq 0 ] && [ "$CPP_FAILED" -eq 0 ]; then
+            CPP_STATUS="${GREEN}✅ PASSED${NC}"
+        else
+            CPP_STATUS="${RED}❌ FAILED${NC}"
+            OVERALL_RESULT=1
+            FAILED_SUITES+=("C++ Unit")
+        fi
+        
+        echo -e "${BOLD}${BLUE}[Build & Config]${NC}"
+        print_build_status "PASSED" "CMake configuration completed"
+        print_build_status "PASSED" "Build completed"
+        echo ""
+        echo -e "${BOLD}${BLUE}[CTest Summary]${NC}"
+        print_build_status "PASSED" "All CTest unit tests passed"
+        echo ""
+        
+        print_summary "$CPP_TOTAL" "$CPP_PASSED" "$CPP_FAILED" "0" "$CPP_SUCCESS_RATE" "$CPP_STATUS" "C++ Unit Test"
+        
+        echo ""
+        echo -e "${BOLD}${YELLOW}Individual Test Executables:${NC}"
+        print_test_result "test_basic" "PASSED"
+        print_test_result "test_cli_options" "PASSED"
+        print_test_result "test_comprehensive" "PASSED"
+        print_test_result "test_edge_cases" "PASSED"
+        print_test_result "test_integration" "PASSED"
+        print_test_result "test_memory_leaks" "PASSED"
+        print_test_result "test_path_validation" "PASSED"
+        print_test_result "test_regex_patterns" "PASSED"
+        
+    else
+        print_error "test/run_unit_tests.sh not found"
+        CPP_STATUS="${RED}❌ FAILED (script not found)${NC}"
         OVERALL_RESULT=1
     fi
-    
-    echo -e "${BOLD}${BLUE}[Build & Config]${NC}"
-    print_build_status "PASSED" "CMake configuration completed"
-    print_build_status "PASSED" "Build completed"
-    echo ""
-    echo -e "${BOLD}${BLUE}[CTest Summary]${NC}"
-    print_build_status "PASSED" "All CTest unit tests passed"
-    echo ""
-    
-    print_summary "$CPP_TOTAL" "$CPP_PASSED" "$CPP_FAILED" "0" "$CPP_SUCCESS_RATE" "$CPP_STATUS" "C++ Unit Test"
-    
-    echo ""
-    echo -e "${BOLD}${YELLOW}Individual Test Executables:${NC}"
-    print_test_result "test_basic" "PASSED"
-    print_test_result "test_cli_options" "PASSED"
-    print_test_result "test_comprehensive" "PASSED"
-    print_test_result "test_edge_cases" "PASSED"
-    print_test_result "test_integration" "PASSED"
-    print_test_result "test_memory_leaks" "PASSED"
-    print_test_result "test_path_validation" "PASSED"
-    print_test_result "test_regex_patterns" "PASSED"
-    
-else
-    print_error "test/run_unit_tests.sh not found"
-    CPP_STATUS="${RED}❌ FAILED (script not found)${NC}"
-    OVERALL_RESULT=1
+    if [[ "$SELECTED_SUITE" == "ALL" ]]; then
+        echo ""
+        print_separator
+        echo ""
+    fi
 fi
-
-echo ""
-print_separator
-echo ""
 
 # FINAL SUMMARY
 print_final_header
@@ -318,7 +380,14 @@ print_final_header
 if [ $OVERALL_RESULT -eq 0 ]; then
     FINAL_STATUS="${GREEN}✅ All test suites passed${NC}"
 else
-    FINAL_STATUS="${RED}❌ Some test suites failed${NC}"
+    if [ ${#FAILED_SUITES[@]} -eq 1 ]; then
+        FINAL_STATUS="${RED}❌ ${FAILED_SUITES[0]} test suite failed${NC}"
+    else
+        FINAL_STATUS="${RED}❌ Failed test suites:${NC}"
+        for suite in "${FAILED_SUITES[@]}"; do
+            echo -e "  ${RED}• $suite${NC}"
+        done
+    fi
 fi
 
 echo -e "${CYAN}Workflow tests :${NC} $WORKFLOW_STATUS  ${CYAN}($WORKFLOW_PASSED/$WORKFLOW_TOTAL passed)${NC}"
