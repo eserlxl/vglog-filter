@@ -69,6 +69,20 @@ Contains tests for Extended Regular Expression (ERE) functionality:
 - `test_ere.c` - ERE test file with CLI options
 - `test_ere_fix.c` - ERE test file with additional options
 
+#### `edge-case-tests/`
+Contains tests for edge cases and boundary conditions:
+- `test_cli_detection_fix.sh` - CLI detection edge case fixes
+- `test_env_normalization.sh` - Environment variable normalization tests
+- `test_ere_fix.sh` - ERE edge case fixes
+
+#### `file-handling-tests/`
+Contains tests for file processing and handling:
+- `test_breaking_case_detection.sh` - Breaking case detection tests
+- `test_header_removal.sh` - Header removal functionality tests
+- `test_nul_safety.sh` - Null byte safety tests
+- `test_rename_handling.sh` - File rename handling tests
+- `test_whitespace_ignore.sh` - Whitespace handling tests
+
 #### `fixture-tests/`
 Contains test fixtures and sample data:
 - `test_whitespace.txt` - Whitespace-only test file
@@ -81,6 +95,17 @@ Contains copies of source files used for testing:
 - `test_content_simple.txt` - Simple test content file for basic file processing tests
 - `test_content_renamed.txt` - Test content file for rename handling tests
 - `debug_log_with_marker.txt` - Debug log content with markers for log filtering tests
+
+#### `utility-tests/`
+Contains utility function tests:
+- `debug_test.sh` - Debug utility tests
+- `test_case.sh` - Case handling tests
+- `test_classify.sh` - Classification function tests
+- `test_classify_fixed.sh` - Fixed classification tests
+- `test_classify_inline.sh` - Inline classification tests
+- `test_classify_inline2.sh` - Additional inline classification tests
+- `test_func.sh` - Function utility tests
+- `test_func2.sh` - Additional function utility tests
 
 ## Running Tests
 
@@ -98,224 +123,262 @@ This will run both the test-workflows tests and the C++ tests in sequence.
 
 #### C++ Tests Only
 
-To run only the C++ tests:
-
 ```bash
+# Run C++ unit tests
 ./test/run_unit_tests.sh
+
+# Run specific C++ test
+./build/bin/test_basic
+./build/bin/test_comprehensive
+./build/bin/test_edge_cases
+./build/bin/test_integration
+./build/bin/test_memory_leaks
+./build/bin/test_path_validation
+./build/bin/test_regex_patterns
+./build/bin/test_cli_options
 ```
 
-#### Test Workflows Only
-
-To run only the test-workflows tests:
+#### Workflow Tests Only
 
 ```bash
+# Run all workflow tests
 ./test-workflows/run_workflow_tests.sh
+
+# Run specific workflow test categories
+./test-workflows/cli-tests/test_extract.sh
+./test-workflows/file-handling-tests/test_whitespace_ignore.sh
+./test-workflows/utility-tests/test_classify.sh
+```
+
+#### Build and Test
+
+```bash
+# Build and run all tests
+./build.sh tests
+
+# Build with specific options and test
+./build.sh tests debug warnings
+./build.sh tests performance warnings
 ```
 
 ### Manual Testing
 
-#### C++ Tests Manual Build
-
-If you prefer to build and run C++ tests manually:
+For manual testing and debugging:
 
 ```bash
-# Create build directory
-mkdir -p build-test
-cd build-test
+# Test specific functionality
+./build/bin/vglog-filter --help
+./build/bin/vglog-filter --version
 
-# Configure with testing enabled
-cmake .. -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Debug
+# Test with sample input
+echo "test input" | ./build/bin/vglog-filter
 
-# Build tests
-make -j20
-
-# Run tests
-ctest --output-on-failure
-```
-
-#### Using build.sh
-
-The `build.sh` script provides convenient test integration:
-
-```bash
-# Build and run tests
-./build.sh tests
-
-# Run tests with specific build configuration
-./build.sh tests debug warnings
-
-# Run tests with performance optimizations
-./build.sh tests performance warnings
+# Test file processing
+./build/bin/vglog-filter test-workflows/fixture-tests/test_whitespace.txt
 ```
 
 ## Test Configuration
 
 ### Build Configurations
 
-All tests are run across multiple build configurations:
+Tests are run across multiple build configurations:
 
-- **Default build** - Standard compilation
-- **Performance build** - Optimized with `-O3 -march=native -flto`
-- **Debug build** - Debug symbols and sanitizers enabled
-- **Warnings build** - Extra compiler warnings enabled
-- **All combinations** - Performance + Debug + Warnings + Tests
+- **Default**: Standard build with O2 optimizations
+- **Performance**: O3 optimizations with LTO and native architecture tuning
+- **Debug**: Debug symbols with O0 optimization for debugging
+- **Warnings**: Extra compiler warnings for code quality
+- **Combinations**: All possible combinations of the above
 
 ### Test Environment
 
 Tests are configured with:
-- **Debug mode**: Better error reporting and stack traces
-- **Warning mode**: Stricter compilation for code quality
-- **Sanitizers**: Memory and undefined behavior detection
-- **C++20 standard**: Modern C++ features
-- **Parallel compilation**: Uses `make -j20` for faster builds
+- **Automatic cleanup**: Temporary files are cleaned up before and after tests
+- **Isolated execution**: Each test runs in isolation to prevent interference
+- **Error reporting**: Comprehensive error messages for debugging
+- **Cross-platform**: Tests work across different Linux distributions
 
 ## Adding New Tests
 
-### C++ Tests
+### C++ Unit Tests
 
-To add a new C++ test:
+To add a new C++ unit test:
 
-1. Create a new `.cpp` file in the `test/` directory
-2. Follow the naming convention: `test_*.cpp`
-3. The test will be automatically picked up by CMake
-4. Use standard C++ testing practices (assertions, etc.)
-5. Include proper cleanup in destructors or test teardown
+1. Create a new test file in the `test/` directory:
+   ```cpp
+   // test_new_feature.cpp
+   #include <cassert>
+   #include <iostream>
+   #include <string>
+   
+   int main() {
+       // Test implementation
+       std::cout << "Running new feature test..." << std::endl;
+       
+       // Add test assertions
+       assert(true && "Basic test passed");
+       
+       std::cout << "All tests passed!" << std::endl;
+       return 0;
+   }
+   ```
 
-Example test structure:
-```cpp
-#include <cassert>
-#include <iostream>
+2. The test will be automatically included in the CMake build system
 
-int main() {
-    // Test setup
-    // ... test logic ...
-    
-    // Assertions
-    assert(condition && "Test description");
-    
-    // Cleanup
-    // ... cleanup code ...
-    
-    std::cout << "Test passed!" << std::endl;
-    return 0;
-}
-```
+3. Run the test:
+   ```bash
+   ./build/bin/test_new_feature
+   ```
 
-### Test Workflows
+### Workflow Tests
 
-To add new test workflows:
+To add a new workflow test:
 
-1. Create test scripts in appropriate subdirectories
-2. Follow the existing naming conventions
-3. Ensure scripts are executable (`chmod +x`)
-4. Update `test-workflows/run_workflow_tests.sh` if needed
+1. Create a new test script in the appropriate `test-workflows/` subdirectory
+2. Make the script executable: `chmod +x test_new_workflow.sh`
+3. The test will be automatically included in the workflow test runner
+
+### Test Guidelines
+
+- **Naming**: Use descriptive names that indicate what is being tested
+- **Isolation**: Each test should be independent and not rely on other tests
+- **Cleanup**: Always clean up any temporary files or resources
+- **Documentation**: Include comments explaining what the test verifies
+- **Error handling**: Test both success and failure cases
 
 ## CI/CD Testing
 
-### GitHub Actions Workflows
+### GitHub Actions Integration
 
-The project includes comprehensive CI/CD testing:
+The project uses comprehensive GitHub Actions workflows for automated testing:
 
-- **Build and Test**: Multi-platform testing with multiple build configurations
-- **Comprehensive Test**: Tests all 12 build configuration combinations
-- **Debug Build Test**: Dedicated testing for debug builds with GDB integration
-- **Cross-Platform Test**: Tests builds across Ubuntu, Arch Linux, Fedora, and Debian
-- **Performance Benchmark**: Automated performance testing and optimization verification
-- **Memory Sanitizer**: Memory error detection using Clang's MemorySanitizer
-- **Clang-Tidy**: Static analysis and code quality checks
-- **CodeQL**: Security analysis and vulnerability detection
-- **ShellCheck**: Shell script linting and validation
+#### Core Testing Workflows
+- **Build and Test** (`test.yml`): Basic build verification and functionality testing
+- **Comprehensive Test** (`comprehensive-test.yml`): Complete testing of all build configurations
+- **Debug Build Test** (`debug-build-test.yml`): Dedicated testing for debug builds
 
-### Local Testing
+#### Quality Assurance Workflows
+- **Clang-Tidy** (`clang-tidy.yml`): Static analysis and code quality checks
+- **Memory Sanitizer** (`memory-sanitizer.yml`): Memory error detection
+- **CodeQL** (`codeql.yml`): Security analysis and vulnerability detection
+- **ShellCheck** (`shellcheck.yml`): Shell script validation
 
-All build configurations are tested locally and in CI:
+#### Performance and Compatibility Workflows
+- **Performance Benchmark** (`performance-benchmark.yml`): Performance testing and optimization verification
+- **Cross-Platform Test** (`cross-platform.yml`): Multi-platform compatibility testing
+
+### Build Matrix
+
+The CI/CD pipeline tests all 12 build configuration combinations:
 - Default build
-- Performance build (optimized)
+- Performance build
 - Debug build
-- Warnings build (extra compiler warnings)
-- All combinations with tests
+- Warnings build
 - Performance + Warnings
 - Debug + Warnings
+- Tests build
 - Performance + Tests
 - Debug + Tests
 - Warnings + Tests
 - Performance + Warnings + Tests
 - Debug + Warnings + Tests
 
+### Test Results
+
+All tests must pass for:
+- Pull request merges
+- Release creation
+- Deployment to production
+
 ## Test Output and Debugging
 
-### Test Runner Output
+### Understanding Test Output
 
-The test runners provide:
-- **Colored output**: Easy-to-read success/error indicators
-- **Detailed error reporting**: Specific failure information
-- **Individual test executable output**: Detailed output from each test
-- **CTest summary**: Structured test results
-- **Progress reporting**: Real-time progress updates
+#### C++ Test Output
+```
+Running test_basic...
+Test: Basic functionality test
+Result: PASSED
+Running test_comprehensive...
+Test: Comprehensive feature test
+Result: PASSED
+All tests completed successfully.
+```
+
+#### Workflow Test Output
+```
+Running CLI tests...
+✓ test_extract.sh passed
+✓ test_fixes.sh passed
+Running file handling tests...
+✓ test_whitespace_ignore.sh passed
+✓ test_nul_safety.sh passed
+All workflow tests completed successfully.
+```
 
 ### Debugging Failed Tests
 
-#### C++ Tests
-
-For debugging C++ test failures:
-
+#### C++ Test Debugging
 ```bash
-# Run with debug symbols
-./build.sh tests debug
+# Run with debug output
+./build/bin/test_basic
 
-# Run individual test with GDB
-gdb build-test/test_basic
-
-# Run with sanitizers for memory issues
-./build.sh tests debug
+# Run with GDB for detailed debugging
+gdb ./build/bin/test_basic
+(gdb) run
+(gdb) bt  # Backtrace on failure
 ```
 
-#### Test Workflows
-
-For debugging test workflow failures:
-
+#### Workflow Test Debugging
 ```bash
-# Run individual test scripts
+# Run with verbose output
+bash -x ./test-workflows/cli-tests/test_extract.sh
+
+# Run individual test steps
 ./test-workflows/cli-tests/test_extract.sh
-
-# Enable debug output
-bash -x ./test-workflows/run_workflow_tests.sh
 ```
 
-### Common Issues
+### Common Test Issues
 
 1. **Build failures**: Check compiler version and dependencies
-2. **Test failures**: Review test output for specific error messages
-3. **Memory issues**: Run with sanitizers enabled
-4. **Performance regressions**: Compare with previous benchmark results
+2. **Test timeouts**: Increase timeout values for slow systems
+3. **Permission errors**: Check file permissions and ownership
+4. **Memory issues**: Run with memory sanitizer in debug builds
+5. **Platform differences**: Test on multiple platforms
 
-## Performance Testing
+### Performance Testing
 
-### Automated Benchmarks
-
-The CI/CD includes automated performance testing:
-- **Performance regression detection**: Compares against baseline
-- **Optimization verification**: Ensures performance flags work correctly
-- **Memory usage tracking**: Monitors memory consumption during tests
-
-### Manual Performance Testing
-
+#### Benchmark Tests
 ```bash
-# Run performance tests
-./build.sh tests performance
+# Run performance benchmarks
+./build.sh performance tests
 
 # Monitor memory usage
-./test/run_unit_tests.sh  # Includes memory monitoring
+./build/bin/vglog-filter -M large_file.log > /dev/null
 ```
 
-## Quality Assurance
+#### Optimization Verification
+- **LTO verification**: Ensure link-time optimization is working
+- **Native optimization**: Verify architecture-specific optimizations
+- **Memory efficiency**: Check memory usage patterns
+- **Processing speed**: Measure processing time for large files
 
-The test suite ensures:
-- **Code coverage**: All major functionality is tested
-- **Edge case handling**: Boundary conditions and error scenarios
-- **Memory safety**: Leak detection and sanitizer testing
-- **Performance**: Optimization verification and benchmarking
-- **Cross-platform compatibility**: Testing across different Linux distributions
-- **Static analysis**: Code quality and security scanning
+## Test Maintenance
 
-For more information about the testing infrastructure, see the [CI/CD Guide](CI_CD_GUIDE.md). 
+### Regular Maintenance Tasks
+
+1. **Update test dependencies**: Keep test tools and libraries current
+2. **Review test coverage**: Ensure new features have adequate test coverage
+3. **Clean up old tests**: Remove obsolete or redundant tests
+4. **Update test documentation**: Keep this document current
+
+### Test Quality Metrics
+
+- **Coverage**: Aim for high test coverage of core functionality
+- **Reliability**: Tests should be stable and not flaky
+- **Performance**: Tests should run quickly and efficiently
+- **Maintainability**: Tests should be easy to understand and modify
+
+---
+
+For more information about the CI/CD infrastructure, see [CI_CD_GUIDE.md](CI_CD_GUIDE.md).
+For build configuration details, see [BUILD.md](BUILD.md). 

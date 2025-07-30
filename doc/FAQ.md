@@ -111,4 +111,63 @@ Recent optimizations include:
 - **Large file detection**: Efficient file size checking using `stat()`
 - **Array operations**: Uses `std::span` for memory-efficient array handling
 - **Stream processing**: Automatic detection and efficient processing of large files
-- **Memory monitoring**: Real-time memory usage tracking for performance analysis 
+- **Memory monitoring**: Real-time memory usage tracking for performance analysis
+
+## What version is currently available?
+The current version is **4.1.4**. The project uses semantic versioning with automated version management based on code changes.
+
+## How does the versioning system work?
+The project uses semantic versioning with automated version bumping:
+- **MAJOR**: Breaking changes (incompatible API changes)
+- **MINOR**: New features (backward-compatible additions)
+- **PATCH**: Bug fixes and minor improvements
+
+The system analyzes actual code changes and uses conservative thresholds to prevent rapid version increases.
+
+## What development tools are available?
+The project includes several development tools in the `dev-bin/` directory:
+- **semantic-version-analyzer**: Analyzes code changes and suggests version bumps
+- **bump-version**: Handles version bumping and release creation
+- **tag-manager**: Manages git tags and cleanup
+- **cursor-version-bump**: Cursor IDE integration for version bumping
+
+## How do I contribute to the project?
+Contributions are welcome! Please:
+1. Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification
+2. Run tests with `./build.sh tests` before submitting
+3. Check that all CI/CD tests pass
+4. Open an issue or submit a pull request
+
+## What platforms are supported?
+The project is primarily tested on Linux (Arch Linux, Ubuntu, Fedora, Debian) but should work on other POSIX systems with minimal changes. The CI/CD pipeline tests across multiple Linux distributions.
+
+## How do I report bugs or request features?
+Please open an issue on GitHub with:
+- A clear description of the problem or feature request
+- Steps to reproduce (for bugs)
+- Expected vs actual behavior
+- System information (OS, compiler version, etc.)
+
+## What license is used?
+The project is licensed under the GNU General Public License v3.0 (GPLv3). See the LICENSE file for details.
+
+## How do I install vglog-filter?
+Currently, you need to build from source:
+```sh
+git clone <repository-url>
+cd vglog-filter
+./build.sh performance
+sudo cp build/bin/vglog-filter /usr/local/bin/
+```
+
+## What are the system requirements?
+- C++20-compatible compiler (GCC 10+ or Clang 10+)
+- CMake 3.16 or newer
+- Linux or other POSIX system
+- Standard build tools (make, etc.)
+
+## How do I get help with development?
+- Check the comprehensive documentation in the `doc/` directory
+- Review the [Developer Guide](DEVELOPER_GUIDE.md) for build options and development workflow
+- Check the [Test Suite Documentation](TEST_SUITE.md) for testing guidelines
+- Open an issue on GitHub for specific questions or problems 

@@ -5,7 +5,7 @@ The `build.sh` script automates the configuration and compilation of the vglog-f
 ## Usage
 
 ```sh
-./build.sh [performance] [warnings] [debug] [clean] [tests]
+./build.sh [performance] [warnings] [debug] [clean] [tests] [-j N] [--build-dir DIR]
 ```
 
 You can provide one or more of the following options:
@@ -61,8 +61,8 @@ You can provide one or more of the following options:
 ## What the Script Does
 - Creates a `build/` directory if it does not exist.
 - Runs CMake with the selected options as variables.
-- If `clean` is specified, runs `make clean` to remove all build artifacts.
-- Builds the project using `make -j20` for fast parallel compilation.
+- If `clean` is specified, removes the build directory for a truly clean build.
+- Builds the project using parallel compilation for fast builds.
 - If `tests` is specified, builds and runs the test suite with automatic cleanup.
 - Validates command-line arguments and provides helpful warnings for unknown options.
 - Supports all build configuration combinations for comprehensive testing.
@@ -73,9 +73,11 @@ The built executable includes several performance optimizations:
 - **Memory optimization**: Vector capacity reservation and efficient string operations
 - **Regex optimization**: All patterns use `std::regex::optimize` for better performance
 - **Smart processing**: Optimal mode selection based on file size
+- **Modern C++ optimizations**: Uses `std::string_view`, `std::span`, and optimized patterns
 
 ## Output
 - The compiled binary and build artifacts will be placed in the `build/` directory.
+- Binary location: `build/bin/vglog-filter` (or `build/bin/Debug/vglog-filter` for debug builds)
 
 ## Continuous Integration
 
@@ -113,6 +115,152 @@ The CI/CD pipeline automatically tests these combinations:
 - Performance builds are verified to use O3 optimizations and LTO
 - Test suites are automatically executed when built
 - Cross-platform compatibility is verified across multiple distributions
+
+## System Requirements
+
+### Prerequisites
+- **CMake**: Version 3.16 or newer
+- **C++ Compiler**: C++20-compatible compiler (GCC 10+ or Clang 10+)
+- **Build Tools**: Standard build tools (make, etc.)
+
+### Installation (Arch Linux)
+```sh
+sudo pacman -S base-devel cmake gcc
+```
+
+### Installation (Ubuntu/Debian)
+```sh
+sudo apt-get install build-essential cmake
+```
+
+### Installation (Fedora)
+```sh
+sudo dnf install gcc-c++ cmake make
+```
+
+## Build Options
+
+### CMake Options
+The build script configures these CMake options:
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `PERFORMANCE_BUILD` | Enable performance optimizations | OFF |
+| `WARNING_MODE` | Enable extra compiler warnings | OFF |
+| `DEBUG_MODE` | Enable debug mode | OFF |
+| `BUILD_TESTING` | Build and enable tests | OFF (unless `tests` specified) |
+| `ENABLE_NATIVE_OPTIMIZATION` | Use -march=native/-mtune=native | OFF |
+| `ENABLE_SANITIZERS` | Enable Address/Undefined sanitizers | OFF |
+
+### Compiler Flags
+Different build modes use different compiler flags:
+
+#### Performance Build
+- `-O3`: Maximum optimization
+- `-march=native -mtune=native`: Architecture-specific optimizations (if enabled)
+- `-flto`: Link-time optimization
+- `-DNDEBUG`: Disable debug assertions
+
+#### Debug Build
+- `-O0`: No optimization
+- `-g`: Debug symbols
+- `-fno-omit-frame-pointer`: Better stack traces
+- `-DDEBUG`: Enable debug assertions
+- `-fsanitize=address,undefined`: Memory and undefined behavior sanitizers (if enabled)
+
+#### Warnings Build
+- `-Wall -Wextra -Wpedantic`: Extra warnings
+- `-Wconversion -Wshadow`: Additional warning flags
+- `-Wnon-virtual-dtor -Wold-style-cast`: C++ specific warnings
+
+## Troubleshooting
+
+### Common Issues
+
+#### CMake Version Too Old
+```
+Error: CMake 3.16 or newer is required
+```
+**Solution**: Update CMake to version 3.16 or newer.
+
+#### Compiler Not C++20 Compatible
+```
+Error: C++20 standard not supported
+```
+**Solution**: Update to GCC 10+ or Clang 10+.
+
+#### Missing Dependencies
+```
+Error: Required package not found
+```
+**Solution**: Install build essentials and CMake for your distribution.
+
+#### Permission Issues
+```
+Error: Permission denied
+```
+**Solution**: Check file permissions and ownership.
+
+### Build Debugging
+
+#### Verbose Build Output
+```sh
+# Enable verbose output
+./build.sh debug 2>&1 | tee build.log
+```
+
+#### Clean Build
+```sh
+# Force clean build
+./build.sh clean debug
+```
+
+#### Manual CMake Configuration
+```sh
+# Manual configuration for debugging
+mkdir build-debug
+cd build-debug
+cmake .. -DDEBUG_MODE=ON -DWARNING_MODE=ON
+make VERBOSE=1
+```
+
+## Performance Considerations
+
+### Build Performance
+- **Parallel builds**: Uses `make -j20` for fast compilation
+- **Incremental builds**: Only rebuilds changed files
+- **Clean builds**: Use `clean` option when configuration changes
+
+### Runtime Performance
+- **Optimized builds**: Performance builds use maximum optimizations
+- **LTO**: Link-time optimization for better performance
+- **Native optimization**: Architecture-specific optimizations when enabled
+
+## Development Workflow
+
+### Typical Development Cycle
+```sh
+# Initial build
+./build.sh debug warnings
+
+# Make changes to source code
+
+# Rebuild and test
+./build.sh tests debug warnings
+
+# Performance build for testing
+./build.sh performance tests
+```
+
+### Testing Before Committing
+```sh
+# Run all tests
+./build.sh tests
+
+# Run with different configurations
+./build.sh tests debug warnings
+./build.sh tests performance warnings
+```
 
 ---
 **Note for Arch Linux/AUR users:** The `updpkgsums` tool (used for updating PKGBUILD checksums) is provided by the `pacman-contrib` package. Be sure to install it if you plan to maintain or update the PKGBUILD or use the AUR automation scripts.

@@ -99,148 +99,255 @@ The project uses GitHub Actions to automatically bump versions based on [Convent
 - **BREAKING CHANGE**: Triggers a **major** version bump
 - **feat**: Triggers a **minor** version bump  
 - **fix**: Triggers a **patch** version bump
-- **docs**, **style**, **refactor**, **perf**, **test**, **chore**: Triggers a **patch** version bump
+- **docs**, **style**, **refactor**, **perf**, **test**, **chore**: No version bump
 
 ### Manual Version Management
-For manual version bumps, use the provided tools:
+For manual version control, use the provided tools:
 
 ```sh
-# Command-line version bump
-./dev-bin/bump-version [major|minor|patch] [--commit] [--tag]
+# Analyze changes and suggest version bump
+./dev-bin/semantic-version-analyzer --verbose
 
-# Interactive version bump (Cursor IDE)
-./dev-bin/cursor-version-bump
+# Manually bump version
+./dev-bin/bump-version [major|minor|patch]
+
+# Manage git tags
+./dev-bin/tag-manager list
+./dev-bin/tag-manager cleanup [count]
 ```
 
 [↑ Back to top](#developer-guide)
 
 ## Testing & CI/CD
 
-The project includes comprehensive testing infrastructure with detailed documentation available in [TEST_SUITE.md](TEST_SUITE.md).
-
 ### Test Suite Overview
 
-vglog-filter includes multiple test suites:
+The project includes a comprehensive test suite with multiple test types:
 
-- **C++ Unit Tests** (`test/` directory): Core functionality tests with automatic CMake integration
-- **Test Workflows** (`test-workflows/` directory): Integration and workflow tests
-- **Comprehensive Test Runner** (`run_tests.sh`): Runs all test suites in sequence
-- **CI/CD Integration**: Automated testing across multiple platforms and configurations
+#### C++ Unit Tests
+Located in the `test/` directory:
+- **test_basic.cpp**: Basic functionality tests
+- **test_comprehensive.cpp**: Comprehensive feature tests
+- **test_edge_cases.cpp**: Edge case and boundary condition tests
+- **test_integration.cpp**: Integration tests
+- **test_memory_leaks.cpp**: Memory leak detection tests
+- **test_path_validation.cpp**: Path validation security tests
+- **test_regex_patterns.cpp**: Regex pattern matching and replacement tests
+- **test_cli_options.cpp**: Command-line argument parsing tests
 
-For detailed information about running tests, adding new tests, and debugging test failures, see the [Test Suite Documentation](TEST_SUITE.md).
+#### Test Workflows
+Located in the `test-workflows/` directory:
+- **cli-tests/**: Command-line interface functionality tests
+- **debug-tests/**: Debugging and manual testing scripts
+- **ere-tests/**: Extended Regular Expression functionality tests
+- **file-handling-tests/**: File processing and handling tests
+- **utility-tests/**: Utility function tests
 
 ### GitHub Actions Workflows
-- **Build and Test**: Multi-platform testing with multiple build configurations
-- **Comprehensive Test**: Tests all 12 build configuration combinations
-- **Debug Build Test**: Dedicated testing for debug builds with GDB integration
-- **Cross-Platform Test**: Tests builds across Ubuntu, Arch Linux, Fedora, and Debian
-- **Performance Benchmark**: Automated performance testing and optimization verification
-- **Memory Sanitizer**: Memory error detection using Clang's MemorySanitizer
-- **Clang-Tidy**: Static analysis and code quality checks
-- **CodeQL**: Security analysis and vulnerability detection
-- **ShellCheck**: Shell script linting and validation
-- **Automated Versioning**: Semantic version bumping based on commit messages
+
+The project uses 12 comprehensive GitHub Actions workflows:
+
+#### Core Testing Workflows
+1. **Build and Test** (`test.yml`): Basic build verification and functionality testing
+2. **Comprehensive Test** (`comprehensive-test.yml`): Complete testing of all build configurations
+3. **Debug Build Test** (`debug-build-test.yml`): Dedicated testing for debug builds
+
+#### Quality Assurance Workflows
+4. **Clang-Tidy** (`clang-tidy.yml`): Static analysis and code quality checks
+5. **Memory Sanitizer** (`memory-sanitizer.yml`): Memory error detection
+6. **CodeQL** (`codeql.yml`): Security analysis and vulnerability detection
+7. **ShellCheck** (`shellcheck.yml`): Shell script validation
+
+#### Performance and Compatibility Workflows
+8. **Performance Benchmark** (`performance-benchmark.yml`): Performance testing and optimization verification
+9. **Cross-Platform Test** (`cross-platform.yml`): Multi-platform compatibility testing
+
+#### Version Management Workflows
+10. **Auto Version Bump** (`version-bump.yml`): Automated version bumping and release creation
+11. **Tag Cleanup** (`tag-cleanup.yml`): Automated tag management and cleanup
+
+#### Security Workflows
+12. **Security Scanning** (`security-scan.yml`): Comprehensive security analysis
 
 ### Local Testing
-All build configurations are tested locally and in CI:
+
+#### Quick Test Run
+```sh
+# Run all tests
+./run_tests.sh
+
+# Run only C++ tests
+./test/run_unit_tests.sh
+
+# Run only workflow tests
+./test-workflows/run_workflow_tests.sh
+```
+
+#### Individual Test Suites
+```sh
+# Run specific C++ test
+./build/bin/test_basic
+
+# Run specific workflow test
+./test-workflows/cli-tests/test_extract.sh
+```
+
+#### Build and Test
+```sh
+# Build and run all tests
+./build.sh tests
+
+# Build with specific options and test
+./build.sh tests debug warnings
+```
+
+### Development Tools
+
+#### Version Management Tools
+- **semantic-version-analyzer**: Analyzes code changes and suggests version bumps
+- **bump-version**: Handles version bumping and release creation
+- **tag-manager**: Manages git tags and cleanup
+- **cursor-version-bump**: Cursor IDE integration for version bumping
+
+#### Testing Tools
+- **run_tests.sh**: Main test runner for all test suites
+- **run_unit_tests.sh**: C++ unit test runner
+- **run_workflow_tests.sh**: Workflow test runner
+
+#### Build Tools
+- **build.sh**: Main build script with multiple configuration options
+- **CMakeLists.txt**: CMake configuration with comprehensive build options
+
+## Development Workflow
+
+### 1. Setup Development Environment
+
+```sh
+# Clone the repository
+git clone <repository-url>
+cd vglog-filter
+
+# Install dependencies (Arch Linux)
+sudo pacman -S base-devel cmake gcc
+
+# Install dependencies (Ubuntu/Debian)
+sudo apt-get install build-essential cmake
+```
+
+### 2. Build and Test
+
+```sh
+# Build with tests
+./build.sh tests
+
+# Build with debug mode
+./build.sh debug tests
+
+# Build with performance optimizations
+./build.sh performance warnings
+```
+
+### 3. Development Cycle
+
+```sh
+# Make changes to source code
+# Run tests to ensure everything works
+./build.sh tests
+
+# Commit changes with conventional commit format
+git commit -m "feat: add new feature"
+
+# Push changes
+git push origin main
+```
+
+### 4. Version Management
+
+```sh
+# Analyze changes since last release
+./dev-bin/semantic-version-analyzer --verbose
+
+# Create release if needed
+# (Automatic via GitHub Actions or manual trigger)
+```
+
+## Build Configurations
+
+### Available Build Modes
+
+| Mode | CMake Option | Description | Compiler Flags |
+|------|-------------|-------------|----------------|
+| Default | None | Standard build | `-O2 -g` |
+| Performance | `PERFORMANCE_BUILD=ON` | Optimized build | `-O3 -march=native -flto` |
+| Debug | `DEBUG_MODE=ON` | Debug build | `-O0 -g -fsanitize=address,undefined` |
+| Warnings | `WARNING_MODE=ON` | Extra warnings | `-Wall -Wextra -Wpedantic` |
+
+### Build Matrix
+
+The CI/CD pipeline tests all combinations:
 - Default build
-- Performance build (optimized)
+- Performance build
 - Debug build
-- Warnings build (extra compiler warnings)
-- All combinations with tests
+- Warnings build
 - Performance + Warnings
 - Debug + Warnings
+- Tests build
 - Performance + Tests
 - Debug + Tests
 - Warnings + Tests
 - Performance + Warnings + Tests
 - Debug + Warnings + Tests
 
-#### Test Framework
-The project includes a basic test framework in the `test/` directory:
-- **test_basic.cpp**: Unit tests for core functionality
-- **Test Coverage**: Version file reading, empty file handling, basic parsing
-- **Automatic Cleanup**: Tests automatically clean up temporary files
-- **Build Integration**: Tests can be built and run with `./build.sh tests`
+## Code Quality
 
-#### Running Tests
-```sh
-# Build and run tests
-./build.sh tests
+### Static Analysis
+- **Clang-Tidy**: Static code analysis and style checking
+- **CodeQL**: Security vulnerability scanning
+- **ShellCheck**: Shell script validation
 
-# Run tests with specific build configuration
-./build.sh tests debug warnings
+### Memory Safety
+- **Memory Sanitizer**: Memory error detection in debug builds
+- **Address Sanitizer**: Memory corruption detection
+- **Undefined Behavior Sanitizer**: Undefined behavior detection
 
-# Run tests with performance optimizations
-./build.sh tests performance warnings
+### Performance
+- **Performance Benchmark**: Automated performance testing
+- **LTO/IPO**: Link-time optimization for performance builds
+- **Native Optimization**: Architecture-specific optimizations
 
-# Manual test compilation (if needed)
-g++ -std=c++20 -Wall -pedantic -Wextra -O2 test/test_basic.cpp -o build/bin/test_basic
-./build/bin/test_basic
-```
+## Troubleshooting
 
-#### CI/CD Testing
-The GitHub Actions workflows automatically test all build configurations:
-- **Comprehensive Test**: Tests all 12 build configuration combinations
-- **Debug Build Test**: Verifies debug symbols and GDB integration
-- **Performance Benchmark**: Tests performance optimizations and LTO
-- **Cross-Platform**: Ensures compatibility across different Linux distributions
+### Common Build Issues
 
-#### Performance Features
-- **Automatic large file detection**: Files >5MB automatically use stream processing
-- **Memory optimization**: Vector capacity reservation and efficient string operations
-- **Regex optimization**: All patterns use `std::regex::optimize` flag
-- **Stream processing**: Line-by-line processing for large files to prevent OOM
-- **Smart defaults**: Optimal processing mode selected automatically
+1. **CMake version too old**: Update to CMake 3.16 or newer
+2. **Compiler not C++20 compatible**: Update to GCC 10+ or Clang 10+
+3. **Missing dependencies**: Install build essentials and CMake
+4. **Permission issues**: Check file permissions and ownership
 
-### Recent Performance Optimizations
+### Test Failures
 
-The project has undergone significant performance improvements:
+1. **Unit test failures**: Check test output for specific error messages
+2. **Workflow test failures**: Verify test environment and dependencies
+3. **Memory sanitizer errors**: Address memory issues in debug builds
+4. **Performance test failures**: Check system resources and optimization flags
 
-#### String Operations Optimization
-- **std::string_view**: Added `std::string_view` support for better performance
-- **String trimming**: Optimized with `ltrim_view()`, `rtrim_view()`, and `trim_view()` functions
-- **Canonicalization**: Added `canon()` overload for `string_view` to avoid unnecessary copies
-- **Memory efficiency**: Reduced string allocations in processing loops
+### Version Issues
 
-#### Regex Pattern Optimization
-- **ECMAScript flags**: All regex patterns now use `std::regex::ECMAScript` flag for better performance
-- **Optimized patterns**: Enhanced regex patterns in both `canon()` and `process()` functions
-- **Consistent flags**: Standardized regex flags across all patterns for maintainability
+1. **Version not detected**: Ensure VERSION file exists and is readable
+2. **Tag conflicts**: Use tag manager to clean up old tags
+3. **Release not created**: Check if changes meet automatic release thresholds
 
-#### Large File Processing Improvements
-- **Efficient file detection**: Replaced `fopen/fseek/ftell` with `stat()` for single file operation
-- **Regular file checking**: Added `S_ISREG()` check to avoid processing directories
-- **Optimized thresholds**: Reduced default threshold to 5MB for better auto-detection
+## Getting Help
 
-#### Array Operations Enhancement
-- **std::span support**: Added C++20 `std::span` support for memory-efficient array handling
-- **Span helpers**: Added `create_span_from_vector()` and `find_marker_in_span()` functions
-- **Marker trimming**: Optimized marker search using `std::span` for better performance
+- **Documentation**: Check the `doc/` directory for comprehensive guides
+- **Issues**: Open an issue on GitHub for bugs or feature requests
+- **CI/CD**: Check GitHub Actions for build and test status
+- **Version Analysis**: Use semantic version analyzer for change analysis
 
-#### New Features
+---
 
-##### Progress Reporting
-- **Real-time feedback**: Progress updates every 1000 lines during processing
-- **Percentage display**: Shows completion percentage and line counts
-- **File-specific**: Progress reporting includes filename for clarity
-- **Stdin handling**: Automatically disabled for stdin to avoid performance impact
-
-##### Memory Monitoring
-- **Real-time tracking**: Monitor memory usage at key processing stages
-- **Performance analysis**: Use `-M` flag to identify memory bottlenecks
-- **Resource optimization**: Helps optimize processing for very large files
-- **Cross-platform**: Uses `getrusage()` for Linux compatibility
-
-##### Enhanced Error Handling
-- **Detailed messages**: Added `create_error_message()` helper for consistent formatting
-- **File context**: All error messages include file names and operation details
-- **Troubleshooting hints**: Better guidance for common issues
-- **Memory failures**: Specific error handling for memory allocation issues
-
-### Development Tools
-The `dev-bin/` directory contains development utilities:
-- `bump-version`: Command-line version management
-- `cursor-version-bump`: Interactive version bumping for Cursor IDE
-
-[↑ Back to top](#developer-guide) 
+For more detailed information, see:
+- [Test Suite Documentation](TEST_SUITE.md)
+- [CI/CD Guide](CI_CD_GUIDE.md)
+- [Versioning Guide](VERSIONING.md)
+- [Build Guide](BUILD.md) 

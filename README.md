@@ -49,7 +49,7 @@ vglog-filter addresses these issues by:
 
 ## Installation & Prerequisites
 
-- **Dependencies**: Requires a C++20-compatible compiler, CMake (version 3.10 or newer recommended).
+- **Dependencies**: Requires a C++20-compatible compiler, CMake (version 3.16 or newer).
 - **Supported platforms**: Linux (tested), should work on other POSIX systems with minimal changes.
 - **Build script**: The project includes a `build.sh` script for easy compilation with various build configurations (see [Developer Guide](doc/DEVELOPER_GUIDE.md#build-options) for details).
 
@@ -121,6 +121,8 @@ Comprehensive documentation is available in the [`doc/`](doc/) folder:
 - [DEVELOPER_GUIDE.md](doc/DEVELOPER_GUIDE.md): Build options, versioning system, and development infrastructure
 - [TEST_SUITE.md](doc/TEST_SUITE.md): Comprehensive test suite documentation and testing guidelines
 - [CI_CD_GUIDE.md](doc/CI_CD_GUIDE.md): Comprehensive CI/CD and testing infrastructure guide
+- [TAG_MANAGEMENT.md](doc/TAG_MANAGEMENT.md): Git tag management and cleanup strategies
+- [RELEASE_WORKFLOW.md](doc/RELEASE_WORKFLOW.md): Release workflow and semantic versioning process
 
 [↑ Back to top](#vglog-filter)
 
