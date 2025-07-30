@@ -154,12 +154,21 @@ print_suite_menu() {
     echo -e "Press [Enter] or wait 5 seconds to select ${BOLD}${AVAILABLE_SUITES[0]}${NC} (default)"
 }
 
-# Show menu and prompt
-print_suite_menu
-read -t 5 -p "Enter your choice [0-$(( ${#AVAILABLE_SUITES[@]} - 1 ))]: " SUITE_CHOICE
-if [[ -z "$SUITE_CHOICE" ]]; then
-    SUITE_CHOICE=0
+# Check for TEST_SUITE environment variable override
+if [[ -n "$TEST_SUITE" ]]; then
+    # Use override value
+    SUITE_CHOICE="$TEST_SUITE"
+    echo -e "${BOLD}${CYAN}Using TEST_SUITE override: $TEST_SUITE${NC}"
+else
+    # Show menu and prompt
+    print_suite_menu
+    read -t 5 -p "Enter your choice [0-$(( ${#AVAILABLE_SUITES[@]} - 1 ))]: " SUITE_CHOICE
+    if [[ -z "$SUITE_CHOICE" ]]; then
+        SUITE_CHOICE=0
+    fi
 fi
+
+# Validate selection (for both override and interactive)
 if ! [[ "$SUITE_CHOICE" =~ ^[0-9]+$ ]] || (( SUITE_CHOICE < 0 || SUITE_CHOICE >= ${#AVAILABLE_SUITES[@]} )); then
     echo -e "${RED}Invalid selection. Defaulting to ${AVAILABLE_SUITES[0]}.${NC}"
     SUITE_CHOICE=0
