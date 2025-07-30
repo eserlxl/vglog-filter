@@ -136,7 +136,11 @@ generate_license_header() {
         current_year=2025
     fi
     
-    cat << EOF
+    # Generate appropriate comment style based on file type
+    case "$file_type" in
+        "c"|"cpp"|"h"|"hh"|"hpp")
+            # C/C++ style comments
+            cat << EOF
 // Copyright © $current_year Eser KUBALI <lxldev.contact@gmail.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
@@ -144,12 +148,45 @@ generate_license_header() {
 // the GNU General Public License v3.0 or later.
 // See the LICENSE file in the project root for details.
 EOF
-    
-    if [[ -n "$description" ]]; then
-        echo "//"
-        echo "// $description"
-    fi
-    echo ""
+            if [[ -n "$description" ]]; then
+                echo "//"
+                echo "// $description"
+            fi
+            echo ""
+            ;;
+        "sh"|"bash")
+            # Shell script style comments
+            cat << EOF
+# Copyright © $current_year Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter test suite and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+EOF
+            if [[ -n "$description" ]]; then
+                echo "#"
+                echo "# $description"
+            fi
+            echo ""
+            ;;
+        *)
+            # Default to C-style comments for unknown file types
+            cat << EOF
+// Copyright © $current_year Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// This file is part of vglog-filter test suite and is licensed under
+// the GNU General Public License v3.0 or later.
+// See the LICENSE file in the project root for details.
+EOF
+            if [[ -n "$description" ]]; then
+                echo "//"
+                echo "// $description"
+            fi
+            echo ""
+            ;;
+    esac
 }
 
 # Export functions for use in test scripts
