@@ -144,7 +144,7 @@ echo "Debug: End of result for Test 2"
 suggestion=$(echo "$result" | grep "^SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
 
 if [[ "$suggestion" = "none" ]]; then
-    echo "✅ PASS: API breaking changes detected correctly (single line change is minor)"
+    echo "✅ PASS: Function prototype removal correctly classified as minor change (despite commit message calling it breaking)"
 else
     echo "❌ FAIL: Expected none, got $suggestion"
     exit 1
