@@ -66,10 +66,10 @@ Options:
   --help, -h               Show this help
 
 Environment Variables:
-  MIN_MAJOR_DIFF_LINES     Minimum lines for major bump (default: 2000)
+  MIN_MAJOR_DIFF_LINES     Minimum lines for major bump (default: 10000)
   MIN_MINOR_DIFF_LINES     Minimum lines for minor bump (default: 50)
-  MIN_PATCH_DIFF_LINES     Minimum lines for patch bump (default: 100)
-  MIN_PATCH_FILES          Minimum files for patch bump (default: 5)
+  MIN_PATCH_DIFF_LINES     Minimum lines for patch bump (default: 500)
+  MIN_PATCH_FILES          Minimum files for patch bump (default: 10)
   MIN_NEW_SOURCE_FILES     Minimum new source files for minor (default: 2)
   MIN_NEW_TEST_FILES       Minimum new test files for minor (default: 3)
   MIN_NEW_DOC_FILES        Minimum new doc files for minor (default: 2)
@@ -126,10 +126,10 @@ ONLY_PATHS=""
 # --- defaults / config --------------------------------------------------------
 
 # Configurable thresholds (can be overridden by environment)
-MIN_MAJOR_DIFF_LINES="${MIN_MAJOR_DIFF_LINES:-2000}"
+MIN_MAJOR_DIFF_LINES="${MIN_MAJOR_DIFF_LINES:-10000}"
 MIN_MINOR_DIFF_LINES="${MIN_MINOR_DIFF_LINES:-50}"
-MIN_PATCH_DIFF_LINES="${MIN_PATCH_DIFF_LINES:-100}"
-MIN_PATCH_FILES="${MIN_PATCH_FILES:-5}"
+MIN_PATCH_DIFF_LINES="${MIN_PATCH_DIFF_LINES:-500}"
+MIN_PATCH_FILES="${MIN_PATCH_FILES:-10}"
 MIN_NEW_SOURCE_FILES="${MIN_NEW_SOURCE_FILES:-2}"
 MIN_NEW_TEST_FILES="${MIN_NEW_TEST_FILES:-3}"
 MIN_NEW_DOC_FILES="${MIN_NEW_DOC_FILES:-2}"
@@ -1125,7 +1125,12 @@ suggest_version_bump() {
     if [[ "${R[api_breaking]}" = "true"      ]]; then printf 'major'; return; fi
     if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then printf 'major'; return; fi
     if [[ "${R[diff_size]:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
-        if [[ "$REQ" != "true" && "$REQ" != "1" && "$REQ" != "yes" ]]; then
+        if [[ "$REQ" = "true" || "$REQ" = "1" || "$REQ" = "yes" ]]; then
+            # When MAJOR_REQUIRE_BREAKING is true, large diffs alone don't trigger major
+            # Only breaking changes should trigger major
+            :
+        else
+            # When MAJOR_REQUIRE_BREAKING is false, large diffs can trigger major
             printf 'major'; return
         fi
     fi
@@ -1152,7 +1157,12 @@ get_bump_reason() {
     if [[ "${R[api_breaking]}" = "true"      ]]; then printf 'api_break';    return; fi
     if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then printf 'security_keywords'; return; fi
     if [[ "${R[diff_size]:-0}" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
-        if [[ "$REQ" != "true" && "$REQ" != "1" && "$REQ" != "yes" ]]; then
+        if [[ "$REQ" = "true" || "$REQ" = "1" || "$REQ" = "yes" ]]; then
+            # When MAJOR_REQUIRE_BREAKING is true, large diffs alone don't trigger major
+            # Only breaking changes should trigger major
+            :
+        else
+            # When MAJOR_REQUIRE_BREAKING is false, large diffs can trigger major
             printf 'large_diff'; return
         fi
     fi
