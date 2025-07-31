@@ -1,86 +1,152 @@
-# Advanced Filtering with vglog-filter
+# Advanced Usage and Customization
 
-## Signature Depth (`-d`/`--depth`)
-- The signature depth controls how many lines from each error block are used to generate a unique signature for deduplication.
-- Example: `-d 2` uses the first two lines of each block. `-d 0` uses all lines (unlimited depth).
-- Lower depth may group more errors together; higher depth distinguishes more unique blocks.
+This guide delves into the advanced features and customization options of `vglog-filter`, allowing you to fine-tune its behavior for specific use cases and integrate it more deeply into your development workflow.
 
-## Marker Customization (`-m`/`--marker`)
-- By default, only log entries after the last occurrence of the marker string are processed.
-- Use `-m "My Marker"` to set a custom marker string.
-- Use `-k` to ignore the marker and process the entire file.
+## Table of Contents
 
-## Deduplication Logic
-- Each error block is canonicalized: addresses, line numbers, array indices, and template parameters are replaced with placeholders.
-- The canonicalized lines (up to the specified depth) form a signature.
-- Only the first occurrence of each unique signature is output; duplicates are omitted.
+- [Custom Filtering Rules](#custom-filtering-rules)
+- [Integration with CI/CD Pipelines](#integration-with-cicd-pipelines)
+- [Performance Tuning](#performance-tuning)
+- [Debugging and Troubleshooting](#debugging-and-troubleshooting)
+- [Extending vglog-filter](#extending-vglog-filter)
 
-## Raw vs. Scrubbed Output (`-v`/`--verbose`)
-- By default, addresses and certain patterns are scrubbed for readability.
-- Use `-v` to disable scrubbing and see the raw log blocks.
+## Custom Filtering Rules
 
-## Progress Monitoring (`-p`/`--progress`)
-- Monitor processing progress for large files with real-time updates.
-- Progress is displayed every 1000 lines processed.
-- Shows percentage completion and line counts.
-- Automatically disabled for stdin to avoid performance impact.
-- Example: `vglog-filter -p large_file.log > filtered.log`
+`vglog-filter` provides a default set of rules to clean up common Valgrind noise. However, you can define custom filtering rules to address specific patterns in your logs.
 
-## Memory Monitoring (`-M`/--memory`)
-- Track memory usage during different processing stages.
-- Useful for performance analysis and identifying memory bottlenecks.
-- Reports memory usage during file reading, processing, and deduplication.
-- Example: `vglog-filter -M valgrind.log > filtered.log`
+Currently, custom filtering rules are implemented by modifying the source code. In future versions, external configuration files for rules might be supported.
 
-## Combined Monitoring
-- Use both progress and memory monitoring together for comprehensive analysis.
-- Example: `vglog-filter -p -M very_large_file.log > filtered.log`
+To add or modify filtering logic, you will need to edit `src/vglog-filter.cpp` and recompile the project. Look for sections related to log processing and pattern matching.
 
-## Example: Custom Filtering
-```sh
-vglog-filter -d 3 -m "==12345== My Custom Marker" mylog.log > filtered.log
+**Example: Adding a new suppression rule**
+
+If you frequently encounter a specific Valgrind warning that is irrelevant to your project, you can add a rule to suppress it. For instance, to ignore warnings related to a specific third-party library:
+
+```cpp
+// Inside vglog-filter.cpp, within the processing logic
+if (line.find("Warning: Irrelevant third-party library message") != std::string::npos) {
+    continue; // Skip this line
+}
 ```
-- This uses a signature depth of 3 and starts processing after the last occurrence of the custom marker.
 
-## Error Handling and Input Validation
-- The tool validates all command-line arguments and provides clear error messages.
-- Depth values must be non-negative integers with descriptive error messages.
-- Input files are checked for existence and readability before processing.
-- Empty input files are handled gracefully with appropriate warnings.
-- Invalid input is handled gracefully with descriptive error messages and helpful suggestions.
-- String operations are performed safely to prevent crashes.
-- Version file resolution supports multiple installation paths for development and production use.
+After modifying the source, recompile the project using `./build.sh`.
 
-## Performance and Memory Management
-- **Automatic large file detection**: Files larger than 5MB automatically use stream processing
-- **Memory-efficient processing**: Stream mode processes files line-by-line instead of loading entire file
-- **Vector capacity reservation**: Pre-allocates memory based on file size estimation
-- **Regex optimization**: All patterns use `std::regex::optimize` and `std::regex::ECMAScript` for better performance
-- **Smart mode selection**: Uses optimal processing approach for each file size
-- **String optimization**: Uses `std::string_view` for efficient string operations
-- **Array optimization**: Uses `std::span` for memory-efficient array handling
-- **Efficient file detection**: Uses `stat()` for fast file size checking
+[↑ Back to top](#advanced-usage-and-customization)
 
-## Advanced Performance Features
+## Integration with CI/CD Pipelines
 
-### String Operations Optimization
-- **std::string_view**: Efficient string views without copying
-- **Optimized trimming**: `ltrim_view()`, `rtrim_view()`, `trim_view()` functions
-- **Canonicalization**: `canon()` overload for `string_view` to avoid copies
+`vglog-filter` is designed to be easily integrated into Continuous Integration/Continuous Deployment (CI/CD) pipelines to automate Valgrind log analysis.
 
-### Regex Pattern Optimization
-- **ECMAScript flags**: Enhanced performance with `std::regex::ECMAScript`
-- **Optimized patterns**: Improved regex patterns for faster matching
-- **Consistent flags**: Standardized regex flags across all patterns
+### Example: GitHub Actions
 
-### Large File Processing
-- **Efficient detection**: Single `stat()` call for file size checking
-- **Regular file validation**: `S_ISREG()` check to avoid directory processing
-- **Stream processing**: Line-by-line processing for memory efficiency
-- **Progress tracking**: Real-time progress updates for large files
+In a GitHub Actions workflow, you can use `vglog-filter` to process Valgrind logs generated during your test runs. This ensures that only relevant errors are reported, making your CI logs cleaner and easier to review.
 
-### Memory Management
-- **Real-time monitoring**: Track memory usage during processing
-- **Performance analysis**: Identify memory bottlenecks with `-M` flag
-- **Resource optimization**: Optimize processing for very large files
-- **Cross-platform**: Uses `getrusage()` for Linux compatibility 
+```yaml
+name: Valgrind Analysis
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  valgrind-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: | # Replace with your project's actual dependencies
+          sudo apt-get update
+          sudo apt-get install build-essential cmake valgrind
+
+      - name: Build project
+        run: ./build.sh
+
+      - name: Run Valgrind and Filter Logs
+        run: |
+          # Run your application with Valgrind and pipe output to vglog-filter
+          valgrind --leak-check=full --show-leak-kinds=all ./build/bin/your_application 2>&1 \
+            | ./build/bin/vglog-filter --progress --monitor-memory > valgrind_filtered.log
+
+          # Check if the filtered log contains any errors (e.g., by checking file size or specific keywords)
+          if [ -s valgrind_filtered.log ]; then
+            echo "Valgrind detected issues. See valgrind_filtered.log:"
+            cat valgrind_filtered.log
+            exit 1 # Fail the CI job if issues are found
+          else
+            echo "Valgrind analysis completed with no new issues detected."
+          fi
+```
+
+This example demonstrates how to:
+1.  Set up the build environment.
+2.  Build `vglog-filter` and your application.
+3.  Run your application under Valgrind, piping its output directly to `vglog-filter`.
+4.  Save the filtered output to a file.
+5.  Implement a basic check to fail the CI job if the filtered log is not empty, indicating potential issues.
+
+For more details on the project's CI/CD setup, refer to the [CI/CD Guide](doc/CI_CD_GUIDE.md).
+
+[↑ Back to top](#advanced-usage-and-customization)
+
+## Performance Tuning
+
+`vglog-filter` is optimized for performance, especially when handling large log files. Here are some considerations for maximizing its efficiency:
+
+-   **Stream Processing (`-s` / `--stream`)**: For very large files or continuous input streams, forcing stream processing mode can be beneficial. While `vglog-filter` automatically switches to this mode for inputs over 5MB, explicitly using `-s` ensures consistent behavior.
+
+    ```sh
+    ./build/bin/vglog-filter -s large_log.log > filtered.log
+    ```
+
+-   **Input/Output Redirection**: Piping Valgrind output directly to `vglog-filter` (as shown in [Usage](#usage)) is generally more efficient than writing to an intermediate file and then reading it. This reduces disk I/O.
+
+    ```sh
+    valgrind ... | ./build/bin/vglog-filter > filtered.log
+    ```
+
+-   **System Resources**: Ensure your system has sufficient CPU and memory. While `vglog-filter` is memory-efficient, very large logs still require some resources. The `--monitor-memory` option can help you assess memory usage.
+
+[↑ Back to top](#advanced-usage-and-customization)
+
+## Debugging and Troubleshooting
+
+If `vglog-filter` is not producing the expected output or if you encounter issues, consider the following:
+
+-   **Verify Valgrind Output**: First, inspect the raw Valgrind output (before filtering) to ensure it contains the patterns you expect `vglog-filter` to process. You can save raw output to a file:
+
+    ```sh
+    valgrind --leak-check=full ./your_program 2> raw_valgrind.log
+    ```
+
+-   **Check Command-Line Options**: Double-check that you are using the correct command-line options. For example, ensure `-s` is used if you intend to force stream processing.
+
+-   **Examine Filtered Output**: Compare the raw Valgrind log with the filtered output. This can help identify if specific patterns are being missed or incorrectly filtered.
+
+-   **Memory Monitoring (`-M` / `--monitor-memory`)**: If you suspect memory-related issues or performance bottlenecks, use the memory monitoring option:
+
+    ```sh
+    ./build/bin/vglog-filter -M your_log.log
+    ```
+    This will report the peak memory usage, which can be helpful for diagnosing resource-related problems.
+
+-   **Build in Debug Mode**: If you are modifying `vglog-filter`'s source code, build it in debug mode for more detailed error messages and easier debugging with tools like GDB. Refer to the [Build Guide](doc/BUILD.md) for instructions on debug builds.
+
+[↑ Back to top](#advanced-usage-and-customization)
+
+## Extending vglog-filter
+
+For developers interested in extending `vglog-filter`'s capabilities, consider the following areas:
+
+-   **Adding New Filtering Logic**: Implement new C++ code within `src/vglog-filter.cpp` to handle novel Valgrind output patterns or introduce more sophisticated filtering algorithms.
+
+-   **External Configuration**: Future enhancements could include support for external configuration files (e.g., JSON, YAML) to define filtering rules without recompiling the source code. This would make `vglog-filter` more flexible for end-users.
+
+-   **New Output Formats**: Currently, `vglog-filter` outputs plain text. You could extend it to support other output formats (e.g., XML, JSON) for easier machine parsing and integration with other analysis tools.
+
+-   **Performance Improvements**: Explore further optimizations, such as parallel processing for multi-core systems (if applicable to the log structure) or more advanced string matching algorithms.
+
+Refer to the [Developer Guide](doc/DEVELOPER_GUIDE.md) for general guidelines on contributing to the project.
+
+[↑ Back to top](#advanced-usage-and-customization)

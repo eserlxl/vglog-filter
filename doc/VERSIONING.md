@@ -1,295 +1,250 @@
 # Versioning Strategy
 
-This document describes the versioning strategy used by vglog-filter.
+This document details the versioning strategy employed by `vglog-filter`, which adheres to [Semantic Versioning (SemVer)](https://semver.org/) principles. It covers how versions are structured, stored, and how changes are automatically and manually managed to ensure a clear and consistent release history.
 
-## Semantic Versioning
+## Table of Contents
 
-vglog-filter follows [Semantic Versioning](https://semver.org/) (SemVer) with the format `MAJOR.MINOR.PATCH`:
+- [Semantic Versioning Overview](#semantic-versioning-overview)
+- [Version Storage and Display](#version-storage-and-display)
+- [Automated Semantic Version Bumping](#automated-semantic-version-bumping)
+  - [Automatic Release Detection Thresholds](#automatic-release-detection-thresholds)
+  - [Semantic Version Analyzer Tool](#semantic-version-analyzer-tool)
+- [Manual Version Management](#manual-version-management)
+- [Version Management Tools](#version-management-tools)
+- [Release Process Integration](#release-process-integration)
+- [Version History](#version-history)
+- [Best Practices for Versioning](#best-practices-for-versioning)
+- [Troubleshooting Versioning Issues](#troubleshooting-versioning-issues)
 
-- **MAJOR** version for incompatible API changes
-- **MINOR** version for backwards-compatible functionality additions
-- **PATCH** version for backwards-compatible bug fixes
+## Semantic Versioning Overview
+
+`vglog-filter` strictly follows the [Semantic Versioning 2.0.0](https://semver.org/) specification, using the `MAJOR.MINOR.PATCH` format:
+
+-   **MAJOR Version (X.0.0)**: Incremented for incompatible API changes. This signifies that users might need to adapt their code or usage patterns when upgrading.
+-   **MINOR Version (0.Y.0)**: Incremented for adding new functionality in a backward-compatible manner. Existing usage should continue to work without modification.
+-   **PATCH Version (0.0.Z)**: Incremented for backward-compatible bug fixes and minor internal improvements. These changes should not affect existing functionality.
 
 ### Version Format Examples
 
-- `1.0.0` → `1.0.1` (bug fix)
-- `1.0.1` → `1.1.0` (new feature)
-- `1.1.0` → `2.0.0` (breaking change)
+-   `1.0.0` → `1.0.1`: A bug fix or minor internal improvement.
+-   `1.0.1` → `1.1.0`: A new feature was added, but existing functionality remains compatible.
+-   `1.1.0` → `2.0.0`: A breaking change was introduced, requiring users to update their integration.
+
+[↑ Back to top](#versioning-strategy)
 
 ## Version Storage and Display
 
-The current version is stored in the `VERSION` file at the project root and is read at runtime from multiple locations in order of preference.
+The current official version of `vglog-filter` is stored in a plain text file named `VERSION` located at the project root. This file is the single source of truth for the project's version.
 
-The version is automatically displayed when using the `--version` or `-V` flag:
+### Displaying the Current Version
+
+Users can retrieve the current version of the `vglog-filter` executable at runtime using the `--version` or `-V` command-line flags:
 
 ```bash
 vglog-filter --version
-# Output: vglog-filter version X.Y.Z
+# Expected Output: vglog-filter version X.Y.Z
 ```
 
-**Note**: The version is read from multiple locations in order of preference:
-1. `./VERSION` (local development)
-2. `../VERSION` (build directory)
-3. `/usr/share/vglog-filter/VERSION` (system installation)
-4. `/usr/local/share/vglog-filter/VERSION` (local installation)
+### Version Resolution Order
 
-If none of these files are accessible, the version will be displayed as "unknown".
+The `vglog-filter` executable attempts to read its version from several predefined locations, in a specific order of preference, to ensure it can find the `VERSION` file in various deployment scenarios:
 
-## Semantic Version Bumping
+1.  `./VERSION`: Relative to the executable's current working directory (common during local development or when running from the build output directory).
+2.  `../VERSION`: Relative to the executable, assuming it's in a `bin/` subdirectory within a build folder (e.g., `build/bin/vglog-filter`).
+3.  `/usr/share/vglog-filter/VERSION`: A standard path for system-wide installations on Linux.
+4.  `/usr/local/share/vglog-filter/VERSION`: A common path for local user installations.
 
-The project uses a semantic versioning system that analyzes actual code changes and supports both manual and automatic releases based on the significance of changes.
+If the `VERSION` file is not found or accessible in any of these locations, the version will be displayed as "unknown".
 
-### Automatic Release Detection
+[↑ Back to top](#versioning-strategy)
 
-The system automatically detects and releases for significant changes using conservative thresholds to prevent rapid version increases:
+## Automated Semantic Version Bumping
 
-- **MAJOR releases**: Breaking changes with large diffs (>200 lines)
-- **MINOR releases**: New features with significant diffs (>50 lines)
-- **PATCH releases**: Bug fixes with notable diffs (>20 lines)
-- **No release**: Changes that don't meet the thresholds
+`vglog-filter` employs an automated system for version bumping, tightly integrated with [Conventional Commits](https://www.conventionalcommits.org/) and GitHub Actions. This system analyzes actual code changes and commit messages to determine the appropriate semantic version increment.
 
-**Note**: These conservative thresholds were implemented to prevent rapid version increases and ensure that only truly significant changes trigger automatic releases.
+### Automatic Release Detection Thresholds
 
-### Semantic Version Analyzer
+The automated release workflow (`version-bump.yml` in `.github/workflows/`) uses conservative thresholds to prevent rapid and unnecessary version increases. A new release (and corresponding version bump) is automatically triggered only when changes meet these criteria:
 
-A dedicated script (`dev-bin/semantic-version-analyzer`) analyzes actual code changes and suggests appropriate version bumps:
+-   **MAJOR Release**: Triggered by the presence of any `BREAKING CHANGE` in the commit message footers. There is no size threshold for breaking changes, as their impact is always significant.
+-   **MINOR Release**: Triggered by new features (`feat:` commit type) AND a significant total diff size (e.g., greater than 50 lines changed).
+-   **PATCH Release**: Triggered by bug fixes (`fix:` commit type) AND a notable total diff size (e.g., greater than 20 lines changed).
+-   **No Release**: Changes that do not meet the above thresholds (e.g., `docs:`, `style:`, `chore:`) will not trigger an automatic version bump.
+
+These thresholds ensure that only truly significant changes result in a new official release, maintaining a meaningful version history.
+
+### Semantic Version Analyzer Tool
+
+A dedicated script, `dev-bin/semantic-version-analyzer`, is used to analyze the Git history and suggest the next appropriate version bump. This tool is the core of our automated versioning system.
 
 ```bash
-# Analyze changes since last tag
+# Analyze changes since the last Git tag (default behavior)
 ./dev-bin/semantic-version-analyzer
 
-# Analyze changes since specific tag
-./dev-bin/semantic-version-analyzer --since vX.Y.Z
+# Analyze changes since a specific Git tag (e.g., v1.1.0)
+./dev-bin/semantic-version-analyzer --since v1.1.0
 
-# Show detailed analysis
+# Show a detailed analysis, including file changes and commit messages
 ./dev-bin/semantic-version-analyzer --verbose
 
-# Analyze changes since specific date
+# Analyze changes since a specific date (e.g., all changes since January 1, 2025)
 ./dev-bin/semantic-version-analyzer --since-date 2025-01-01
 ```
 
-### What the Analyzer Checks
+#### What the Analyzer Checks
 
-The semantic version analyzer examines actual code changes with a focus on CLI tools:
+The `semantic-version-analyzer` performs a deep inspection of the codebase and Git history, with a particular focus on changes relevant to a command-line interface (CLI) tool:
 
-1. **File Changes**:
-   - Added files (new source files, test files, documentation)
-   - Modified files (existing code changes)
-   - Deleted files (removed functionality)
+1.  **File Changes**: Identifies added, modified, and deleted files across the repository (source code, tests, documentation, build scripts).
+2.  **CLI Interface Analysis**: Specifically looks for patterns indicating changes to the CLI, such as:
+    -   Introduction of new command-line options (suggests a `MINOR` bump).
+    -   Removal of existing command-line options (suggests a `MAJOR` / breaking change).
+    -   Enhancements to existing options (typically a `PATCH` or `MINOR` depending on impact).
+3.  **Source Code Structure**: Detects new source files, test files, or significant refactorings that might imply new functionality or breaking changes.
+4.  **Documentation Updates**: Notes new or significantly updated documentation files, which can sometimes correlate with new features.
+5.  **Change Magnitude**: Quantifies the size of changes (e.g., lines added/deleted) to inform the threshold-based decision for automatic releases.
 
-2. **CLI Interface Analysis**:
-   - New command-line options (indicates new features)
-   - Removed command-line options (breaking changes)
-   - Enhanced existing options (non-breaking improvements)
-   - New source files (indicates new functionality)
-   - New test files (indicates new functionality)
-   - New documentation files (indicates new features)
+[↑ Back to top](#versioning-strategy)
 
-3. **Change Magnitude**:
-   - Diff size analysis for threshold-based decisions
-   - Conservative thresholds to prevent rapid version increases
+## Manual Version Management
 
-### Manual Version Bumping
+While automated versioning is the primary method, `vglog-filter` provides options for manual control over version bumps and releases, typically via the GitHub Actions interface.
 
-You can manually trigger version bumps through the GitHub Actions interface:
-1. Go to the "Actions" tab in your repository
-2. Select "Auto Version Bump with Semantic Release Notes"
-3. Click "Run workflow"
-4. Choose the bump type (auto, major, minor, patch)
-5. Optionally add custom release notes
-6. Mark as prerelease if needed
+### Manually Triggering a Version Bump
 
-### Automatic vs Manual Releases
+This is useful for hotfixes, specific prereleases, or when you need to override the automatic detection:
 
-The system supports both automatic and manual release workflows:
+1.  Navigate to your repository on GitHub.
+2.  Go to the **Actions** tab.
+3.  Select the workflow named **"Auto Version Bump with Semantic Release Notes"** from the left sidebar.
+4.  Click the **"Run workflow"** dropdown button.
+5.  In the form, you can:
+    -   Choose the `Bump type` (e.g., `major`, `minor`, `patch`) or select `auto` to let the system detect it.
+    -   Add `Custom release notes` that will be prepended to the automatically generated notes.
+    -   Check `Prerelease` if you are creating a pre-release version (e.g., `v1.2.3-beta.1`).
+6.  Click **"Run workflow"** to initiate the manual release process.
 
-#### Automatic Releases
-- Triggered by significant changes detected by the semantic analyzer
-- Uses conservative thresholds to prevent rapid version increases
-- Creates releases with automatically generated release notes
-- Runs as part of the CI/CD pipeline
-
-#### Manual Releases
-- Triggered through GitHub Actions interface
-- Allows full control over version bump type
-- Supports custom release notes
-- Can be used for hotfixes or special releases
+[↑ Back to top](#versioning-strategy)
 
 ## Version Management Tools
 
-### Semantic Version Analyzer
+Several utility scripts are provided in the `dev-bin/` directory to assist with version management tasks.
 
-The `dev-bin/semantic-version-analyzer` script provides comprehensive version analysis:
+### `semantic-version-analyzer`
 
-```bash
-# Basic analysis
-./dev-bin/semantic-version-analyzer
+As described above, this script analyzes changes and suggests version bumps. It's a crucial tool for understanding the impact of your commits.
 
-# Detailed analysis with file changes
-./dev-bin/semantic-version-analyzer --verbose
+### `bump-version`
 
-# Analyze since specific tag
-./dev-bin/semantic-version-analyzer --since vX.Y.Z
-
-# Analyze since specific date
-./dev-bin/semantic-version-analyzer --since-date 2025-01-01
-
-# Show help
-./dev-bin/semantic-version-analyzer --help
-```
-
-### Version Bump Script
-
-The `dev-bin/bump-version` script handles version bumping and release creation:
+The `dev-bin/bump-version` script allows for manual incrementing of the project's version and updating the `VERSION` file. This is primarily used by the automated workflows but can be run locally for specific needs.
 
 ```bash
-# Bump patch version
+# Bump the patch version
 ./dev-bin/bump-version patch
 
-# Bump minor version
+# Bump the minor version
 ./dev-bin/bump-version minor
 
-# Bump major version
+# Bump the major version
 ./dev-bin/bump-version major
 
-# Auto-detect bump type
+# Auto-detect and bump version (similar to CI behavior)
 ./dev-bin/bump-version auto
 ```
 
-### Tag Manager
+### `tag-manager`
 
-The `dev-bin/tag-manager` script provides tag management capabilities:
+The `dev-bin/tag-manager` script provides functionalities for listing, creating, and cleaning up Git tags. This is essential for maintaining a tidy and accurate tag history.
 
 ```bash
-# List all tags
+# List all Git tags (sorted by version)
 ./dev-bin/tag-manager list
 
-# Clean up old tags
+# Clean up old tags (interactively or by keeping a specific count)
 ./dev-bin/tag-manager cleanup [count]
 
-# Create new tag
+# Create a new tag (use with caution, prefer automated releases)
 ./dev-bin/tag-manager create <version>
 
-# Show tag info
+# Show detailed information about a specific tag
 ./dev-bin/tag-manager info <tag>
 ```
 
-## Release Process
+For more details on tag management, refer to the [Git Tag Management Guide](TAG_MANAGEMENT.md).
 
-### 1. Prepare for Release
+[↑ Back to top](#versioning-strategy)
 
-Before creating a release, ensure your changes are ready:
+## Release Process Integration
 
-```bash
-# Check current status
-git status
+The versioning strategy is an integral part of the overall [Release Workflow](RELEASE_WORKFLOW.md). The typical flow is:
 
-# Make sure all changes are committed
-git add .
-git commit -m "feat: final changes before release"
+1.  **Develop and Commit**: Make changes and commit them using [Conventional Commit](https://www.conventionalcommits.org/) messages.
+2.  **Push to `main`**: Push your changes to the `main` branch.
+3.  **Automated Analysis**: The `version-bump.yml` GitHub Actions workflow is triggered. It uses `semantic-version-analyzer` to determine the appropriate version bump.
+4.  **Version Update and Tagging**: If a bump is warranted, the `VERSION` file is updated, a new Git tag is created, and a GitHub Release is generated with automatically compiled release notes.
+5.  **Verification**: Comprehensive CI/CD tests run on the new tag to ensure stability.
 
-# Push to main
-git push origin main
-```
+This automated process ensures that releases are consistent, well-documented, and accurately reflect the changes in the codebase.
 
-### 2. Analyze Changes
-
-Use the semantic version analyzer to understand what changed:
-
-```bash
-# Basic analysis
-./dev-bin/semantic-version-analyzer
-
-# Detailed analysis with file changes
-./dev-bin/semantic-version-analyzer --verbose
-```
-
-### 3. Create Release
-
-#### Option A: Automatic Release (Recommended)
-- Simply push your changes to main
-- If significant changes are detected, a release will be created automatically
-- Check GitHub Actions to monitor the process
-
-#### Option B: Manual Release
-1. Go to GitHub → Actions → "Auto Version Bump with Semantic Release Notes"
-2. Click "Run workflow"
-3. Choose the suggested bump type (or "auto" for automatic detection)
-4. Add custom release notes (optional)
-5. Mark as prerelease if needed
-6. Click "Run workflow"
+[↑ Back to top](#versioning-strategy)
 
 ## Version History
 
+`vglog-filter` maintains a clear version history, accessible through Git tags and GitHub Releases.
+
 ### Recent Releases
 
-The project maintains a version history that can be viewed using:
+You can view recent releases and their corresponding tags using Git commands:
 
 ```bash
-# List all version tags
+# List all version tags, sorted by version (newest first)
 git tag --sort=-version:refname
 
-# Show recent releases
+# Show recent commits along with their tags
 git log --oneline --tags --decorate --max-count=10
 ```
 
+For a more user-friendly view, refer to the [GitHub Releases page](https://github.com/eserlxl/vglog-filter/releases) of the repository.
+
 ### Version Evolution
 
-The project has evolved through several major versions:
+The project has evolved through several major versions, each marking significant milestones:
 
-- **v1.x**: Initial development and basic functionality
-- **v2.x**: Performance improvements and large file support
-- **v3.x**: Advanced features and comprehensive testing
-- **v4.x**: Current major version with semantic versioning and CI/CD improvements
+-   **v1.x**: Initial development, establishing core filtering and deduplication functionalities.
+-   **v2.x**: Focused on performance improvements, introducing support for large files and stream processing.
+-   **v3.x**: Expanded with advanced features, enhanced filtering capabilities, and a more comprehensive test suite.
+-   **v4.x**: The current major version, characterized by the implementation of robust semantic versioning, automated release workflows, and extensive CI/CD improvements.
 
-## Best Practices
+[↑ Back to top](#versioning-strategy)
 
-### When to Bump Versions
+## Best Practices for Versioning
 
-- **MAJOR**: Breaking changes, incompatible API modifications
-- **MINOR**: New features, backward-compatible additions
-- **PATCH**: Bug fixes, minor improvements, documentation updates
+Adhering to these best practices ensures a smooth and accurate versioning process:
 
-### Commit Message Guidelines
+1.  **Consistent Commit Messages**: Always write clear, concise, and [Conventional Commit](https://www.conventionalcommits.org/)-compliant messages. This is the foundation for accurate automated version detection.
+2.  **Understand Bump Types**: Be aware of what constitutes a MAJOR, MINOR, or PATCH change. This helps in writing appropriate commit messages and understanding the impact of your contributions.
+3.  **Rely on Automation**: For most cases, let the automated GitHub Actions workflow handle version bumping and tagging. Avoid manually modifying the `VERSION` file or creating tags directly on `main`.
+4.  **Review Release Notes**: Before a major release, review the automatically generated release notes to ensure they accurately capture all significant changes.
+5.  **Prereleases for Major Changes**: For significant or breaking changes, consider creating prereleases (e.g., `v2.0.0-beta.1`) to allow for broader testing before a stable release.
 
-Follow [Conventional Commits](https://www.conventionalcommits.org/) for automatic version detection:
+[↑ Back to top](#versioning-strategy)
 
-```bash
-# Major version bump
-git commit -m "feat!: breaking change"
+## Troubleshooting Versioning Issues
 
-# Minor version bump
-git commit -m "feat: new feature"
-
-# Patch version bump
-git commit -m "fix: bug fix"
-```
-
-### Release Notes
-
-- Include a summary of changes
-- List new features and improvements
-- Document breaking changes
-- Mention bug fixes and security updates
-- Include migration notes if needed
-
-## Troubleshooting
+If you encounter problems related to versioning, consider the following troubleshooting steps:
 
 ### Common Issues
 
-1. **Version not detected**: Ensure the VERSION file exists and is readable
-2. **Automatic release not triggered**: Check if changes meet the conservative thresholds
-3. **Tag conflicts**: Use the tag manager to clean up old tags
-4. **Build failures**: Ensure all tests pass before creating releases
+1.  **Version not detected or displayed as "unknown"**: Ensure the `VERSION` file exists in one of the expected locations and has read permissions. Verify the `vglog-filter` executable is correctly built and linked.
+2.  **Automatic release not triggered**: Check if your commit messages adhere to [Conventional Commits](https://www.conventionalcommits.org/) and if the changes meet the [automatic release detection thresholds](#automatic-release-detection-thresholds). Review the GitHub Actions workflow logs for any errors.
+3.  **Incorrect version bump suggested/applied**: Manually run `semantic-version-analyzer --verbose` to understand why a particular bump was suggested. If you believe it's incorrect, you can manually trigger the workflow and override the bump type.
+4.  **Tag conflicts or messy tag history**: Use the `tag-manager` script to list and clean up old or conflicting tags. Ensure you are not manually creating tags that conflict with the automated process.
 
 ### Getting Help
 
-- Check the [FAQ](FAQ.md) for common questions
-- Review the [Developer Guide](DEVELOPER_GUIDE.md) for detailed information
-- Open an issue for bugs or feature requests
-- Check GitHub Actions for build and test status
+-   **GitHub Actions Logs**: The most valuable resource for troubleshooting automated versioning issues are the detailed logs of the `version-bump.yml` workflow runs.
+-   **`semantic-version-analyzer` Output**: Use the verbose output of this tool to understand the analysis of your changes.
+-   **Project Documentation**: Refer to the [FAQ](FAQ.md), [Developer Guide](DEVELOPER_GUIDE.md), [Release Workflow Guide](RELEASE_WORKFLOW.md), and [Git Tag Management Guide](TAG_MANAGEMENT.md) for more context.
+-   **GitHub Issues**: If you suspect a bug in the versioning tooling or the workflow itself, please [open an issue](https://github.com/eserlxl/vglog-filter/issues) on the GitHub repository.
 
----
-
-For more information about the release workflow, see [RELEASE_WORKFLOW.md](RELEASE_WORKFLOW.md).
-For tag management strategies, see [TAG_MANAGEMENT.md](TAG_MANAGEMENT.md). 
+[↑ Back to top](#versioning-strategy)

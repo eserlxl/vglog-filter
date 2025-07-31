@@ -1,183 +1,161 @@
-# Tag Management Guide
+# Git Tag Management Guide
 
-This document provides guidance on managing Git tags in the vglog-filter project to avoid tag proliferation and maintain a clean repository.
+This guide provides comprehensive instructions and best practices for managing Git tags within the `vglog-filter` project. Proper tag management is crucial for maintaining a clean repository, accurately tracking releases, and ensuring consistency with our semantic versioning strategy.
 
-## Current Tag Issues
+## Table of Contents
 
-### Problems with Previous Approach
-1. **Too Many Tags**: Automated version bumping based on commit messages created tags for every small change
-2. **No Cleanup**: Old tags accumulated over time
-3. **Inconsistent Format**: Mixed tag formats (e.g., `v1.1.2` vs `1.0.0`)
-4. **Unreliable Detection**: Commit message analysis was not always accurate
+- [Overview of Tag Management](#overview-of-tag-management)
+- [Tagging Strategy and Conventions](#tagging-strategy-and-conventions)
+- [Automated Tag Cleanup](#automated-tag-cleanup)
+- [Manual Tag Management with `tag-manager`](#manual-tag-management-with-tag-manager)
+- [Troubleshooting Tag Issues](#troubleshooting-tag-issues)
+- [Best Practices for Tagging](#best-practices-for-tagging)
 
-## Solutions Implemented
+## Overview of Tag Management
 
-### 1. Semantic Version Bumping
+In `vglog-filter`, Git tags are primarily used to mark official releases and significant milestones. Our approach emphasizes automation and consistency to avoid common issues such as:
 
-The version bump workflow has been redesigned to use semantic analysis with intelligent automation:
+-   **Tag Proliferation**: Preventing an excessive number of tags for minor changes.
+-   **Inconsistent Formats**: Ensuring all release tags follow a standardized naming convention.
+-   **Manual Errors**: Reducing the likelihood of human error in tagging.
 
-#### Automatic Release Detection
-- **MAJOR releases**: Any breaking changes detected
-- **MINOR releases**: New features with large diffs (>50 lines)
-- **PATCH releases**: Bug fixes with significant diffs (>20 lines)
-- **No release**: Small changes that don't meet thresholds
+This is achieved through:
+-   **Semantic Versioning**: All release tags adhere to the `vX.Y.Z` format, reflecting major, minor, and patch versions.
+-   **Automated Release Workflow**: New release tags are automatically created by GitHub Actions as part of the [Release Workflow](RELEASE_WORKFLOW.md).
+-   **Automated Tag Cleanup**: A dedicated GitHub Actions workflow periodically cleans up old tags.
+-   **`tag-manager` Script**: A command-line utility for local and manual tag operations.
 
-#### Manual Trigger Options
-- Use GitHub Actions interface to manually trigger version bumps
-- Choose specific bump type (major, minor, patch) or "auto" for detection
-- Add custom release notes
-- Mark as prerelease if needed
-- Full control over when releases are created
+[↑ Back to top](#git-tag-management-guide)
 
-#### Semantic Version Analyzer
-- Analyzes actual code changes rather than commit messages
-- Examines file modifications, additions, and deletions
-- Suggests appropriate version bump type
-- Provides detailed analysis of changes
-- Includes diff size analysis for threshold-based decisions
+## Tagging Strategy and Conventions
 
-### 2. Automated Tag Cleanup
+Our tagging strategy is tightly integrated with our [Semantic Versioning](VERSIONING.md) and [Release Workflow](RELEASE_WORKFLOW.md).
 
-A new workflow (`.github/workflows/tag-cleanup.yml`) automatically manages tags:
+### When to Create Tags
 
-#### Features
-- **Weekly Cleanup**: Runs every Sunday at 2 AM UTC
-- **Configurable Retention**: Keeps the 10 most recent tags by default
-- **Manual Trigger**: Can be run manually with custom parameters
-- **Dry Run Mode**: Preview what would be deleted before actual cleanup
+Tags are created exclusively for official releases. They are **not** created for every commit. A new tag is generated when:
 
-#### Usage
-```bash
-# Via GitHub Actions interface:
-# 1. Go to Actions tab
-# 2. Select "Tag Cleanup"
-# 3. Click "Run workflow"
-# 4. Set keep_count (default: 10)
-# 5. Set dry_run (default: true)
-```
+-   A **MAJOR** release occurs (e.g., `v1.0.0` to `v2.0.0`): Signifies breaking changes.
+-   A **MINOR** release occurs (e.g., `v1.1.0` to `v1.2.0`): Signifies new backward-compatible features.
+-   A **PATCH** release occurs (e.g., `v1.1.1` to `v1.1.2`): Signifies backward-compatible bug fixes or minor improvements.
 
-### 3. Tag Manager Script
+These version bumps are primarily determined by the [Conventional Commits](https://www.conventionalcommits.org/) in the Git history and automated by the `version-bump.yml` GitHub Actions workflow.
 
-A new script (`dev-bin/tag-manager`) provides command-line tag management:
+### Tag Naming Convention
 
-#### Commands
-```bash
-# List all tags (sorted by version)
-./dev-bin/tag-manager list
+All release tags must follow the `vX.Y.Z` format, where:
+-   `v`: A mandatory prefix indicating a version tag.
+-   `X`: The major version number.
+-   `Y`: The minor version number.
+-   `Z`: The patch version number.
 
-# Clean up old tags (interactive)
-./dev-bin/tag-manager cleanup [count]
+**Examples:** `v1.0.0`, `v1.2.3`, `v2.0.0-beta.1` (for prereleases).
 
-# Create a new tag
-./dev-bin/tag-manager create <version>
+This consistent format ensures easy parsing and sorting of tags.
 
-# Show detailed tag information
-./dev-bin/tag-manager info <tag>
-```
+[↑ Back to top](#git-tag-management-guide)
 
-#### Examples
-```bash
-# List current tags
-./dev-bin/tag-manager list
+## Automated Tag Cleanup
 
-# Keep only 5 most recent tags
-./dev-bin/tag-manager cleanup 5
+To prevent the accumulation of old or unnecessary tags, `vglog-filter` utilizes an automated tag cleanup workflow.
 
-# Create tag for version 1.2.0
-./dev-bin/tag-manager create 1.2.0
+### GitHub Actions Workflow (`tag-cleanup.yml`)
 
-# Show info about v1.1.2
-./dev-bin/tag-manager info v1.1.2
-```
+A dedicated GitHub Actions workflow is responsible for periodically cleaning up old tags from the repository.
 
-## Best Practices
+-   **Schedule**: By default, this workflow runs every Sunday at 2 AM UTC.
+-   **Retention Policy**: It keeps the 10 most recent tags by default. This number is configurable.
+-   **Manual Trigger**: The workflow can also be triggered manually from the GitHub Actions interface for immediate cleanup.
+-   **Dry Run Mode**: The manual trigger allows for a `dry_run` option, which shows which tags *would* be deleted without actually deleting them.
 
-### 1. When to Create Tags
-- **Major Releases**: Significant new features or breaking changes
-- **Minor Releases**: New features (backward-compatible)
-- **Patch Releases**: Bug fixes and minor improvements
-- **NOT for every commit**: Avoid tagging every small change
+#### How to Trigger Manually (with Dry Run)
 
-### 2. Tag Naming Convention
-- Use consistent format: `vX.Y.Z` (e.g., `v1.2.3`)
-- Always prefix with `v` for version tags
-- Use semantic versioning
+1.  Navigate to your repository on GitHub.
+2.  Go to the **Actions** tab.
+3.  Select the workflow named **"Tag Cleanup"** from the left sidebar.
+4.  Click the **"Run workflow"** dropdown button on the right.
+5.  In the form:
+    -   Set `keep_count` to your desired number of tags to retain (e.g., `10`).
+    -   Set `dry_run` to `true` to preview the deletion without making actual changes.
+6.  Click **"Run workflow"**.
+7.  Review the workflow logs to see which tags would be deleted. If satisfied, run again with `dry_run` set to `false`.
 
-### 3. Tag Cleanup Strategy
-- **Keep Recent**: Maintain the 10 most recent tags
-- **Archive Old**: Consider archiving old releases on GitHub
-- **Document Breaking Changes**: Keep tags for major version changes longer
+[↑ Back to top](#git-tag-management-guide)
 
-### 4. Release Workflow
-1. **Develop**: Make changes with clear commit messages
-2. **Analyze**: Use semantic version analyzer to understand changes
-3. **Review**: Check the suggested version bump type
-4. **Trigger**: Manually trigger version bump when ready
-5. **Review**: Check generated release notes
-6. **Cleanup**: Run tag cleanup periodically
+## Manual Tag Management with `tag-manager`
 
-## Migration from Current State
+The `dev-bin/tag-manager` script provides command-line utilities for local and manual management of Git tags. This is useful for development, specific cleanup tasks, or when direct Git commands are preferred.
 
-### Immediate Actions
-1. **Standardize Tag Format**: Ensure all future tags use `vX.Y.Z` format
-2. **Clean Up Inconsistent Tags**: Remove or rename tags with inconsistent formats
-3. **Set Up Automated Cleanup**: Enable the tag cleanup workflow
+### Commands
 
-### Long-term Strategy
-1. **Reduce Tag Frequency**: Use manual triggers for more control
-2. **Batch Changes**: Group related changes into single releases
-3. **Document Releases**: Maintain good release notes for each tag
+-   **`./dev-bin/tag-manager list`**: Lists all Git tags in the repository, sorted by version (newest first).
+    ```bash
+    ./dev-bin/tag-manager list
+    ```
 
-## Configuration
+-   **`./dev-bin/tag-manager cleanup [count]`**: Interactively cleans up old tags. If `count` is provided, it will keep only the specified number of most recent tags. Otherwise, it will prompt for confirmation for each tag.
+    ```bash
+    # Interactively clean up tags
+    ./dev-bin/tag-manager cleanup
 
-### GitHub Actions Settings
-- **Version Bump**: Manual trigger with auto-detection option
-- **Tag Cleanup**: Weekly automatic + manual trigger
-- **Retention**: 10 tags by default (configurable)
+    # Keep only the 5 most recent tags and delete older ones
+    ./dev-bin/tag-manager cleanup 5
+    ```
 
-### Local Development
-- Use `./dev-bin/tag-manager` for local tag operations
-- Use `./dev-bin/bump-version` for version management
-- Use `./dev-bin/semantic-version-analyzer` for change analysis
-- Write clear commit messages to help with analysis
+-   **`./dev-bin/tag-manager create <version>`**: Creates a new annotated Git tag with the specified version (e.g., `1.2.0`). This should generally be avoided in favor of the automated release workflow unless you have a specific reason.
+    ```bash
+    # Create a new tag v1.2.0 (use with caution, prefer automated releases)
+    ./dev-bin/tag-manager create 1.2.0
+    ```
 
-## Troubleshooting
+-   **`./dev-bin/tag-manager info <tag>`**: Displays detailed information about a specific tag.
+    ```bash
+    # Show information about tag v1.1.2
+    ./dev-bin/tag-manager info v1.1.2
+    ```
+
+[↑ Back to top](#git-tag-management-guide)
+
+## Troubleshooting Tag Issues
+
+If you encounter problems with Git tags, consider the following troubleshooting steps:
 
 ### Common Issues
-1. **Too Many Tags**: Run cleanup workflow or use tag manager
-2. **Inconsistent Formats**: Use tag manager to standardize
-3. **Accidental Tags**: Delete via GitHub interface or tag manager
-4. **Workflow Failures**: Check GitHub Actions logs for errors
 
-### Commands Reference
-```bash
-# List all tags
-git tag --sort=-version:refname
+1.  **Too Many Tags**: If your repository has an excessive number of tags, run the automated tag cleanup workflow or use `./dev-bin/tag-manager cleanup`.
+2.  **Inconsistent Tag Formats**: Manually identify and delete inconsistently named tags. Ensure all new tags adhere to the `vX.Y.Z` convention.
+3.  **Accidental Tags**: If you accidentally create a tag, you can delete it locally and remotely:
+    ```bash
+    git tag -d <tag_name>             # Delete local tag
+    git push origin :refs/tags/<tag_name> # Delete remote tag
+    ```
+4.  **Automated Workflow Failures**: If the `tag-cleanup.yml` or `version-bump.yml` workflows fail, check the GitHub Actions logs for specific error messages. Common causes include insufficient permissions for the GitHub Token or network issues.
 
-# Delete local tag
-git tag -d <tag_name>
+### Useful Git Commands for Tags
 
-# Delete remote tag
-git push origin :refs/tags/<tag_name>
+-   **List all tags (sorted by version, newest first)**:
+    ```bash
+    git tag --sort=-version:refname
+    ```
+-   **Show details of a tag (commit, author, message)**:
+    ```bash
+    git show <tag_name>
+    ```
+-   **Compare changes between two tags**:
+    ```bash
+    git log <old_tag>..<new_tag> --oneline
+    ```
 
-# Show tag details
-git show <tag_name>
+[↑ Back to top](#git-tag-management-guide)
 
-# Compare tags
-git log <old_tag>..<new_tag> --oneline
-```
+## Best Practices for Tagging
 
-## Future Improvements
+Adhering to these best practices will ensure effective and maintainable tag management.
 
-### Potential Enhancements
-1. **Release Notes Templates**: Custom templates for different release types
-2. **Tag Categories**: Different retention policies for different tag types
-3. **Integration**: Better integration with package managers (AUR, etc.)
-4. **Notifications**: Slack/Discord notifications for releases
-5. **Analytics**: Track release frequency and impact
+1.  **Automate Tagging**: Whenever possible, rely on the automated release workflow to create tags. This ensures consistency and reduces manual errors.
+2.  **Follow Naming Conventions**: Always use the `vX.Y.Z` format for release tags. Consistency is key for tooling and human readability.
+3.  **Regular Cleanup**: Utilize the automated tag cleanup workflow to keep your repository tidy. A smaller number of relevant tags is more useful than a large number of irrelevant ones.
+4.  **Document Releases**: Ensure that each release tag is accompanied by clear and comprehensive release notes, detailing the changes included. Our automated release workflow handles this.
+5.  **Avoid Manual Tag Creation on `main`**: Unless absolutely necessary (e.g., for a hotfix outside the normal release cycle), avoid manually creating tags directly on the `main` branch to prevent conflicts with automation.
 
-### Monitoring
-- Monitor tag creation frequency
-- Track release quality and user feedback
-- Adjust retention policies based on project needs
-- Review and update this guide periodically 
+[↑ Back to top](#git-tag-management-guide)

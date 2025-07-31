@@ -1,268 +1,218 @@
-# Building vglog-filter
+# Build Guide
 
-The `build.sh` script automates the configuration and compilation of the vglog-filter project using CMake and Make.
+This guide provides comprehensive instructions for building `vglog-filter` from source. It covers prerequisites, standard build procedures, and advanced build configurations.
 
-## Usage
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Standard Build](#standard-build)
+- [Build Types](#build-types)
+  - [Debug Build](#debug-build)
+  - [Release Build](#release-build)
+  - [Sanitized Builds](#sanitized-builds)
+- [Cross-Compilation](#cross-compilation)
+- [Troubleshooting Build Issues](#troubleshooting-build-issues)
+
+## Prerequisites
+
+Before you can build `vglog-filter`, ensure you have the following tools installed on your system:
+
+-   **C++20 Compatible Compiler**: A compiler that supports the C++20 standard. Recommended compilers:
+    -   GCC (GNU Compiler Collection) version 10 or newer.
+    -   Clang (LLVM) version 12 or newer.
+-   **CMake**: A cross-platform build system generator. Version 3.16 or higher is required.
+
+### Installing Dependencies
+
+**For Debian/Ubuntu-based systems:**
 
 ```sh
-./build.sh [performance] [warnings] [debug] [clean] [tests] [-j N] [--build-dir DIR]
+sudo apt-get update
+sudo apt-get install build-essential cmake
 ```
 
-You can provide one or more of the following options:
+**For Arch Linux-based systems:**
 
-| Option        | Description                                                      |
-|---------------|------------------------------------------------------------------|
-| `performance` | Enables performance optimizations (disables debug mode if both are set) |
-| `warnings`    | Enables extra compiler warnings                                  |
-| `debug`       | Enables debug mode (disables performance mode if both are set)   |
-| `clean`       | Forces a clean build (removes all build artifacts)               |
-| `tests`       | Builds and runs the test suite                                   |
-
-- `performance` and `debug` are **mutually exclusive**. If both are specified, `debug` takes precedence and disables `performance`.
-- `warnings`, `clean`, and `tests` can be combined with any mode.
-- `clean` is useful for configuration changes or debugging build issues.
-- `tests` will automatically clean up any leftover test files before and after execution.
-
-## Examples
-
-- **Performance build with warnings:**
-  ```sh
-  ./build.sh performance warnings
-  ```
-- **Debug build:**
-  ```sh
-  ./build.sh debug
-  ```
-- **Debug build with extra warnings:**
-  ```sh
-  ./build.sh debug warnings
-  ```
-- **Clean build (removes all artifacts before building):**
-  ```sh
-  ./build.sh clean
-  ```
-- **Performance build with warnings and clean:**
-  ```sh
-  ./build.sh performance warnings clean
-  ```
-- **Build and run tests:**
-  ```sh
-  ./build.sh tests
-  ```
-- **Build and run tests with warnings:**
-  ```sh
-  ./build.sh tests warnings
-  ```
-- **Build and run tests in debug mode:**
-  ```sh
-  ./build.sh tests debug
-  ```
-
-## What the Script Does
-- Creates a `build/` directory if it does not exist.
-- Runs CMake with the selected options as variables.
-- If `clean` is specified, removes the build directory for a truly clean build.
-- Builds the project using parallel compilation for fast builds.
-- If `tests` is specified, builds and runs the test suite with automatic cleanup.
-- Validates command-line arguments and provides helpful warnings for unknown options.
-- Supports all build configuration combinations for comprehensive testing.
-
-## Performance Features
-The built executable includes several performance optimizations:
-- **Automatic large file detection**: Files >5MB automatically use stream processing
-- **Memory optimization**: Vector capacity reservation and efficient string operations
-- **Regex optimization**: All patterns use `std::regex::optimize` for better performance
-- **Smart processing**: Optimal mode selection based on file size
-- **Modern C++ optimizations**: Uses `std::string_view`, `std::span`, and optimized patterns
-
-## Output
-- The compiled binary and build artifacts will be placed in the `build/` directory.
-- Binary location: `build/bin/vglog-filter` (or `build/bin/Debug/vglog-filter` for debug builds)
-
-## Continuous Integration
-
-The project includes comprehensive GitHub Actions workflows that automatically test all build configurations:
-
-### Automated Testing Workflows
-- **Build and Test**: Tests default, performance, debug, and warnings builds
-- **Comprehensive Test**: Tests all 12 build configuration combinations
-- **Debug Build Test**: Dedicated testing for debug builds with GDB integration
-- **Cross-Platform Test**: Tests builds across Ubuntu, Arch Linux, Fedora, and Debian
-- **Performance Benchmark**: Automated performance testing and optimization verification
-- **Memory Sanitizer**: Memory error detection using Clang's MemorySanitizer
-- **Clang-Tidy**: Static analysis and code quality checks
-- **CodeQL**: Security analysis and vulnerability detection
-- **ShellCheck**: Shell script linting and validation
-
-### Build Configurations Tested
-The CI/CD pipeline automatically tests these combinations:
-- Default build
-- Performance build (O3 optimizations + LTO)
-- Debug build (debug symbols + O0)
-- Warnings build (extra compiler warnings)
-- Performance + Warnings
-- Debug + Warnings
-- Tests build (with test suite)
-- Performance + Tests
-- Debug + Tests
-- Warnings + Tests
-- Performance + Warnings + Tests
-- Debug + Warnings + Tests
-
-### Quality Assurance
-- All builds are tested for functionality and binary characteristics
-- Debug builds are verified to contain debug symbols
-- Performance builds are verified to use O3 optimizations and LTO
-- Test suites are automatically executed when built
-- Cross-platform compatibility is verified across multiple distributions
-
-## System Requirements
-
-### Prerequisites
-- **CMake**: Version 3.16 or newer
-- **C++ Compiler**: C++20-compatible compiler (GCC 10+ or Clang 10+)
-- **Build Tools**: Standard build tools (make, etc.)
-
-### Installation (Arch Linux)
 ```sh
 sudo pacman -S base-devel cmake gcc
 ```
 
-### Installation (Ubuntu/Debian)
+**For macOS (using Homebrew):**
+
 ```sh
-sudo apt-get install build-essential cmake
+brew install cmake gcc
 ```
 
-### Installation (Fedora)
+**For Windows (using MSYS2 or WSL):**
+
+It is recommended to use Windows Subsystem for Linux (WSL) or MSYS2 to build `vglog-filter` on Windows, as the build process is designed for a Unix-like environment. Follow the Linux instructions within your WSL environment or install `mingw-w64-x86_64-toolchain` and `cmake` in MSYS2.
+
+[↑ Back to top](#build-guide)
+
+## Standard Build
+
+The simplest way to build `vglog-filter` is by using the provided `build.sh` script. This script automates the CMake configuration and compilation process for a standard release build.
+
+1.  **Clone the repository:**
+    ```sh
+    git clone https://github.com/eserlxl/vglog-filter.git
+    cd vglog-filter
+    ```
+2.  **Run the build script:**
+    ```sh
+    ./build.sh
+    ```
+
+Upon successful completion, the `vglog-filter` executable will be located in the `build/bin/` directory.
+
+### What `build.sh` does:
+
+The `build.sh` script performs the following steps:
+
 ```sh
-sudo dnf install gcc-c++ cmake make
+mkdir -p build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build .
 ```
 
-## Build Options
+-   `mkdir -p build`: Creates a `build` directory if it doesn't already exist. This is where all build artifacts will be placed.
+-   `cd build`: Changes the current directory to `build`.
+-   `cmake .. -DCMAKE_BUILD_TYPE=Release`: Configures the project using CMake. `-DCMAKE_BUILD_TYPE=Release` sets the build type to `Release`, which enables optimizations and disables debugging symbols.
+-   `cmake --build .`: Compiles the project using the generated build system (e.g., Makefiles on Unix-like systems, Visual Studio solutions on Windows).
 
-### CMake Options
-The build script configures these CMake options:
+[↑ Back to top](#build-guide)
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `PERFORMANCE_BUILD` | Enable performance optimizations | OFF |
-| `WARNING_MODE` | Enable extra compiler warnings | OFF |
-| `DEBUG_MODE` | Enable debug mode | OFF |
-| `BUILD_TESTING` | Build and enable tests | OFF (unless `tests` specified) |
-| `ENABLE_NATIVE_OPTIMIZATION` | Use -march=native/-mtune=native | OFF |
-| `ENABLE_SANITIZERS` | Enable Address/Undefined sanitizers | OFF |
+## Build Types
 
-### Compiler Flags
-Different build modes use different compiler flags:
+CMake supports different build types, each optimized for specific purposes (e.g., debugging, performance). You can specify the build type using the `-DCMAKE_BUILD_TYPE` flag during the CMake configuration step.
 
-#### Performance Build
-- `-O3`: Maximum optimization
-- `-march=native -mtune=native`: Architecture-specific optimizations (if enabled)
-- `-flto`: Link-time optimization
-- `-DNDEBUG`: Disable debug assertions
+### Debug Build
 
-#### Debug Build
-- `-O0`: No optimization
-- `-g`: Debug symbols
-- `-fno-omit-frame-pointer`: Better stack traces
-- `-DDEBUG`: Enable debug assertions
-- `-fsanitize=address,undefined`: Memory and undefined behavior sanitizers (if enabled)
+A debug build includes debugging symbols and disables optimizations, making it easier to step through code with a debugger and identify issues.
 
-#### Warnings Build
-- `-Wall -Wextra -Wpedantic`: Extra warnings
-- `-Wconversion -Wshadow`: Additional warning flags
-- `-Wnon-virtual-dtor -Wold-style-cast`: C++ specific warnings
+To create a debug build:
 
-## Troubleshooting
-
-### Common Issues
-
-#### CMake Version Too Old
-```
-Error: CMake 3.16 or newer is required
-```
-**Solution**: Update CMake to version 3.16 or newer.
-
-#### Compiler Not C++20 Compatible
-```
-Error: C++20 standard not supported
-```
-**Solution**: Update to GCC 10+ or Clang 10+.
-
-#### Missing Dependencies
-```
-Error: Required package not found
-```
-**Solution**: Install build essentials and CMake for your distribution.
-
-#### Permission Issues
-```
-Error: Permission denied
-```
-**Solution**: Check file permissions and ownership.
-
-### Build Debugging
-
-#### Verbose Build Output
 ```sh
-# Enable verbose output
-./build.sh debug 2>&1 | tee build.log
-```
-
-#### Clean Build
-```sh
-# Force clean build
-./build.sh clean debug
-```
-
-#### Manual CMake Configuration
-```sh
-# Manual configuration for debugging
-mkdir build-debug
+mkdir -p build-debug
 cd build-debug
-cmake .. -DDEBUG_MODE=ON -DWARNING_MODE=ON
-make VERBOSE=1
+cmake .. -DCMAKE_BUILD_TYPE=Debug
+cmake --build .
 ```
 
-## Performance Considerations
+The executable will be located at `build-debug/bin/vglog-filter`.
 
-### Build Performance
-- **Parallel builds**: Uses `make -j20` for fast compilation
-- **Incremental builds**: Only rebuilds changed files
-- **Clean builds**: Use `clean` option when configuration changes
+[↑ Back to top](#build-guide)
 
-### Runtime Performance
-- **Optimized builds**: Performance builds use maximum optimizations
-- **LTO**: Link-time optimization for better performance
-- **Native optimization**: Architecture-specific optimizations when enabled
+### Release Build
 
-## Development Workflow
+A release build is optimized for performance and size. It typically includes compiler optimizations and excludes debugging symbols.
 
-### Typical Development Cycle
+This is the default build type when using `./build.sh`.
+
+To explicitly create a release build:
+
 ```sh
-# Initial build
-./build.sh debug warnings
-
-# Make changes to source code
-
-# Rebuild and test
-./build.sh tests debug warnings
-
-# Performance build for testing
-./build.sh performance tests
+mkdir -p build-release
+cd build-release
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build .
 ```
 
-### Testing Before Committing
-```sh
-# Run all tests
-./build.sh tests
+The executable will be located at `build-release/bin/vglog-filter`.
 
-# Run with different configurations
-./build.sh tests debug warnings
-./build.sh tests performance warnings
-```
+[↑ Back to top](#build-guide)
 
----
-**Note for Arch Linux/AUR users:** The `updpkgsums` tool (used for updating PKGBUILD checksums) is provided by the `pacman-contrib` package. Be sure to install it if you plan to maintain or update the PKGBUILD or use the AUR automation scripts.
+### Sanitized Builds
 
-For troubleshooting or advanced configuration, see the comments in `build.sh` or the CMakeLists.txt file. 
+`vglog-filter` supports various sanitizers (e.g., AddressSanitizer, MemorySanitizer, UndefinedBehaviorSanitizer) to help detect runtime errors. These are crucial for ensuring code quality and stability.
+
+To enable a sanitizer, pass the appropriate CMake option:
+
+-   **AddressSanitizer (ASan)**: Detects memory errors like use-after-free, double-free, and out-of-bounds access.
+    ```sh
+mkdir -p build-asan
+cd build-asan
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON
+cmake --build .
+    ```
+
+-   **MemorySanitizer (MSan)**: Detects uses of uninitialized memory. Requires Clang.
+    ```sh
+mkdir -p build-msan
+cd build-msan
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_MSAN=ON
+cmake --build .
+    ```
+
+-   **UndefinedBehaviorSanitizer (UBSan)**: Detects various kinds of undefined behavior.
+    ```sh
+mkdir -p build-ubsan
+cd build-ubsan
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_UBSAN=ON
+cmake --build .
+    ```
+
+**Note**: Sanitized builds should typically be `Debug` builds to ensure all checks are active and debugging symbols are available. Running tests with sanitized builds is highly recommended to catch issues early. The CI/CD pipeline includes dedicated jobs for sanitized builds.
+
+[↑ Back to top](#build-guide)
+
+## Cross-Compilation
+
+Cross-compilation allows you to build `vglog-filter` for a different target platform than the one you are building on (e.g., building a Linux executable on macOS). This typically involves using a CMake toolchain file.
+
+**General Steps for Cross-Compilation:**
+
+1.  **Install a cross-compiler toolchain** for your target platform.
+2.  **Create a CMake toolchain file** (`toolchain.cmake`) that specifies the cross-compiler, target architecture, and sysroot.
+
+    Example `toolchain.cmake` for ARM Linux:
+    ```cmake
+    set(CMAKE_SYSTEM_NAME Linux)
+    set(CMAKE_SYSTEM_PROCESSOR arm)
+
+    set(CMAKE_C_COMPILER arm-linux-gnueabihf-gcc)
+    set(CMAKE_CXX_COMPILER arm-linux-gnueabihf-g++)
+
+    set(CMAKE_FIND_ROOT_PATH /path/to/arm-linux-gnueabihf-sysroot)
+    set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+    set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+    set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+    set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+    ```
+
+3.  **Configure CMake with the toolchain file:**
+    ```sh
+    mkdir -p build-cross
+    cd build-cross
+    cmake .. -DCMAKE_TOOLCHAIN_FILE=/path/to/toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+    cmake --build .
+    ```
+
+Cross-compilation can be complex and depends heavily on your specific target environment. Refer to CMake's official documentation on [toolchain files](https://cmake.org/cmake/help/latest/manual/cmake-toolchains.7.html) for more in-depth information.
+
+[↑ Back to top](#build-guide)
+
+## Troubleshooting Build Issues
+
+If you encounter problems during the build process, consider the following:
+
+-   **Missing Prerequisites**: Double-check that all [prerequisites](#prerequisites) are installed and accessible in your system's PATH.
+
+-   **Compiler Version**: Ensure your C++ compiler supports C++20. You can check your GCC version with `g++ --version` or Clang version with `clang++ --version`.
+
+-   **CMake Version**: Verify your CMake version with `cmake --version`. If it's older than 3.16, you'll need to update it.
+
+-   **Clean Build**: Sometimes, old build artifacts can cause issues. Try cleaning your build directory and recompiling:
+    ```sh
+    rm -rf build*
+    ./build.sh
+    ```
+
+-   **Error Messages**: Read the error messages carefully. They often provide clues about what went wrong (e.g., missing headers, undefined references).
+
+-   **Consult CI/CD Workflows**: The project's GitHub Actions workflows (`.github/workflows/`) provide working examples of how the project is built on various platforms and configurations. Reviewing these files can help you identify correct build commands and dependencies.
+
+-   **Open an Issue**: If you're still stuck, please [open an issue](https://github.com/eserlxl/vglog-filter/issues) on the GitHub repository with details about your system, compiler, CMake version, and the full error output.
+
+[↑ Back to top](#build-guide)
