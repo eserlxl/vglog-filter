@@ -259,7 +259,8 @@ bool test_file_becomes_unreadable() {
     
     // The behavior might vary depending on the OS and filesystem
     // We just want to ensure it doesn't crash
-    TEST_PASS("File becoming unreadable during processing handled");
+    // Note: could_continue might be true or false depending on OS/filesystem behavior
+    TEST_PASS("File becoming unreadable during processing handled (could_continue: " + std::string(could_continue ? "true" : "false") + ")");
     return true;
 }
 
