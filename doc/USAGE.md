@@ -1,6 +1,8 @@
 # Usage Guide: vglog-filter
 
-This guide provides comprehensive instructions on how to use `vglog-filter` to process Valgrind log files. It covers installation, basic usage, command-line options, and practical examples to help you effectively clean and analyze your Valgrind output.
+This guide provides comprehensive instructions on how to use `vglog-filter` to process Valgrind log files. Valgrind is an instrumentation framework for building dynamic analysis tools. It is commonly used for memory debugging, detecting memory leaks, and profiling. `vglog-filter` enhances Valgrind's utility by cleaning and normalizing its often verbose and inconsistent output.
+
+It covers installation, basic usage, command-line options, and practical examples to help you effectively clean and analyze your Valgrind output.
 
 ## Table of Contents
 
@@ -28,14 +30,14 @@ This guide provides comprehensive instructions on how to use `vglog-filter` to p
 
 ## Key Features
 
-`vglog-filter` is a powerful command-line utility designed to streamline the analysis of Valgrind memory error logs. Its key features include:
+`vglog-filter` is a powerful command-line utility designed to streamline the analysis of Valgrind memory error logs. By processing raw Valgrind output, it transforms verbose and often inconsistent logs into a clean, concise, and actionable format. Its key features include:
 
--   **Automated Deduplication**: Intelligently identifies and removes duplicate stack traces, significantly reducing log file size and improving readability.
--   **Dynamic Data Normalization**: Scrubs non-deterministic elements like memory addresses and `at:` line numbers, making log comparisons consistent across different runs.
--   **Flexible Input/Output**: Supports processing logs from files or directly from standard input, allowing seamless integration into CI/CD pipelines or scripting workflows.
--   **Customizable Filtering**: Allows users to define a custom marker to specify the relevant section of a log file for processing, or to process the entire log.
--   **Performance Monitoring**: Provides options to monitor real-time progress and peak memory usage, crucial for handling very large Valgrind outputs.
--   **Stream Processing**: Automatically switches to a memory-efficient stream processing mode for large files (over 5MB) or can be forced for continuous streams.
+-   **Automated Deduplication**: Intelligently identifies and removes duplicate stack traces and error reports. This significantly reduces log file size, eliminates redundant information, and improves readability, allowing developers to focus on unique issues.
+-   **Dynamic Data Normalization**: Scrubs non-deterministic elements such as memory addresses, process IDs, and `at:` line numbers. This crucial step makes log comparisons consistent and reliable across different Valgrind runs, facilitating automated analysis and regression testing.
+-   **Flexible Input/Output**: Supports processing logs from specified files or directly from standard input (stdin). This flexibility allows for seamless integration into CI/CD pipelines, automated scripting workflows, and real-time analysis of Valgrind output.
+-   **Customizable Filtering**: Allows users to define a custom marker string to delineate the relevant section of a log file for processing. This is particularly useful for large logs that contain setup or teardown information, ensuring only the critical error reports are analyzed. Alternatively, the entire log can be processed.
+-   **Performance Monitoring**: Provides options to monitor real-time processing progress and report peak memory usage. These metrics are invaluable for handling very large Valgrind outputs, helping users understand resource consumption and optimize their analysis workflows.
+-   **Memory-Efficient Stream Processing**: Automatically switches to a memory-efficient stream processing mode for large input files (typically over 5MB) or can be explicitly forced for continuous streams. This ensures `vglog-filter` can handle extremely large logs without exhausting system memory.
 
 ## Installation
 
@@ -53,12 +55,11 @@ Before building, ensure you have the following installed on your system:
 Follow these steps to build `vglog-filter`:
 
 1.  **Clone the Repository**:
-    If you haven't already, clone the `vglog-filter` repository to your local machine:
+    If you haven't already, clone the `vglog-filter` repository to your local machine. Replace `[YOUR_REPOSITORY_URL]` with the actual URL of the `vglog-filter` repository (e.g., `https://github.com/example-org/vglog-filter.git`):
     ```bash
-    git clone https://github.com/your-username/vglog-filter.git
+    git clone [YOUR_REPOSITORY_URL]
     cd vglog-filter
     ```
-    *(Note: Replace `https://github.com/your-username/vglog-filter.git` with the actual repository URL if different.)*
 
 2.  **Build the Project**:
     The project includes a convenient `build.sh` script that handles the CMake configuration and compilation process.
@@ -91,13 +92,19 @@ Follow these steps to build `vglog-filter`:
     ./build.sh --help
     ```
 
-3.  **Executable Location**:
-    After a successful build, the `vglog-filter` executable will be located in the `build/bin/` directory (or `build/bin/<Config>` for multi-config generators like Visual Studio). You can then run it directly from there or add it to your system's PATH for easier access.
+3.  **Executable Location and PATH**:
+    After a successful build, the `vglog-filter` executable will be located in the `build/bin/` directory (or `build/bin/<Config>` for multi-config generators like Visual Studio).
 
-    Example:
+    You can run it directly from there:
     ```bash
     ./build/bin/vglog-filter --version
     ```
+
+    For easier access, consider adding the `build/bin/` directory to your system's `PATH` environment variable. For example, in your `~/.bashrc` or `~/.zshrc` file:
+    ```bash
+    export PATH="/path/to/vglog-filter/build/bin:$PATH"
+    ```
+    Remember to replace `/path/to/vglog-filter` with the actual absolute path to your cloned repository. After modifying your shell configuration, reload it (e.g., `source ~/.bashrc`) for the changes to take effect.
 
 [↑ Back to top](#usage-guide)
 
@@ -153,7 +160,7 @@ vglog-filter input.log | less
 
 ## Command-Line Options
 
-`vglog-filter` provides several command-line options to customize its behavior.
+`vglog-filter` provides several command-line options to customize its behavior. These options can be combined to achieve specific filtering and processing outcomes.
 
 ### Filtering and Deduplication Options
 
@@ -162,34 +169,34 @@ vglog-filter input.log | less
     -   **Example**: `vglog-filter -k full_log.log`
 
 -   `-d N, --depth N`
-    -   **Purpose**: Controls the number of lines (`N`) used to generate the unique signature for deduplication. A higher depth considers more context, leading to more precise (but potentially fewer) deduplications.
-    -   **`N=0`**: Uses unlimited depth, meaning the entire error block is considered for the signature.
-    -   **Default**: A sensible default is used if not specified.
+    -   **Purpose**: Controls the number of lines (`N`) used to generate the unique signature for deduplication. A higher depth considers more context, leading to more precise (but potentially fewer) deduplications. This parameter helps fine-tune the balance between aggressive deduplication and preserving distinct error patterns.
+    -   **`N=0`**: Uses unlimited depth, meaning the entire error block is considered for the signature, providing the most precise deduplication.
+    -   **Default**: If not specified, a sensible default depth (e.g., 5 lines) is used, which typically offers a good balance for common Valgrind outputs.
     -   **Example**: `vglog-filter -d 5 raw.log` (uses first 5 lines for signature)
 
 -   `-m S, --marker S`
-    -   **Purpose**: Specifies a custom marker string (`S`) to delineate the relevant section of the log. Only log entries after the last occurrence of this custom marker will be processed (unless `-k` is used).
+    -   **Purpose**: Specifies a custom marker string (`S`) to delineate the relevant section of the log. Only log entries *after* the last occurrence of this custom marker will be processed (unless `-k` is used). This is useful for logs that contain preamble or postamble information you wish to ignore.
     -   **Default**: `Successfully downloaded debug`
     -   **Example**: `vglog-filter -m "--- TEST START ---" my_log.log`
 
 -   `-v, --verbose`
-    -   **Purpose**: Disables the scrubbing (normalization) of non-deterministic elements like memory addresses and `at:` line numbers. The output will be the raw Valgrind log, but still filtered and deduplicated based on other options.
+    -   **Purpose**: Disables the scrubbing (normalization) of non-deterministic elements like memory addresses, process IDs, and `at:` line numbers. The output will be the raw Valgrind log, but still filtered and deduplicated based on other options. Use this if you need to inspect the exact memory addresses or other dynamic data.
     -   **Example**: `vglog-filter -v raw.log`
 
 ### Processing Mode Options
 
 -   `-s, --stream`
-    -   **Purpose**: Forces `vglog-filter` to use memory-efficient stream processing mode, regardless of the input file size. By default, the tool automatically switches to stream mode for files larger than 5MB.
+    -   **Purpose**: Forces `vglog-filter` to use memory-efficient stream processing mode, regardless of the input file size. By default, the tool automatically switches to stream mode for files larger than 5MB. This option is crucial for processing continuous streams or extremely large files where loading the entire content into memory is not feasible.
     -   **Example**: `vglog-filter -s small_file.log`
 
 ### Monitoring and Information Options
 
 -   `-p, --progress`
-    -   **Purpose**: Displays a real-time progress bar during processing. This is particularly useful for large log files to track the tool's progress.
+    -   **Purpose**: Displays a real-time progress bar during processing. This is particularly useful for large log files to track the tool's progress and estimate completion time.
     -   **Example**: `vglog-filter -p large_log.log`
 
 -   `-M, --monitor-memory`
-    -   **Purpose**: Monitors and reports peak memory usage at different stages of the processing. This helps in understanding the tool's resource consumption.
+    -   **Purpose**: Monitors and reports peak memory usage at different stages of the processing. This helps in understanding the tool's resource consumption and identifying potential memory bottlenecks, especially with very large inputs.
     -   **Example**: `vglog-filter -M my_log.log`
 
 -   `-V, --version`
@@ -197,7 +204,7 @@ vglog-filter input.log | less
     -   **Example**: `vglog-filter --version`
 
 -   `-h, --help`
-    -   **Purpose**: Displays a brief help message with available command-line options.
+    -   **Purpose**: Displays a brief help message with available command-line options and their usage.
     -   **Example**: `vglog-filter --help`
 
 [↑ Back to top](#usage-guide)
@@ -326,6 +333,17 @@ If you encounter problems while using `vglog-filter`, consider the following:
 5.  **Output Still Contains Dynamic Data**:
     -   If you expect memory addresses or other dynamic elements to be scrubbed but they are still present, ensure you are *not* using the `--verbose` (`-v`) option, as this disables scrubbing.
 
+6.  **Build Issues**:
+    -   If you encounter problems during the build process, refer to the `build.sh` script's help message (`./build.sh --help`) and ensure all [Prerequisites](#prerequisites) are met.
+
 If you're still facing issues, refer to the [FAQ](FAQ.md) or [Developer Guide](DEVELOPER_GUIDE.md) for more in-depth troubleshooting and development information.
+
+[↑ Back to top](#usage-guide)
+
+## Contributing
+
+We welcome contributions to `vglog-filter`! If you're interested in improving this tool, please refer to our [Contributing Guide](../../.github/CONTRIBUTING.md) for detailed instructions on how to set up your development environment, propose changes, and submit pull requests.
+
+Your contributions help make `vglog-filter` better for everyone.
 
 [↑ Back to top](#usage-guide)
