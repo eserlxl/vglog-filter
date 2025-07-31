@@ -927,12 +927,12 @@ extract_cli_options() {
     enhanced_cli_patterns=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
         | awk '
-            # Check for short option patterns (-x) - exclude git command arguments and string literals
-            /^[+-][[:space:]]*.*-[[:alpha:]]/ && !/^[+-][[:space:]]*\/\// && !/^[+-][[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^[+-][[:space:]]*.*["\x27].*-[[:alpha:]]/ {
+            # Check for short option patterns (-x) - exclude git command arguments, string literals, and comments
+            /^[+-][[:space:]]*.*-[[:alpha:]]/ && !/^[+-][[:space:]]*\/\// && !/^[+-][[:space:]]*#/ && !/^[+-][[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^[+-][[:space:]]*.*["\x27].*-[[:alpha:]]/ {
                 print "short_option_change"
             }
-            # Check for long option patterns (--option) - exclude git command arguments and string literals
-            /^[+-][[:space:]]*.*--[[:alnum:]-]+/ && !/^[+-][[:space:]]*\/\// && !/^[+-][[:space:]]*.*git[[:space:]]+.*--[[:alnum:]-]+/ && !/^[+-][[:space:]]*.*["\x27].*--[[:alnum:]-]+/ {
+            # Check for long option patterns (--option) - exclude git command arguments, string literals, and comments
+            /^[+-][[:space:]]*.*--[[:alnum:]-]+/ && !/^[+-][[:space:]]*\/\// && !/^[+-][[:space:]]*#/ && !/^[+-][[:space:]]*.*git[[:space:]]+.*--[[:alnum:]-]+/ && !/^[+-][[:space:]]*.*["\x27].*--[[:alnum:]-]+/ {
                 print "long_option_change"
             }
             # Check for argument count changes
@@ -1040,11 +1040,11 @@ extract_cli_options() {
     fi
 
     # Simple manual CLI detection - look for any --option patterns in the diff
-    # Exclude git command arguments and string literals to avoid false positives
+    # Exclude git command arguments, string literals, and comments to avoid false positives
     local manual_cli_detected
     manual_cli_detected=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | awk '/^[+-].*--[a-zA-Z0-9]/ && !/^[+-].*git[[:space:]]+.*--[a-zA-Z0-9]/ && !/^[+-].*["\x27].*--[a-zA-Z0-9]/ { count++ } END { print count+0 }' 2>/dev/null || printf '0' \
+        | awk '/^[+-].*--[a-zA-Z0-9]/ && !/^[+-].*git[[:space:]]+.*--[a-zA-Z0-9]/ && !/^[+-].*["\x27].*--[a-zA-Z0-9]/ && !/^[+-][[:space:]]*#/ { count++ } END { print count+0 }' 2>/dev/null || printf '0' \
     )
     
     # Debug: Show what we're processing
@@ -1162,11 +1162,11 @@ analyze_changes() {
     done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" 2>/dev/null || printf '')
 
     # Simple manual CLI detection - look for CLI parsing patterns in the diff
-    # Exclude git command arguments and string literals to avoid false positives
+    # Exclude git command arguments and string literals, and comments to avoid false positives
     local manual_cli_detected
     manual_cli_detected=$( \
         git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | awk '/^[+-].*--[a-zA-Z0-9]/ && !/^[+-].*git[[:space:]]+.*--[a-zA-Z0-9]/ && !/^[+-].*["\x27].*--[a-zA-Z0-9]/ { count++ } END { print count+0 }' 2>/dev/null || printf '0' \
+        | awk '/^[+-].*--[a-zA-Z0-9]/ && !/^[+-].*git[[:space:]]+.*--[a-zA-Z0-9]/ && !/^[+-].*["\x27].*--[a-zA-Z0-9]/ && !/^[+-][[:space:]]*#/ { count++ } END { print count+0 }' 2>/dev/null || printf '0' \
     )
     
     # Ensure manual_cli_detected is numeric
