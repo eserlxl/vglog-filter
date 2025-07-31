@@ -1,16 +1,23 @@
 # vglog-filter
 
-vglog-filter is a fast and flexible tool designed to process and clean up Valgrind log files. It helps developers and testers focus on the most relevant information by removing noise, deduplicating stack traces, and normalizing logs for easier inspection and comparison. This streamlines the debugging process, especially for large or repetitive Valgrind outputs.
+[![Test](https://github.com/eserlxl/vglog-filter/actions/workflows/test.yml/badge.svg)](https://github.com/eserlxl/vglog-filter/actions/workflows/test.yml)
+[![Comprehensive Test](https://github.com/eserlxl/vglog-filter/actions/workflows/comprehensive-test.yml/badge.svg)](https://github.com/eserlxl/vglog-filter/actions/workflows/comprehensive-test.yml)
+[![Cross-Platform](https://github.com/eserlxl/vglog-filter/actions/workflows/cross-platform.yml/badge.svg)](https://github.com/eserlxl/vglog-filter/actions/workflows/cross-platform.yml)
+[![CodeQL](https://github.com/eserlxl/vglog-filter/actions/workflows/codeql.yml/badge.svg)](https://github.com/eserlxl/vglog-filter/actions/workflows/codeql.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://isocpp.org/std/status)
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
+
+**vglog-filter** is a fast and flexible tool designed to process and clean up Valgrind log files. It helps developers focus on relevant information by removing noise, deduplicating stack traces, and normalizing logs for easier inspection and comparison.
 
 ## Table of Contents
 
 - [Motivation](#motivation)
 - [Features](#features)
-- [Installation & Prerequisites](#installation--prerequisites)
-- [Usage Example](#usage-example)
+- [Getting Started](#getting-started)
+- [Usage](#usage)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
-  - [Development Workflow](#development-workflow)
 - [License](#license)
 
 ## Motivation
@@ -20,122 +27,119 @@ Valgrind is a powerful tool for detecting memory errors and leaks in C/C++ progr
 - Noisy, irrelevant warnings
 - Non-deterministic elements (e.g., memory addresses) that make diffs and comparisons difficult
 
-vglog-filter addresses these issues by:
-- **Filtering out noise**: Removes irrelevant or user-specified log lines.
-- **Deduplicating stack traces**: Collapses repeated errors and stack traces to a single instance.
-- **Normalizing logs**: Replaces non-deterministic elements (like memory addresses) with placeholders for easier diffing and automated analysis.
+`vglog-filter` addresses these issues by filtering noise, deduplicating stack traces, and normalizing logs for easier analysis.
 
 [↑ Back to top](#vglog-filter)
 
 ## Features
 
-- **High performance**: Optimized for speed, suitable for large log files.
-- **Flexible filtering**: Customizable rules for what to keep or discard.
-- **Stack trace deduplication**: Groups identical errors for concise output.
-- **Log normalization**: Makes logs comparable across runs and systems.
-- **Easy integration**: Can be used as a standalone tool or in CI pipelines.
-- **Robust error handling**: Comprehensive error messages and input validation.
-- **Automatic large file detection**: Smart processing mode selection for optimal performance.
-- **Memory-efficient processing**: Stream processing for large files to prevent OOM errors.
-- **Progress reporting**: Real-time progress updates for large file processing.
-- **Memory monitoring**: Track memory usage during processing for performance analysis.
-- **Modern C++ optimizations**: Uses `std::string_view`, `std::span`, and optimized regex patterns.
-- **Automated versioning**: Semantic versioning with automated bumping based on conventional commits.
-- **Comprehensive CI/CD**: 12 GitHub Actions workflows testing all build configurations.
-- **Quality assurance**: Static analysis, memory sanitizer, security scanning, and cross-platform testing.
-- **Comprehensive test suite**: C++ unit tests, integration tests, and automated CI/CD testing (see [Test Suite Documentation](doc/TEST_SUITE.md)).
+- **Core Functionality**:
+    - **High-performance filtering**: Fast, customizable rules to remove noise.
+    - **Stack trace deduplication**: Collapses identical errors into a single report.
+    - **Log normalization**: Replaces non-deterministic data (e.g., memory addresses) for easy diffing.
+- **Performance & Efficiency**:
+    - **Memory-efficient**: Uses stream processing for large files to prevent OOM errors.
+    - **Automatic optimization**: Smart processing mode selection based on file size.
+    - **Modern C++**: Leverages C++20 features like `std::string_view` for speed.
+- **User Experience**:
+    - **Easy integration**: Works as a standalone tool or in CI pipelines.
+    - **Progress reporting**: Real-time progress updates for large files.
+    - **Memory monitoring**: Track memory usage during processing.
+- **Development & Quality**:
+    - **Automated versioning**: Semantic versioning based on Conventional Commits.
+    - **Comprehensive CI/CD**: 12 GitHub Actions workflows for testing, static analysis, memory sanitization, and security scanning.
+    - **Extensive Test Suite**: Unit, integration, and workflow tests ensure reliability. See the [Test Suite Guide](doc/TEST_SUITE.md).
 
 [↑ Back to top](#vglog-filter)
 
-## Installation & Prerequisites
+## Getting Started
 
-- **Dependencies**: Requires a C++20-compatible compiler, CMake (version 3.16 or newer).
-- **Supported platforms**: Linux (tested), should work on other POSIX systems with minimal changes.
-- **Build script**: The project includes a `build.sh` script for easy compilation with various build configurations (see [Developer Guide](doc/DEVELOPER_GUIDE.md#build-options) for details).
+### 1. Prerequisites
+- C++20 compatible compiler (e.g., GCC 10+, Clang 12+)
+- CMake (>= 3.16)
 
-Clone the repository and ensure you have the necessary build tools installed:
+Install dependencies:
 ```sh
-sudo pacman -S base-devel cmake gcc   # Arch Linux example
-# or
-sudo apt-get install build-essential cmake   # Debian/Ubuntu example
+# Arch Linux
+sudo pacman -S base-devel cmake gcc
+
+# Debian/Ubuntu
+sudo apt-get install build-essential cmake
 ```
 
+### 2. Build
+Clone the repository and run the build script:
+```sh
+git clone https://github.com/eserlxl/vglog-filter.git
+cd vglog-filter
+./build.sh
+```
+The executable will be located at `build/bin/vglog-filter`. For advanced build options, see the [Build Guide](doc/BUILD.md).
+
 [↑ Back to top](#vglog-filter)
 
-## Usage Example
+## Usage
 
-After building, you can use vglog-filter as follows:
+`vglog-filter` can process Valgrind logs from a file or standard input.
 
+### Basic Usage
+Filter a log file and save the output:
 ```sh
 valgrind --leak-check=full ./your_program 2> raw.log
-vglog-filter raw.log > filtered.log
+./build/bin/vglog-filter raw.log > filtered.log
 ```
 
-- `raw.log`: The original Valgrind output.
-- `filtered.log`: The cleaned, deduplicated, and normalized log.
-- **Automatic optimization**: Large files (>5MB) automatically use stream processing.
-
-You can also pipe output directly:
+### Piping from Valgrind
+Pipe Valgrind's output directly to `vglog-filter`:
 ```sh
-valgrind --leak-check=full ./your_program 2>&1 | vglog-filter > filtered.log
+valgrind --leak-check=full --show-leak-kinds=all ./your_program 2>&1 | ./build/bin/vglog-filter
 ```
+> **Note**: `vglog-filter` automatically detects large files (>5MB) and switches to a memory-efficient stream processing mode.
 
-Direct stdin support! You can pipe directly from valgrind:
+### Command-Line Options
+- `-s`: Force stream processing, even for small files.
+- `-p`: Show a progress bar, useful for large files.
+- `-M`: Monitor and report peak memory usage.
+
+Example with options:
 ```sh
-valgrind --leak-check=full ./your_program 2>&1 | vglog-filter
+# Monitor progress and memory usage on a large file
+./build/bin/vglog-filter -p -M very_large_file.log > filtered.log
 ```
-
-For large files, you can force stream processing:
-```sh
-vglog-filter -s very_large.log > filtered.log
-```
-
-Monitor progress for large files:
-```sh
-vglog-filter -p large_file.log > filtered.log
-```
-
-Track memory usage during processing:
-```sh
-vglog-filter -M valgrind.log > filtered.log
-```
-
-Combine progress and memory monitoring:
-```sh
-vglog-filter -p -M very_large_file.log > filtered.log
-```
-
-For detailed usage instructions, see the [Usage Guide](doc/USAGE.md).
+For a complete list of options and advanced usage, see the [Usage Guide](doc/USAGE.md).
 
 [↑ Back to top](#vglog-filter)
 
 ## Documentation
 
-Comprehensive documentation is available in the [`doc/`](doc/) folder:
+All documentation is located in the [`doc/`](doc/) directory.
 
-- [USAGE.md](doc/USAGE.md): Basic usage, options, and workflow
-- [FAQ.md](doc/FAQ.md): Frequently asked questions
-- [ADVANCED.md](doc/ADVANCED.md): Advanced filtering, signature depth, marker customization, and deduplication logic
-- [BUILD.md](doc/BUILD.md): Build script and configuration options
-- [VERSIONING.md](doc/VERSIONING.md): Versioning strategy and automated version management
-- [DEVELOPER_GUIDE.md](doc/DEVELOPER_GUIDE.md): Build options, versioning system, and development infrastructure
-- [TEST_SUITE.md](doc/TEST_SUITE.md): Comprehensive test suite documentation and testing guidelines
-- [CI_CD_GUIDE.md](doc/CI_CD_GUIDE.md): Comprehensive CI/CD and testing infrastructure guide
-- [TAG_MANAGEMENT.md](doc/TAG_MANAGEMENT.md): Git tag management and cleanup strategies
-- [RELEASE_WORKFLOW.md](doc/RELEASE_WORKFLOW.md): Release workflow and semantic versioning process
+**User Guides**
+- [USAGE.md](doc/USAGE.md): Command-line options and examples.
+- [FAQ.md](doc/FAQ.md): Frequently Asked Questions.
+- [ADVANCED.md](doc/ADVANCED.md): Advanced features and customization.
+
+**Developer Guides**
+- [BUILD.md](doc/BUILD.md): Detailed build instructions.
+- [DEVELOPER_GUIDE.md](doc/DEVELOPER_GUIDE.md): Core development workflows.
+- [TEST_SUITE.md](doc/TEST_SUITE.md): Guide to the testing framework.
+- [VERSIONING.md](doc/VERSIONING.md): Our versioning and release strategy.
+- [CI_CD_GUIDE.md](doc/CI_CD_GUIDE.md): Overview of the CI/CD pipeline.
+- [RELEASE_WORKFLOW.md](doc/RELEASE_WORKFLOW.md): How to create a new release.
+- [TAG_MANAGEMENT.md](doc/TAG_MANAGEMENT.md): Managing git tags.
 
 [↑ Back to top](#vglog-filter)
 
 ## Contributing
 
-Contributions, bug reports, and feature requests are welcome! Please open an issue or submit a pull request.
+Contributions are welcome! Please open an issue to discuss your ideas or submit a pull request.
 
-### Development Workflow
-1. Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for commit messages
-2. Use the provided version bumping tools for releases
-3. Run tests with `./run_tests.sh` before submitting pull requests (see [Test Suite Documentation](doc/TEST_SUITE.md))
-4. All builds are automatically tested in CI/CD with 12 different configurations
-5. Check the [CONTRIBUTING.md](.github/CONTRIBUTING.md) for detailed guidelines
+Before submitting a PR, please ensure:
+1.  Your commit messages follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+2.  You have run the test suite locally with `./run_tests.sh`.
+3.  You have read our [Contributing Guidelines](.github/CONTRIBUTING.md).
+
+Our project uses an extensive CI/CD pipeline that automatically tests all contributions in 12 different build configurations.
 
 [↑ Back to top](#vglog-filter)
 
