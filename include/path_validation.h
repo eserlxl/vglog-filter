@@ -84,7 +84,7 @@ inline std::string validate_file_path(const std::string& input_path) {
 
     // Check if the normalized path is within the base directory.
     // This is a check to prevent path traversal attacks like "../"
-    auto [root_end, nothing] = std::mismatch(base_dir.begin(), base_dir.end(), normal_path.begin());
+    auto [root_end, path_end] = std::mismatch(base_dir.begin(), base_dir.end(), normal_path.begin());
 
     if (root_end != base_dir.end()) {
         throw std::runtime_error("Path traversal attempt detected: " + input_path);
