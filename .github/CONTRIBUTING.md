@@ -8,11 +8,14 @@ Thank you for considering contributing to vglog-filter! We welcome contributions
 - **Feature Requests**: Open an issue describing your idea and why it would be useful. Please check for existing issues before submitting a new one.
 - **Pull Requests**: Fork the repository and create your branch from `main`. Make sure your code follows the project's style and passes all tests. Include a clear description of your changes and reference any related issues.
 
-## Code Style
+### Pull Request Checklist
 
-- Follow the existing code style and conventions.
-- Write clear, concise commit messages.
-- Add or update documentation as needed.
+Before submitting a Pull Request, please ensure the following:
+
+1.  Your commit messages adhere to the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+2.  You have successfully run the entire test suite locally using `./run_tests.sh`.
+3.  Your code follows the existing code style and conventions.
+4.  You have added or updated documentation as needed.
 
 ## Code of Conduct
 

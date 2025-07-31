@@ -57,7 +57,7 @@ Follow these steps to build `vglog-filter`:
 1.  **Clone the Repository**:
     If you haven't already, clone the `vglog-filter` repository to your local machine. Replace `[YOUR_REPOSITORY_URL]` with the actual URL of the `vglog-filter` repository (e.g., `https://github.com/example-org/vglog-filter.git`):
     ```bash
-    git clone [YOUR_REPOSITORY_URL]
+    git clone https://github.com/eserlxl/vglog-filter.git
     cd vglog-filter
     ```
 
