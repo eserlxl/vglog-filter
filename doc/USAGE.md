@@ -1,9 +1,13 @@
-# Usage Guide
+# Usage Guide: vglog-filter
 
-This guide provides comprehensive instructions on how to use `vglog-filter` to process Valgrind log files. It covers basic usage, command-line options, and practical examples to help you effectively clean and analyze your Valgrind output.
+This guide provides comprehensive instructions on how to use `vglog-filter` to process Valgrind log files. It covers installation, basic usage, command-line options, and practical examples to help you effectively clean and analyze your Valgrind output.
 
 ## Table of Contents
 
+- [Key Features](#key-features)
+- [Installation](#installation)
+  - [Prerequisites](#prerequisites)
+  - [Building from Source](#building-from-source)
 - [Basic Usage](#basic-usage)
 - [Input and Output](#input-and-output)
 - [Command-Line Options](#command-line-options)
@@ -21,6 +25,81 @@ This guide provides comprehensive instructions on how to use `vglog-filter` to p
   - [Viewing Raw (Unscrubbed) Output](#viewing-raw-unscrubbed-output)
 - [Exit Codes](#exit-codes)
 - [Troubleshooting Common Usage Issues](#troubleshooting-common-usage-issues)
+
+## Key Features
+
+`vglog-filter` is a powerful command-line utility designed to streamline the analysis of Valgrind memory error logs. Its key features include:
+
+-   **Automated Deduplication**: Intelligently identifies and removes duplicate stack traces, significantly reducing log file size and improving readability.
+-   **Dynamic Data Normalization**: Scrubs non-deterministic elements like memory addresses and `at:` line numbers, making log comparisons consistent across different runs.
+-   **Flexible Input/Output**: Supports processing logs from files or directly from standard input, allowing seamless integration into CI/CD pipelines or scripting workflows.
+-   **Customizable Filtering**: Allows users to define a custom marker to specify the relevant section of a log file for processing, or to process the entire log.
+-   **Performance Monitoring**: Provides options to monitor real-time progress and peak memory usage, crucial for handling very large Valgrind outputs.
+-   **Stream Processing**: Automatically switches to a memory-efficient stream processing mode for large files (over 5MB) or can be forced for continuous streams.
+
+## Installation
+
+To use `vglog-filter`, you need to build it from its source code.
+
+### Prerequisites
+
+Before building, ensure you have the following installed on your system:
+
+-   **CMake**: Version 3.16 or higher.
+-   **C++ Compiler**: A C++20 compliant compiler (e.g., GCC, Clang, MSVC).
+
+### Building from Source
+
+Follow these steps to build `vglog-filter`:
+
+1.  **Clone the Repository**:
+    If you haven't already, clone the `vglog-filter` repository to your local machine:
+    ```bash
+    git clone https://github.com/your-username/vglog-filter.git
+    cd vglog-filter
+    ```
+    *(Note: Replace `https://github.com/your-username/vglog-filter.git` with the actual repository URL if different.)*
+
+2.  **Build the Project**:
+    The project includes a convenient `build.sh` script that handles the CMake configuration and compilation process.
+
+    To perform a standard build (optimized for performance by default):
+    ```bash
+    ./build.sh
+    ```
+
+    You can also specify different build modes:
+    -   **Debug Build**: For development and debugging, enabling debug symbols and disabling optimizations.
+        ```bash
+        ./build.sh debug
+        ```
+    -   **Build with Warnings**: To enable additional compiler warnings.
+        ```bash
+        ./build.sh warnings
+        ```
+    -   **Clean Build**: To remove the existing build directory before recompiling.
+        ```bash
+        ./build.sh clean
+        ```
+    -   **Build and Run Tests**: To compile the project and then execute its test suite.
+        ```bash
+        ./build.sh tests
+        ```
+
+    For more options, including parallel jobs (`-j N`) and custom build directories (`--build-dir DIR`), run:
+    ```bash
+    ./build.sh --help
+    ```
+
+3.  **Executable Location**:
+    After a successful build, the `vglog-filter` executable will be located in the `build/bin/` directory (or `build/bin/<Config>` for multi-config generators like Visual Studio). You can then run it directly from there or add it to your system's PATH for easier access.
+
+    Example:
+    ```bash
+    ./build/bin/vglog-filter --version
+    ```
+
+[↑ Back to top](#usage-guide)
 
 ## Basic Usage
 
@@ -53,7 +132,7 @@ By default, `vglog-filter` processes log entries after the last occurrence of th
     ```bash
     valgrind --leak-check=full ./my_program 2>&1 | vglog-filter > filtered_output.txt
     ```
-    *Note: `2>&1` redirects Valgrind's stderr (where it typically writes logs) to stdout, so it can be piped.* 
+    *Note: `2>&1` redirects Valgrind's stderr (where it typically writes logs) to stdout, so it can be piped.*
 
 ### Output Destination
 
@@ -227,26 +306,26 @@ Always check the exit code in scripts to ensure `vglog-filter` completed as expe
 
 If you encounter problems while using `vglog-filter`, consider the following:
 
-1.  **No Output or Unexpected Output**: 
+1.  **No Output or Unexpected Output**:
     -   **Check Input**: Ensure the `INPUT_FILE` path is correct and the file exists and is readable. If piping, verify that the upstream command (e.g., `valgrind`) is correctly redirecting its output to stdout.
     -   **Marker Issue**: If you're not seeing expected output, it might be because the default marker (`Successfully downloaded debug`) is not present, or your custom marker (`-m`) is incorrect. Try using `--keep-debug-info` (`-k`) to process the entire file.
     -   **Empty Input**: If the input file is empty, `vglog-filter` will issue a warning and exit successfully. Check if your input source is indeed providing data.
 
-2.  **"File not found" or "Permission denied" Errors**: 
+2.  **"File not found" or "Permission denied" Errors**:
     -   **Path**: Double-check the absolute or relative path to your input file.
     -   **Permissions**: Ensure you have read permissions for the input file and write permissions for the output directory if you're redirecting output to a new file.
 
-3.  **Invalid Option Errors**: 
+3.  **Invalid Option Errors**:
     -   **Syntax**: Verify that you are using the correct option syntax (e.g., `-d N` requires a number, `-m S` requires a string).
     -   **Typos**: Check for typos in option names (e.g., `--progess` instead of `--progress`).
 
-4.  **Performance Issues / High Memory Usage**: 
+4.  **Performance Issues / High Memory Usage**:
     -   **Large Files**: For very large files, ensure `vglog-filter` is operating in stream processing mode. It should switch automatically, but you can force it with `-s`.
     -   **Monitor**: Use `--monitor-memory` (`-M`) to get insights into memory consumption and `--progress` (`-p`) to see if processing is stuck.
 
-5.  **Output Still Contains Dynamic Data**: 
+5.  **Output Still Contains Dynamic Data**:
     -   If you expect memory addresses or other dynamic elements to be scrubbed but they are still present, ensure you are *not* using the `--verbose` (`-v`) option, as this disables scrubbing.
 
-If you're still facing issues, refer to the [FAQ](FAQ.md) or [Troubleshooting for Developers](#troubleshooting-common-usage-issues) in the [Developer Guide](DEVELOPER_GUIDE.md).
+If you're still facing issues, refer to the [FAQ](FAQ.md) or [Developer Guide](DEVELOPER_GUIDE.md) for more in-depth troubleshooting and development information.
 
 [↑ Back to top](#usage-guide)
