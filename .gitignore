@@ -1,4 +1,7 @@
-.vscode/
+# =============================================================================
+# C++ COMPILED FILES
+# =============================================================================
+
 # Compiled object files
 *.o
 *.obj
@@ -6,73 +9,175 @@
 # Precompiled Headers
 *.gch
 *.pch
+*.h.gch
+*.h.pch
+*.h.gch.dSYM/
+*.h.pch.dSYM/
 
 # Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
+*.so.*
+*.dylib.*
+*.dll.*
 
 # Compiled Static libraries
 *.a
 *.lib
+*.a.*
+*.lib.*
 
 # Executables
 *.exe
 *.out
 *.app
-vglog-filter
+*.bin
+*.elf
+*.hex
+
+# =============================================================================
+# DEBUG & PROFILING FILES
+# =============================================================================
 
 # Debug files
 *.dSYM/
 *.su
 *.idb
 *.pdb
+*.ilk
+*.map
+*.exp
 
-# Other
-*~
-*.swp
-*.tmp
-*.log
-*.lock
+# Profiling files
+*.gcov
+*.gcda
+*.gcno
+*.prof
+*.gprof
+
+# =============================================================================
+# BUILD SYSTEMS
+# =============================================================================
 
 # CMake
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
+CMakeDoxyfile.in
+CMakeDoxygenDefaults.cmake
+DartConfiguration.tcl
+CTestTestfile.cmake
+compile_commands.json
+
+# Ninja build system
+.ninja_deps
+.ninja_log
+build.ninja
+
+# Make
 Makefile
+Makefile.in
+*.mk
+*.make
+
+# =============================================================================
+# EDITORS & IDEs
+# =============================================================================
+
+# Vim
+*~
+*.swp
+*.swo
+*.swn
+*.bak
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# VSCode
+.vscode/
+*.code-workspace
+*.code-workspace.lock
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+*.iws.lock
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# =============================================================================
+# FRAMEWORKS & LIBRARIES
+# =============================================================================
 
 # Qt
 moc_*.cpp
 qrc_*.cpp
 ui_*.h
+*.qm
+*.moc
 
 # CodeBlocks
 *.depend
 *.layout
+*.cbp
+*.workspace
 
-# CLion
-.idea/
-cmake-build-*/
-
-# VSCode
-.vscode/ 
+# =============================================================================
+# BUILD & OUTPUT DIRECTORIES
+# =============================================================================
 
 # Build directories
 build/
 build-*/
+cmake-build-*/
+build-test/
+out/
+dist/
+target/
 
-# Test results
+# =============================================================================
+# TESTING & ANALYSIS
+# =============================================================================
+
+# Test results and outputs
 test_results/
 test_results_*/
+*.test
+*.out
+*.log
+*.xml
+*.junit
+coverage/
+*.gcov
+*.lcov
 
-# Backups
-*.bak
-Backup/
-Backups/
+# Valgrind
+valgrind-out.txt
+*.vglog
 
-# Tarballs
-*.tar
-*.tar.*
+# Sanitizer outputs
+*.asan
+*.ubsan
+*.tsan
+*.msan
+
+# =============================================================================
+# PACKAGE MANAGEMENT
+# =============================================================================
 
 # AUR PKG & SRC
 aur/pkg/
@@ -81,3 +186,100 @@ aur/lint/
 aur/PKGBUILD
 aur/.SRCINFO
 aur/PKGBUILD.git
+
+# Conan
+conan/
+conanfile.txt.lock
+conan_trace.log
+
+# vcpkg
+vcpkg_installed/
+
+# =============================================================================
+# TEMPORARY & BACKUP FILES
+# =============================================================================
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.lock
+*.lock.*
+
+# Backup files
+*.bak
+*.backup
+*.backup.*
+Backup/
+Backups/
+backup/
+backups/
+
+# Archive files
+*.tar
+*.tar.*
+*.zip
+*.rar
+*.7z
+*.gz
+*.bz2
+*.xz
+
+# =============================================================================
+# PROJECT SPECIFIC
+# =============================================================================
+
+# Bot directory
+bot/
+
+# Version control
+.git/
+.svn/
+.hg/
+.bzr/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# =============================================================================
+# DOCUMENTATION GENERATION
+# =============================================================================
+
+# Doxygen
+doc/html/
+doc/latex/
+doc/man/
+doc/rtf/
+doc/xml/
+
+# Sphinx
+docs/_build/
+docs/build/
+
+# =============================================================================
+# DEPENDENCY MANAGEMENT
+# =============================================================================
+
+# Node.js (if using any JS tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python (if using any Python scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
