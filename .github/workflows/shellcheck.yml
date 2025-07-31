@@ -66,7 +66,8 @@ jobs:
             '.github/**/*.sh' > .globs.z || true
 
           # Add any tracked files that start with a bash/sh shebang (captures executables without .sh)
-          git grep -IlzE '^#!.*\b(bash|sh)\b' -- > .shebang.z || true
+          # Exclude markdown files and other documentation
+          git grep -IlzE '^#!.*\b(bash|sh)\b' -- ':!*.md' ':!*.txt' ':!*.rst' > .shebang.z || true
 
           # Combine and deduplicate (NUL-separated)
           cat .globs.z .shebang.z 2>/dev/null | sort -zu > files-to-check.txt || true
