@@ -26,7 +26,6 @@
 #include <unistd.h>      // getopt_long()
 #include <filesystem>    // path validation
 #include <limits.h>      // PATH_MAX
-#include <libgen.h>      // dirname, basename
 #include <path_validation.h>  // path validation functions
 
 using Str      = std::string;
@@ -93,14 +92,14 @@ Str create_error_message(const Str& operation, const Str& filename, const Str& d
 }
 
 // Helper function to report progress for large files
-void report_progress(size_t lines_processed, size_t total_lines, const Str& filename) {
-    if (total_lines == 0) return;
+void report_progress(size_t bytes_processed, size_t total_bytes, const Str& filename) {
+    if (total_bytes == 0) return;
     
-    int percentage = static_cast<int>((lines_processed * 100) / total_lines);
+    int percentage = static_cast<int>((bytes_processed * 100) / total_bytes);
     std::cerr << "\rProcessing " << filename << ": " << percentage << "% (" 
-              << lines_processed << "/" << total_lines << " lines)" << std::flush;
+              << bytes_processed / (1024 * 1024) << "/" << total_bytes / (1024 * 1024) << " MB)" << std::flush;
     
-    if (lines_processed >= total_lines) {
+    if (bytes_processed >= total_bytes) {
         std::cerr << std::endl;  // New line when complete
     }
 }
@@ -271,34 +270,28 @@ public:
     }
 
     void run(std::istream& in) {
-        size_t lines_processed = 0;
-        size_t total_lines = 0;
+        size_t bytes_processed = 0;
+        size_t total_bytes = 0;
 
         if (opt.show_progress && !opt.use_stdin) {
-            // This is inefficient for large files, but it's for progress reporting only
             try {
-                std::ifstream count_file = path_validation::safe_ifstream(opt.filename);
-                if (count_file) {
-                    total_lines = static_cast<size_t>(
-                        std::count(std::istreambuf_iterator<char>(count_file),
-                                   std::istreambuf_iterator<char>(), '\n'));
-                }
-            } catch (const std::exception& e) {
-                // If path validation fails, skip progress reporting but continue processing
-                std::cerr << "Warning: Could not count lines for progress reporting: " << e.what() << "\n";
+                total_bytes = std::filesystem::file_size(opt.filename);
+            } catch (const std::filesystem::filesystem_error& e) {
+                std::cerr << "Warning: Could not get file size for progress reporting: " << e.what() << "\n";
             }
         }
 
         Str line;
         while (std::getline(in, line)) {
-            if (opt.show_progress && (++lines_processed % 1000 == 0)) {
-                report_progress(lines_processed, total_lines, opt.filename);
+            bytes_processed += line.length() + 1; // +1 for the newline character
+            if (opt.show_progress && (bytes_processed % (1024 * 1024) == 0 || bytes_processed >= total_bytes)) {
+                report_progress(bytes_processed, total_bytes, opt.filename);
             }
             process_line(line);
         }
 
-        if (opt.show_progress) {
-            report_progress(lines_processed, total_lines, opt.filename);
+        if (opt.show_progress && total_bytes > 0) {
+            report_progress(bytes_processed, total_bytes, opt.filename);
         }
 
         flush();
@@ -439,45 +432,8 @@ void process_file_stream(const Str& fname, const Options& opt) {
     process_stream(file, opt);
 }
 
-Str get_version()
-{
-    // Try multiple paths in order of preference
-    const std::vector<Str> paths = {
-        "./VERSION",                    // Local development
-        "../VERSION",                   // Build directory
-        "/usr/share/vglog-filter/VERSION", // System installation
-        "/usr/local/share/vglog-filter/VERSION" // Local installation
-    };
-    
-    for (const auto& path : paths) {
-        try {
-            std::ifstream version_file = path_validation::safe_ifstream(path);
-            if (version_file.is_open()) {
-                Str version;
-                if (std::getline(version_file, version)) {
-                    // Remove any whitespace safely
-                    if (!version.empty()) {
-                        size_t start = version.find_first_not_of(" \t\r\n");
-                        if (start != Str::npos) {
-                            version.erase(0, start);
-                        }
-                        size_t end = version.find_last_not_of(" \t\r\n");
-                        if (end != Str::npos) {
-                            version.erase(end + 1);
-                        }
-                    }
-                    if (!version.empty()) {
-                        return version;
-                    }
-                }
-            }
-        } catch (const std::exception&) {
-            // Continue to next path if this one fails validation
-            continue;
-        }
-    }
-    return "unknown";
-}
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
 
 int main(int argc, char* argv[])
 {
@@ -533,7 +489,7 @@ int main(int argc, char* argv[])
             case 'p': opt.show_progress  = true; break;
             case 'M': opt.monitor_memory = true; break;
             case 'V':
-                std::cout << "vglog-filter version " << get_version() << std::endl;
+                std::cout << "vglog-filter version " << TOSTRING(VGLOG_FILTER_VERSION) << std::endl;
                 return 0;
             case 'h': usage(argv[0]); return 0;
             default : usage(argv[0]); return 1;

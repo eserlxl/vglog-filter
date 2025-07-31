@@ -44,11 +44,18 @@ if(DEBUG_MODE AND PERFORMANCE_BUILD)
 endif()
 
 # ---- Helper interface targets ------------------------------------------------
+# Read version from file to pass as a definition
+file(READ "${CMAKE_SOURCE_DIR}/VERSION" VGLOG_FILTER_VERSION_STRING)
+string(STRIP "${VGLOG_FILTER_VERSION_STRING}" VGLOG_FILTER_VERSION_STRING)
+
 # project_options: optimization/sanitizer/defines that apply to all targets
 add_library(project_options INTERFACE)
 target_include_directories(project_options INTERFACE
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+)
+target_compile_definitions(project_options INTERFACE
+    VGLOG_FILTER_VERSION="${VGLOG_FILTER_VERSION_STRING}"
 )
 
 # project_warnings: warning levels per compiler
