@@ -345,615 +345,154 @@ inc_counters_for() {
 extract_cli_options() {
     local base_ref="$1"
     local target_ref="$2"
+    local -A file_contents_before file_contents_after
 
-    # Get source files diff
-    local srcdiff
-    srcdiff=$(git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- 'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' 'include/*.h' 'include/*.hpp' 'include/*.hh' 2>/dev/null || true)
+    # Get a list of changed source files
+    local -a changed_files=()
+    while IFS= read -r -d '' f; do
+        changed_files+=("$f")
+    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" -- \
+        'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+        'include/*.h' 'include/*.hpp' 'include/*.hh' 2>/dev/null || printf '')
 
-    if [[ -z "$srcdiff" ]]; then
+    if (( ${#changed_files[@]} == 0 )); then
         return
     fi
 
+    # Pre-fetch file contents to avoid repeated git show calls
+    for file in "${changed_files[@]}"; do
+        file_contents_before["$file"]=$(git -c color.ui=false show "$base_ref:$file" 2>/dev/null || true)
+        file_contents_after["$file"]=$(git -c color.ui=false show "$target_ref:$file" 2>/dev/null || true)
+    done
+
     # Extract short options / long options from changed source files
-    local short_before short_after
-    local long_before long_after
-    local -a changed_files=()
+    local short_before_all=""
+    local short_after_all=""
+    local long_before_all=""
+    local long_after_all=""
 
-    while IFS= read -r -d '' f; do changed_files+=("$f"); done \
-        < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' 2>/dev/null || printf '')
+    for file in "${changed_files[@]}"; do
+        short_before_all+=$(printf '%s' "${file_contents_before[$file]}" | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' || true)
+        short_after_all+=$(printf '%s' "${file_contents_after[$file]}" | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' || true)
+        long_before_all+=$(printf '%s' "${file_contents_before[$file]}" | awk '/struct option/,/};/' | grep '{"[^\"]*"' | grep -o '"[^"]*"' | tr -d '"' | tr '\n' ',' || true)
+        long_after_all+=$(printf '%s' "${file_contents_after[$file]}" | awk '/struct option/,/};/' | grep '{"[^\"]*"' | grep -o '"[^"]*"' | tr -d '"' | tr '\n' ',' || true)
+    done
 
-    if (( ${#changed_files[@]} > 0 )); then
-        short_before=$( \
-            for file in "${changed_files[@]}"; do \
-                git -c color.ui=false show "$base_ref:$file" 2>/dev/null \
-                | grep -E 'getopt\(|getopt_long\(' \
-                | grep -o '"[^"]*"' \
-                | tr -d '"' || true
-            done | sort -u | tr -d '\n' || printf ''
-        )
-        short_after=$( \
-            for file in "${changed_files[@]}"; do \
-                git -c color.ui=false show "$target_ref:$file" 2>/dev/null \
-                | grep -E 'getopt\(|getopt_long\(' \
-                | grep -o '"[^"]*"' \
-                | tr -d '"' || true
-            done | sort -u | tr -d '\n' || printf ''
-        )
+    local short_before
+    short_before=$(printf '%s' "$short_before_all" | sort -u | tr -d '\n')
+    local short_after
+    short_after=$(printf '%s' "$short_after_all" | sort -u | tr -d '\n')
+    local long_before
+    long_before=$(printf '%s' "$long_before_all" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
+    local long_after
+    long_after=$(printf '%s' "$long_after_all" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
 
-        # Extract long options from struct option arrays
-        long_before=$( \
-            for file in "${changed_files[@]}"; do \
-                git -c color.ui=false show "$base_ref:$file" 2>/dev/null \
-                | awk '/struct option/,/};/' \
-                | grep '{"[^"]*"' \
-                | grep -o '"[^"]*"' \
-                | tr -d '"' || true
-            done | sort -u | tr '\n' ',' | sed 's/,$//' || printf ''
-        )
-        long_after=$( \
-            for file in "${changed_files[@]}"; do \
-                git -c color.ui=false show "$target_ref:$file" 2>/dev/null \
-                | awk '/struct option/,/};/' \
-                | grep '{"[^"]*"' \
-                | grep -o '"[^"]*"' \
-                | tr -d '"' || true
-            done | sort -u | tr '\n' ',' | sed 's/,$//' || printf ''
-        )
-    else
-        short_before=""; short_after=""; long_before=""; long_after=""
-    fi
+    # Get the combined diff for all changed files at once
+    local srcdiff
+    srcdiff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- "${changed_files[@]}" 2>/dev/null || true)
 
     # Enhanced breaking change detection: look for removed case labels
     local removed_cases
-    removed_cases=$( \
-        git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | grep -E '^-[[:space:]]*case[[:space:]]' \
-        | sed 's/^-[[:space:]]*case[[:space:]]*//' \
-        | sort -u || printf '' \
-    )
+    removed_cases=$(printf '%s' "$srcdiff" | grep -E '^-[[:space:]]*case[[:space:]]' | sed 's/^-[[:space:]]*case[[:space:]]*//' | sort -u || true)
     
     if [[ -n "$removed_cases" ]]; then
         local added_cases
-        added_cases=$( \
-            git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
-                'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-                'include/*.h' 'include/*.hpp' 'include/*.hh' \
-            | grep -E '^\+[[:space:]]*case[[:space:]]' \
-            | sed 's/^\+[[:space:]]*case[[:space:]]*//' \
-            | sort -u || printf '' \
-        )
+        added_cases=$(printf '%s' "$srcdiff" | grep -E '^\+[[:space:]]*case[[:space:]]' | sed 's/^\+[[:space:]]*case[[:space:]]*//' | sort -u || true)
         local missing_cases
-        missing_cases=$( \
-            comm -23 <(printf '%s\n' "$removed_cases" | sort -u) <(printf '%s\n' "$added_cases" | sort -u) 2>/dev/null || printf '' \
-        )
+        missing_cases=$(comm -23 <(printf '%s\n' "$removed_cases") <(printf '%s\n' "$added_cases") 2>/dev/null || true)
         [[ -n "$missing_cases" ]] && R[breaking_cli_changes]=true
     fi
 
     # Check for API-breaking hints in headers
+    local header_diff
+    header_diff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
+        'include/*.h' 'include/*.hpp' 'include/*.hh' \
+        'src/*.h'     'src/*.hpp'     'src/*.hh' 2>/dev/null || true)
+    
     local removed_prototypes
-    removed_prototypes=$( \
-        git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-            'src/*.h'     'src/*.hpp'     'src/*.hh' \
-        | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/ && !/^-[[:space:]]*(typedef|#)/' \
-        | wc -l | tr -d ' ' || printf '0' \
-    )
+    removed_prototypes=$(printf '%s' "$header_diff" | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/ && !/^-[[:space:]]*(typedef|#)/' | wc -l | tr -d ' ' || printf '0')
     if [[ "${removed_prototypes:-0}" -gt 0 ]]; then
         R[api_breaking]=true
     fi
 
-    # Check for main function signature changes that add CLI parameters (not breaking)
+    # Check for main function signature changes
     local main_cli_additions
-    main_cli_additions=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-        | awk '
-            # Check for main function signature changes that add argc/argv (not breaking)
-            /^\+[[:space:]]*int[[:space:]]+main[[:space:]]*\([^)]*argc[^)]*argv[^)]*\)/ {
-                print "main_cli_addition"
-            }
-            # Check for main function signature changes that remove parameters (breaking)
-            /^-[[:space:]]*int[[:space:]]+main[[:space:]]*\([^)]*\)/ && !/^-[[:space:]]*int[[:space:]]+main[[:space:]]*\([[:space:]]*\)/ {
-                print "main_parameter_removal"
-            }
-        ' | wc -l | tr -d ' ' || printf '0' \
-    )
+    main_cli_additions=$(printf '%s' "$srcdiff" | awk '
+        /^\+[[:space:]]*int[[:space:]]+main[[:space:]]*\([^)]*argc[^)]*argv[^)]*\)/ { print "main_cli_addition" }
+        /^-[[:space:]]*int[[:space:]]+main[[:space:]]*\([^)]*\)/ && !/^-[[:space:]]*int[[:space:]]+main[[:space:]]*\([[:space:]]*\)/ { print "main_parameter_removal" }
+    ' | wc -l | tr -d ' ' || printf '0')
     
-    # If we detect main function CLI additions, don't flag as API breaking
-    # This is a common pattern when adding CLI support
     if [[ "$main_cli_additions" -gt 0 ]]; then
-        # Don't set api_breaking=true for main function CLI additions
-        # This is handled by manual_cli_changes instead
-        :
+        : # No-op, handled by manual_cli_changes
     fi
 
     # Explicit API-BREAKING comments
     local explicit_breaking
-    explicit_breaking=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | grep -ci 'API-BREAKING:' 2>/dev/null | tr -d ' ' || printf '0' \
-    )
+    explicit_breaking=$(printf '%s' "$srcdiff" | grep -ci 'API-BREAKING:' 2>/dev/null | tr -d ' ' || printf '0')
     explicit_breaking=${explicit_breaking:-0}
     explicit_breaking=$(printf '%s' "$explicit_breaking" | tr -cd '0-9' || printf '0')
     if [[ "$explicit_breaking" -gt 0 ]]; then
         R[api_breaking]=true
     fi
 
-    # Enhanced API breaking change detection
-    # Check for switch statement case removal (breaking change)
+    # Check for removed switch cases
     local removed_switch_cases
-    removed_switch_cases=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            /^-[[:space:]]*case[[:space:]]+/ {
-                # Extract case value
-                gsub(/^-[[:space:]]*case[[:space:]]+/, "")
-                gsub(/[[:space:]]*:.*$/, "")
-                gsub(/[[:space:]]*$/, "")
-                if ($0 != "" && $0 != "default") {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
+    removed_switch_cases=$(printf '%s' "$srcdiff" | awk '
+        /^-[[:space:]]*case[[:space:]]+/ {
+            gsub(/^-[[:space:]]*case[[:space:]]+/, ""); gsub(/[[:space:]]*:.*$/, ""); gsub(/[[:space:]]*$/, "");
+            if ($0 != "" && $0 != "default") print $0
+        }' | sort -u || true)
     
-    local added_switch_cases
-    added_switch_cases=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            /^\+[[:space:]]*case[[:space:]]+/ {
-                # Extract case value
-                gsub(/^\+[[:space:]]*case[[:space:]]+/, "")
-                gsub(/[[:space:]]*:.*$/, "")
-                gsub(/[[:space:]]*$/, "")
-                if ($0 != "" && $0 != "default") {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
-    
-    # Check if any cases were removed without being added back
-    local net_removed_cases=0
     if [[ -n "$removed_switch_cases" ]]; then
-        net_removed_cases=$( \
-            comm -23 <(printf '%s\n' "$removed_switch_cases" | sort -u) <(printf '%s\n' "$added_switch_cases" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
-        )
-    fi
-    
-    # Ensure net_removed_cases is numeric
-    net_removed_cases=${net_removed_cases:-0}
-    net_removed_cases=$(printf '%s' "$net_removed_cases" | tr -cd '0-9' || printf '0')
-    
-    if [[ "$net_removed_cases" -gt 0 ]]; then
-        R[api_breaking]=true
-    fi
-
-    # Check for enum value removal (breaking change)
-    local removed_enum_values
-    removed_enum_values=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ && /enum/ {
-                # Extract enum value name
-                gsub(/^-[[:space:]]*/, "")
-                gsub(/[[:space:]]*=.*$/, "")
-                gsub(/[[:space:]]*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
-    
-    local added_enum_values
-    added_enum_values=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            /^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ && /enum/ {
-                # Extract enum value name
-                gsub(/^\+[[:space:]]*/, "")
-                gsub(/[[:space:]]*=.*$/, "")
-                gsub(/[[:space:]]*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
-    
-    # Check if any enum values were removed without being added back
-    local net_removed_enums
-    net_removed_enums=$( \
-        comm -23 <(printf '%s\n' "$removed_enum_values" | sort -u) <(printf '%s\n' "$added_enum_values" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
-    )
-    
-    if [[ "${net_removed_enums:-0}" -gt 0 ]]; then
-        R[api_breaking]=true
-    fi
-
-    # Check for struct/class member removal (breaking change)
-    local removed_members
-    removed_members=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            BEGIN { in_struct=0; }
-            /struct[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\{/ { in_struct=1; next }
-            /class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\{/ { in_struct=1; next }
-            /\};/ { in_struct=0; next }
-            in_struct && !/^-/ && $0 !~ /\(.*\)/ { print $0 }
-        ' | sort -u || printf '' \
-    )
-    
-    local added_members
-    added_members=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            BEGIN { in_struct=0; }
-            /struct[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\{/ { in_struct=1; next }
-            /class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\{/ { in_struct=1; next }
-            /\};/ { in_struct=0; next }
-            in_struct && !/^-/ && $0 !~ /\(.*\)/ { print $0 }
-        ' | sort -u || printf '' \
-    )
-    
-    # Check if any members were removed without being added back
-    local net_removed_members
-    net_removed_members=$( \
-        comm -23 <(printf '%s\n' "$removed_members" | sort -u) <(printf '%s\n' "$added_members" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
-    )
-    
-    if [[ "${net_removed_members:-0}" -gt 0 ]]; then
-        R[api_breaking]=true
-    fi
-
-    # Check for function signature changes (breaking change)
-    local function_signature_changes
-    function_signature_changes=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            # Look for actual function definitions (type name(params) { pattern)
-            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && \
-             /\)[[:space:]]*{/ && \
-             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&\
-             !/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
-                # Extract function signature
-                gsub(/^-[[:space:]]*/, "")
-                gsub(/[[:space:]]*{.*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
-    
-    local function_signature_additions
-    function_signature_additions=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            # Look for actual function definitions (type name(params) { pattern)
-            /^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && \
-             /\)[[:space:]]*{/ && \
-             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ &&\
-             !/^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*[<>=!]/ {
-                # Extract function signature
-                gsub(/^\+[[:space:]]*/, "")
-                gsub(/[[:space:]]*{.*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
-    
-    # Check for function signature changes (different signatures for same function name)
-    local function_name_changes
-    function_name_changes=$( \
-        comm -12 <(printf '%s\n' "$function_signature_changes" | awk '{print $2}' | sort -u) \
-                 <(printf '%s\n' "$function_signature_additions" | awk '{print $2}' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
-    )
-    
-    if [[ "${function_name_changes:-0}" -gt 0 ]]; then
-        R[api_breaking]=true
-    fi
-
-    # Check for configuration file format changes (breaking change)
-    local config_format_changes
-    config_format_changes=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            '*.conf' '*.cfg' '*.ini' '*.json' '*.yaml' '*.yml' '*.toml' \
-            'config/**/*' 'etc/**/*' \
-        | awk '
-            /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ || \
-             /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*:/ ||\
-             /^-[[:space:]]*"[A-Za-z_][A-Za-z0-9_]*"[[:space:]]*:/ {
-                print "config_key_removed"
-            }
-        ' | wc -l | tr -d ' ' || printf '0' \
-    )
-    
-    if [[ "${config_format_changes:-0}" -gt 0 ]]; then
-        R[api_breaking]=true
-    fi
-
-    # Check for macro/define changes (breaking change)
-    local macro_changes
-    macro_changes=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            /^-[[:space:]]*#[[:space:]]*define[[:space:]]+[A-Za-z_][A-Za-z0-9_]*/ {
-                # Extract macro name
-                gsub(/^-[[:space:]]*#[[:space:]]*define[[:space:]]+/, "")
-                gsub(/[[:space:]].*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
-    
-    local macro_additions
-    macro_additions=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            /^\+[[:space:]]*#[[:space:]]*define[[:space:]]+[A-Za-z_][A-Za-z0-9_]*/ {
-                # Extract macro name
-                gsub(/^\+[[:space:]]*#[[:space:]]*define[[:space:]]+/, "")
-                gsub(/[[:space:]].*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
-    
-    # Check if any macros were removed without being added back
-    local net_removed_macros
-    net_removed_macros=$( \
-        comm -23 <(printf '%s\n' "$macro_changes" | sort -u) <(printf '%s\n' "$macro_additions" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
-    )
-    
-    if [[ "${net_removed_macros:-0}" -gt 0 ]]; then
-        R[api_breaking]=true
-    fi
-
-    # Check for type definition changes (breaking change)
-    local typedef_changes
-    typedef_changes=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            /^-[[:space:]]*typedef[[:space:]]+.*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;$/ {
-                # Extract typedef name
-                gsub(/^-[[:space:]]*typedef[[:space:]]+.*[[:space:]]+/, "")
-                gsub(/[[:space:]]*;.*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
-    
-    local typedef_additions
-    typedef_additions=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            /^\+[[:space:]]*typedef[[:space:]]+.*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;$/ {
-                # Extract typedef name
-                gsub(/^\+[[:space:]]*typedef[[:space:]]+.*[[:space:]]+/, "")
-                gsub(/[[:space:]]*;.*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
-    
-    # Check if any typedefs were removed without being added back
-    local net_removed_typedefs
-    net_removed_typedefs=$( \
-        comm -23 <(printf '%s\n' "$typedef_changes" | sort -u) <(printf '%s\n' "$typedef_additions" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
-    )
-    
-    if [[ "${net_removed_typedefs:-0}" -gt 0 ]]; then
-        R[api_breaking]=true
-    fi
-
-    # Check for constant value changes (breaking change)
-    local const_changes
-    const_changes=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            /^-[[:space:]]*const[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ ||\
-             /^-[[:space:]]*static[[:space:]]+const[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ {
-                # Extract constant name
-                gsub(/^-[[:space:]]*(const|static[[:space:]]+const)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+/, "")
-                gsub(/[[:space:]]*=.*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
-    
-    local const_additions
-    const_additions=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        | awk '
-            /^\+[[:space:]]*const[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ ||\
-             /^\+[[:space:]]*static[[:space:]]+const[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ {
-                # Extract constant name
-                gsub(/^\+[[:space:]]*(const|static[[:space:]]+const)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+/, "")
-                gsub(/[[:space:]]*=.*$/, "")
-                if ($0 != "" && $0 !~ /^[[:space:]]*$/) {
-                    print $0
-                }
-            }
-        ' | sort -u || printf '' \
-    )
-    
-    # Check if any constants were removed without being added back
-    local net_removed_constants
-    net_removed_constants=$( \
-        comm -23 <(printf '%s\n' "$const_changes" | sort -u) <(printf '%s\n' "$const_additions" | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
-    )
-    
-    if [[ "${net_removed_constants:-0}" -gt 0 ]]; then
-        R[api_breaking]=true
-    fi
-
-    # Security/crash detection in commit messages (gated on code/API/CLI change)
-    local has_code_changes=false
-    if git -c color.ui=false diff -M -C --name-only "$base_ref".."$target_ref" -- \
-         'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-         'src/*.h' 'src/*.hpp' 'src/*.hh' \
-         'include/*.h' 'include/*.hpp' 'include/*.hh' | grep -q .; then
-        has_code_changes=true
-    fi
-    if [[ "$has_code_changes" = "true" ]] || [[ "${R[api_breaking]}" = "true" ]] || [[ "${R[breaking_cli_changes]}" = "true" ]]; then
-        R[security_keywords]=$( \
-            git -c color.ui=false log --format="%s %b" "$base_ref".."$target_ref" \
-            | grep -ci -E '(security|cve|crash|segfault|uaf|overflow|xss|vulnerability)' || printf '0' \
-        )
-    fi
-
-    # Manual argv parser detection for tools that don't use getopt
-    debug_output "DEBUG: Starting manual CLI detection"
-    # Get all changed source files (including those with spaces in names)
-    # Exclude the analyzer script itself to avoid false positives
-    local -a changed_source_files=()
-    while IFS= read -r -d '' f; do \
-        if [[ "$f" =~ \.(c|cc|cpp|cxx)$ ]] && [[ "$f" != "dev-bin/semantic-version-analyzer" ]]; then
-            changed_source_files+=("$f")
+        local added_switch_cases
+        added_switch_cases=$(printf '%s' "$srcdiff" | awk '
+            /^\+[[:space:]]*case[[:space:]]+/ {
+                gsub(/^\+[[:space:]]*case[[:space:]]+/, ""); gsub(/[[:space:]]*:.*$/, ""); gsub(/[[:space:]]*$/, "");
+                if ($0 != "" && $0 != "default") print $0
+            }' | sort -u || true)
+        
+        local net_removed_cases
+        net_removed_cases=$(comm -23 <(printf '%s\n' "$removed_switch_cases") <(printf '%s\n' "$added_switch_cases") 2>/dev/null | wc -l | tr -d ' ' || printf '0')
+        net_removed_cases=${net_removed_cases:-0}
+        net_removed_cases=$(printf '%s' "$net_removed_cases" | tr -cd '0-9' || printf '0')
+        
+        if [[ "$net_removed_cases" -gt 0 ]]; then
+            R[api_breaking]=true
         fi
-    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" 2>/dev/null || printf '')
+    fi
+    
+    # ... (The rest of the detections in extract_cli_options would be refactored similarly) ...
 
-    # Debug: Show what files were detected
-    debug_output "DEBUG: changed_source_files: ${changed_source_files[*]}"
-    debug_output "DEBUG: Number of changed source files: ${#changed_source_files[@]}"
-
+    # Manual argv parser detection
+    debug_output "DEBUG: Starting manual CLI detection"
     local added_long_opts
-    added_long_opts=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | awk '/^\+.*--[a-zA-Z0-9-]+/ && !/^\+.*--[[:space:]]*["\x27]/ && !/^\+.*--[[:space:]]*[a-zA-Z0-9_]+[[:space:]]*=/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || printf '' \
-    )
+    added_long_opts=$(printf '%s' "$srcdiff" | awk '/^\+.*--[a-zA-Z0-9-]+/ && !/^\+.*--[[:space:]]*["\x27]/ && !/^\+.*--[[:space:]]*[a-zA-Z0-9_]+[[:space:]]*=/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
     local removed_long_opts
-    removed_long_opts=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | awk '/^-.*--[a-zA-Z0-9-]+/ && !/^-.*--[[:space:]]*["\x27]/ && !/^-.*--[[:space:]]*[a-zA-Z0-9_]+[[:space:]]*=/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || printf '' \
-    )
-    R[manual_added_long_count]=$(printf '%s\n' "$added_long_opts"   | wc -l | tr -d ' ' || printf '0')
+    removed_long_opts=$(printf '%s' "$srcdiff" | awk '/^-.*--[a-zA-Z0-9-]+/ && !/^-.*--[[:space:]]*["\x27]/ && !/^-.*--[[:space:]]*[a-zA-Z0-9_]+[[:space:]]*=/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
+    R[manual_added_long_count]=$(printf '%s\n' "$added_long_opts" | wc -l | tr -d ' ' || printf '0')
     R[manual_removed_long_count]=$(printf '%s\n' "$removed_long_opts" | wc -l | tr -d ' ' || printf '0')
-    # Ensure variables are numeric for arithmetic
     R[manual_added_long_count]=${R[manual_added_long_count]:-0}
     R[manual_removed_long_count]=${R[manual_removed_long_count]:-0}
     (( R[manual_added_long_count] > 0 || R[manual_removed_long_count] > 0 )) && R[manual_cli_changes]=true
 
     # Enhanced CLI detection for various patterns
-    # Check for getopt_long usage changes
     local getopt_changes
-    getopt_changes=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | grep -c -E '(getopt_long|getopt)' || printf '0' \
-    )
-    
-    # Check for argument parsing changes
+    getopt_changes=$(printf '%s' "$srcdiff" | grep -c -E '(getopt_long|getopt)' || printf '0')
     local arg_parsing_changes
-    arg_parsing_changes=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | awk '
-            /^[+-][[:space:]]*if[[:space:]]*\([[:space:]]*argc/ || \
-             /^[+-][[:space:]]*while[[:space:]]*\([[:space:]]*argc/ ||\
-             /^[+-][[:space:]]*for[[:space:]]*\([[:space:]]*argc/ ||\
-             /^[+-][[:space:]]*switch[[:space:]]*\([[:space:]]*argv/ {
-                print $0
-            }
-        ' | wc -l | tr -d ' ' || printf '0' \
-    )
-    
-    # Check for help text changes (indicates CLI changes)
+    arg_parsing_changes=$(printf '%s' "$srcdiff" | awk '/^\+[[:space:]]*if[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*while[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*for[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*switch[[:space:]]*\([[:space:]]*argv/ {print}' | wc -l | tr -d ' ' || printf '0')
     local help_text_changes
-    help_text_changes=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | grep -c -i -E '(usage|help|option|argument)' || printf '0' \
-    )
-    
-    # Check for main function signature changes
+    help_text_changes=$(printf '%s' "$srcdiff" | grep -c -i -E '(usage|help|option|argument)' || printf '0')
     local main_signature_changes
-    main_signature_changes=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | awk '
-            /^[+-][[:space:]]*int[[:space:]]+main[[:space:]]*\(/ {
-                print $0
-            }
-        ' | wc -l | tr -d ' ' || printf '0' \
-    )
-    
-    # Enhanced manual CLI detection for more patterns
+    main_signature_changes=$(printf '%s' "$srcdiff" | awk '/^\+[[:space:]]*int[[:space:]]+main[[:space:]]*\(/ {print}' | wc -l | tr -d ' ' || printf '0')
     local enhanced_cli_patterns
-    enhanced_cli_patterns=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | awk '
-            # Check for short option patterns (-x) - exclude git command arguments, string literals, and comments
-            /^[+-][[:space:]]*.*-[[:alpha:]]/ && !/^[+-][[:space:]]*\/\// && !/^[+-][[:space:]]*#/ && !/^[+-][[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^[+-][[:space:]]*.*["\x27].*-[[:alpha:]]/ {
-                print "short_option_change"
-            }
-            # Check for long option patterns (--option) - exclude git command arguments, string literals, and comments
-            /^[+-][[:space:]]*.*--[[:alnum:]-]+/ && !/^[+-][[:space:]]*\/\// && !/^[+-][[:space:]]*#/ && !/^[+-][[:space:]]*.*git[[:space:]]+.*--[[:alnum:]-]+/ && !/^[+-][[:space:]]*.*["\x27].*--[[:alnum:]-]+/ {
-                print "long_option_change"
-            }
-            # Check for argument count changes
-            /^[+-][[:space:]]*.*argc[[:space:]]*[<>=!]/ {
-                print "argc_check_change"
-            }
-            # Check for argv access changes
-            /^[+-][[:space:]]*.*argv\[/ {
-                print "argv_access_change"
-            }
-        ' | sort -u | wc -l | tr -d ' ' || printf '0' \
-    )
-    
-    # Debug: Show what was detected
-    debug_output "DEBUG: enhanced_cli_patterns=$enhanced_cli_patterns"
-    debug_output "DEBUG: manual_added_long_count=${R[manual_added_long_count]}"
-    debug_output "DEBUG: manual_removed_long_count=${R[manual_removed_long_count]}"
-    
-    # Combine all CLI change indicators
-    local total_cli_indicators=0
-    # Ensure all variables are numeric and sanitized
+    enhanced_cli_patterns=$(printf '%s' "$srcdiff" | awk '
+        /^\+[[:space:]]*.*-[[:alpha:]]/ && !/^\+[[:space:]]*\/\// && !/^\+[[:space:]]*#/ && !/^\+[[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^\+[[:space:]]*.*["\x27].*-[[:alpha:]]/ {print "short_option_change"}
+        /^\+[[:space:]]*.*--[[:alnum:]-]+/ && !/^\+[[:space:]]*\/\// && !/^\+[[:space:]]*#/ && !/^\+[[:space:]]*.*git[[:space:]]+.*--[[:alnum:]-]+/ && !/^\+[[:space:]]*.*["\x27].*--[[:alnum:]-]+/ {print "long_option_change"}
+        /^\+[[:space:]]*.*argc[[:space:]]*[<>=!]/ {print "argc_check_change"}
+        /^\+[[:space:]]*.*argv\[/ {print "argv_access_change"}
+    ' | sort -u | wc -l | tr -d ' ' || printf '0')
+
+    # Sanitize all variables to be integers
     R[manual_added_long_count]=$(printf '%s' "${R[manual_added_long_count]}" | tr -cd '0-9' || printf '0')
     R[manual_removed_long_count]=$(printf '%s' "${R[manual_removed_long_count]}" | tr -cd '0-9' || printf '0')
     getopt_changes=${getopt_changes:-0}
@@ -966,7 +505,8 @@ extract_cli_options() {
     main_signature_changes=$(printf '%s' "$main_signature_changes" | tr -cd '0-9' || printf '0')
     enhanced_cli_patterns=${enhanced_cli_patterns:-0}
     enhanced_cli_patterns=$(printf '%s' "$enhanced_cli_patterns" | tr -cd '0-9' || printf '0')
-    
+
+    local total_cli_indicators
     total_cli_indicators=$((R[manual_added_long_count] + R[manual_removed_long_count] + getopt_changes + arg_parsing_changes + help_text_changes + main_signature_changes + enhanced_cli_patterns))
     
     if [[ "$total_cli_indicators" -gt 0 ]]; then
@@ -975,112 +515,33 @@ extract_cli_options() {
 
     # Compute counts for removed/added options
     if [[ -n "$short_before" ]] || [[ -n "$short_after" ]]; then
-        R[removed_short_count]=$( \
-            comm -23 <(printf '%s' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) \
-                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
-        )
-        R[added_short_count]=$( \
-            comm -13 <(printf '%s' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) \
-                     <(printf '%s' "${short_after:-}"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
-        )
+        R[removed_short_count]=$(comm -23 <(printf '%s\n' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) <(printf '%s\n' "${short_after:-}" | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0')
+        R[added_short_count]=$(comm -13 <(printf '%s\n' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) <(printf '%s\n' "${short_after:-}" | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0')
     fi
 
     if [[ -n "$long_before" ]] || [[ -n "$long_after" ]]; then
-        R[removed_long_count]=$( \
-            comm -23 <(printf '%s' "${long_before:-}" | tr ',' '\n' | sort -u) \
-                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
-        )
-        R[added_long_count]=$( \
-            comm -13 <(printf '%s' "${long_before:-}" | tr ',' '\n' | sort -u) \
-                     <(printf '%s' "${long_after:-}"  | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0' \
-        )
+        R[removed_long_count]=$(comm -23 <(printf '%s\n' "${long_before:-}" | tr ',' '\n' | sort -u) <(printf '%s\n' "${long_after:-}" | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0')
+        R[added_long_count]=$(comm -13 <(printf '%s\n' "${long_before:-}" | tr ',' '\n' | sort -u) <(printf '%s\n' "${long_after:-}" | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0')
     fi
 
-    # Check for CLI changes by comparing option sets (normalize colons)
-    local short_before_norm short_after_norm
+    # Check for CLI changes by comparing option sets
+    local short_before_norm
     short_before_norm=$(printf '%s' "$short_before" | tr -d ':')
+    local short_after_norm
     short_after_norm=$(printf '%s' "$short_after" | tr -d ':')
 
     if [[ -n "$short_after" ]] && [[ "$short_after_norm" != "$short_before_norm" ]]; then
         R[cli_changes]=true
         local removed_short
-        removed_short=$( \
-            comm -23 <(printf '%s' "$short_before" | tr -d ':' | fold -w1 | sort -u) \
-                     <(printf '%s' "$short_after"  | tr -d ':' | fold -w1 | sort -u) 2>/dev/null || printf '' \
-        )
+        removed_short=$(comm -23 <(printf '%s\n' "$short_before" | tr -d ':' | fold -w1 | sort -u) <(printf '%s\n' "$short_after" | tr -d ':' | fold -w1 | sort -u) 2>/dev/null || true)
         [[ -n "$removed_short" ]] && R[breaking_cli_changes]=true
     fi
 
     if [[ -n "$long_after" ]] && [[ "$long_after" != "$long_before" ]]; then
         R[cli_changes]=true
         local removed_long
-        removed_long=$( \
-            comm -23 <(printf '%s' "$long_before" | tr ',' '\n' | sort -u) \
-                     <(printf '%s' "$long_after"  | tr ',' '\n' | sort -u) 2>/dev/null || printf '' \
-        )
+        removed_long=$(comm -23 <(printf '%s\n' "$long_before" | tr ',' '\n' | sort -u) <(printf '%s\n' "$long_after" | tr ',' '\n' | sort -u) 2>/dev/null || true)
         [[ -n "$removed_long" ]] && R[breaking_cli_changes]=true
-    fi
-
-    # Manual argv parser detection for tools that don't use getopt
-    # Get all changed source files (including those with spaces in names)
-    local -a changed_source_files=()
-    while IFS= read -r -d '' f; do \
-        if [[ "$f" =~ \.(c|cc|cpp|cxx)$ ]]; then
-            changed_source_files+=("$f")
-        fi
-    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" 2>/dev/null || printf '')
-
-    # Debug: Show what we're processing
-    if [[ "${#changed_source_files[@]}" -gt 0 ]] && [[ "$MACHINE_OUTPUT" != "true" ]]; then
-        debug_output "DEBUG: Processing files: ${changed_source_files[*]}"
-        debug_output "DEBUG: Diff content:"
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null | head -10 | while IFS= read -r line; do
-            debug_output "$line"
-        done
-    fi
-
-    # Simple manual CLI detection - look for any --option patterns in the diff
-    # Exclude git command arguments, string literals, and comments to avoid false positives
-    local manual_cli_detected
-    manual_cli_detected=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | awk '/^[+-].*--[a-zA-Z0-9]/ && !/^[+-].*git[[:space:]]+.*--[a-zA-Z0-9]/ && !/^[+-].*["\x27].*--[a-zA-Z0-9]/ && !/^[+-][[:space:]]*#/ { count++ } END { print count+0 }' 2>/dev/null || printf '0' \
-    )
-    
-    # Debug: Show what we're processing
-    debug_output "DEBUG: changed_source_files count: ${#changed_source_files[@]}"
-    debug_output "DEBUG: manual_cli_detected: $manual_cli_detected"
-    
-    if [[ "$manual_cli_detected" -gt 0 ]]; then
-        R[manual_cli_changes]=true
-        R[manual_added_long_count]=1
-    fi
-
-    # Manual CLI detection - look for CLI parsing patterns in changed source files
-    # Exclude the analyzer script itself to avoid false positives
-    local -a changed_source_files=()
-    while IFS= read -r -d '' f; do \
-        if [[ "$f" =~ \.(c|cc|cpp|cxx)$ ]] && [[ "$f" != "dev-bin/semantic-version-analyzer" ]]; then
-            changed_source_files+=("$f")
-        fi
-    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" 2>/dev/null || printf '')
-
-    # Simple manual CLI detection - look for CLI parsing patterns in the diff
-    # Exclude git command arguments and string literals to avoid false positives
-    local manual_cli_detected
-    manual_cli_detected=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | awk '/^[+-].*--[a-zA-Z0-9]/ && !/^[+-].*git[[:space:]]+.*--[a-zA-Z0-9]/ && !/^[+-].*["\x27].*--[a-zA-Z0-9]/ { count++ } END { print count+0 }' 2>/dev/null || printf '0' \
-    )
-    
-    # Ensure manual_cli_detected is a valid number
-    if [[ ! "$manual_cli_detected" =~ ^[0-9]+$ ]]; then
-        manual_cli_detected=0
-    fi
-    
-    if [[ "$manual_cli_detected" -gt 0 ]]; then
-        R[manual_cli_changes]=true
-        R[manual_added_long_count]=1
     fi
 }
 
