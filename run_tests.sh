@@ -467,7 +467,7 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "C++ Unit" ]]; then
             declare -A cpp_test_results
             
             while IFS= read -r line; do
-                if [[ $line =~ ^[[:space:]]*[0-9]+/[0-9]+[[:space:]]+Test[[:space:]]+\#([0-9]+):[[:space:]]+([a-zA-Z0-9_]+)[[:space:]]+\.+[[:space:]]+(Passed|Failed) ]]; then
+                if [[ $line =~ ^[[:space:]]*[0-9]+/[0-9]+[[:space:]]+Test[[:space:]]+\#([0-9]+):[[:space:]]+([a-zA-Z0-9_]+)[[:space:]]+\.*[[:space:]]+(Passed|Failed) ]]; then
                     test_name="${BASH_REMATCH[2]}"
                     test_status="${BASH_REMATCH[3]}"
                     cpp_test_results["$test_name"]="$test_status"

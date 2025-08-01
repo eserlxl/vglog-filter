@@ -93,20 +93,6 @@ else
     TEST_RESULT=0
 fi
 
-echo "[DEBUG] CTest command exit code: $ctest_exit_code"
-echo "[DEBUG] TEST_RESULT after CTest command: $TEST_RESULT"
-echo "[DEBUG] CPP_PASSED after parsing: $CPP_PASSED"
-echo "[DEBUG] CPP_FAILED after parsing: $CPP_FAILED"
-
-# Set final TEST_RESULT based on actual test counts
-if [ "$CPP_FAILED" -gt 0 ]; then
-    TEST_RESULT=1
-else
-    TEST_RESULT=0
-fi
-
-echo "[DEBUG] Final TEST_RESULT before exit: $TEST_RESULT"
-
 # Generate C++ test summary
 CPP_SUMMARY_FILE="$PROJECT_ROOT/test_results/cpp_unit_test_summary.txt"
 
