@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
     using Str = std::string;
     using VecS = std::vector<Str>;
 
-    // speed up i/o - but keep sync for MSAN compatibility
+    // Speed up I/O - but keep sync for MSAN compatibility
     std::ios::sync_with_stdio(true);
     std::cin.tie(nullptr);
 
@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
             case 'v': opt.scrub_raw = false; break;
             case 'd':
                 try {
-                    long depth_long = std::stol(optarg);
+                    const long depth_long = std::stol(optarg);
                     if (depth_long < 0 || depth_long > MAX_DEPTH) {
                         std::cerr << "Error: Depth must be between 0 and " << MAX_DEPTH << " (got: " << optarg << ")\n";
                         return 1;
@@ -113,7 +113,7 @@ int main(int argc, char* argv[])
             }
         }
         else {
-            VecS lines = read_file_lines(opt.filename);
+            const VecS lines = read_file_lines(opt.filename);
             if (lines.empty() && !opt.filename.empty() && opt.filename != "-") {
                 std::cerr << "Warning: Input file '" << opt.filename << "' is empty\n";
                 return 0;
