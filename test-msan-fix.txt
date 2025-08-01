@@ -1,32 +1,41 @@
-==12345== Memcheck, a memory error detector
-==12345== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
-==12345== Using Valgrind-3.21.0 and LibVEX; rerun with -h for copyright info
-==12345== Command: ./test_program
-==12345== 
-==12345== Invalid read of size 4
-==12345==    at 0x4004F6: main (test.c:10)
-==12345==    by 0x4E4C3D4: (below main)
-==12345==  Address 0x5204040 is 0 bytes after a block of size 40 alloc'd
-==12345==    at 0x4C2AB80: malloc (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
-==12345==    by 0x4004E6: main (test.c:8)
-==12345== 
-==12345== HEAP SUMMARY:
-==12345==     in use at exit: 40 bytes in 1 blocks
-==12345==   total heap usage: 1 allocs, 0 frees, 40 bytes allocated
-==12345== 
-==12345== LEAK SUMMARY:
-==12345==    definitely lost: 40 bytes in 1 blocks
-==12345==    indirectly lost: 0 bytes in 0 blocks
-==12345==      possibly lost: 0 bytes in 0 blocks
-==12345==    still reachable: 0 bytes in 0 blocks
-==12345==         suppressed: 0 bytes in 0 blocks
-==12345== Rerun with --leak-check=full to see details of leaked memory
-==12345== 
-==12345== For lists of detected and suppressed errors, rerun with: -s
-==12345== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)
+==1234== Memcheck, a memory error detector
+==1234== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1234== Using Valgrind-3.21.0 and LibVEX; rerun with -h for copyright info
+==1234== Command: ./test_program
+==1234== 
+==1234== Invalid read of size 4
+==1234==    at 0x4005A1: main (test.c:10)
+==1234==  Address 0x5204040 is 0 bytes after a block of size 40 alloc'd
+==1234==    at 0x4C2AB80: malloc (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==1234==    by 0x40058E: main (test.c:8)
+==1234== 
+==1234== HEAP SUMMARY:
+==1234==     in use at exit: 40 bytes in 1 blocks
+==1234==   total heap usage: 1 allocs, 0 frees, 40 bytes allocated
+==1234== 
+==1234== LEAK SUMMARY:
+==1234==    definitely lost: 40 bytes in 1 blocks
+==1234==    indirectly lost: 0 bytes in 0 blocks
+==1234==      possibly lost: 0 bytes in 0 blocks
+==1234==    still reachable: 0 bytes in 0 blocks
+==1234==         suppressed: 0 bytes in 0 blocks
+==1234== Rerun with --leak-check=full to see details of leaked memory
+==1234== 
+==1234== For lists of detected and suppressed errors, rerun with: -s
+==1234== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)
 Successfully downloaded debug information
-==12345== 
-==12345== Process terminating with default action of signal 11 (SIGSEGV)
-==12345==  Bad permissions for mapped region at address 0x400000
-==12345==    at 0x4004F6: main (test.c:10)
-==12345==    by 0x4E4C3D4: (below main) 
+==1234== 
+==1234== HEAP SUMMARY:
+==1234==     in use at exit: 40 bytes in 1 blocks
+==1234==   total heap usage: 1 allocs, 0 frees, 40 bytes allocated
+==1234== 
+==1234== LEAK SUMMARY:
+==1234==    definitely lost: 40 bytes in 1 blocks
+==1234==    indirectly lost: 0 bytes in 0 blocks
+==1234==      possibly lost: 0 bytes in 0 blocks
+==1234==    still reachable: 0 bytes in 0 blocks
+==1234==         suppressed: 0 bytes in 0 blocks
+==1234== Rerun with --leak-check=full to see details of leaked memory
+==1234== 
+==1234== For lists of detected and suppressed errors, rerun with: -s
+==1234== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0) 

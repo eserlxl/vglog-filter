@@ -11,6 +11,10 @@
 void usage(std::string_view prog) {
     const int default_depth = DEFAULT_DEPTH;
     const std::string default_marker = DEFAULT_MARKER;
+    
+    // Ensure the stream is properly initialized before use
+    std::cout.flush();
+    
     std::cout
         << "Usage: " << prog << " [options] [valgrind_log]\n\n"
         << "Input\n"

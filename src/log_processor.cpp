@@ -12,6 +12,7 @@
 #include <iterator>
 #include <stdexcept>
 #include <limits>
+#include <locale>
 
 using namespace canonicalization;
 
@@ -71,6 +72,10 @@ LogProcessor::LogProcessor(const Options& options) :
 
 void LogProcessor::initialize_regex_patterns() {
     try {
+        // Ensure locale is properly initialized before regex compilation
+        std::locale::global(std::locale(""));
+        
+        // Initialize regex patterns with explicit locale and proper initialization
         re_vg_line = std::regex(VG_LINE_PATTERN, std::regex::optimize | std::regex::ECMAScript);
         re_prefix = std::regex(PREFIX_PATTERN, std::regex::optimize | std::regex::ECMAScript);
         re_start = std::regex(START_PATTERN, std::regex::optimize | std::regex::ECMAScript);
@@ -80,6 +85,8 @@ void LogProcessor::initialize_regex_patterns() {
         re_q = std::regex(Q_PATTERN, std::regex::optimize | std::regex::ECMAScript);
     } catch (const std::regex_error& e) {
         throw std::runtime_error("Failed to initialize regex patterns: " + std::string(e.what()));
+    } catch (const std::runtime_error& e) {
+        throw std::runtime_error("Failed to set locale for regex patterns: " + std::string(e.what()));
     }
 }
 

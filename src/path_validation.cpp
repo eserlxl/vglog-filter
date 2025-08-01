@@ -91,8 +91,18 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
     // Validate path is not absolute
     validate_not_absolute(path, path_str);
     
-    // Get current working directory
-    const std::filesystem::path base_dir = get_current_working_directory();
+    // Get current working directory with proper initialization
+    std::filesystem::path base_dir;
+    try {
+        base_dir = get_current_working_directory();
+    } catch (const std::runtime_error& e) {
+        throw std::runtime_error("Failed to get current working directory: " + std::string(e.what()));
+    }
+    
+    // Ensure base_dir is properly initialized before use
+    if (base_dir.empty()) {
+        throw std::runtime_error("Current working directory is empty or invalid.");
+    }
     
     // Construct full path
     const std::filesystem::path full_path = base_dir / path;
