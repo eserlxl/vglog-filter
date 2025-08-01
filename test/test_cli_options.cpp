@@ -48,7 +48,7 @@ bool run_test(const std::string& test_name, const std::vector<std::string>& args
         char buffer[128];
         ssize_t count;
         while ((count = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
-            actual_output.append(buffer, count);
+            actual_output.append(buffer, static_cast<size_t>(count));
         }
         close(pipefd[0]);
 
