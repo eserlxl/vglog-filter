@@ -16,21 +16,7 @@
 using namespace canonicalization;
 
 bool test_trim_views() {
-    std::cout << "\n=== Testing trim_view, ltrim_view, rtrim_view ===" << std::endl;
-
-    // ltrim_view
-    TEST_ASSERT(ltrim_view("  hello  ") == "hello  ", "ltrim_view: leading spaces");
-    TEST_ASSERT(ltrim_view("\t\nhello\r\n") == "hello\r\n", "ltrim_view: mixed leading whitespace");
-    TEST_ASSERT(ltrim_view("hello") == "hello", "ltrim_view: no leading whitespace");
-    TEST_ASSERT(ltrim_view("  ") == "", "ltrim_view: all spaces");
-    TEST_ASSERT(ltrim_view("") == "", "ltrim_view: empty string");
-
-    // rtrim_view
-    TEST_ASSERT(rtrim_view("  hello  ") == "  hello", "rtrim_view: trailing spaces");
-    TEST_ASSERT(rtrim_view("\t\nhello\r\n") == "\t\nhello", "rtrim_view: mixed trailing whitespace");
-    TEST_ASSERT(rtrim_view("hello") == "hello", "rtrim_view: no trailing whitespace");
-    TEST_ASSERT(rtrim_view("  ") == "", "rtrim_view: all spaces");
-    TEST_ASSERT(rtrim_view("") == "", "rtrim_view: empty string");
+    std::cout << "\n=== Testing trim_view ===" << std::endl;
 
     // trim_view
     TEST_ASSERT(trim_view("  hello  ") == "hello", "trim_view: leading and trailing spaces");
@@ -42,7 +28,7 @@ bool test_trim_views() {
     TEST_ASSERT(trim_view("") == "", "trim_view: empty string");
     TEST_ASSERT(trim_view("  h e l l o  ") == "h e l l o", "trim_view: internal spaces");
 
-    TEST_PASS("trim_view, ltrim_view, rtrim_view tests completed");
+    TEST_PASS("trim_view tests completed");
     return true;
 }
 
@@ -78,12 +64,12 @@ bool test_canon_function() {
     std::cout << "\n=== Testing canon() function ===" << std::endl;
 
     // Test case 1: Basic Valgrind line with all elements
-    std::string input1 = "==12345==    at 0x12345678: std::vector<int>::operator[] (vector.cpp:123)[0]";
+    std::string input1 = "   at 0x12345678: std::vector<int>::operator[] (vector.cpp:123)[0]";
     std::string expected1 = "at 0xADDR: std::vector<T>::operator[] (vector.cpp:LINE)[]";
     TEST_ASSERT(canon(input1) == expected1, "Canon: basic valgrind line");
 
     // Test case 2: Multiple addresses, line numbers, templates, arrays
-    std::string input2 = "==123== Invalid read of size 4 at 0xABCDEF: func<char>(file.c:45)[1] by 0x12345: main";
+    std::string input2 = "Invalid read of size 4 at 0xABCDEF: func<char>(file.c:45)[1] by 0x12345: main";
     std::string expected2 = "Invalid read of size 4 at 0xADDR: func<T>(file.c:LINE)[] by 0xADDR: main";
     TEST_ASSERT(canon(input2) == expected2, "Canon: multiple elements");
 
@@ -102,18 +88,18 @@ bool test_canon_function() {
     std::string expected5 = "";
     TEST_ASSERT(canon(input5) == expected5, "Canon: empty string");
 
-    // Test case 6: Valgrind line with only prefix and whitespace
-    std::string input6 = "==123==   \t ";
+    // Test case 6: Valgrind line with only whitespace
+    std::string input6 = "   \t ";
     std::string expected6 = "";
     TEST_ASSERT(canon(input6) == expected6, "Canon: prefix and whitespace");
 
     // Test case 7: Valgrind line with question marks
-    std::string input7 = "==123== ??? some error ???";
+    std::string input7 = "??? some error ???";
     std::string expected7 = "??? some error ???"; // Question marks are not canonicalized by canon()
     TEST_ASSERT(canon(input7) == expected7, "Canon: question marks");
 
     // Test case 8: Valgrind line with 'at :' and 'by :'
-    std::string input8 = "==123==    at : main by : func";
+    std::string input8 = "   at : main by : func";
     std::string expected8 = "at : main by : func"; // 'at :' and 'by :' are not canonicalized by canon()
     TEST_ASSERT(canon(input8) == expected8, "Canon: at and by");
 

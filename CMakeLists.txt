@@ -115,10 +115,20 @@ else()
   endif()
 endif()
 
+# ---- Library ---------------------------------------------------------------
+add_library(vglog-filter-lib
+  src/options.cpp
+  src/file_utils.cpp
+  src/log_processor.cpp
+  src/path_validation.cpp
+  src/canonicalization.cpp
+)
+target_link_libraries(vglog-filter-lib PUBLIC project_options project_warnings)
+target_compile_features(vglog-filter-lib PUBLIC cxx_std_20)
+
 # ---- Main executable ---------------------------------------------------------
-add_executable(vglog-filter src/vglog-filter.cpp)
-target_link_libraries(vglog-filter PRIVATE project_options project_warnings)
-target_compile_features(vglog-filter PRIVATE cxx_std_20)
+add_executable(vglog-filter src/main.cpp)
+target_link_libraries(vglog-filter PRIVATE vglog-filter-lib)
 
 # ---- IPO/LTO (only when meaningful) -----------------------------------------
 include(CheckIPOSupported)
@@ -126,6 +136,7 @@ set(_ipo_allowed OFF)
 check_ipo_supported(RESULT _ipo_allowed OUTPUT _ipo_msg)
 if (PERFORMANCE_BUILD AND _ipo_allowed)
   set_property(TARGET vglog-filter PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+  set_property(TARGET vglog-filter-lib PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
   message(STATUS "IPO/LTO enabled for vglog-filter")
 else()
   message(STATUS "IPO/LTO not enabled: ${_ipo_msg}")
@@ -140,8 +151,7 @@ if (BUILD_TESTING)
   function(add_test_exe name srcpath)
     if (EXISTS "${CMAKE_SOURCE_DIR}/${srcpath}")
       add_executable(${name} "${srcpath}")
-      target_link_libraries(${name} PRIVATE project_options project_warnings)
-      target_compile_features(${name} PRIVATE cxx_std_20)
+      target_link_libraries(${name} PRIVATE vglog-filter-lib)
       add_test(NAME ${name} COMMAND ${name})
       message(STATUS "Test target '${name}' added (${srcpath})")
     else()

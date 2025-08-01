@@ -58,11 +58,7 @@ mkdir -p "$PROJECT_ROOT/test_results"
 
 # Build configuration
 echo "[INFO] Configuring CMake with testing enabled..."
-if ! cmake -B "$BUILD_DIR" 
-    -DCMAKE_BUILD_TYPE=Debug 
-    -DBUILD_TESTING=ON 
-    -DENABLE_SANITIZERS=ON 
-    -DWARNING_MODE=ON > "$PROJECT_ROOT/test_results/cmake_config.log" 2>&1; then
+if ! cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DENABLE_SANITIZERS=ON -DWARNING_MODE=ON > "$PROJECT_ROOT/test_results/cmake_config.log" 2>&1; then
     echo "[ERROR] CMake configuration failed. Check $PROJECT_ROOT/test_results/cmake_config.log"
     exit 1
 fi
