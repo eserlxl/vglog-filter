@@ -90,7 +90,15 @@ jobs:
               echo "semantic-version-analyzer not found or not executable at ./dev-bin/semantic-version-analyzer" >&2
               exit 1
             fi
-            BUMP_TYPE="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null | tr -d '\n' || echo 'skip')"
+            # Run analyzer and capture only stdout, redirect stderr to /dev/null
+            BUMP_TYPE_OUTPUT="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || true)"
+            if [[ -n "$BUMP_TYPE_OUTPUT" ]]; then
+              BUMP_TYPE="$(printf '%s' "$BUMP_TYPE_OUTPUT" | tr -d '\n' | tr -d '\r')"
+              echo "DEBUG: Analyzer output: '$BUMP_TYPE_OUTPUT' -> BUMP_TYPE: '$BUMP_TYPE'" >&2
+            else
+              BUMP_TYPE="skip"
+              echo "DEBUG: No analyzer output, using skip" >&2
+            fi
           fi
 
           # Ensure BUMP_TYPE is valid for GitHub Actions output
@@ -98,6 +106,17 @@ jobs:
           if [[ "$BUMP_TYPE" == "none" ]]; then
             BUMP_TYPE="skip"
           fi
+          
+          # Validate BUMP_TYPE is one of the expected values
+          case "$BUMP_TYPE" in
+            major|minor|patch|skip)
+              echo "DEBUG: Valid BUMP_TYPE: '$BUMP_TYPE'" >&2
+              ;;
+            *)
+              echo "ERROR: Invalid BUMP_TYPE: '$BUMP_TYPE'. Falling back to 'skip'" >&2
+              BUMP_TYPE="skip"
+              ;;
+          esac
 
           echo "bump_type=${BUMP_TYPE}" >> "$GITHUB_OUTPUT"
           echo "release_notes=${{ github.event.inputs.release_notes || '' }}" >> "$GITHUB_OUTPUT"
