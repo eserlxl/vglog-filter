@@ -10,8 +10,6 @@
 # VGLOG-FILTER C++ Unit Test Runner
 # This script builds and runs all C++ unit tests using CMake and CTest
 
-set -euo pipefail
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
