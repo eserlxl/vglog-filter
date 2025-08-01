@@ -112,7 +112,7 @@ print_test_result() {
         padding+=" "
     done
     
-    if [ "$status" = "PASSED" ]; then
+    if [ "${status^^}" = "PASSED" ]; then
         echo -e "  ${GREEN}✔${NC} ${CYAN}$test_name${NC}${padding} ${GREEN}PASSED${NC}"
     else
         echo -e "  ${RED}✖${NC} ${CYAN}$test_name${NC}${padding} ${RED}FAILED${NC}"
