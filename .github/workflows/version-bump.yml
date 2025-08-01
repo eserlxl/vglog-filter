@@ -90,7 +90,7 @@ jobs:
               echo "semantic-version-analyzer not found or not executable at ./dev-bin/semantic-version-analyzer" >&2
               exit 1
             fi
-            BUMP_TYPE="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo 'skip')"
+            BUMP_TYPE="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null | tr -d '\n' || echo 'skip')"
           fi
 
           # Ensure BUMP_TYPE is valid for GitHub Actions output
