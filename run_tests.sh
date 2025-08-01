@@ -438,17 +438,17 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "C++ Unit" ]]; then
         # Capture the output and exit code
         # Note: Output is captured but not currently used - kept for potential future logging
         # CPP_OUTPUT=$(./test/run_unit_tests.sh 2>&1)
-        ./test/run_unit_tests.sh >/dev/null 2>&1
+        ./test/run_unit_tests.sh
         CPP_RESULT=$?
         
                     # Parse C++ test results from summary if it exists
-            if [ -f "test_results/cpp_unit_test_summary.txt" ]; then
-                CPP_PASSED=$(grep "Passed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "$CPP_TOTAL")
-                CPP_FAILED=$(grep "Failed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
-            fi
+        if [ -f "test_results/cpp_unit_test_summary.txt" ]; then
+            CPP_PASSED=$(grep "Passed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
+            CPP_FAILED=$(grep "Failed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
+        fi
         
         # Calculate C++ success rate
-        CPP_SUCCESS_RATE=100
+        CPP_SUCCESS_RATE=0
         if [ "$CPP_TOTAL" -gt 0 ]; then
             CPP_SUCCESS_RATE=$((CPP_PASSED * 100 / CPP_TOTAL))
         fi
@@ -462,26 +462,34 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "C++ Unit" ]]; then
             FAILED_SUITES+=("C++ Unit")
         fi
         
-        echo -e "${BOLD}${BLUE}[Build & Config]${NC}"
-        print_build_status "PASSED" "CMake configuration completed"
-        print_build_status "PASSED" "Build completed"
-        echo ""
-        echo -e "${BOLD}${BLUE}[CTest Summary]${NC}"
-        print_build_status "PASSED" "All CTest unit tests passed"
-        echo ""
+        # Display categorized test results from actual test execution
+        if [ -f "$PROJECT_ROOT/test_results/ctest_detailed.log" ]; then
+            declare -A cpp_test_results
+            
+            while IFS= read -r line; do
+                if [[ $line =~ ^[[:space:]]*([0-9]+)/([0-9]+)[[:space:]]+Test[[:space:]]+#([0-9]+):[[:space:]]+([a-zA-Z0-9_]+)[[:space:]]+\.+[[:space:]]+(Passed|Failed) ]]; then
+                    test_name="${BASH_REMATCH[4]}"
+                    test_status="${BASH_REMATCH[5]}"
+                    cpp_test_results["$test_name"]="$test_status"
+                fi
+            done < "$PROJECT_ROOT/test_results/ctest_detailed.log"
+            
+            echo -e "${BOLD}${YELLOW}Individual Test Executables:${NC}"
+            # Get the list of C++ test executables from CMakeLists.txt
+            CPP_TEST_NAMES=($(grep "^[[:space:]]*add_test_exe(" "$PROJECT_ROOT/CMakeLists.txt" | sed -E 's/^[[:space:]]*add_test_exe\(([^[:space:]]+).*$/\1/'))
+            
+            for test_name in "${CPP_TEST_NAMES[@]}"; do
+                if [[ -n "${cpp_test_results[$test_name]}" ]]; then
+                    print_test_result "$test_name" "${cpp_test_results[$test_name]}"
+                else
+                    # If a test is not found in the ctest log, assume it was skipped or failed to run
+                    print_test_result "$test_name" "SKIPPED"
+                fi
+            done
+            echo ""
+        fi
         
         print_summary "$CPP_TOTAL" "$CPP_PASSED" "$CPP_FAILED" "0" "$CPP_SUCCESS_RATE" "$CPP_STATUS" "C++ Unit Test"
-        
-        echo ""
-        echo -e "${BOLD}${YELLOW}Individual Test Executables:${NC}"
-        print_test_result "test_basic" "PASSED"
-        print_test_result "test_cli_options" "PASSED"
-        print_test_result "test_comprehensive" "PASSED"
-        print_test_result "test_edge_cases" "PASSED"
-        print_test_result "test_integration" "PASSED"
-        print_test_result "test_memory_leaks" "PASSED"
-        print_test_result "test_path_validation" "PASSED"
-        print_test_result "test_regex_patterns" "PASSED"
         
     else
         print_error "test/run_unit_tests.sh not found"

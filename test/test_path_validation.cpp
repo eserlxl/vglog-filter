@@ -294,6 +294,14 @@ bool test_edge_cases() {
     
     // Test empty string
     TEST_ASSERT(!path_validation::contains_path_traversal(""), "Empty string should be safe");
+    try {
+        std::string result = path_validation::validate_file_path("");
+        TEST_ASSERT(result == ".", "Empty path should return '.'");
+        TEST_PASS("Empty path validation");
+    } catch (const std::exception& e) {
+        std::cerr << "FAIL: Empty path should not throw exception: " << e.what() << std::endl;
+        return false;
+    }
     
     // Test single character
     TEST_ASSERT(!path_validation::contains_path_traversal("a"), "Single character should be safe");

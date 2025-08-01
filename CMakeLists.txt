@@ -151,6 +151,7 @@ if (BUILD_TESTING)
 
 
 
+  add_test_exe(test_canonicalization  "test/test_canonicalization.cpp")
   add_test_exe(test_basic           "test/test_basic.cpp")
   add_test_exe(test_integration     "test/test_integration.cpp")
   add_test_exe(test_comprehensive   "test/test_comprehensive.cpp")

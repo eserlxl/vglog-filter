@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <regex>
+#include <canonicalization.h>
 #include <fstream>
 
 #define TEST_ASSERT(condition, message) \
@@ -29,18 +30,10 @@ inline std::string trim(std::string_view s) {
     return std::string(s.substr(start, end - start + 1));
 }
 
-inline std::string regex_replace_all(std::string_view src, const std::regex& re, std::string_view repl) {
-    return std::regex_replace(std::string(src), re, std::string(repl));
-}
+
 
 inline std::string canon(std::string_view s) {
-    std::string result(s);
-    // Canonicalize addresses, line numbers, etc. (example logic)
-    result = regex_replace_all(result, std::regex("0x[0-9A-Fa-f]+"), "0xADDR");
-    result = regex_replace_all(result, std::regex(":\\d+"), ":LINE");
-    result = regex_replace_all(result, std::regex("\\[\\d+\\]"), "[]");
-    result = regex_replace_all(result, std::regex("<[^>]*>"), "<T>");
-    return result;
+    return canonicalization::canon(s);
 }
 
 class TempFile {

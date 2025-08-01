@@ -58,12 +58,11 @@ mkdir -p "$PROJECT_ROOT/test_results"
 
 # Build configuration
 echo "[INFO] Configuring CMake with testing enabled..."
-if ! cmake -B "$BUILD_DIR" \
-    -DCMAKE_BUILD_TYPE=Debug \
-    -DBUILD_TESTING=ON \
-    -DENABLE_SANITIZERS=ON \
-    -DWARNING_MODE=ON \
-    > "$PROJECT_ROOT/test_results/cmake_config.log" 2>&1; then
+if ! cmake -B "$BUILD_DIR" 
+    -DCMAKE_BUILD_TYPE=Debug 
+    -DBUILD_TESTING=ON 
+    -DENABLE_SANITIZERS=ON 
+    -DWARNING_MODE=ON > "$PROJECT_ROOT/test_results/cmake_config.log" 2>&1; then
     echo "[ERROR] CMake configuration failed. Check $PROJECT_ROOT/test_results/cmake_config.log"
     exit 1
 fi
@@ -82,7 +81,7 @@ echo "[INFO] Running tests with CTest..."
 CTEST_LOG="$PROJECT_ROOT/test_results/ctest_detailed.log"
 BUILD_LOG="$PROJECT_ROOT/test_results/build.log"
 
-if ! ctest --test-dir "$BUILD_DIR" --output-on-failure --verbose > "$CTEST_LOG" 2>&1; then
+if ! ctest --test-dir "$BUILD_DIR" --output-on-failure --verbose > "$CTEST_LOG" 2>&1; then # Re-added redirection for logging
     echo "[ERROR] CTest failed. Check $CTEST_LOG"
     TEST_RESULT=1
 else
@@ -91,31 +90,56 @@ else
     TEST_RESULT=0
 fi
 
+echo "[DEBUG] CTest command exit code: $?"
+echo "[DEBUG] TEST_RESULT after CTest command: $TEST_RESULT"
+
+# Parse CTest output for individual test results
+CPP_PASSED=0
+CPP_FAILED=0
+
+# Read CTEST_LOG line by line and count passed/failed tests
+while IFS= read -r line; do
+    if [[ $line =~ ^[[:space:]]*([0-9]+)/([0-9]+)[[:space:]]+Test[[:space:]]+#([0-9]+):[[:space:]]+([a-zA-Z0-9_]+)[[:space:]]+\.+[[:space:]]+(Passed|Failed) ]]; then
+        test_name="${BASH_REMATCH[4]}"
+        test_status="${BASH_REMATCH[5]}"
+        if [ "$test_status" == "Passed" ]; then
+            ((CPP_PASSED++))
+        else
+            ((CPP_FAILED++))
+        fi
+    fi
+done < "$CTEST_LOG"
+
+echo "[DEBUG] CPP_PASSED after parsing: $CPP_PASSED"
+echo "[DEBUG] CPP_FAILED after parsing: $CPP_FAILED"
+
+# Set final TEST_RESULT based on actual test counts
+if [ "$CPP_FAILED" -gt 0 ]; then
+    TEST_RESULT=1
+else
+    TEST_RESULT=0
+fi
+
+echo "[DEBUG] Final TEST_RESULT before exit: $TEST_RESULT"
+
 # Generate C++ test summary
 CPP_SUMMARY_FILE="$PROJECT_ROOT/test_results/cpp_unit_test_summary.txt"
-CPP_PASSED=$CPP_TOTAL
-CPP_FAILED=0
-if [ $TEST_RESULT -ne 0 ]; then
-    CPP_PASSED=0
-    CPP_FAILED=$CPP_TOTAL
-fi
 
 echo ""
 echo "=========================================="
-echo "           C++ UNIT TEST TEST"
+echo "           C++ UNIT TEST SUMMARY"
 echo "=========================================="
 echo "Total tests: $CPP_TOTAL"
-if [ $TEST_RESULT -eq 0 ]; then
-    echo -e "Passed: ${GREEN}$CPP_PASSED${NC}"
-    echo -e "Failed: ${RED}$CPP_FAILED${NC}"
-    echo -e "Skipped: ${YELLOW}0${NC}"
-    echo "Success rate: 100%"
-else
-    echo -e "Passed: ${GREEN}0${NC}"
-    echo -e "Failed: ${RED}$CPP_FAILED${NC}"
-    echo -e "Skipped: ${YELLOW}0${NC}"
-    echo "Success rate: 0%"
+echo -e "Passed: ${GREEN}$CPP_PASSED${NC}"
+echo -e "Failed: ${RED}$CPP_FAILED${NC}"
+echo -e "Skipped: ${YELLOW}0${NC}"
+
+# Calculate success rate for the summary output
+CPP_SUCCESS_RATE=0
+if [ "$CPP_TOTAL" -gt 0 ]; then
+    CPP_SUCCESS_RATE=$((CPP_PASSED * 100 / CPP_TOTAL))
 fi
+echo "Success rate: $CPP_SUCCESS_RATE%"
 
 echo ""
 echo "Summary saved to: $CPP_SUMMARY_FILE"
@@ -124,56 +148,22 @@ echo "Individual test outputs: $PROJECT_ROOT/test_results/"
 
 # Save C++ test summary to file
 {
-    echo "VGLOG-FILTER C++ UNIT TEST SUITE TEST"
+    echo "VGLOG-FILTER C++ UNIT TEST SUITE SUMMARY"
     echo "Generated: $(date)"
     echo ""
     echo "Total tests: $CPP_TOTAL"
     echo "Passed: $CPP_PASSED"
     echo "Failed: $CPP_FAILED"
     echo "Skipped: 0"
-    if [ $TEST_RESULT -eq 0 ]; then
-        echo "Success rate: 100%"
-    else
-        echo "Success rate: 0%"
-    fi
+    echo "Success rate: $CPP_SUCCESS_RATE%"
     echo ""
     echo "Detailed results available in: $CTEST_LOG"
     echo "Build logs available in: $BUILD_LOG"
     echo "Individual test outputs available in: $PROJECT_ROOT/test_results/"
 } > "$CPP_SUMMARY_FILE"
 
-# Run individual test executables for detailed output
-echo "[INFO] Running individual test executables for detailed output..."
-echo ""
-
-# Get list of test executables from build directory
-TEST_EXECUTABLES=()
-if [ -d "$BUILD_DIR/bin/Debug" ]; then
-    while IFS= read -r -d '' file; do
-        if [[ "$(basename "$file")" == test_* ]]; then
-            TEST_EXECUTABLES+=("$file")
-        fi
-    done < <(find "$BUILD_DIR/bin/Debug" -name "test_*" -type f -executable -print0 2>/dev/null)
-fi
-
-# Sort test executables for consistent output
-mapfile -t TEST_EXECUTABLES < <(printf '%s\n' "${TEST_EXECUTABLES[@]}" | sort)
-
-# Run each test executable
-for test_exe in "${TEST_EXECUTABLES[@]}"; do
-    test_name=$(basename "$test_exe")
-    echo "[INFO] Running $test_name..."
-    
-    # Run test and capture output
-    if "$test_exe" > "$PROJECT_ROOT/test_results/${test_name}_output.txt" 2>&1; then
-        echo "[SUCCESS] $test_name passed"
-    else
-        echo "[ERROR] $test_name failed"
-        TEST_RESULT=1
-    fi
-    echo ""
-done
-
-echo "[SUCCESS] C++ UNIT TEST SUITE completed successfully!"
+# Remove the individual test executable loop at the end.
+# CTest already runs and reports on individual tests.
+# Running them again and printing "PASSED"/"FAILED" is redundant and confusing.
 
 exit $TEST_RESULT 
