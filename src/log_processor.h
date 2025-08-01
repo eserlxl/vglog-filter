@@ -48,11 +48,11 @@ private:
     bool marker_found = false;
 
     // Regex members
-    const std::regex re_vg_line;
-    const std::regex re_prefix;
-    const std::regex re_start;
-    const std::regex re_bytes_head;
-    const std::regex re_at;
-    const std::regex re_by;
-    const std::regex re_q;
+    std::regex re_vg_line;
+    std::regex re_prefix;
+    std::regex re_start;
+    std::regex re_bytes_head;
+    std::regex re_at;
+    std::regex re_by;
+    std::regex re_q;
 };

@@ -22,8 +22,8 @@ int main(int argc, char* argv[])
     using Str = std::string;
     using VecS = std::vector<Str>;
 
-    // speed up i/o
-    std::ios::sync_with_stdio(false);
+    // speed up i/o - but keep sync for MSAN compatibility
+    std::ios::sync_with_stdio(true);
     std::cin.tie(nullptr);
 
     Options opt;

@@ -9,7 +9,7 @@
 #include <iostream>
 
 void usage(std::string_view prog) {
-    std::cerr
+    std::cout
         << "Usage: " << prog << " [options] [valgrind_log]\n\n"
         << "Input\n"
         << "  valgrind_log            Path to Valgrind log file (default: stdin if omitted)\n"

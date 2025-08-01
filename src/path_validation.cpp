@@ -25,7 +25,12 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
         throw std::runtime_error("Absolute paths are not allowed for security reasons: " + std::string(input_path));
     }
 
-    const std::filesystem::path base_dir = std::filesystem::current_path();
+    std::filesystem::path base_dir;
+    try {
+        base_dir = std::filesystem::current_path();
+    } catch (const std::filesystem::filesystem_error& e) {
+        throw std::runtime_error("Failed to get current working directory: " + std::string(e.what()));
+    }
     std::filesystem::path full_path = base_dir / path;
 
     // weakly_canonical resolves symlinks and normalizes the path (e.g., ., ..)

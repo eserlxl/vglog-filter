@@ -14,20 +14,22 @@
 using namespace canonicalization;
 
 LogProcessor::LogProcessor(const Options& options) :
-    opt(options),
-    re_vg_line(R"(^==[0-9]+==)", std::regex::optimize | std::regex::ECMAScript),
-    re_prefix(R"(^==[0-9]+==[ \t\v\f\r\n]*)", std::regex::optimize | std::regex::ECMAScript),
-    re_start(R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))", std::regex::optimize | std::regex::ECMAScript),
-    re_bytes_head(R"([0-9]+ bytes in [0-9]+ blocks)", std::regex::optimize | std::regex::ECMAScript),
-    re_at(R"(at : +)", std::regex::optimize | std::regex::ECMAScript),
-    re_by(R"(by : +)", std::regex::optimize | std::regex::ECMAScript),
-    re_q(R"(\?{3,})", std::regex::optimize | std::regex::ECMAScript)
+    opt(options)
 {
     seen.reserve(256);
     if (opt.stream_mode) {
         pending_blocks.reserve(64);
     }
     sigLines.reserve(64);
+    
+    // Initialize regex patterns
+    re_vg_line = std::regex(R"(^==[0-9]+==)", std::regex::optimize | std::regex::ECMAScript);
+    re_prefix = std::regex(R"(^==[0-9]+==[ \t\v\f\r\n]*)", std::regex::optimize | std::regex::ECMAScript);
+    re_start = std::regex(R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))", std::regex::optimize | std::regex::ECMAScript);
+    re_bytes_head = std::regex(R"([0-9]+ bytes in [0-9]+ blocks)", std::regex::optimize | std::regex::ECMAScript);
+    re_at = std::regex(R"(at : +)", std::regex::optimize | std::regex::ECMAScript);
+    re_by = std::regex(R"(by : +)", std::regex::optimize | std::regex::ECMAScript);
+    re_q = std::regex(R"(\?{3,})", std::regex::optimize | std::regex::ECMAScript);
 }
 
 void LogProcessor::process_stream(std::istream& in) {
