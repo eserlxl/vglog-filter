@@ -99,9 +99,20 @@ echo "=========================================="
 echo "           C++ UNIT TEST SUMMARY"
 echo "=========================================="
 echo "Total tests: $CPP_TOTAL"
-echo -e "Passed: ${GREEN}$CPP_PASSED${NC}"
-echo -e "Failed: ${RED}$CPP_FAILED${NC}"
-echo -e "Skipped: ${YELLOW}0${NC}"
+
+# Conditionally show test results based on outcomes
+if [ "$CPP_PASSED" -eq "$CPP_TOTAL" ] && [ "$CPP_TOTAL" -gt 0 ]; then
+    # All tests passed - only show passed count
+    echo -e "Passed: ${GREEN}$CPP_PASSED${NC}"
+elif [ "$CPP_FAILED" -eq "$CPP_TOTAL" ] && [ "$CPP_TOTAL" -gt 0 ]; then
+    # All tests failed - only show failed count
+    echo -e "Failed: ${RED}$CPP_FAILED${NC}"
+else
+    # Mixed results - show all counts
+    echo -e "Passed: ${GREEN}$CPP_PASSED${NC}"
+    echo -e "Failed: ${RED}$CPP_FAILED${NC}"
+    echo -e "Skipped: ${YELLOW}0${NC}"
+fi
 
 # Calculate success rate for the summary output
 CPP_SUCCESS_RATE=0
@@ -121,9 +132,21 @@ echo "Individual test outputs: $PROJECT_ROOT/test_results/"
     echo "Generated: $(date)"
     echo ""
     echo "Total tests: $CPP_TOTAL"
-    echo "Passed: $CPP_PASSED"
-    echo "Failed: $CPP_FAILED"
-    echo "Skipped: 0"
+    
+    # Conditionally show test results based on outcomes (same logic as console output)
+    if [ "$CPP_PASSED" -eq "$CPP_TOTAL" ] && [ "$CPP_TOTAL" -gt 0 ]; then
+        # All tests passed - only show passed count
+        echo "Passed: $CPP_PASSED"
+    elif [ "$CPP_FAILED" -eq "$CPP_TOTAL" ] && [ "$CPP_TOTAL" -gt 0 ]; then
+        # All tests failed - only show failed count
+        echo "Failed: $CPP_FAILED"
+    else
+        # Mixed results - show all counts
+        echo "Passed: $CPP_PASSED"
+        echo "Failed: $CPP_FAILED"
+        echo "Skipped: 0"
+    fi
+    
     echo "Success rate: $CPP_SUCCESS_RATE%"
     echo ""
     echo "Detailed results available in: $CTEST_LOG"
