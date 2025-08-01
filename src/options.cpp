@@ -9,10 +9,8 @@
 #include <iostream>
 
 void usage(std::string_view prog) {
-    // Pre-format the constants to avoid uninitialized value issues with streams
     const int default_depth = DEFAULT_DEPTH;
     const std::string default_marker = DEFAULT_MARKER;
-    
     std::cout
         << "Usage: " << prog << " [options] [valgrind_log]\n\n"
         << "Input\n"
