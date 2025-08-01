@@ -22,14 +22,18 @@ LogProcessor::LogProcessor(const Options& options) :
     }
     sigLines.reserve(64);
     
-    // Initialize regex patterns
-    re_vg_line = std::regex(R"(^==[0-9]+==)", std::regex::optimize | std::regex::ECMAScript);
-    re_prefix = std::regex(R"(^==[0-9]+==[ \t\v\f\r\n]*)", std::regex::optimize | std::regex::ECMAScript);
-    re_start = std::regex(R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))", std::regex::optimize | std::regex::ECMAScript);
-    re_bytes_head = std::regex(R"([0-9]+ bytes in [0-9]+ blocks)", std::regex::optimize | std::regex::ECMAScript);
-    re_at = std::regex(R"(at : +)", std::regex::optimize | std::regex::ECMAScript);
-    re_by = std::regex(R"(by : +)", std::regex::optimize | std::regex::ECMAScript);
-    re_q = std::regex(R"(\?{3,})", std::regex::optimize | std::regex::ECMAScript);
+    // Initialize regex patterns with explicit locale to avoid uninitialized value issues
+    try {
+        re_vg_line = std::regex(R"(^==[0-9]+==)", std::regex::optimize | std::regex::ECMAScript);
+        re_prefix = std::regex(R"(^==[0-9]+==[ \t\v\f\r\n]*)", std::regex::optimize | std::regex::ECMAScript);
+        re_start = std::regex(R"((Invalid (read|write)|Syscall param|Use of uninitialised|Conditional jump|bytes in [0-9]+ blocks|still reachable|possibly lost|definitely lost|Process terminating))", std::regex::optimize | std::regex::ECMAScript);
+        re_bytes_head = std::regex(R"([0-9]+ bytes in [0-9]+ blocks)", std::regex::optimize | std::regex::ECMAScript);
+        re_at = std::regex(R"(at : +)", std::regex::optimize | std::regex::ECMAScript);
+        re_by = std::regex(R"(by : +)", std::regex::optimize | std::regex::ECMAScript);
+        re_q = std::regex(R"(\?{3,})", std::regex::optimize | std::regex::ECMAScript);
+    } catch (const std::regex_error& e) {
+        throw std::runtime_error("Failed to initialize regex patterns: " + std::string(e.what()));
+    }
 }
 
 void LogProcessor::process_stream(std::istream& in) {

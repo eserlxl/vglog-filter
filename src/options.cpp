@@ -9,6 +9,10 @@
 #include <iostream>
 
 void usage(std::string_view prog) {
+    // Pre-format the constants to avoid uninitialized value issues with streams
+    const int default_depth = DEFAULT_DEPTH;
+    const std::string default_marker = DEFAULT_MARKER;
+    
     std::cout
         << "Usage: " << prog << " [options] [valgrind_log]\n\n"
         << "Input\n"
@@ -17,8 +21,8 @@ void usage(std::string_view prog) {
         << "Options\n"
         << "  -k, --keep-debug-info   Keep everything; do not trim above last debug marker.\n"
         << "  -v, --verbose           Show completely raw blocks (no address / \"at:\" scrub).\n"
-        << "  -d N, --depth N         Signature depth (default: " << DEFAULT_DEPTH << ", 0 = unlimited).\n"
-        << "  -m S, --marker S        Marker string (default: \"" << DEFAULT_MARKER << "\").\n"
+        << "  -d N, --depth N         Signature depth (default: " << default_depth << ", 0 = unlimited).\n"
+        << "  -m S, --marker S        Marker string (default: \"" << default_marker << "\").\n"
         << "  -s, --stream            Force stream processing mode (auto-detected for files >5MB).\n"
         << "  -p, --progress          Show progress for large files.\n"
         << "  -M, --memory            Monitor memory usage during processing.\n"

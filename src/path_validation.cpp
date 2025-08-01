@@ -16,13 +16,15 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
     }
 
     if (input_path == "-") {
-        return "-"; // Special case for stdin
+        return std::filesystem::path("-"); // Special case for stdin
     }
 
-    const std::filesystem::path path(input_path);
+    // Create path object with explicit string conversion to avoid uninitialized value issues
+    const std::string path_str(input_path);
+    const std::filesystem::path path(path_str);
 
     if (path.is_absolute()) {
-        throw std::runtime_error("Absolute paths are not allowed for security reasons: " + std::string(input_path));
+        throw std::runtime_error("Absolute paths are not allowed for security reasons: " + path_str);
     }
 
     std::filesystem::path base_dir;
@@ -31,11 +33,18 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
     } catch (const std::filesystem::filesystem_error& e) {
         throw std::runtime_error("Failed to get current working directory: " + std::string(e.what()));
     }
+    
+    // Create full path with explicit construction to avoid uninitialized value issues
     std::filesystem::path full_path = base_dir / path;
 
     // weakly_canonical resolves symlinks and normalizes the path (e.g., ., ..)
     // without requiring the path to exist.
-    std::filesystem::path canonical_path = std::filesystem::weakly_canonical(full_path);
+    std::filesystem::path canonical_path;
+    try {
+        canonical_path = std::filesystem::weakly_canonical(full_path);
+    } catch (const std::filesystem::filesystem_error& e) {
+        throw std::runtime_error("Failed to canonicalize path: " + std::string(e.what()));
+    }
 
     // To prevent path traversal, we check if the canonical path is within the current working directory.
     // We do this by iterating over the path components and ensuring that the canonical path
@@ -49,7 +58,7 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
     }
 
     if (base_it != base_dir.end()) {
-        throw std::runtime_error("Path traversal attempt detected: " + std::string(input_path));
+        throw std::runtime_error("Path traversal attempt detected: " + path_str);
     }
 
     return canonical_path;
