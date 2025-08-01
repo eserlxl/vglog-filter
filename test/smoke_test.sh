@@ -59,7 +59,7 @@ EOF
 [ -s filtered_output.txt ] || { echo "No output generated"; exit 1; }
 
 # Also test stdin pipeline path
-cat test_input.txt | "$BINARY_PATH" > /dev/null
+"$BINARY_PATH" < test_input.txt > /dev/null
 
 # Try a few flags (do not assert content here, just execution)
 "$BINARY_PATH" -d 2 test_input.txt > filtered_depth2.txt

@@ -37,7 +37,7 @@ TEST_DIR="$PROJECT_ROOT/test"
 BUILD_DIR="$PROJECT_ROOT/build-test"
 
 # Ensure we're in the project root
-cd "$PROJECT_ROOT"
+cd "$PROJECT_ROOT" || exit
 
 # Count C++ tests automatically
 CPP_TOTAL=$(count_cpp_tests)
