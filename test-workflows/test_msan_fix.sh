@@ -27,6 +27,9 @@ if [[ ! -f "$PROGRAM" ]]; then
     exit 1
 fi
 
+# Change to test-workflows directory to use relative paths
+cd "$SCRIPT_DIR"
+
 # Check if test file exists
 if [[ ! -f "$TEST_FILE" ]]; then
     echo -e "${RED}Error: Test file not found at $TEST_FILE${NC}"
