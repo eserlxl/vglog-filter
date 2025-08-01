@@ -11,6 +11,9 @@
 
 namespace canonicalization {
 
+using Str = std::string;
+using StrView = std::string_view;
+
 namespace { // Anonymous namespace for internal linkage
 
     StrView ltrim_view(StrView s) {
@@ -38,9 +41,9 @@ Str rtrim(Str s) {
     return s;
 }
 
-Str regex_replace_all(const Str& src, const std::regex& re, const Str& repl)
+Str regex_replace_all(StrView src, const std::regex& re, StrView repl)
 {
-    return std::regex_replace(src, re, repl);
+    return std::regex_replace(src.data(), re, repl.data());
 }
 
 const std::regex& get_re_addr() {

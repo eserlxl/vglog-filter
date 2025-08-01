@@ -12,15 +12,16 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <string>
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 
-using Str = std::string;
-using VecS = std::vector<Str>;
-
 int main(int argc, char* argv[])
 {
+    using Str = std::string;
+    using VecS = std::vector<Str>;
+
     // speed up i/o
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr);
@@ -47,15 +48,12 @@ int main(int argc, char* argv[])
             case 'v': opt.scrub_raw = false; break;
             case 'd':
                 try {
-                    opt.depth = std::stoi(optarg);
-                    if (opt.depth < 0) {
-                        std::cerr << "Error: Depth must be non-negative (got: " << optarg << ")\n";
+                    long depth_long = std::stol(optarg);
+                    if (depth_long < 0 || depth_long > MAX_DEPTH) {
+                        std::cerr << "Error: Depth must be between 0 and " << MAX_DEPTH << " (got: " << optarg << ")\n";
                         return 1;
                     }
-                    if (opt.depth > MAX_DEPTH) {
-                        std::cerr << "Error: Depth value too large (got: " << optarg << ", max: " << MAX_DEPTH << ")\n";
-                        return 1;
-                    }
+                    opt.depth = static_cast<int>(depth_long);
                 } catch (...) {
                     std::cerr << "Error: Invalid depth value '" << optarg << "' (expected non-negative integer)\n";
                     return 1;
@@ -113,7 +111,8 @@ int main(int argc, char* argv[])
             } else {
                 process_file_stream(opt.filename, opt);
             }
-        } else {
+        }
+        else {
             VecS lines = read_file_lines(opt.filename);
             if (lines.empty() && !opt.filename.empty() && opt.filename != "-") {
                 std::cerr << "Warning: Input file '" << opt.filename << "' is empty\n";

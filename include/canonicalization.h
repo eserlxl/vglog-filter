@@ -5,8 +5,7 @@
 // the GNU General Public License v3.0 or later.
 // See the LICENSE file in the project root for details.
 
-#ifndef CANONICALIZATION_H
-#define CANONICALIZATION_H
+#pragma once
 
 #include <string>
 #include <string_view>
@@ -14,22 +13,17 @@
 
 namespace canonicalization {
 
-using Str = std::string;
-using StrView = std::string_view;
-
-StrView trim_view(StrView s);
-Str rtrim(Str s);
-Str regex_replace_all(const Str& src, const std::regex& re, const Str& repl);
-Str canon(Str s);
-Str canon(StrView s);
+[[nodiscard]] std::string_view trim_view(std::string_view s);
+[[nodiscard]] std::string rtrim(std::string s);
+[[nodiscard]] std::string regex_replace_all(std::string_view src, const std::regex& re, std::string_view repl);
+[[nodiscard]] std::string canon(std::string s);
+[[nodiscard]] std::string canon(std::string_view s);
 
 // Regex getters
-const std::regex& get_re_addr();
-const std::regex& get_re_line();
-const std::regex& get_re_array();
-const std::regex& get_re_template();
-const std::regex& get_re_ws();
+[[nodiscard]] const std::regex& get_re_addr();
+[[nodiscard]] const std::regex& get_re_line();
+[[nodiscard]] const std::regex& get_re_array();
+[[nodiscard]] const std::regex& get_re_template();
+[[nodiscard]] const std::regex& get_re_ws();
 
 } // namespace canonicalization
-
-#endif // CANONICALIZATION_H

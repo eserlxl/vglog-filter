@@ -79,80 +79,31 @@ jobs:
         run: |
           set -euo pipefail
 
-          require_analyzer() {
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            BUMP_TYPE="${{ github.event.inputs.bump_type }}"
+          else
+            BUMP_TYPE="auto"
+          fi
+
+          if [[ "$BUMP_TYPE" == "auto" ]]; then
             if [[ ! -x ./dev-bin/semantic-version-analyzer ]]; then
               echo "semantic-version-analyzer not found or not executable at ./dev-bin/semantic-version-analyzer" >&2
               exit 1
             fi
-          }
-
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            BUMP_TYPE="${{ github.event.inputs.bump_type }}"
-            RELEASE_NOTES="${{ github.event.inputs.release_notes }}"
-            PRERELEASE="${{ github.event.inputs.prerelease }}"
-            if [[ "$BUMP_TYPE" == "auto" ]]; then
-              require_analyzer
-              BUMP_TYPE="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo none)"
-            fi
-          else
-            require_analyzer
-
-            # Establish a robust diff base and compute diff size
-            if LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null)"; then
-              BASE="$LAST_TAG"
-              DIFF_SIZE="$(git diff --numstat "$LAST_TAG..HEAD" | awk '{ins+=$1; del+=$2} END{print (ins+0)+(del+0)}')"
-            else
-              EMPTY_TREE="$(git hash-object -t tree /dev/null)"
-              BASE="repo-root"
-              # Use two-arg form to avoid ambiguity with '..' and a tree-ish
-              DIFF_SIZE="$(git diff --numstat "$EMPTY_TREE" HEAD | awk '{ins+=$1; del+=$2} END{print (ins+0)+(del+0)}')"
-            fi
-
-            ANALYSIS="$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || true)"
-
-            # Parse simple counters from analyzer output (falls back to 0 if not present)
-            NEW_SOURCE_FILES="$(awk -F': ' '/New source files:/ {print $2+0}' <<<"$ANALYSIS")"
-            NEW_TEST_FILES="$(awk  -F': ' '/New test files:/  {print $2+0}' <<<"$ANALYSIS")"
-            NEW_DOC_FILES="$(awk   -F': ' '/New doc files:/   {print $2+0}' <<<"$ANALYSIS")"
-            DELETED_FILES="$(awk   -F': ' '/Deleted files:/   {print $2+0}' <<<"$ANALYSIS")"
-            MODIFIED_FILES="$(awk  -F': ' '/Modified files:/  {print $2+0}' <<<"$ANALYSIS")"
-
-            echo "Analysis:"
-            echo "  base: ${BASE}"
-            echo "  diff size: ${DIFF_SIZE} (ins+del)"
-            echo "  new src: ${NEW_SOURCE_FILES}, new tests: ${NEW_TEST_FILES}, new docs: ${NEW_DOC_FILES}, deleted: ${DELETED_FILES}, modified: ${MODIFIED_FILES}"
-
-            if [[ "${DELETED_FILES}" -gt 0 ]]; then
-              BUMP_TYPE="major"
-            elif [[ "${NEW_SOURCE_FILES}" -gt 0 || "${NEW_TEST_FILES}" -gt 0 ]]; then
-              if [[ "${DIFF_SIZE}" -ge 400 ]]; then
-                BUMP_TYPE="minor"
-              else
-                BUMP_TYPE="patch"
-              fi
-            elif [[ "${MODIFIED_FILES}" -gt 0 || "${DIFF_SIZE}" -gt 0 ]]; then
-              BUMP_TYPE="patch"
-            else
-              echo "bump_type=none" >> "$GITHUB_OUTPUT"
-              echo "release_notes=" >> "$GITHUB_OUTPUT"
-              echo "prerelease=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            RELEASE_NOTES=""
-            PRERELEASE="false"
+            BUMP_TYPE="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo none)"
           fi
 
           echo "bump_type=${BUMP_TYPE}" >> "$GITHUB_OUTPUT"
-          echo "release_notes=${RELEASE_NOTES}" >> "$GITHUB_OUTPUT"
-          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "release_notes=${{ github.event.inputs.release_notes || '' }}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${{ github.event.inputs.prerelease || false }}" >> "$GITHUB_OUTPUT"
 
       - name: Summarize analysis
         if: steps.version-analysis.outputs.bump_type != 'none'
         run: |
           {
             echo "### Version analysis"
-            echo "- Bump type: \`${{ steps.version-analysis.outputs.bump_type }}\`"
-            echo "- Target branch: \`${{ env.TARGET_BRANCH }}\`"
+            echo "- Bump type: `${{ steps.version-analysis.outputs.bump_type }}`"
+            echo "- Target branch: `${{ env.TARGET_BRANCH }}`"
             echo "- New version (after bump): will be computed in the next step"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -238,3 +189,10 @@ jobs:
           prerelease: ${{ steps.version-analysis.outputs.prerelease == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+      - name: No bump needed
+        if: steps.version-analysis.outputs.bump_type == 'none'
+        run: |
+          echo "No significant changes detected; no version bump needed."
+          echo "### No version bump needed" >> "$GITHUB_STEP_SUMMARY"

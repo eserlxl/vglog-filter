@@ -5,36 +5,31 @@
 // the GNU General Public License v3.0 or later.
 // See the LICENSE file in the project root for details.
 
-#ifndef FILE_UTILS_H
-#define FILE_UTILS_H
+#pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 #include <iosfwd>
 #include "options.h"
 
-using Str = std::string;
-using VecS = std::vector<Str>;
-
 // Helper function to create detailed error messages
-Str create_error_message(const Str& operation, const Str& filename, const Str& details = "");
+[[nodiscard]] std::string create_error_message(std::string_view operation, std::string_view filename, std::string_view details = "");
 
 // Helper function to report progress for large files
-void report_progress(size_t bytes_processed, size_t total_bytes, const Str& filename);
+void report_progress(size_t bytes_processed, size_t total_bytes, std::string_view filename);
 
 // Helper function to get current memory usage in MB
-size_t get_memory_usage_mb();
+[[nodiscard]] size_t get_memory_usage_mb();
 
 // Helper function to report memory usage
-void report_memory_usage(const Str& operation, const Str& filename = "");
+void report_memory_usage(std::string_view operation, std::string_view filename = "");
 
 // Read all lines from a file
-VecS read_file_lines(const Str& fname);
+[[nodiscard]] std::vector<std::string> read_file_lines(std::string_view fname);
 
 // Check if a file is large
-bool is_large_file(const Str& fname);
+[[nodiscard]] bool is_large_file(std::string_view fname);
 
 // Process a file as a stream
-void process_file_stream(const Str& fname, const Options& opt);
-
-#endif // FILE_UTILS_H
+void process_file_stream(std::string_view fname, const Options& opt);

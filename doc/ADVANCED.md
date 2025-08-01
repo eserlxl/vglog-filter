@@ -12,24 +12,9 @@ This guide delves into the advanced features and customization options of `vglog
 
 ## Custom Filtering Rules
 
-`vglog-filter` provides a default set of rules to clean up common Valgrind noise. However, you can define custom filtering rules to address specific patterns in your logs.
+`vglog-filter` provides a default set of rules to clean up common Valgrind noise. Future versions may support external configuration files for custom rules.
 
-Currently, custom filtering rules are implemented by modifying the source code. In future versions, external configuration files for rules might be supported.
-
-To add or modify filtering logic, you will need to edit `src/vglog-filter.cpp` and recompile the project. Look for sections related to log processing and pattern matching.
-
-**Example: Adding a new suppression rule**
-
-If you frequently encounter a specific Valgrind warning that is irrelevant to your project, you can add a rule to suppress it. For instance, to ignore warnings related to a specific third-party library:
-
-```cpp
-// Inside vglog-filter.cpp, within the processing logic
-if (line.find("Warning: Irrelevant third-party library message") != std::string::npos) {
-    continue; // Skip this line
-}
-```
-
-After modifying the source, recompile the project using `./build.sh`.
+For developers looking to implement custom filtering logic now, this can be done by modifying the log processing sections in the source code (e.g., `src/log_processor.cpp`) and recompiling the project.
 
 [↑ Back to top](#advanced-usage-and-customization)
 
@@ -139,7 +124,7 @@ If `vglog-filter` is not producing the expected output or if you encounter issue
 
 For developers interested in extending `vglog-filter`'s capabilities, consider the following areas:
 
--   **Adding New Filtering Logic**: Implement new C++ code within `src/vglog-filter.cpp` to handle novel Valgrind output patterns or introduce more sophisticated filtering algorithms.
+-   **Adding New Filtering Logic**: Implement new C++ code within `src/log_processor.cpp` to handle novel Valgrind output patterns or introduce more sophisticated filtering algorithms.
 
 -   **External Configuration**: Future enhancements could include support for external configuration files (e.g., JSON, YAML) to define filtering rules without recompiling the source code. This would make `vglog-filter` more flexible for end-users.
 

@@ -5,7 +5,7 @@
 // the GNU General Public License v3.0 or later.
 // See the LICENSE file in the project root for details.
 
-#include "log_processor.h"
+#include "log_processor.h" 
 #include "file_utils.h"
 #include <canonicalization.h>
 #include <filesystem>
@@ -81,16 +81,16 @@ void LogProcessor::process_lines(const VecS& lines) {
 }
 
 
-void LogProcessor::process_line(const Str& line) {
-    if (opt.trim && opt.stream_mode && line.find(opt.marker) != Str::npos) {
+void LogProcessor::process_line(std::string_view line) {
+    if (opt.trim && opt.stream_mode && line.find(opt.marker) != std::string_view::npos) {
         marker_found = true;
         reset_epoch();
         return; // skip marker line
     }
 
-    if (!std::regex_search(line, re_vg_line)) return;
+    if (!std::regex_search(line.begin(), line.end(), re_vg_line)) return;
 
-    Str processed_line = std::regex_replace(line, re_prefix, "");
+    Str processed_line = std::regex_replace(std::string(line), re_prefix, "");
 
     if (std::regex_search(processed_line, re_start)) {
         flush();

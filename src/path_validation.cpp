@@ -10,8 +10,8 @@
 
 namespace path_validation {
 
-std::filesystem::path validate_and_canonicalize(const std::string& input_path) {
-    if (input_path.empty() || input_path.find('\0') != std::string::npos) {
+std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
+    if (input_path.empty() || input_path.find('\0') != std::string_view::npos) {
         throw std::runtime_error("Invalid path: empty or contains null bytes.");
     }
 
@@ -21,31 +21,37 @@ std::filesystem::path validate_and_canonicalize(const std::string& input_path) {
 
     const std::filesystem::path path(input_path);
 
-    // Disallow absolute paths
     if (path.is_absolute()) {
-        throw std::runtime_error("Absolute paths are not allowed: " + input_path);
+        throw std::runtime_error("Absolute paths are not allowed for security reasons: " + std::string(input_path));
     }
 
     const std::filesystem::path base_dir = std::filesystem::current_path();
     std::filesystem::path full_path = base_dir / path;
 
-    // The `weakly_canonical` function resolves symlinks and normalizes the path.
-    // It doesn't require the path to exist.
+    // weakly_canonical resolves symlinks and normalizes the path (e.g., ., ..)
+    // without requiring the path to exist.
     std::filesystem::path canonical_path = std::filesystem::weakly_canonical(full_path);
 
-    // Check if the canonical path is still within the base directory.
-    // This is a robust way to prevent path traversal attacks.
-    auto [root_end, mismatch_path] = std::mismatch(base_dir.begin(), base_dir.end(), canonical_path.begin());
+    // To prevent path traversal, we check if the canonical path is within the current working directory.
+    // We do this by iterating over the path components and ensuring that the canonical path
+    // starts with the components of the base directory.
+    auto base_it = base_dir.begin();
+    auto path_it = canonical_path.begin();
 
-    if (root_end != base_dir.end()) {
-        throw std::runtime_error("Path traversal attempt detected: " + input_path);
+    while (base_it != base_dir.end() && path_it != canonical_path.end() && *base_it == *path_it) {
+        ++base_it;
+        ++path_it;
+    }
+
+    if (base_it != base_dir.end()) {
+        throw std::runtime_error("Path traversal attempt detected: " + std::string(input_path));
     }
 
     return canonical_path;
 }
 
 
-std::ifstream safe_ifstream(const std::string& filename) {
+std::ifstream safe_ifstream(std::string_view filename) {
     if (filename == "-") {
         throw std::runtime_error("Cannot open stdin with ifstream.");
     }

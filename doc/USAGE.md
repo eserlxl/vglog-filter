@@ -41,70 +41,37 @@ It covers installation, basic usage, command-line options, and practical example
 
 ## Installation
 
-To use `vglog-filter`, you need to build it from its source code.
-
-### Prerequisites
-
-Before building, ensure you have the following installed on your system:
-
--   **CMake**: Version 3.16 or higher.
--   **C++ Compiler**: A C++20 compliant compiler (e.g., GCC, Clang, MSVC).
+To use `vglog-filter`, you need to build it from its source code. For detailed instructions, refer to the [Build Guide](BUILD.md).
 
 ### Building from Source
 
-Follow these steps to build `vglog-filter`:
+The project includes a convenient `build.sh` script that handles the CMake configuration and compilation process.
 
-1.  **Clone the Repository**:
-    If you haven't already, clone the `vglog-filter` repository to your local machine. Replace `[YOUR_REPOSITORY_URL]` with the actual URL of the `vglog-filter` repository (e.g., `https://github.com/example-org/vglog-filter.git`):
-    ```bash
-    git clone https://github.com/eserlxl/vglog-filter.git
-    cd vglog-filter
-    ```
+```bash
+./build.sh --help
+```
 
-2.  **Build the Project**:
-    The project includes a convenient `build.sh` script that handles the CMake configuration and compilation process.
+```
+vglog-filter build script
 
-    To perform a standard build (optimized for performance by default):
-    ```bash
-    ./build.sh
-    ```
+Usage:
+  build.sh [performance] [warnings] [debug] [clean] [tests] [-j N] [--build-dir DIR]
+  build.sh --help
 
-    You can also specify different build modes:
-    -   **Debug Build**: For development and debugging, enabling debug symbols and disabling optimizations.
-        ```bash
-        ./build.sh debug
-        ```
-    -   **Build with Warnings**: To enable additional compiler warnings.
-        ```bash
-        ./build.sh warnings
-        ```
-    -   **Clean Build**: To remove the existing build directory before recompiling.
-        ```bash
-        ./build.sh clean
-        ```
-    -   **Build and Run Tests**: To compile the project and then execute its test suite.
-        ```bash
-        ./build.sh tests
-        ```
+Options/Modes:
+  performance        Enable performance optimizations (mutually exclusive with debug)
+  warnings           Enable extra compiler warnings
+  debug              Enable debug mode (mutually exclusive with performance)
+  clean              Remove the build directory and reconfigure
+  tests              Build and run tests (ctest if available)
+  -j, --jobs N       Parallel build jobs (default: 8)
+  --build-dir DIR    Build directory (default: build)
+  -h, --help         Show this help
 
-    For more options, including parallel jobs (`-j N`) and custom build directories (`--build-dir DIR`), run:
-    ```bash
-    ./build.sh --help
-    ```
-
-3.  **Executable Location and PATH**:
-    After a successful build, the `vglog-filter` executable will be located in the `build/bin/` directory (or `build/bin/<Config>` for multi-config generators like Visual Studio).
-
-    You can run it directly from there:
-    ```bash
-    ./build/bin/vglog-filter --version
-    ```
-
-    For easier access, consider adding the `build/bin/` directory to your system's `PATH` environment variable. For example, in your `~/.bashrc` or `~/.zshrc` file:
-    ```bash
-    export PATH="/path/to/vglog-filter/build/bin:$PATH"
-    ```
-    Remember to replace `/path/to/vglog-filter` with the actual absolute path to your cloned repository. After modifying your shell configuration, reload it (e.g., `source ~/.bashrc`) for the changes to take effect.
+Environment overrides:
+  BUILD_DIR=/path/to/build   Set build directory
+  JOBS=N                     Set parallel build jobs
+```
 
 [↑ Back to top](#usage-guide)
 

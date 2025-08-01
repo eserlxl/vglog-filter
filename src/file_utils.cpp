@@ -13,20 +13,27 @@
 #include <sys/resource.h>
 #include <filesystem>
 
+using Str = std::string;
+using VecS = std::vector<Str>;
+
 // Helper function to create detailed error messages
-Str create_error_message(const Str& operation, const Str& filename, const Str& details) {
-    Str message = "Error during " + operation;
+Str create_error_message(std::string_view operation, std::string_view filename, std::string_view details) {
+    Str message = "Error during ";
+    message += operation;
     if (!filename.empty()) {
-        message += " for file '" + filename + "'";
+        message += " for file '";
+        message += filename;
+        message += "'";
     }
     if (!details.empty()) {
-        message += ": " + details;
+        message += ": ";
+        message += details;
     }
     return message;
 }
 
 // Helper function to report progress for large files
-void report_progress(size_t bytes_processed, size_t total_bytes, const Str& filename) {
+void report_progress(size_t bytes_processed, size_t total_bytes, std::string_view filename) {
     if (total_bytes == 0) return;
     
     int percentage = static_cast<int>((bytes_processed * 100) / total_bytes);
@@ -49,7 +56,7 @@ size_t get_memory_usage_mb() {
 }
 
 // Helper function to report memory usage
-void report_memory_usage(const Str& operation, const Str& filename) {
+void report_memory_usage(std::string_view operation, std::string_view filename) {
     size_t memory_mb = get_memory_usage_mb();
     if (memory_mb > 0) {
         std::cerr << "Memory usage during " << operation;
@@ -60,9 +67,9 @@ void report_memory_usage(const Str& operation, const Str& filename) {
     }
 }
 
-VecS read_file_lines(const Str& fname)
+VecS read_file_lines(std::string_view fname)
 {
-    std::ifstream file = path_validation::safe_ifstream(fname);
+    std::ifstream file = path_validation::safe_ifstream(std::string(fname));
     if (!file) throw std::runtime_error(create_error_message("opening file", fname));
 
     VecS lines;
@@ -77,9 +84,9 @@ VecS read_file_lines(const Str& fname)
 }
 
 // Check if file is large enough to warrant stream processing
-bool is_large_file(const Str& fname) {
+bool is_large_file(std::string_view fname) {
     try {
-        auto validated_path = path_validation::validate_and_canonicalize(fname);
+        auto validated_path = path_validation::validate_and_canonicalize(std::string(fname));
         return std::filesystem::file_size(validated_path) >= (LARGE_FILE_THRESHOLD_MB * 1024 * 1024);
     } catch (const std::exception&) {
         return false;
@@ -87,8 +94,8 @@ bool is_large_file(const Str& fname) {
 }
 
 // Stream wrapper for files
-void process_file_stream(const Str& fname, const Options& opt) {
-    std::ifstream file = path_validation::safe_ifstream(fname);
+void process_file_stream(std::string_view fname, const Options& opt) {
+    std::ifstream file = path_validation::safe_ifstream(std::string(fname));
     if (!file) throw std::runtime_error(create_error_message("opening file", fname));
     LogProcessor processor(opt);
     processor.process_stream(file);

@@ -37,64 +37,58 @@ env:
   CI: "true"
 
 jobs:
-  test-ubuntu:
-    name: Ubuntu (native)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Install dependencies
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential cmake g++ make
-          cmake --version
-          g++ --version
-          chmod +x ./build.sh
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Build and test
-        run: |
-          set -euo pipefail
-          ./build.sh performance warnings clean
-          test -x ./build/bin/vglog-filter
-          ./build/bin/vglog-filter --help
-          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
-          
-          # Test -k flag functionality
-          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
-          echo "==12345== Test input" >> test_k_flag.txt
-          ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
-          rm -f test_k_flag.txt
-
-  test-arch:
-    name: Arch Linux (container)
+  test:
+    name: ${{ matrix.os.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
-    container:
-      image: archlinux:latest
+      matrix:
+        os:
+          - name: Ubuntu
+            container: ""
+            packages: "build-essential cmake g++ make"
+            update_cmd: "apt-get update"
+            install_cmd: "apt-get install -y --no-install-recommends"
+          - name: Arch Linux
+            container: "archlinux:latest"
+            packages: "base-devel cmake gcc make git ca-certificates"
+            update_cmd: "pacman -Syu --noconfirm --noprogressbar --disable-download-timeout"
+            install_cmd: "pacman -S --noconfirm --needed"
+          - name: Fedora
+            container: "fedora:latest"
+            packages: "gcc-c++ cmake make git ca-certificates"
+            update_cmd: "dnf -y update"
+            install_cmd: "dnf -y install"
+          - name: Debian
+            container: "debian:stable"
+            packages: "build-essential cmake g++ make git ca-certificates"
+            update_cmd: "apt-get update"
+            install_cmd: "apt-get install -y --no-install-recommends"
+
+    container: ${{ matrix.os.container }}
+
     steps:
-      - name: Prepare git for checkout (Arch container)
+      - name: Prepare git for checkout
+        if: matrix.os.container != ''
         run: |
           set -euo pipefail
-          pacman -Syu --noconfirm --noprogressbar --disable-download-timeout
-          pacman -S --noconfirm --needed git ca-certificates
+          ${{ matrix.os.update_cmd }}
+          ${{ matrix.os.install_cmd }} ${{ matrix.os.packages }}
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Install dependencies
+        if: matrix.os.container == ''
         run: |
           set -euo pipefail
-          pacman -S --noconfirm --needed base-devel cmake gcc make
-          cmake --version
-          g++ --version || gcc --version
+          sudo ${{ matrix.os.update_cmd }}
+          sudo ${{ matrix.os.install_cmd }} ${{ matrix.os.packages }}
           chmod +x ./build.sh
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Build and test
         run: |
           set -euo pipefail
@@ -108,84 +102,3 @@ jobs:
           echo "==12345== Test input" >> test_k_flag.txt
           ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
           rm -f test_k_flag.txt
-
-  test-fedora:
-    name: Fedora (container)
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-    container:
-      image: fedora:latest
-    steps:
-      - name: Prepare git for checkout (Fedora container)
-        run: |
-          set -euo pipefail
-          dnf -y update
-          dnf -y install git ca-certificates
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Install dependencies
-        run: |
-          set -euo pipefail
-          dnf -y install gcc-c++ cmake make
-          cmake --version
-          g++ --version
-          chmod +x ./build.sh
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Build and test
-        run: |
-          set -euo pipefail
-          ./build.sh performance warnings clean
-          test -x ./build/bin/vglog-filter
-          ./build/bin/vglog-filter --help
-          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
-          
-          # Test -k flag functionality
-          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
-          echo "==12345== Test input" >> test_k_flag.txt
-          ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
-          rm -f test_k_flag.txt
-
-  test-debian:
-    name: Debian (container)
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-    container:
-      image: debian:stable
-    steps:
-      - name: Prepare git for checkout (Debian container)
-        run: |
-          set -euo pipefail
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y --no-install-recommends git ca-certificates
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Install dependencies
-        run: |
-          set -euo pipefail
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y --no-install-recommends build-essential cmake g++ make
-          cmake --version
-          g++ --version
-          chmod +x ./build.sh
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Build and test
-        run: |
-          set -euo pipefail
-          ./build.sh performance warnings clean
-          test -x ./build/bin/vglog-filter
-          ./build/bin/vglog-filter --help
-          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
-          
-          # Test -k flag functionality
-          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
-          echo "==12345== Test input" >> test_k_flag.txt
-          ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
-          rm -f test_k_flag.txt 

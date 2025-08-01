@@ -54,37 +54,7 @@ Valgrind is an indispensable tool for detecting memory errors and leaks in C/C++
 
 ## Installation
 
-### Prerequisites
-
-To build and run `vglog-filter`, you need:
-- A C++20 compatible compiler (e.g., GCC 10+, Clang 12+)
-- CMake (version 3.16 or higher)
-
-**Install Dependencies (Example for Linux Distributions):**
-
-```sh
-# Arch Linux
-sudo pacman -S base-devel cmake gcc
-
-# Debian/Ubuntu
-sudo apt-get update
-sudo apt-get install build-essential cmake
-```
-
-### Building from Source
-
-1.  **Clone the repository:**
-    ```sh
-    git clone https://github.com/eserlxl/vglog-filter.git
-    cd vglog-filter
-    ```
-2.  **Build the project:**
-    ```sh
-    ./build.sh
-    ```
-    This script compiles the project and places the executable at `build/bin/vglog-filter`.
-
-For advanced build configurations and options, please consult the [Build Guide](doc/BUILD.md).
+For detailed instructions on building from source, please consult the [Build Guide](doc/BUILD.md).
 
 [↑ Back to top](#vglog-filter)
 

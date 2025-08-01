@@ -56,18 +56,6 @@ jobs:
             args: "debug"
           - name: "warnings"
             args: "warnings"
-          - name: "performance-warnings"
-            args: "performance warnings"
-          - name: "debug-warnings"
-            args: "debug warnings"
-          - name: "tests"
-            args: "tests"
-          - name: "performance-tests"
-            args: "performance tests"
-          - name: "debug-tests"
-            args: "debug tests"
-          - name: "warnings-tests"
-            args: "warnings tests"
           - name: "performance-warnings-tests"
             args: "performance warnings tests"
           - name: "debug-warnings-tests"
@@ -80,19 +68,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          set -Eeuo pipefail
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake g++ make \
-            binutils file pkg-config
-
-      - name: Ensure build.sh is executable
-        run: |
-          set -Eeuo pipefail
-          test -f ./build.sh
-          chmod +x ./build.sh
+      - name: Setup C++ Environment
+        uses: ./.github/actions/setup-cpp
 
       - name: Build with ${{ matrix.build_config.name }} configuration
         run: |
@@ -174,69 +151,8 @@ jobs:
           # Run tests if they were built
           if [[ "${{ matrix.build_config.name }}" == *"tests"* ]]; then
             echo "Running test suite..."
-            "${BUILD_DIR}/bin/test_basic"
-            "${BUILD_DIR}/bin/test_integration"
-            echo "✓ All tests passed"
+            ./run_tests.sh --suite C++
           fi
-
-      - name: Performance check (for performance builds)
-        if: contains(matrix.build_config.name, 'performance')
-        run: |
-          set -Eeuo pipefail
-          echo "=== Performance Build Verification ==="
-
-          if [ -f "${BUILD_DIR}/CMakeCache.txt" ]; then
-            # Look for high optimization in flags
-            if grep -Eiq "(^|;)CMAKE_(C|CXX)_FLAGS[^=]*=.*-O3" "${BUILD_DIR}/CMakeCache.txt"; then
-              echo "✓ O3 optimization enabled"
-            else
-              echo "⚠ O3 optimization not found in cache"
-            fi
-
-            # Check LTO
-            if grep -q "INTERPROCEDURAL_OPTIMIZATION:BOOL=TRUE" "${BUILD_DIR}/CMakeCache.txt"; then
-              echo "✓ Link Time Optimization enabled"
-            else
-              echo "⚠ Link Time Optimization not enabled"
-            fi
-          else
-            echo "⚠ ${BUILD_DIR}/CMakeCache.txt not found; skipping CMake cache checks"
-          fi
-
-      - name: Debug check (for debug builds)
-        if: contains(matrix.build_config.name, 'debug')
-        run: |
-          set -Eeuo pipefail
-          echo "=== Debug Build Verification ==="
-
-          if [ -f "${BUILD_DIR}/CMakeCache.txt" ]; then
-            if grep -Eiq "(^|;)CMAKE_(C|CXX)_FLAGS[^=]*=.*-O0" "${BUILD_DIR}/CMakeCache.txt"; then
-              echo "✓ O0 optimization (debug mode) enabled"
-            else
-              echo "⚠ O0 optimization not found in cache"
-            fi
-          else
-            echo "⚠ ${BUILD_DIR}/CMakeCache.txt not found; skipping optimization check"
-          fi
-
-          # Check for debug sections in the binary
-          if readelf -S "${BUILD_DIR}/bin/vglog-filter" | grep -q '\.debug'; then
-            echo "✓ Debug sections present"
-          else
-            echo "⚠ Debug sections not found"
-          fi
-
-      - name: Test summary
-        run: |
-          set -Eeuo pipefail
-          echo "=== ${{ matrix.build_config.name }} Test Summary ==="
-          echo "✓ Build completed successfully"
-          echo "✓ Binary characteristics verified"
-          echo "✓ Functionality tested"
-          if [[ "${{ matrix.build_config.name }}" == *"tests"* ]]; then
-            echo "✓ Test suite executed"
-          fi
-          echo "Configuration args: '${{ matrix.build_config.args }}'"
 
       - name: Upload diagnostics on failure
         if: failure()

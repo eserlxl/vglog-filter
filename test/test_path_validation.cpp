@@ -17,7 +17,7 @@
 #define TEST_EXPECT_EXCEPTION(expr, exception_type, message) \
     do { \
         try { \
-            expr; \
+            (void)expr; \
             std::cerr << "FAIL: " << message << " (expected exception but none thrown)" << std::endl; \
             return false; \
         } catch (const exception_type& e) { \

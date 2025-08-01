@@ -5,11 +5,11 @@
 // the GNU General Public License v3.0 or later.
 // See the LICENSE file in the project root for details.
 
-#ifndef LOG_PROCESSOR_H
-#define LOG_PROCESSOR_H
+#pragma once
 
 #include "options.h"
 #include <string>
+#include <string_view>
 #include <vector>
 #include <sstream>
 #include <unordered_set>
@@ -17,12 +17,12 @@
 #include <iostream>
 #include <span>
 
-using Str = std::string;
-using VecS = std::vector<Str>;
-using StrSpan = std::span<const Str>;
-
 class LogProcessor {
 public:
+    using Str = std::string;
+    using VecS = std::vector<Str>;
+    using StrSpan = std::span<const Str>;
+
     explicit LogProcessor(const Options& options);
     
     // Process from a stream (for stdin or large files)
@@ -32,11 +32,11 @@ public:
     void process_lines(const VecS& lines);
 
 private:
-    void process_line(const Str& line);
+    void process_line(std::string_view line);
     void flush();
     void clear_current_state();
     void reset_epoch();
-    size_t find_marker(const VecS& lines) const;
+    [[nodiscard]] size_t find_marker(const VecS& lines) const;
 
     const Options& opt;
     std::ostringstream raw, sig;
@@ -56,5 +56,3 @@ private:
     const std::regex re_by;
     const std::regex re_q;
 };
-
-#endif // LOG_PROCESSOR_H

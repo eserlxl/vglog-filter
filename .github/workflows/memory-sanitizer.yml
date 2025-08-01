@@ -28,10 +28,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install dependencies
+      - name: Setup C++ Environment
+        uses: ./.github/actions/setup-cpp
+
+      - name: Install Clang
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake clang
+          sudo apt-get install -y clang
       
       - name: Build with Memory Sanitizer
         run: |
@@ -50,69 +53,8 @@ jobs:
                 -DBUILD_TESTS=ON \
                 ..
           make -j$(nproc)
-          
-          # Debug: Check if executable was built
-          echo "Checking build output..."
-          ls -la
-          if [ -d bin ]; then
-            echo "bin directory contents:"
-            ls -la bin/
-          fi
       
       - name: Run Memory Sanitizer Tests
         run: |
-          cd build-msan
-          
-          # Check if executable exists
-          if [ ! -f "./bin/vglog-filter" ]; then
-            echo "ERROR: vglog-filter executable not found!"
-            echo "Current directory contents:"
-            ls -la
-            if [ -d bin ]; then
-              echo "bin directory contents:"
-              ls -la bin/
-            fi
-            exit 1
-          fi
-          
-          # Set environment for MSan with more permissive options
-          # Suppress known false positives from C++ standard library
           export MSAN_OPTIONS="abort_on_error=0:print_stats=1:halt_on_error=0:exit_code=0"
-          
-          # Test basic functionality
-          echo "Testing help output..."
-          ./bin/vglog-filter --help
-          
-          echo "Testing version output..."
-          ./bin/vglog-filter --version
-          
-          echo "Testing with sample input..."
-          # Create a minimal test input
-          cat > test_input.txt << 'EOF'
-          ==12345== Memcheck, a memory error detector
-          ==12345== Invalid read of size 4
-          ==12345==    at 0x4005A1: main (test.c:10)
-          ==12345== HEAP SUMMARY:
-          ==12345==     in use at exit: 40 bytes in 1 blocks
-          EOF
-          
-          # Test that the program can process input (even if output is affected by MSan)
-          echo "Testing program execution..."
-          ./bin/vglog-filter test_input.txt > /dev/null 2> sanitizer_output.txt || true
-          
-          # Check for sanitizer warnings but don't fail the build
-          # Memory Sanitizer has known issues with C++ standard library
-          if grep -q "WARNING: MemorySanitizer" sanitizer_output.txt; then
-            echo "Memory Sanitizer warnings detected (these may be false positives):"
-            cat sanitizer_output.txt
-            echo ""
-            echo "Note: Memory Sanitizer warnings in C++ standard library are often false positives"
-            echo "The program functionality has been verified to work correctly"
-            echo "✓ Memory Sanitizer test completed (warnings are expected)"
-          else
-            echo "Memory Sanitizer test passed without warnings"
-            echo "✓ Memory Sanitizer test completed successfully"
-          fi
-          
-          # Clean up
-          rm -f test_input.txt sanitizer_output.txt 
+          ./test/smoke_test.sh build-msan/bin/vglog-filter

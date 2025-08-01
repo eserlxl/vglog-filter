@@ -5,10 +5,10 @@
 // the GNU General Public License v3.0 or later.
 // See the LICENSE file in the project root for details.
 
-#ifndef OPTIONS_H
-#define OPTIONS_H
+#pragma once
 
 #include <string>
+#include <string_view>
 #include <iostream>
 
 constexpr int         DEFAULT_DEPTH  = 1;
@@ -27,6 +27,4 @@ struct Options {
     bool  use_stdin       = false;
 };
 
-void usage(const char* prog);
-
-#endif // OPTIONS_H
+void usage(std::string_view prog);

@@ -77,7 +77,14 @@ echo "[INFO] Running tests with CTest..."
 CTEST_LOG="$PROJECT_ROOT/test_results/ctest_detailed.log"
 BUILD_LOG="$PROJECT_ROOT/test_results/build.log"
 
-if ! ctest --test-dir "$BUILD_DIR" --output-on-failure --verbose > "$CTEST_LOG" 2>&1; then # Re-added redirection for logging
+ctest_exit_code=0
+ctest --test-dir "$BUILD_DIR" --output-on-failure -T Test > "$CTEST_LOG" 2>&1 || ctest_exit_code=$?
+
+# Parse CTest output for individual test results
+CPP_PASSED=$(grep -c "Passed" "$CTEST_LOG")
+CPP_FAILED=$(grep -c "Failed" "$CTEST_LOG")
+
+if [ "$ctest_exit_code" -ne 0 ] || [ "$CPP_FAILED" -gt 0 ]; then
     echo "[ERROR] CTest failed. Check $CTEST_LOG"
     TEST_RESULT=1
 else
@@ -86,26 +93,8 @@ else
     TEST_RESULT=0
 fi
 
-echo "[DEBUG] CTest command exit code: $?"
+echo "[DEBUG] CTest command exit code: $ctest_exit_code"
 echo "[DEBUG] TEST_RESULT after CTest command: $TEST_RESULT"
-
-# Parse CTest output for individual test results
-CPP_PASSED=0
-CPP_FAILED=0
-
-# Read CTEST_LOG line by line and count passed/failed tests
-while IFS= read -r line; do
-    if [[ $line =~ ^[[:space:]]*([0-9]+)/([0-9]+)[[:space:]]+Test[[:space:]]+#([0-9]+):[[:space:]]+([a-zA-Z0-9_]+)[[:space:]]+\.+[[:space:]]+(Passed|Failed) ]]; then
-        test_name="${BASH_REMATCH[4]}"
-        test_status="${BASH_REMATCH[5]}"
-        if [ "$test_status" == "Passed" ]; then
-            ((CPP_PASSED++))
-        else
-            ((CPP_FAILED++))
-        fi
-    fi
-done < "$CTEST_LOG"
-
 echo "[DEBUG] CPP_PASSED after parsing: $CPP_PASSED"
 echo "[DEBUG] CPP_FAILED after parsing: $CPP_FAILED"
 
@@ -158,8 +147,4 @@ echo "Individual test outputs: $PROJECT_ROOT/test_results/"
     echo "Individual test outputs available in: $PROJECT_ROOT/test_results/"
 } > "$CPP_SUMMARY_FILE"
 
-# Remove the individual test executable loop at the end.
-# CTest already runs and reports on individual tests.
-# Running them again and printing "PASSED"/"FAILED" is redundant and confusing.
-
-exit $TEST_RESULT 
+exit $TEST_RESULT

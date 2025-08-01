@@ -258,7 +258,7 @@ if [ "$WORKFLOW_TOTAL" -eq 0 ]; then
 fi
 
 # Initialize C++ test counters
-CPP_PASSED=$CPP_TOTAL
+CPP_PASSED=0
 CPP_FAILED=0
 
 print_header
@@ -436,15 +436,15 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "C++ Unit" ]]; then
     # Run C++ tests
     if [ -f "./test/run_unit_tests.sh" ]; then
         # Capture the output and exit code
-        # Note: Output is captured but not currently used - kept for potential future logging
-        # CPP_OUTPUT=$(./test/run_unit_tests.sh 2>&1)
         ./test/run_unit_tests.sh
         CPP_RESULT=$?
         
-                    # Parse C++ test results from summary if it exists
-        if [ -f "test_results/cpp_unit_test_summary.txt" ]; then
-            CPP_PASSED=$(grep "Passed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
-            CPP_FAILED=$(grep "Failed:" test_results/cpp_unit_test_summary.txt | awk '{print $2}' 2>/dev/null || echo "0")
+        CPP_PASSED=0
+        CPP_FAILED=0
+        # Parse C++ test results from summary if it exists
+        if [ -f "test_results/ctest_detailed.log" ]; then
+            CPP_PASSED=$(grep -c "Passed" "test_results/ctest_detailed.log")
+            CPP_FAILED=$(grep -c "Failed" "test_results/ctest_detailed.log")
         fi
         
         # Calculate C++ success rate
@@ -467,9 +467,9 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "C++ Unit" ]]; then
             declare -A cpp_test_results
             
             while IFS= read -r line; do
-                if [[ $line =~ ^[[:space:]]*([0-9]+)/([0-9]+)[[:space:]]+Test[[:space:]]+#([0-9]+):[[:space:]]+([a-zA-Z0-9_]+)[[:space:]]+\.+[[:space:]]+(Passed|Failed) ]]; then
-                    test_name="${BASH_REMATCH[4]}"
-                    test_status="${BASH_REMATCH[5]}"
+                if [[ $line =~ ^[[:space:]]*[0-9]+/[0-9]+[[:space:]]+Test[[:space:]]+\#([0-9]+):[[:space:]]+([a-zA-Z0-9_]+)[[:space:]]+\.+[[:space:]]+(Passed|Failed) ]]; then
+                    test_name="${BASH_REMATCH[2]}"
+                    test_status="${BASH_REMATCH[3]}"
                     cpp_test_results["$test_name"]="$test_status"
                 fi
             done < "$PROJECT_ROOT/test_results/ctest_detailed.log"
@@ -594,4 +594,4 @@ print_final_footer
 # Cleanup test artifacts
 cleanup_test_artifacts
 
-exit $OVERALL_RESULT 
+exit $OVERALL_RESULT

@@ -8,7 +8,7 @@
 #include "options.h"
 #include <iostream>
 
-void usage(const char* prog) {
+void usage(std::string_view prog) {
     std::cerr
         << "Usage: " << prog << " [options] [valgrind_log]\n\n"
         << "Input\n"

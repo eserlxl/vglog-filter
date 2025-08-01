@@ -88,4 +88,4 @@ jobs:
             fi
           done
           echo "Tag cleanup completed"
-        fi 
+        fi

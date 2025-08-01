@@ -45,13 +45,13 @@ brew install cmake gcc
 
 **For Windows (using MSYS2 or WSL):**
 
-It is recommended to use Windows Subsystem for Linux (WSL) or MSYS2 to build `vglog-filter` on Windows, as the build process is designed for a Unix-like environment. Follow the Linux instructions within your WSL environment or install `mingw-w64-x86_64-toolchain` and `cmake` in MSYS2.
+It is recommended to use Windows Subsystem for Linux (WSL) or MSYS2 to build `vglog-filter` on Windows, as the build process is designed for a Unix-like environment. Follow the Linux instructions within your WSL environment or install `mingw-w4c-x86_64-toolchain` and `cmake` in MSYS2.
 
 [↑ Back to top](#build-guide)
 
 ## Standard Build
 
-The simplest way to build `vglog-filter` is by using the provided `build.sh` script. This script automates the CMake configuration and compilation process for a standard release build.
+The simplest way to build `vglog-filter` is by using the provided `build.sh` script. This script automates the CMake configuration and compilation process.
 
 1.  **Clone the repository:**
     ```sh
@@ -65,21 +65,19 @@ The simplest way to build `vglog-filter` is by using the provided `build.sh` scr
 
 Upon successful completion, the `vglog-filter` executable will be located in the `build/bin/` directory.
 
-### What `build.sh` does:
+### `build.sh` Options
 
-The `build.sh` script performs the following steps:
+The `build.sh` script accepts several arguments to customize the build process:
 
-```sh
-mkdir -p build
-cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build .
-```
+-   `performance`: Enables performance optimizations (`-O3`, LTO, etc.).
+-   `debug`: Creates a debug build with symbols and no optimizations.
+-   `warnings`: Enables extra compiler warnings.
+-   `tests`: Builds and runs the test suite.
+-   `clean`: Removes the build directory before building.
+-   `--build-dir <dir>`: Specifies a custom build directory.
+-   `-j <N>`: Sets the number of parallel jobs for compilation.
 
--   `mkdir -p build`: Creates a `build` directory if it doesn't already exist. This is where all build artifacts will be placed.
--   `cd build`: Changes the current directory to `build`.
--   `cmake .. -DCMAKE_BUILD_TYPE=Release`: Configures the project using CMake. `-DCMAKE_BUILD_TYPE=Release` sets the build type to `Release`, which enables optimizations and disables debugging symbols.
--   `cmake --build .`: Compiles the project using the generated build system (e.g., Makefiles on Unix-like systems, Visual Studio solutions on Windows).
+For more details, run `./build.sh --help`.
 
 [↑ Back to top](#build-guide)
 
@@ -94,10 +92,7 @@ A debug build includes debugging symbols and disables optimizations, making it e
 To create a debug build:
 
 ```sh
-mkdir -p build-debug
-cd build-debug
-cmake .. -DCMAKE_BUILD_TYPE=Debug
-cmake --build .
+./build.sh debug
 ```
 
 The executable will be located at `build-debug/bin/vglog-filter`.
@@ -113,13 +108,10 @@ This is the default build type when using `./build.sh`.
 To explicitly create a release build:
 
 ```sh
-mkdir -p build-release
-cd build-release
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build .
+./build.sh performance
 ```
 
-The executable will be located at `build-release/bin/vglog-filter`.
+The executable will be located at `build/bin/vglog-filter`.
 
 [↑ Back to top](#build-guide)
 
@@ -131,26 +123,26 @@ To enable a sanitizer, pass the appropriate CMake option:
 
 -   **AddressSanitizer (ASan)**: Detects memory errors like use-after-free, double-free, and out-of-bounds access.
     ```sh
-mkdir -p build-asan
-cd build-asan
-cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON
-cmake --build .
+    mkdir -p build-asan
+    cd build-asan
+    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON
+    cmake --build .
     ```
 
 -   **MemorySanitizer (MSan)**: Detects uses of uninitialized memory. Requires Clang.
     ```sh
-mkdir -p build-msan
-cd build-msan
-cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_MSAN=ON
-cmake --build .
+    mkdir -p build-msan
+    cd build-msan
+    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_MSAN=ON
+    cmake --build .
     ```
 
 -   **UndefinedBehaviorSanitizer (UBSan)**: Detects various kinds of undefined behavior.
     ```sh
-mkdir -p build-ubsan
-cd build-ubsan
-cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_UBSAN=ON
-cmake --build .
+    mkdir -p build-ubsan
+    cd build-ubsan
+    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_UBSAN=ON
+    cmake --build .
     ```
 
 **Note**: Sanitized builds should typically be `Debug` builds to ensure all checks are active and debugging symbols are available. Running tests with sanitized builds is highly recommended to catch issues early. The CI/CD pipeline includes dedicated jobs for sanitized builds.
@@ -205,8 +197,7 @@ If you encounter problems during the build process, consider the following:
 
 -   **Clean Build**: Sometimes, old build artifacts can cause issues. Try cleaning your build directory and recompiling:
     ```sh
-    rm -rf build*
-    ./build.sh
+    ./build.sh clean
     ```
 
 -   **Error Messages**: Read the error messages carefully. They often provide clues about what went wrong (e.g., missing headers, undefined references).

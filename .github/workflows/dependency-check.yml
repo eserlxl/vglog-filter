@@ -31,10 +31,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake g++ make
+      - name: Setup C++ Environment
+        uses: ./.github/actions/setup-cpp
       
       - name: Build project
         run: |
@@ -72,4 +70,4 @@ jobs:
           echo "✓ Binary analysis completed"
           echo ""
           echo "Note: This is a basic security check. For production use,"
-          echo "consider implementing more comprehensive security scanning." 
+          echo "consider implementing more comprehensive security scanning."

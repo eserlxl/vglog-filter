@@ -21,12 +21,7 @@ This guide provides comprehensive information for developers contributing to `vg
 
 ## Build Options
 
-`vglog-filter` supports various build configurations, controlled via CMake options. These configurations are designed to cater to different development needs, from highly optimized release builds to detailed debug builds.
-
--   **`PERFORMANCE_BUILD`**: Enables aggressive performance optimizations. This includes `-O3`, architecture-specific tuning (`-march=native -mtune=native`), and Link Time Optimization (LTO/IPO). The `NDEBUG` macro is defined to disable assertions.
--   **`WARNING_MODE`**: Activates extensive compiler warnings. This adds `-Wextra` to the default `-Wall -pedantic` flags, helping to catch potential issues and enforce strict code quality.
--   **`DEBUG_MODE`**: Configures the build for debugging. This includes debug symbols (`-g`), disables optimizations (`-O0`), and defines the `DEBUG` macro. When `DEBUG_MODE` is enabled, it takes precedence over `PERFORMANCE_BUILD` if both are specified.
--   **Sanitizers**: Specific CMake options are available to enable various sanitizers (e.g., AddressSanitizer, MemorySanitizer, UndefinedBehaviorSanitizer) for runtime error detection. Refer to the [Build Guide](BUILD.md) for details on enabling these.
+For detailed information on building, including prerequisites and cross-compilation, refer to the [Build Guide](BUILD.md).
 
 ### Using `build.sh`
 
@@ -74,8 +69,6 @@ The `build.sh` script simplifies the process of configuring and compiling `vglog
     ```
 
 **Note**: If both `debug` and `performance` options are provided, `debug` mode will take precedence. The `clean` and `tests` options can be combined with any other build configuration options.
-
-For more detailed information on building, including prerequisites and cross-compilation, refer to the [Build Guide](BUILD.md).
 
 [↑ Back to top](#developer-guide)
 
@@ -242,20 +235,7 @@ This section outlines a typical development workflow for contributing to `vglog-
 
 ### 1. Setup Your Development Environment
 
-Start by cloning the repository and installing the necessary build dependencies:
-
-```sh
-# Clone the repository
-git clone https://github.com/eserlxl/vglog-filter.git
-cd vglog-filter
-
-# Install dependencies (Example for Arch Linux)
-sudo pacman -S base-devel cmake gcc
-
-# Install dependencies (Example for Ubuntu/Debian)
-sudo apt-get update
-sudo apt-get install build-essential cmake
-```
+Start by cloning the repository and installing the necessary build dependencies as described in the [Build Guide](BUILD.md).
 
 ### 2. Build and Test Locally
 
