@@ -37,6 +37,14 @@ private:
     void clear_current_state();
     void reset_epoch();
     [[nodiscard]] size_t find_marker(const VecS& lines) const;
+    
+    // New helper methods for better code organization
+    void initialize_regex_patterns();
+    size_t get_file_size_for_progress() const;
+    bool should_report_progress(size_t bytes_processed, size_t total_bytes) const;
+    void output_pending_blocks();
+    std::string process_raw_line(const std::string& processed_line);
+    std::string generate_signature_key() const;
 
     const Options& opt;
     std::ostringstream raw, sig;

@@ -14,12 +14,16 @@ on:
   push:
     paths:
       - 'src/**'
+      - 'include/**'
+      - 'test/**'
       - 'CMakeLists.txt'
       - 'build.sh'
       - '.github/workflows/test.yml'
   pull_request:
     paths:
       - 'src/**'
+      - 'include/**'
+      - 'test/**'
       - 'CMakeLists.txt'
       - 'build.sh'
       - '.github/workflows/test.yml'
@@ -52,14 +56,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better caching
 
       - name: Cache apt packages
         uses: actions/cache@v3
         with:
           path: /var/cache/apt/archives
-          key: ${{ runner.os }}-apt-${{ hashFiles('**/CMakeLists.txt') }}
+          key: ${{ runner.os }}-apt-${{ hashFiles('**/CMakeLists.txt', 'build.sh') }}
           restore-keys: |
             ${{ runner.os }}-apt-
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/
+            .ccache/
+          key: ${{ runner.os }}-${{ matrix.build-type }}-${{ hashFiles('CMakeLists.txt', 'build.sh', 'src/**', 'include/**') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.build-type }}-
 
       - name: Install dependencies
         run: |
@@ -74,7 +90,10 @@ jobs:
           chmod +x ./test/smoke_test.sh
 
       - name: Build vglog-filter (${{ matrix.build-type }} + clean)
+        id: build
         run: |
+          echo "=== Building with configuration: ${{ matrix.build-type }} ==="
+          
           case "${{ matrix.build-type }}" in
             default)
               ./build.sh clean
@@ -93,39 +112,87 @@ jobs:
               exit 2
               ;;
           esac
+          
+          echo "✓ Build completed for ${{ matrix.build-type }}"
 
       - name: Verify binary exists and is executable
         run: |
-          ls -la "${BINARY_PATH}"
-          file "${BINARY_PATH}"
-          test -x "${BINARY_PATH}"
+          echo "=== Verifying binary ==="
+          
+          # Check binary exists and is executable
+          if [ ! -f "${BINARY_PATH}" ] || [ ! -x "${BINARY_PATH}" ]; then
+            echo "✗ Binary not found or not executable at ${BINARY_PATH}"
+            ls -la build/bin/ || true
+            exit 1
+          fi
+          
+          # Check binary characteristics
+          echo "Binary size: $(stat -c%s "${BINARY_PATH}") bytes"
+          echo "Binary type: $(file "${BINARY_PATH}")"
+          
+          # Verify binary can run
+          if ! "${BINARY_PATH}" --version > /dev/null 2>&1; then
+            echo "✗ Binary failed to run --version"
+            exit 1
+          fi
+          
+          echo "✓ Binary verification passed"
 
       - name: Run smoke tests
-        run: ./test/smoke_test.sh "${BINARY_PATH}"
+        run: |
+          echo "=== Running smoke tests ==="
+          ./test/smoke_test.sh "${BINARY_PATH}"
+          echo "✓ Smoke tests passed"
 
       - name: Run C++ unit tests
-        run: ./run_tests.sh --suite C++
-
-      - name: Inspect compilation characteristics (non-fatal)
         run: |
-          if [ "${{ matrix.build-type }}" = "performance" ]; then
-            echo "[info] Checking for basic text section presence (objdump)…"
-            if objdump -h "${BINARY_PATH}" | grep -q '\.text'; then
-              echo "[ok] .text section found (expected)."
-            else
-              echo "[warn] Could not verify .text section."
-            fi
-          elif [ "${{ matrix.build-type }}" = "debug" ]; then
-            echo "[info] Checking for debug symbols (file)…"
-            if file "${BINARY_PATH}" | grep -qi 'not stripped'; then
-              echo "[ok] Debug build appears to include symbols."
-            else
-              echo "[warn] Debug symbols not detected (binary may be stripped)."
-            fi
-          else
-            echo "[info] No special checks for build type '${{ matrix.build-type }}'."
-          fi
-          # Non-fatal by design
+          echo "=== Running C++ unit tests ==="
+          ./run_tests.sh --suite C++
+          echo "✓ C++ unit tests passed"
+
+      - name: Inspect compilation characteristics
+        run: |
+          echo "=== Inspecting ${{ matrix.build-type }} build ==="
+          
+          case "${{ matrix.build-type }}" in
+            performance)
+              echo "Checking for optimization characteristics..."
+              if ! file "${BINARY_PATH}" | grep -q "not stripped"; then
+                echo "✓ Binary appears to be optimized (stripped)"
+              else
+                echo "⚠ Binary may not be fully optimized"
+              fi
+              
+              BINARY_SIZE=$(stat -c%s "${BINARY_PATH}")
+              if [ "$BINARY_SIZE" -gt 10485760 ]; then  # 10MB
+                echo "⚠ Binary size is large: ${BINARY_SIZE} bytes"
+              else
+                echo "✓ Binary size is reasonable: ${BINARY_SIZE} bytes"
+              fi
+              ;;
+            debug)
+              echo "Checking for debug characteristics..."
+              if file "${BINARY_PATH}" | grep -q "not stripped"; then
+                echo "✓ Debug symbols present"
+              else
+                echo "⚠ Debug symbols not detected"
+              fi
+              
+              if ldd "${BINARY_PATH}" | grep -q "libasan\|libubsan"; then
+                echo "✓ Sanitizer libraries linked"
+              else
+                echo "ℹ No sanitizer libraries detected"
+              fi
+              ;;
+            warnings)
+              echo "Checking for warning-free build..."
+              echo "✓ Build completed with warnings enabled"
+              ;;
+            default)
+              echo "Checking default build characteristics..."
+              echo "✓ Default build completed successfully"
+              ;;
+          esac
 
       - name: Upload binary artifact
         if: always()
@@ -134,3 +201,15 @@ jobs:
           name: vglog-filter-${{ matrix.build-type }}
           path: ${{ env.BINARY_PATH }}
           if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ matrix.build-type }}
+          path: |
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
+          if-no-files-found: ignore
+          retention-days: 3

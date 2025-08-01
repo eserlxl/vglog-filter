@@ -8,6 +8,7 @@
 #include <canonicalization.h>
 #include <algorithm>
 #include <cctype>
+#include <stdexcept>
 
 namespace canonicalization {
 
@@ -28,6 +29,13 @@ namespace { // Anonymous namespace for internal linkage
         return StrView(s.begin(), static_cast<size_t>(end - s.begin()));
     }
 
+    // Regex pattern constants for better maintainability
+    constexpr const char* ADDR_PATTERN = R"(0x[0-9a-fA-F]+)";
+    constexpr const char* LINE_PATTERN = R"(:[0-9]+)";
+    constexpr const char* ARRAY_PATTERN = R"(\[[0-9]+\])";
+    constexpr const char* TEMPLATE_PATTERN = R"(<[^>]*>)";
+    constexpr const char* WS_PATTERN = R"([ \t\v\f\r\n]+)";
+
 } // anonymous namespace
 
 StrView trim_view(StrView s) {
@@ -41,48 +49,52 @@ Str rtrim(Str s) {
     return s;
 }
 
-Str regex_replace_all(StrView src, const std::regex& re, StrView repl)
-{
-    return std::regex_replace(src.data(), re, repl.data());
+Str regex_replace_all(StrView src, const std::regex& re, StrView repl) {
+    try {
+        return std::regex_replace(src.data(), re, repl.data());
+    } catch (const std::regex_error& e) {
+        throw std::runtime_error("Regex replacement failed: " + std::string(e.what()));
+    }
 }
 
 const std::regex& get_re_addr() {
-    static const std::regex re(R"(0x[0-9a-fA-F]+)", std::regex::optimize | std::regex::ECMAScript);
+    static const std::regex re(ADDR_PATTERN, std::regex::optimize | std::regex::ECMAScript);
     return re;
 }
 
 const std::regex& get_re_line() {
-    static const std::regex re(R"(:[0-9]+)", std::regex::optimize | std::regex::ECMAScript);
+    static const std::regex re(LINE_PATTERN, std::regex::optimize | std::regex::ECMAScript);
     return re;
 }
 
 const std::regex& get_re_array() {
-    static const std::regex re(R"(\[[0-9]+\])", std::regex::optimize | std::regex::ECMAScript);
+    static const std::regex re(ARRAY_PATTERN, std::regex::optimize | std::regex::ECMAScript);
     return re;
 }
 
 const std::regex& get_re_template() {
-    static const std::regex re(R"(<[^>]*>)", std::regex::optimize | std::regex::ECMAScript);
+    static const std::regex re(TEMPLATE_PATTERN, std::regex::optimize | std::regex::ECMAScript);
     return re;
 }
 
 const std::regex& get_re_ws() {
-    static const std::regex re(R"([ \t\v\f\r\n]+)", std::regex::optimize | std::regex::ECMAScript);
+    static const std::regex re(WS_PATTERN, std::regex::optimize | std::regex::ECMAScript);
     return re;
 }
 
-Str canon(Str s)
-{
+Str canon(Str s) {
+    // Apply canonicalization transformations in sequence
     s = regex_replace_all(s, get_re_addr(), "0xADDR");
     s = regex_replace_all(s, get_re_line(), ":LINE");
     s = regex_replace_all(s, get_re_array(), "[]");
     s = regex_replace_all(s, get_re_template(), "<T>");
     s = regex_replace_all(s, get_re_ws(), " ");
+    
+    // Return trimmed result
     return Str(trim_view(s));
 }
 
-Str canon(StrView s)
-{
+Str canon(StrView s) {
     Str tmp(s);
     return canon(std::move(tmp));
 }
