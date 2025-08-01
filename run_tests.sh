@@ -159,15 +159,7 @@ print_info_line() {
     echo -e "${CYAN}$label${NC} : ${YELLOW}$value${NC}"
 }
 
-print_build_status() {
-    local status="$1"
-    local message="$2"
-    if [ "$status" = "PASSED" ]; then
-        echo -e "  ${GREEN}✔${NC} ${CYAN}$message${NC}"
-    else
-        echo -e "  ${RED}✖${NC} ${CYAN}$message${NC}"
-    fi
-}
+
 
 print_separator() {
     echo -e "${MAGENTA}------------------------------------------------------------${NC}"
@@ -476,7 +468,7 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "C++ Unit" ]]; then
             
             echo -e "${BOLD}${YELLOW}Individual Test Executables:${NC}"
             # Get the list of C++ test executables from CMakeLists.txt
-            CPP_TEST_NAMES=($(grep "^[[:space:]]*add_test_exe(" "$PROJECT_ROOT/CMakeLists.txt" | sed -E 's/^[[:space:]]*add_test_exe\(([^[:space:]]+).*$/\1/'))
+            mapfile -t CPP_TEST_NAMES < <(grep "^[[:space:]]*add_test_exe(" "$PROJECT_ROOT/CMakeLists.txt" | sed -E 's/^[[:space:]]*add_test_exe\(([^[:space:]]+).*$/\1/')
             
             for test_name in "${CPP_TEST_NAMES[@]}"; do
                 if [[ -n "${cpp_test_results[$test_name]}" ]]; then
