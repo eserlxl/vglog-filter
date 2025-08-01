@@ -90,20 +90,18 @@ jobs:
               echo "semantic-version-analyzer not found or not executable at ./dev-bin/semantic-version-analyzer" >&2
               exit 1
             fi
-            BUMP_TYPE="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo 'no-bump')"
+            BUMP_TYPE="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || echo 'none')"
           fi
 
           # Ensure BUMP_TYPE is valid for GitHub Actions output
-          if [[ "$BUMP_TYPE" == "no-bump" ]]; then
-            BUMP_TYPE="no-bump"
-          fi
+          # The semantic-version-analyzer outputs 'none' for no bump needed
 
           echo "bump_type=${BUMP_TYPE}" >> "$GITHUB_OUTPUT"
           echo "release_notes=${{ github.event.inputs.release_notes || '' }}" >> "$GITHUB_OUTPUT"
           echo "prerelease=${{ github.event.inputs.prerelease || false }}" >> "$GITHUB_OUTPUT"
 
       - name: Summarize analysis
-        if: steps.version-analysis.outputs.bump_type != 'no-bump'
+        if: steps.version-analysis.outputs.bump_type != 'none'
         run: |
           {
             echo "### Version analysis"
@@ -114,7 +112,7 @@ jobs:
 
       - name: Bump version
         id: bump
-        if: steps.version-analysis.outputs.bump_type != 'no-bump'
+        if: steps.version-analysis.outputs.bump_type != 'none'
         run: |
           set -euo pipefail
           echo "Bumping version type: ${{ steps.version-analysis.outputs.bump_type }}"
@@ -153,12 +151,12 @@ jobs:
           git push origin HEAD:"${TARGET_BRANCH}"
 
       - name: Append new version to summary
-        if: steps.version-analysis.outputs.bump_type != 'no-bump'
+        if: steps.version-analysis.outputs.bump_type != 'none'
         run: |
           echo "- New version: v${NEW_VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create annotated tag
-        if: steps.version-analysis.outputs.bump_type != 'no-bump'
+        if: steps.version-analysis.outputs.bump_type != 'none'
         run: |
           set -euo pipefail
           # Ensure we see the latest tags
@@ -172,7 +170,7 @@ jobs:
           fi
 
       - name: Create Release
-        if: steps.version-analysis.outputs.bump_type != 'no-bump'
+        if: steps.version-analysis.outputs.bump_type != 'none'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.NEW_VERSION }}
@@ -197,7 +195,7 @@ jobs:
 
 
       - name: No bump needed
-        if: steps.version-analysis.outputs.bump_type == 'no-bump'
+        if: steps.version-analysis.outputs.bump_type == 'none'
         run: |
           echo "No significant changes detected; no version bump needed."
           echo "### No version bump needed" >> "$GITHUB_STEP_SUMMARY"
