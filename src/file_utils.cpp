@@ -57,7 +57,7 @@ size_t get_memory_usage_mb() {
 
 // Helper function to report memory usage
 void report_memory_usage(std::string_view operation, std::string_view filename) {
-    size_t memory_mb = get_memory_usage_mb();
+    const size_t memory_mb = get_memory_usage_mb();
     if (memory_mb > 0) {
         std::cerr << "Memory usage during " << operation;
         if (!filename.empty()) {
@@ -70,7 +70,7 @@ void report_memory_usage(std::string_view operation, std::string_view filename) 
 VecS read_file_lines(std::string_view fname)
 {
     std::ifstream file = path_validation::safe_ifstream(std::string(fname));
-    if (!file) throw std::runtime_error(create_error_message("opening file", fname));
+    if (!file) throw std::runtime_error(create_error_message("opening file", fname, ""));
 
     VecS lines;
     lines.reserve(1024); // Reserve capacity for better performance
@@ -86,7 +86,7 @@ VecS read_file_lines(std::string_view fname)
 // Check if file is large enough to warrant stream processing
 bool is_large_file(std::string_view fname) {
     try {
-        auto validated_path = path_validation::validate_and_canonicalize(std::string(fname));
+        const auto validated_path = path_validation::validate_and_canonicalize(std::string(fname));
         return std::filesystem::file_size(validated_path) >= (LARGE_FILE_THRESHOLD_MB * 1024 * 1024);
     } catch (const std::exception&) {
         return false;
@@ -96,7 +96,7 @@ bool is_large_file(std::string_view fname) {
 // Stream wrapper for files
 void process_file_stream(std::string_view fname, const Options& opt) {
     std::ifstream file = path_validation::safe_ifstream(std::string(fname));
-    if (!file) throw std::runtime_error(create_error_message("opening file", fname));
+    if (!file) throw std::runtime_error(create_error_message("opening file", fname, ""));
     LogProcessor processor(opt);
     processor.process_stream(file);
 }

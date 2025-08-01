@@ -48,7 +48,7 @@ void LogProcessor::process_stream(std::istream& in) {
         }
     }
 
-    Str line;
+    std::string line;
     while (std::getline(in, line)) {
         bytes_processed += line.length() + 1; // +1 for the newline character
         if (opt.show_progress && total_bytes > 0 && (bytes_processed % (1024 * 1024) == 0 || bytes_processed >= total_bytes)) {
@@ -96,7 +96,7 @@ void LogProcessor::process_line(std::string_view line) {
 
     if (!std::regex_search(line.begin(), line.end(), re_vg_line)) return;
 
-    Str processed_line = std::regex_replace(std::string(line), re_prefix, "");
+    std::string processed_line = std::regex_replace(std::string(line), re_prefix, "");
 
     if (std::regex_search(processed_line, re_start)) {
         flush();
@@ -105,7 +105,7 @@ void LogProcessor::process_line(std::string_view line) {
         }
     }
 
-    Str rawLine = processed_line;
+    std::string rawLine = processed_line;
     if (opt.scrub_raw) {
         rawLine = regex_replace_all(rawLine, get_re_addr(), "");
         rawLine = regex_replace_all(rawLine, re_at, "");
@@ -115,19 +115,19 @@ void LogProcessor::process_line(std::string_view line) {
     if (trim_view(rawLine).empty()) return;
 
     raw << rawLine << '\n';
-    Str cl = canon(processed_line);
+    std::string cl = canon(processed_line);
     sig << cl << '\n';
     sigLines.push_back(std::move(cl));
 }
 
 void LogProcessor::flush() {
-    const Str rawStr = raw.str();
+    const std::string rawStr = raw.str();
     if (rawStr.empty()) {
         clear_current_state();
         return;
     }
 
-    Str key;
+    std::string key;
     if (opt.depth > 0) {
         key.reserve(256);
         for (int i = 0; i < opt.depth && i < static_cast<int>(sigLines.size()); ++i) {
@@ -163,7 +163,7 @@ void LogProcessor::reset_epoch() {
 
 size_t LogProcessor::find_marker(const VecS& lines) const {
     for (size_t i = lines.size(); i-- > 0;) {
-        if (lines[i].find(opt.marker) != Str::npos) {
+        if (lines[i].find(opt.marker) != std::string::npos) {
             return i + 1; // start after the marker line
         }
     }
