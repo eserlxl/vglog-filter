@@ -29,12 +29,103 @@ namespace { // Anonymous namespace for internal linkage
         return StrView(s.begin(), static_cast<size_t>(end - s.begin()));
     }
 
-    // Regex pattern constants for better maintainability
-    constexpr const char* ADDR_PATTERN = R"(0x[0-9a-fA-F]+)";
-    constexpr const char* LINE_PATTERN = R"(:[0-9]+)";
-    constexpr const char* ARRAY_PATTERN = R"(\[[0-9]+\])";
-    constexpr const char* TEMPLATE_PATTERN = R"(<[^>]*>)";
-    constexpr const char* WS_PATTERN = R"([ \t\v\f\r\n]+)";
+    // Simple string replacement functions to replace regex
+    Str replace_addr_pattern(Str s) {
+        // Replace 0x[0-9a-fA-F]+ with 0xADDR
+        size_t pos = 0;
+        while ((pos = s.find("0x", pos)) != std::string::npos) {
+            size_t start = pos;
+            pos += 2; // Skip "0x"
+            
+            // Find end of hex digits
+            while (pos < s.size() && std::isxdigit(s[pos])) pos++;
+            
+            // Replace if we found hex digits
+            if (pos > start + 2) {
+                s.replace(start, pos - start, "0xADDR");
+                pos = start + 6; // Skip the replacement
+            }
+        }
+        return s;
+    }
+    
+    Str replace_line_pattern(Str s) {
+        // Replace :[0-9]+ with :LINE
+        size_t pos = 0;
+        while ((pos = s.find(':', pos)) != std::string::npos) {
+            size_t start = pos;
+            pos++; // Skip ':'
+            
+            // Find end of digits
+            while (pos < s.size() && std::isdigit(s[pos])) pos++;
+            
+            // Replace if we found digits
+            if (pos > start + 1) {
+                s.replace(start, pos - start, ":LINE");
+                pos = start + 5; // Skip the replacement
+            }
+        }
+        return s;
+    }
+    
+    Str replace_array_pattern(Str s) {
+        // Replace [0-9]+ with []
+        size_t pos = 0;
+        while ((pos = s.find('[', pos)) != std::string::npos) {
+            size_t start = pos;
+            pos++; // Skip '['
+            
+            // Find end of digits
+            while (pos < s.size() && std::isdigit(s[pos])) pos++;
+            
+            // Check if next char is ']'
+            if (pos < s.size() && s[pos] == ']') {
+                s.replace(start, pos - start + 1, "[]");
+                pos = start + 2; // Skip the replacement
+            }
+        }
+        return s;
+    }
+    
+    Str replace_template_pattern(Str s) {
+        // Replace <[^>]*> with <T>
+        size_t pos = 0;
+        while ((pos = s.find('<', pos)) != std::string::npos) {
+            size_t start = pos;
+            pos++; // Skip '<'
+            
+            // Find closing '>'
+            while (pos < s.size() && s[pos] != '>') pos++;
+            
+            // Replace if we found closing '>'
+            if (pos < s.size()) {
+                s.replace(start, pos - start + 1, "<T>");
+                pos = start + 3; // Skip the replacement
+            }
+        }
+        return s;
+    }
+    
+    Str replace_ws_pattern(Str s) {
+        // Replace multiple whitespace with single space
+        size_t pos = 0;
+        while (pos < s.size()) {
+            if (std::isspace(s[pos])) {
+                size_t start = pos;
+                // Find end of whitespace sequence
+                while (pos < s.size() && std::isspace(s[pos])) pos++;
+                
+                // Replace with single space if multiple whitespace
+                if (pos > start + 1) {
+                    s.replace(start, pos - start, " ");
+                    pos = start + 1; // Skip the replacement
+                }
+            } else {
+                pos++;
+            }
+        }
+        return s;
+    }
 
 } // anonymous namespace
 
@@ -49,46 +140,13 @@ Str rtrim(Str s) {
     return s;
 }
 
-Str regex_replace_all(StrView src, const std::regex& re, StrView repl) {
-    try {
-        return std::regex_replace(src.data(), re, repl.data());
-    } catch (const std::regex_error& e) {
-        throw std::runtime_error("Regex replacement failed: " + std::string(e.what()));
-    }
-}
-
-const std::regex& get_re_addr() {
-    static const std::regex re(ADDR_PATTERN, std::regex::optimize | std::regex::ECMAScript);
-    return re;
-}
-
-const std::regex& get_re_line() {
-    static const std::regex re(LINE_PATTERN, std::regex::optimize | std::regex::ECMAScript);
-    return re;
-}
-
-const std::regex& get_re_array() {
-    static const std::regex re(ARRAY_PATTERN, std::regex::optimize | std::regex::ECMAScript);
-    return re;
-}
-
-const std::regex& get_re_template() {
-    static const std::regex re(TEMPLATE_PATTERN, std::regex::optimize | std::regex::ECMAScript);
-    return re;
-}
-
-const std::regex& get_re_ws() {
-    static const std::regex re(WS_PATTERN, std::regex::optimize | std::regex::ECMAScript);
-    return re;
-}
-
 Str canon(Str s) {
-    // Apply canonicalization transformations in sequence
-    s = regex_replace_all(s, get_re_addr(), "0xADDR");
-    s = regex_replace_all(s, get_re_line(), ":LINE");
-    s = regex_replace_all(s, get_re_array(), "[]");
-    s = regex_replace_all(s, get_re_template(), "<T>");
-    s = regex_replace_all(s, get_re_ws(), " ");
+    // Apply canonicalization transformations in sequence using string matching
+    s = replace_addr_pattern(std::move(s));
+    s = replace_line_pattern(std::move(s));
+    s = replace_array_pattern(std::move(s));
+    s = replace_template_pattern(std::move(s));
+    s = replace_ws_pattern(std::move(s));
     
     // Return trimmed result
     return Str(trim_view(s));

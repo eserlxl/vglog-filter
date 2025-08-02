@@ -9,21 +9,12 @@
 
 #include <string>
 #include <string_view>
-#include <regex>
 
 namespace canonicalization {
 
 [[nodiscard]] std::string_view trim_view(std::string_view s);
 [[nodiscard]] std::string rtrim(std::string s);
-[[nodiscard]] std::string regex_replace_all(std::string_view src, const std::regex& re, std::string_view repl);
 [[nodiscard]] std::string canon(std::string s);
 [[nodiscard]] std::string canon(std::string_view s);
-
-// Regex getters
-[[nodiscard]] const std::regex& get_re_addr();
-[[nodiscard]] const std::regex& get_re_line();
-[[nodiscard]] const std::regex& get_re_array();
-[[nodiscard]] const std::regex& get_re_template();
-[[nodiscard]] const std::regex& get_re_ws();
 
 } // namespace canonicalization

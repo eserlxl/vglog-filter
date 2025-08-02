@@ -70,40 +70,190 @@ LogProcessor::LogProcessor(const Options& options) :
     sigLines.reserve(64);
     
     // Initialize regex patterns with explicit locale to avoid uninitialized value issues
-    initialize_regex_patterns();
+    initialize_string_patterns();
 }
 
-void LogProcessor::initialize_regex_patterns() {
-    try {
-        // Create explicit string copies to ensure proper initialization
-        const std::string vg_pattern(VG_LINE_PATTERN);
-        const std::string prefix_pattern(PREFIX_PATTERN);
-        const std::string start_pattern(START_PATTERN);
-        const std::string bytes_head_pattern(BYTES_HEAD_PATTERN);
-        const std::string at_pattern(AT_PATTERN);
-        const std::string by_pattern(BY_PATTERN);
-        const std::string q_pattern(Q_PATTERN);
-        
-        // Set global locale to C locale to minimize MSan uninitialized value issues
-        // This ensures the regex engine uses a fully initialized locale
-        std::locale::global(std::locale::classic());
-        
-        // Initialize regex objects with ECMAScript syntax
-        // Note: MSan warnings in regex initialization are known C++ library limitations
-        // and do not indicate actual bugs in our code. The warnings are related to
-        // internal locale handling in the C++ standard library regex implementation.
-        re_vg_line = std::make_unique<std::regex>(vg_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_prefix = std::make_unique<std::regex>(prefix_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_start = std::make_unique<std::regex>(start_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_bytes_head = std::make_unique<std::regex>(bytes_head_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_at = std::make_unique<std::regex>(at_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_by = std::make_unique<std::regex>(by_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_q = std::make_unique<std::regex>(q_pattern, std::regex::optimize | std::regex::ECMAScript);
-    } catch (const std::regex_error& e) {
-        throw std::runtime_error("Failed to initialize regex patterns: " + std::string(e.what()));
-    } catch (const std::exception& e) {
-        throw std::runtime_error("Failed to initialize regex patterns: " + std::string(e.what()));
+void LogProcessor::initialize_string_patterns() {
+    // Initialize pattern strings for string matching
+    // No regex compilation needed - eliminates MSan warnings
+    vg_pattern = VG_LINE_PATTERN;
+    prefix_pattern = PREFIX_PATTERN;
+    start_pattern = START_PATTERN;
+    bytes_head_pattern = BYTES_HEAD_PATTERN;
+    at_pattern = AT_PATTERN;
+    by_pattern = BY_PATTERN;
+    q_pattern = Q_PATTERN;
+}
+
+// Simple string matching functions to replace regex
+
+bool LogProcessor::matches_vg_line(std::string_view line) const {
+    // Match pattern: ^==[0-9]+==
+    if (line.size() < 4) return false;
+    if (line[0] != '=' || line[1] != '=') return false;
+    
+    size_t i = 2;
+    while (i < line.size() && std::isdigit(line[i])) i++;
+    if (i < 4 || i >= line.size() - 1) return false;
+    if (line[i] != '=' || line[i+1] != '=') return false;
+    
+    return true;
+}
+
+bool LogProcessor::matches_prefix(std::string_view line) const {
+    // Match pattern: ^==[0-9]+==[ \t\v\f\r\n]*
+    if (!matches_vg_line(line)) return false;
+    
+    // Find the end of ==[0-9]+==
+    size_t i = 2;
+    while (i < line.size() && std::isdigit(line[i])) i++;
+    i += 2; // Skip ==
+    
+    // Check for whitespace
+    while (i < line.size() && std::isspace(line[i])) i++;
+    
+    return true;
+}
+
+bool LogProcessor::matches_start_pattern(std::string_view line) const {
+    // Match pattern: (Invalid (read|write)|Syscall param|Use of uninitialised|...)
+    const std::vector<std::string_view> patterns = {
+        "Invalid read",
+        "Invalid write", 
+        "Syscall param",
+        "Use of uninitialised",
+        "Conditional jump",
+        "bytes in ",
+        "still reachable",
+        "possibly lost",
+        "definitely lost",
+        "Process terminating"
+    };
+    
+    for (const auto& pattern : patterns) {
+        if (line.find(pattern) != std::string_view::npos) return true;
     }
+    return false;
+}
+
+bool LogProcessor::matches_bytes_head(std::string_view line) const {
+    // Match pattern: [0-9]+ bytes in [0-9]+ blocks
+    size_t pos = 0;
+    
+    // Find first number
+    while (pos < line.size() && !std::isdigit(line[pos])) pos++;
+    if (pos >= line.size()) return false;
+    
+    // Skip first number
+    while (pos < line.size() && std::isdigit(line[pos])) pos++;
+    
+    // Check for " bytes in "
+    if (pos + 10 >= line.size()) return false;
+    if (line.substr(pos, 10) != " bytes in ") return false;
+    pos += 10;
+    
+    // Find second number
+    while (pos < line.size() && !std::isdigit(line[pos])) pos++;
+    if (pos >= line.size()) return false;
+    
+    // Skip second number
+    while (pos < line.size() && std::isdigit(line[pos])) pos++;
+    
+    // Check for " blocks"
+    if (pos + 7 >= line.size()) return false;
+    return line.substr(pos, 7) == " blocks";
+}
+
+bool LogProcessor::matches_at_pattern(std::string_view line) const {
+    // Match pattern: at : +
+    return line.find("at : ") != std::string_view::npos;
+}
+
+bool LogProcessor::matches_by_pattern(std::string_view line) const {
+    // Match pattern: by : +
+    return line.find("by : ") != std::string_view::npos;
+}
+
+bool LogProcessor::matches_q_pattern(std::string_view line) const {
+    // Match pattern: \?{3,} (3 or more question marks)
+    int count = 0;
+    for (char c : line) {
+        if (c == '?') {
+            count++;
+            if (count >= 3) return true;
+        } else {
+            count = 0;
+        }
+    }
+    return false;
+}
+
+std::string LogProcessor::replace_prefix(std::string_view line) const {
+    // Replace pattern: ^==[0-9]+==[ \t\v\f\r\n]*
+    if (!matches_vg_line(line)) return std::string(line);
+    
+    // Find the end of ==[0-9]+==
+    size_t i = 2;
+    while (i < line.size() && std::isdigit(line[i])) i++;
+    i += 2; // Skip ==
+    
+    // Skip whitespace
+    while (i < line.size() && std::isspace(line[i])) i++;
+    
+    return std::string(line.substr(i));
+}
+
+std::string LogProcessor::replace_patterns(const std::string& line) const {
+    std::string result = line;
+    
+    // Replace address patterns (0x[0-9a-fA-F]+)
+    size_t pos = 0;
+    while ((pos = result.find("0x", pos)) != std::string::npos) {
+        size_t start = pos;
+        pos += 2; // Skip "0x"
+        
+        // Find end of hex digits
+        while (pos < result.size() && std::isxdigit(result[pos])) pos++;
+        
+        // Replace if we found hex digits
+        if (pos > start + 2) {
+            result.replace(start, pos - start, "");
+            pos = start; // Continue from the same position
+        }
+    }
+    
+    // Replace "at : " patterns
+    pos = 0;
+    while ((pos = result.find("at : ", pos)) != std::string::npos) {
+        result.replace(pos, 5, "");
+    }
+    
+    // Replace "by : " patterns
+    pos = 0;
+    while ((pos = result.find("by : ", pos)) != std::string::npos) {
+        result.replace(pos, 5, "");
+    }
+    
+    // Replace question mark patterns (3 or more)
+    pos = 0;
+    while (pos < result.size()) {
+        if (result[pos] == '?') {
+            size_t start = pos;
+            int count = 0;
+            while (pos < result.size() && result[pos] == '?') {
+                count++;
+                pos++;
+            }
+            if (count >= 3) {
+                result.replace(start, count, "");
+                pos = start; // Continue from the same position
+            }
+        } else {
+            pos++;
+        }
+    }
+    
+    return result;
 }
 
 void LogProcessor::process_stream(std::istream& in) {
@@ -236,16 +386,16 @@ void LogProcessor::process_line(std::string_view line) {
     }
 
     // Skip lines that don't match valgrind pattern
-    if (!std::regex_search(line.begin(), line.end(), *re_vg_line)) {
+    if (!matches_vg_line(line)) {
         return;
     }
 
-    std::string processed_line = std::regex_replace(std::string(line), *re_prefix, "");
+    std::string processed_line = replace_prefix(line);
 
     // Handle start of new block
-    if (std::regex_search(processed_line, *re_start)) {
+    if (matches_start_pattern(processed_line)) {
         flush();
-        if (std::regex_search(processed_line, *re_bytes_head)) {
+        if (matches_bytes_head(processed_line)) {
             return;
         }
     }
@@ -267,14 +417,8 @@ std::string LogProcessor::process_raw_line(const std::string& processed_line) {
     std::string rawLine = processed_line;
     
     if (opt.scrub_raw) {
-        try {
-            rawLine = regex_replace_all(rawLine, get_re_addr(), "");
-            rawLine = regex_replace_all(rawLine, *re_at, "");
-            rawLine = regex_replace_all(rawLine, *re_by, "");
-            rawLine = regex_replace_all(rawLine, *re_q, "");
-        } catch (const std::regex_error& e) {
-            throw std::runtime_error("Regex processing failed: " + std::string(e.what()));
-        }
+        // Use string matching instead of regex - no exceptions to catch
+        rawLine = replace_patterns(rawLine);
     }
     
     return rawLine;

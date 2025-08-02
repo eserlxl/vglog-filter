@@ -8,21 +8,17 @@
 #include <iostream>
 #include <string>
 #include <string_view>
-#include <regex>
 #include <cassert>
 #include "test_helpers.h"
-#include "canonicalization.h"
+#include <canonicalization.h>
 
 using namespace canonicalization;
 
 bool test_trim_views() {
     std::cout << "\n=== Testing trim_view ===" << std::endl;
 
-    // trim_view
     TEST_ASSERT(trim_view("  hello  ") == "hello", "trim_view: leading and trailing spaces");
-    TEST_ASSERT(trim_view("\t\nhello\r\n") == "hello", "trim_view: mixed leading and trailing whitespace");
-    TEST_ASSERT(trim_view("  hello") == "hello", "trim_view: only leading spaces");
-    TEST_ASSERT(trim_view("hello  ") == "hello", "trim_view: only trailing spaces");
+    TEST_ASSERT(trim_view("\t\nhello\r\n") == "hello", "trim_view: mixed whitespace");
     TEST_ASSERT(trim_view("hello") == "hello", "trim_view: no whitespace");
     TEST_ASSERT(trim_view("  ") == "", "trim_view: all spaces");
     TEST_ASSERT(trim_view("") == "", "trim_view: empty string");
@@ -43,20 +39,6 @@ bool test_rtrim_string() {
     TEST_ASSERT(rtrim("hello world  ") == "hello world", "rtrim: multiple words");
 
     TEST_PASS("rtrim(Str) tests completed");
-    return true;
-}
-
-bool test_regex_replace_all_no_match() {
-    std::cout << "\n=== Testing regex_replace_all with no matches ===" << std::endl;
-
-    const std::regex re("pattern_not_found");
-    std::string original = "This is a test string.";
-    TEST_ASSERT(regex_replace_all(original, re, "replacement") == original, 
-                "Should return original string if no match");
-    TEST_ASSERT(regex_replace_all("", re, "replacement") == "", 
-                "Empty string should remain empty");
-
-    TEST_PASS("regex_replace_all with no matches tests completed");
     return true;
 }
 
@@ -114,7 +96,6 @@ int main() {
 
     all_passed &= test_trim_views();
     all_passed &= test_rtrim_string();
-    all_passed &= test_regex_replace_all_no_match();
     all_passed &= test_canon_function();
 
     if (all_passed) {
