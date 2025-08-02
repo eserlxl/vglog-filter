@@ -210,10 +210,6 @@ vcpkg_installed/
 *.bak
 *.backup
 *.backup.*
-Backup/
-Backups/
-backup/
-backups/
 
 # Archive files
 *.tar
