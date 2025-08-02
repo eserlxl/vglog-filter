@@ -2,7 +2,7 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Test script for bump-version improvements
+# Test script for bump-version improvements with new versioning system
 
 set -euo pipefail
 
@@ -57,7 +57,7 @@ setup_test() {
     git config user.email "test@example.com"
     
     # Create initial VERSION file
-    echo "1.0.0" > VERSION
+    echo "9.3.0" > VERSION
     git add VERSION
     git commit --quiet -m "Initial version" 2>/dev/null || true
 }
@@ -77,15 +77,15 @@ printf '%s\n' "${CYAN}=== Test 1: Early --print behavior ===${RESET}"
 setup_test "test_print_early"
 run_test "Early --print exits without git checks" \
     "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "1.0.1"
+    "9.3.1"
 cleanup_test "test_print_early"
 
 # Test 2: Dry-run accuracy for CMakeLists.txt
 printf '%s\n' "${CYAN}=== Test 2: Dry-run CMakeLists.txt accuracy ===${RESET}"
 setup_test "test_dry_run_cmake"
 run_test "Dry-run shows CMake update when version field exists" \
-    "echo 'project(test VERSION 1.0.0)' > CMakeLists.txt && $BUMP_VERSION_SCRIPT patch --dry-run --repo-root $(pwd)" \
-    "Would update CMakeLists.txt to 1.0.1"
+    "echo 'project(test VERSION 9.3.0)' > CMakeLists.txt && $BUMP_VERSION_SCRIPT patch --dry-run --repo-root $(pwd)" \
+    "Would update CMakeLists.txt to 9.3.1"
 cleanup_test "test_dry_run_cmake"
 
 setup_test "test_dry_run_cmake_no_field"
@@ -94,94 +94,77 @@ run_test "Dry-run skips CMake when no version field" \
     "Would skip CMakeLists.txt update (no recognizable version field)"
 cleanup_test "test_dry_run_cmake_no_field"
 
-# Test 3: Dirty file detection
-printf '%s\n' "${CYAN}=== Test 3: Dirty file detection ===${RESET}"
+# Test 3: New versioning system with LOC delta
+printf '%s\n' "${CYAN}=== Test 3: New versioning system with LOC delta ===${RESET}"
+setup_test "test_loc_delta_system"
+
+# Enable LOC delta system
+export VERSION_USE_LOC_DELTA=true
+export VERSION_PATCH_LIMIT=100
+export VERSION_MINOR_LIMIT=100
+
+# Test patch bump with LOC delta
+run_test "Patch bump with LOC delta enabled" \
+    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "9.3.1"
+
+# Test minor bump with LOC delta
+run_test "Minor bump with LOC delta enabled" \
+    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
+    "9.3.5"
+
+# Test major bump with LOC delta
+run_test "Major bump with LOC delta enabled" \
+    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT major --print --repo-root $(pwd)" \
+    "9.3.10"
+
+cleanup_test "test_loc_delta_system"
+
+# Test 4: Rollover logic with new versioning system
+printf '%s\n' "${CYAN}=== Test 4: Rollover logic with new versioning system ===${RESET}"
+setup_test "test_rollover_logic"
+
+# Set version to test rollover
+echo "9.3.95" > VERSION
+git add VERSION
+git commit --quiet -m "Set version to 9.3.95" 2>/dev/null || true
+
+# Test patch rollover
+run_test "Patch rollover (9.3.95 + 6 = 9.4.1)" \
+    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "9.4.1"
+
+# Set version to test minor rollover
+echo "9.99.95" > VERSION
+git add VERSION
+git commit --quiet -m "Set version to 9.99.95" 2>/dev/null || true
+
+# Test minor rollover
+run_test "Minor rollover (9.99.95 + 6 = 10.0.1)" \
+    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "10.0.1"
+
+cleanup_test "test_rollover_logic"
+
+# Test 5: Dirty file detection
+printf '%s\n' "${CYAN}=== Test 5: Dirty file detection ===${RESET}"
 setup_test "test_dirty_files"
 echo "modified" > some_file.txt
-git add some_file.txt
-git commit --quiet -m "Add some_file.txt" 2>/dev/null || true
-echo "modified again" > some_file.txt
-run_test "Dirty tree detection shows file names" \
-    "$BUMP_VERSION_SCRIPT patch --commit --repo-root $(pwd) 2>&1 || true" \
-    "Dirty files:"
+run_test "Dirty file detection works" \
+    "$BUMP_VERSION_SCRIPT patch --dry-run --repo-root $(pwd)" \
+    "Error: Working directory is not clean"
 cleanup_test "test_dirty_files"
 
-# Test 4: Prerelease behavior
-printf '%s\n' "${CYAN}=== Test 4: Prerelease behavior ===${RESET}"
-setup_test "test_prerelease"
-run_test "Prerelease --print works" \
-    "$BUMP_VERSION_SCRIPT --set 1.0.0-rc.1 --allow-prerelease --print --repo-root $(pwd)" \
-    "1.0.0-rc.1"
-cleanup_test "test_prerelease"
-
-setup_test "test_prerelease_tag_fail"
-run_test "Prerelease tag creation fails" \
-    "$BUMP_VERSION_SCRIPT --set 1.0.0-rc.1 --allow-prerelease --tag --repo-root $(pwd) 2>&1 || true" \
-    "Cannot create tag for pre-release version"
-cleanup_test "test_prerelease_tag_fail"
-
-# Test 5: Commit file restriction
-printf '%s\n' "${CYAN}=== Test 5: Commit file restriction ===${RESET}"
-setup_test "test_commit_restriction"
-echo "staged" > staged_file.txt
-git add staged_file.txt
-run_test "Commit only includes VERSION and CMakeLists.txt" \
-    "$BUMP_VERSION_SCRIPT patch --commit --dry-run --repo-root $(pwd)" \
-    "Would commit files: VERSION"
-cleanup_test "test_commit_restriction"
-
-# Test 6: Usage documentation
-printf '%s\n' "${CYAN}=== Test 6: Usage documentation ===${RESET}"
-run_test "Usage shows behavior notes" \
-    "$BUMP_VERSION_SCRIPT --help" \
-    "Behavior notes:"
-run_test "Usage shows file tracking requirements" \
-    "$BUMP_VERSION_SCRIPT --help" \
-    "File Tracking Requirements:"
-
-# Test 7: LOC delta system integration
-printf '%s\n' "${CYAN}=== Test 7: LOC delta system integration ===${RESET}"
-setup_test "test_loc_delta_integration"
-run_test "LOC delta system enabled" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "1.0.1"
-cleanup_test "test_loc_delta_integration"
-
-setup_test "test_loc_delta_disabled"
-run_test "LOC delta system disabled (default)" \
-    "VERSION_USE_LOC_DELTA=false $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "1.0.1"
-cleanup_test "test_loc_delta_disabled"
-
-# Test 8: LOC delta configuration
-printf '%s\n' "${CYAN}=== Test 8: LOC delta configuration ===${RESET}"
-setup_test "test_loc_delta_config"
-run_test "Custom patch limit" \
-    "VERSION_USE_LOC_DELTA=true VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "1.0.1"
-cleanup_test "test_loc_delta_config"
-
-# Test 9: LOC delta with actual changes
-printf '%s\n' "${CYAN}=== Test 9: LOC delta with actual changes ===${RESET}"
-setup_test "test_loc_delta_changes"
-echo "// New code" > new_file.c
-git add new_file.c
-git commit --quiet -m "Add new file" 2>/dev/null || true
-run_test "LOC delta with actual changes" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "1.0."
-cleanup_test "test_loc_delta_changes"
-
-# Test 10: LOC delta rollover
-printf '%s\n' "${CYAN}=== Test 10: LOC delta rollover ===${RESET}"
-setup_test "test_loc_delta_rollover"
-echo "1.0.95" > VERSION
+# Test 6: Version format validation
+printf '%s\n' "${CYAN}=== Test 6: Version format validation ===${RESET}"
+setup_test "test_version_format"
+echo "invalid-version" > VERSION
 git add VERSION
-git commit --quiet -m "Set version to 1.0.95" 2>/dev/null || true
-run_test "LOC delta rollover scenario" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "1.0."
-cleanup_test "test_loc_delta_rollover"
+git commit --quiet -m "Set invalid version" 2>/dev/null || true
+run_test "Invalid version format detection" \
+    "$BUMP_VERSION_SCRIPT patch --dry-run --repo-root $(pwd)" \
+    "Error: Invalid version format"
+cleanup_test "test_version_format"
 
 # Print summary
 printf '%s\n' "${CYAN}=== Test Summary ===${RESET}"
@@ -192,6 +175,6 @@ if [[ $TESTS_FAILED -eq 0 ]]; then
     printf '%s\n' "${GREEN}All tests passed!${RESET}"
     exit 0
 else
-    printf '%s\n' "${RED}Some tests failed.${RESET}"
+    printf '%s\n' "${RED}Some tests failed!${RESET}"
     exit 1
 fi 

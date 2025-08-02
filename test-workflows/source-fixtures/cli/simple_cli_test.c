@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
             return 0;
         }
         if (strcmp(argv[i], "--version") == 0) {
-            printf("Version 1.0.0\n");
+            printf("Version 9.3.0\n");
             return 0;
         }
         if (strcmp(argv[i], "--verbose") == 0) {
