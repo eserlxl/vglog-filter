@@ -22,8 +22,7 @@ SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 VERSION_FILE="$PROJECT_ROOT/VERSION"
 
-# Change to project root for git operations
-cd "$PROJECT_ROOT"
+# Note: Directory change will happen after --repo-root processing
 
 # --- Dependency helpers -------------------------------------------------------
 
@@ -160,10 +159,7 @@ bump_version() {
     IFS='.' read -r current_major current_minor current_patch <<< "$CURRENT_VERSION"
 
     # Check if LOC-based delta system is enabled
-    printf "DEBUG: VERSION_USE_LOC_DELTA=${VERSION_USE_LOC_DELTA:-false}\n"
-    printf "DEBUG: Condition check: [[ \"${VERSION_USE_LOC_DELTA:-false}\" = \"true\" ]]\n"
     if [[ "${VERSION_USE_LOC_DELTA:-false}" = "true" ]]; then
-        printf "DEBUG: LOC delta system enabled\n"
         # Use semantic analyzer to calculate LOC-based delta
         local delta=1
         # Try to find semantic analyzer in various locations
@@ -175,11 +171,9 @@ bump_version() {
         fi
         
         if [[ -n "$analyzer_path" ]]; then
-            printf "DEBUG: Found analyzer at: $analyzer_path\n"
             # Get the delta from semantic analyzer
             local analyzer_output
             analyzer_output=$(VERSION_USE_LOC_DELTA=true "$analyzer_path" --json 2>/dev/null || true)
-            printf "DEBUG: Analyzer output length: ${#analyzer_output}\n"
             
             if [[ -n "$analyzer_output" ]]; then
                 # Extract delta from JSON output - look for nested fields under loc_delta
@@ -212,7 +206,6 @@ bump_version() {
                 local new_patch=$((current_patch + delta))
                 local patch_limit="${VERSION_PATCH_LIMIT:-100}"
                 local minor_limit="${VERSION_MINOR_LIMIT:-100}"
-                
                 if [[ "$new_patch" -ge "$patch_limit" ]]; then
                     # Rollover to next minor
                     local new_minor=$((current_minor + 1))
@@ -629,6 +622,9 @@ if [[ -n "$REPO_ROOT" ]]; then
     VERSION_FILE="$PROJECT_ROOT/VERSION"
     cd "$PROJECT_ROOT"
     printf '%s\n' "${CYAN}Using repository root: $PROJECT_ROOT${RESET}" >&2
+else
+    # Change to project root for git operations (default behavior)
+    cd "$PROJECT_ROOT"
 fi
 
 # Early exclusivity check
@@ -646,12 +642,9 @@ if [[ "$PRINT_ONLY" == "true" ]]; then
     elif [[ -n "$BUMP_TYPE" && -f "$VERSION_FILE" ]]; then
         CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
         if [[ "$CURRENT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            IFS='.' read -r a b c <<< "$CURRENT_VERSION"
-            case "$BUMP_TYPE" in
-                major) printf '%s\n' "$((a+1)).0.0" ;;
-                minor) printf '%s\n' "$a.$((b+1)).0" ;;
-                patch) printf '%s\n' "$a.$b.$((c+1))" ;;
-            esac
+            # Use bump_version function to ensure LOC-based delta system is used
+            bump_version "$BUMP_TYPE"
+            printf '%s\n' "$NEW_VERSION"
             exit 0
         fi
     fi
