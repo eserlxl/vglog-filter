@@ -576,6 +576,64 @@ test_json_output() {
     rm -rf "$test_dir"
 }
 
+# Test LOC delta system
+test_loc_delta_system() {
+    log_info "Testing LOC delta system..."
+    
+    local test_dir
+    test_dir=$(mktemp -d)
+    cd "$test_dir" || exit 1
+    
+    # Initialize git repository
+    git init >/dev/null 2>&1
+    echo "0.0.0" > VERSION
+    
+    # Create initial test file
+    echo "initial test" > test.txt
+    git add . >/dev/null 2>&1
+    git commit -m "Initial commit" >/dev/null 2>&1
+    
+    # Create a tag so we can analyze changes since the tag
+    git tag v0.0.0 >/dev/null 2>&1
+    
+    # Add a new test file
+    echo "new test" > new_test.txt
+    git add . >/dev/null 2>&1
+    git commit -m "Add new file" >/dev/null 2>&1
+    
+    # Test LOC delta system enabled
+    local output
+    output=$(VERSION_USE_LOC_DELTA=true "$SCRIPT_PATH" --json --repo-root "$test_dir" 2>&1)
+    
+    if [[ "$output" == *'"loc_delta"'* ]] && [[ "$output" == *'"enabled": true'* ]]; then
+        log_success "LOC delta system enabled"
+    else
+        log_error "LOC delta system enabled"
+    fi
+    
+    # Test LOC delta system disabled
+    output=$(VERSION_USE_LOC_DELTA=false "$SCRIPT_PATH" --json --repo-root "$test_dir" 2>&1)
+    
+    if [[ "$output" != *'"loc_delta"'* ]]; then
+        log_success "LOC delta system disabled"
+    else
+        log_error "LOC delta system disabled"
+    fi
+    
+    # Test bonus system
+    output=$(VERSION_USE_LOC_DELTA=true "$SCRIPT_PATH" --json --repo-root "$test_dir" 2>&1)
+    
+    if [[ "$output" == *'"bonuses"'* ]]; then
+        log_success "Bonus system included in JSON"
+    else
+        log_error "Bonus system included in JSON"
+    fi
+    
+    # Cleanup
+    cd - >/dev/null 2>&1 || exit
+    rm -rf "$test_dir"
+}
+
 # Main test runner
 # shellcheck disable=SC2317
 main() {
@@ -607,6 +665,7 @@ main() {
     test_threshold_configuration
     test_error_handling
     test_json_output
+    test_loc_delta_system
     
     # Print summary
     printf "\n%s=== Test Summary ===%s\n" "${BLUE}" "${NC}"

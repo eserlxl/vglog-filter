@@ -139,6 +139,50 @@ run_test "Usage shows file tracking requirements" \
     "$BUMP_VERSION_SCRIPT --help" \
     "File Tracking Requirements:"
 
+# Test 7: LOC delta system integration
+printf '%s\n' "${CYAN}=== Test 7: LOC delta system integration ===${RESET}"
+setup_test "test_loc_delta_integration"
+run_test "LOC delta system enabled" \
+    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "1.0.1"
+cleanup_test "test_loc_delta_integration"
+
+setup_test "test_loc_delta_disabled"
+run_test "LOC delta system disabled (default)" \
+    "VERSION_USE_LOC_DELTA=false $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "1.0.1"
+cleanup_test "test_loc_delta_disabled"
+
+# Test 8: LOC delta configuration
+printf '%s\n' "${CYAN}=== Test 8: LOC delta configuration ===${RESET}"
+setup_test "test_loc_delta_config"
+run_test "Custom patch limit" \
+    "VERSION_USE_LOC_DELTA=true VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "1.0.1"
+cleanup_test "test_loc_delta_config"
+
+# Test 9: LOC delta with actual changes
+printf '%s\n' "${CYAN}=== Test 9: LOC delta with actual changes ===${RESET}"
+setup_test "test_loc_delta_changes"
+echo "// New code" > new_file.c
+git add new_file.c
+git commit --quiet -m "Add new file" 2>/dev/null || true
+run_test "LOC delta with actual changes" \
+    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "1.0."
+cleanup_test "test_loc_delta_changes"
+
+# Test 10: LOC delta rollover
+printf '%s\n' "${CYAN}=== Test 10: LOC delta rollover ===${RESET}"
+setup_test "test_loc_delta_rollover"
+echo "1.0.95" > VERSION
+git add VERSION
+git commit --quiet -m "Set version to 1.0.95" 2>/dev/null || true
+run_test "LOC delta rollover scenario" \
+    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "1.0."
+cleanup_test "test_loc_delta_rollover"
+
 # Print summary
 printf '%s\n' "${CYAN}=== Test Summary ===${RESET}"
 printf '%s\n' "${GREEN}Tests passed: $TESTS_PASSED${RESET}"

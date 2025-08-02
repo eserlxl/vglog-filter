@@ -10,6 +10,9 @@ Tests for the main functionality of the project:
 - **`test_semantic_version_analyzer.sh`**: Comprehensive tests for semantic version analysis
 - **`test_semantic_version_analyzer_fixes.sh`**: Tests for specific fixes and improvements
 - **`test_semantic_version_analyzer_simple.sh`**: Basic functionality tests
+- **`test_loc_delta_system.sh`**: Basic demonstration of LOC-based delta system
+- **`test_loc_delta_system_comprehensive.sh`**: Comprehensive tests for LOC-based delta system
+- **`test_bump_version_loc_delta.sh`**: Tests bump-version integration with LOC delta system
 
 ### File Handling Tests (`file-handling-tests/`)
 Tests for file processing and handling:
@@ -46,6 +49,22 @@ Tests for Extended Regular Expression functionality:
 - **`test_ere.c`**: Basic ERE functionality
 - **`test_ere_fix.c`**: ERE fix testing
 
+### LOC Delta System Tests
+Tests for the LOC-based delta versioning system:
+- **`test_loc_delta_system.sh`**: Basic demonstration and examples
+- **`test_loc_delta_system_comprehensive.sh`**: Comprehensive test suite covering:
+  - Basic LOC-based delta calculations
+  - Breaking change bonuses
+  - Feature addition bonuses
+  - Security fix bonuses
+  - Combined bonus scenarios
+  - Configuration customization
+  - Rollover scenarios
+  - Edge cases
+  - Verbose output
+- **`test_bump_version_loc_delta.sh`**: Integration tests for bump-version script
+- **`run_loc_delta_tests.sh`**: Dedicated test runner for LOC delta system
+
 ## Test Helper Functions
 
 The `test_helper.sh` file provides common utilities for all tests:
@@ -74,6 +93,17 @@ The `test_helper.sh` file provides common utilities for all tests:
 ### Run All Tests
 ```bash
 bash test-workflows/run_workflow_tests.sh
+```
+
+### Run LOC Delta System Tests
+```bash
+# Run all LOC delta system tests
+bash test-workflows/run_loc_delta_tests.sh
+
+# Run specific LOC delta tests
+bash test-workflows/core-tests/test_loc_delta_system.sh
+bash test-workflows/core-tests/test_loc_delta_system_comprehensive.sh
+bash test-workflows/core-tests/test_bump_version_loc_delta.sh
 ```
 
 ### Run Specific Test Categories

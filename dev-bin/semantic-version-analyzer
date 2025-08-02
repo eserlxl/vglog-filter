@@ -72,6 +72,22 @@ Environment Variables:
   MIN_NEW_TEST_FILES       Minimum new test files for minor (default: 3)
   MIN_NEW_DOC_FILES        Minimum new doc files for minor (default: 2)
   MAJOR_REQUIRE_BREAKING   Require breaking changes for major (default: true; accepts: true/1/yes)
+  VERSION_USE_LOC_DELTA    Enable LOC-based delta system (default: false)
+  VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
+  VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
+  VERSION_PATCH_DELTA      Patch delta formula (default: 1*(1+LOC/250))
+  VERSION_MINOR_DELTA      Minor delta formula (default: 5*(1+LOC/500))
+  VERSION_MAJOR_DELTA      Major delta formula (default: 10*(1+LOC/1000))
+  VERSION_BREAKING_CLI_BONUS Breaking CLI bonus (default: 2)
+  VERSION_API_BREAKING_BONUS API breaking bonus (default: 3)
+  VERSION_REMOVED_OPTION_BONUS Removed option bonus (default: 1)
+  VERSION_CLI_CHANGES_BONUS CLI changes bonus (default: 2)
+  VERSION_MANUAL_CLI_BONUS Manual CLI bonus (default: 1)
+  VERSION_NEW_SOURCE_BONUS New source file bonus (default: 1)
+  VERSION_NEW_TEST_BONUS   New test file bonus (default: 1)
+  VERSION_NEW_DOC_BONUS    New doc file bonus (default: 1)
+  VERSION_ADDED_OPTION_BONUS Added option bonus (default: 1)
+  VERSION_SECURITY_BONUS   Security keyword bonus (default: 2)
 
 Examples:
   $(basename "$0") --since v1.1.0
@@ -132,6 +148,26 @@ MIN_NEW_SOURCE_FILES="${MIN_NEW_SOURCE_FILES:-2}"
 MIN_NEW_TEST_FILES="${MIN_NEW_TEST_FILES:-3}"
 MIN_NEW_DOC_FILES="${MIN_NEW_DOC_FILES:-2}"
 MAJOR_REQUIRE_BREAKING="${MAJOR_REQUIRE_BREAKING:-true}"
+
+# LOC-based delta system configuration
+VERSION_PATCH_LIMIT="${VERSION_PATCH_LIMIT:-100}"
+VERSION_MINOR_LIMIT="${VERSION_MINOR_LIMIT:-100}"
+VERSION_PATCH_DELTA="${VERSION_PATCH_DELTA:-1*(1+LOC/250)}"
+VERSION_MINOR_DELTA="${VERSION_MINOR_DELTA:-5*(1+LOC/500)}"
+VERSION_MAJOR_DELTA="${VERSION_MAJOR_DELTA:-10*(1+LOC/1000)}"
+VERSION_USE_LOC_DELTA="${VERSION_USE_LOC_DELTA:-false}"
+
+# Bonus system configuration
+VERSION_BREAKING_CLI_BONUS="${VERSION_BREAKING_CLI_BONUS:-2}"
+VERSION_API_BREAKING_BONUS="${VERSION_API_BREAKING_BONUS:-3}"
+VERSION_REMOVED_OPTION_BONUS="${VERSION_REMOVED_OPTION_BONUS:-1}"
+VERSION_CLI_CHANGES_BONUS="${VERSION_CLI_CHANGES_BONUS:-2}"
+VERSION_MANUAL_CLI_BONUS="${VERSION_MANUAL_CLI_BONUS:-1}"
+VERSION_NEW_SOURCE_BONUS="${VERSION_NEW_SOURCE_BONUS:-1}"
+VERSION_NEW_TEST_BONUS="${VERSION_NEW_TEST_BONUS:-1}"
+VERSION_NEW_DOC_BONUS="${VERSION_NEW_DOC_BONUS:-1}"
+VERSION_ADDED_OPTION_BONUS="${VERSION_ADDED_OPTION_BONUS:-1}"
+VERSION_SECURITY_BONUS="${VERSION_SECURITY_BONUS:-2}"
 
 # Normalize MAJOR_REQUIRE_BREAKING once for consistency
 REQ="${MAJOR_REQUIRE_BREAKING,,}"
@@ -466,7 +502,7 @@ extract_cli_options() {
     # Manual argv parser detection
     debug_output "DEBUG: Starting manual CLI detection"
     local added_long_opts
-    added_long_opts=$(printf '%s' "$srcdiff" | awk '/^\+.*--[a-zA-Z0-9-]+/ && !/^\+.*--[[:space:]]*["\x27]/ && !/^\+.*--[[:space:]]*[a-zA-Z0-9_]+[[:space:]]*=/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
+    added_long_opts=$(printf '%s' "$srcdiff" | awk '/^\+.*--[a-zA-Z0-9-]+/ && !/^\+.*--[[:space:]]*["\x27]/ && !/^\+[[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^\+[[:space:]]*.*["\x27].*-[[:alpha:]]/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
     local removed_long_opts
     removed_long_opts=$(printf '%s' "$srcdiff" | awk '/^-.*--[a-zA-Z0-9-]+/ && !/^-.*--[[:space:]]*["\x27]/ && !/^-.*--[[:space:]]*[a-zA-Z0-9_]+[[:space:]]*=/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
     R[manual_added_long_count]=$(printf '%s\n' "$added_long_opts" | wc -l | tr -d ' ' || printf '0')
@@ -649,7 +685,94 @@ analyze_changes() {
     fi
 }
 
-# Calculate next version without external dependency
+# Calculate LOC-based delta for version increments with bonus additions
+calculate_loc_delta() {
+    local bump_type="$1"
+    local loc="${R[diff_size]:-0}"
+    
+    # Ensure LOC is numeric
+    if [[ ! "$loc" =~ ^[0-9]+$ ]]; then
+        loc=0
+    fi
+    
+    # Calculate base delta from LOC
+    local base_delta=1
+    case "$bump_type" in
+        patch)
+            # Calculate: 1*(1+LOC/250)
+            base_delta=$(awk "BEGIN {printf \"%d\", 1 * (1 + $loc / 250)}" 2>/dev/null || echo "1")
+            ;;
+        minor)
+            # Calculate: 5*(1+LOC/500)
+            base_delta=$(awk "BEGIN {printf \"%d\", 5 * (1 + $loc / 500)}" 2>/dev/null || echo "5")
+            ;;
+        major)
+            # Calculate: 10*(1+LOC/1000)
+            base_delta=$(awk "BEGIN {printf \"%d\", 10 * (1 + $loc / 1000)}" 2>/dev/null || echo "10")
+            ;;
+        *)
+            base_delta=1
+            ;;
+    esac
+    
+    # Calculate bonus additions
+    local bonus=0
+    
+    # Breaking change bonuses
+    if [[ "${R[breaking_cli_changes]:-false}" = "true" ]]; then
+        bonus=$((bonus + VERSION_BREAKING_CLI_BONUS))
+    fi
+    if [[ "${R[api_breaking]:-false}" = "true" ]]; then
+        bonus=$((bonus + VERSION_API_BREAKING_BONUS))
+    fi
+    if [[ "${R[removed_short_count]:-0}" -gt 0 ]]; then
+        bonus=$((bonus + VERSION_REMOVED_OPTION_BONUS))
+    fi
+    if [[ "${R[removed_long_count]:-0}" -gt 0 ]]; then
+        bonus=$((bonus + VERSION_REMOVED_OPTION_BONUS))
+    fi
+    
+    # Feature addition bonuses
+    if [[ "${R[cli_changes]:-false}" = "true" ]]; then
+        bonus=$((bonus + VERSION_CLI_CHANGES_BONUS))
+    fi
+    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
+        bonus=$((bonus + VERSION_MANUAL_CLI_BONUS))
+    fi
+    if [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
+        bonus=$((bonus + VERSION_NEW_SOURCE_BONUS))
+    fi
+    if [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
+        bonus=$((bonus + VERSION_NEW_TEST_BONUS))
+    fi
+    if [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
+        bonus=$((bonus + VERSION_NEW_DOC_BONUS))
+    fi
+    if [[ "${R[added_short_count]:-0}" -gt 0 ]]; then
+        bonus=$((bonus + VERSION_ADDED_OPTION_BONUS))
+    fi
+    if [[ "${R[added_long_count]:-0}" -gt 0 ]]; then
+        bonus=$((bonus + VERSION_ADDED_OPTION_BONUS))
+    fi
+    
+    # Security fix bonuses
+    local security_keywords="${R[security_keywords]:-0}"
+    if [[ "$security_keywords" -gt 0 ]]; then
+        bonus=$((bonus + security_keywords * VERSION_SECURITY_BONUS))
+    fi
+    
+    # Calculate final delta
+    local final_delta=$((base_delta + bonus))
+    
+    # Ensure minimum delta of 1
+    if [[ "$final_delta" -lt 1 ]]; then
+        final_delta=1
+    fi
+    
+    printf '%d' "$final_delta"
+}
+
+# Calculate next version with LOC-based delta system
 calculate_next_version() {
     local current_version="$1"
     local bump_type="$2"
@@ -672,15 +795,67 @@ calculate_next_version() {
     local major minor patch
     IFS='.' read -r major minor patch <<< "$current_version"
 
+    # Calculate delta based on LOC if enabled
+    local delta=1
+    if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
+        delta=$(calculate_loc_delta "$bump_type")
+    else
+        # Traditional fixed deltas
+        case "$bump_type" in
+            major) delta=1 ;;
+            minor) delta=1 ;;
+            patch) delta=1 ;;
+        esac
+    fi
+
     case "$bump_type" in
         major)
-            printf '%d.0.0' "$((major + 1))"
+            # Apply delta and handle rollover
+            local new_patch=$((patch + delta))
+            if [[ "$new_patch" -ge "$VERSION_PATCH_LIMIT" ]]; then
+                # Rollover to next minor
+                local new_minor=$((minor + 1))
+                if [[ "$new_minor" -ge "$VERSION_MINOR_LIMIT" ]]; then
+                    # Rollover to next major
+                    printf '%d.0.0' "$((major + 1))"
+                else
+                    printf '%d.%d.0' "$major" "$new_minor"
+                fi
+            else
+                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
+            fi
             ;;
         minor)
-            printf '%d.%d.0' "$major" "$((minor + 1))"
+            # Apply delta and handle rollover
+            local new_patch=$((patch + delta))
+            if [[ "$new_patch" -ge "$VERSION_PATCH_LIMIT" ]]; then
+                # Rollover to next minor
+                local new_minor=$((minor + 1))
+                if [[ "$new_minor" -ge "$VERSION_MINOR_LIMIT" ]]; then
+                    # Rollover to next major
+                    printf '%d.0.0' "$((major + 1))"
+                else
+                    printf '%d.%d.0' "$major" "$new_minor"
+                fi
+            else
+                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
+            fi
             ;;
         patch)
-            printf '%d.%d.%d' "$major" "$minor" "$((patch + 1))"
+            # Apply delta and handle rollover
+            local new_patch=$((patch + delta))
+            if [[ "$new_patch" -ge "$VERSION_PATCH_LIMIT" ]]; then
+                # Rollover to next minor
+                local new_minor=$((minor + 1))
+                if [[ "$new_minor" -ge "$VERSION_MINOR_LIMIT" ]]; then
+                    # Rollover to next major
+                    printf '%d.0.0' "$((major + 1))"
+                else
+                    printf '%d.%d.0' "$major" "$new_minor"
+                fi
+            else
+                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
+            fi
             ;;
         *)
             printf '%s' "$current_version"
@@ -953,7 +1128,27 @@ main() {
         printf '    "added_short_count": %s,\n' "${R[added_short_count]:-0}"
         printf '    "removed_long_count": %s,\n' "${R[removed_long_count]:-0}"
         printf '    "added_long_count": %s\n' "${R[added_long_count]:-0}"
-        printf '  }\n'
+        printf '  }'
+        if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
+            printf ',\n'
+            printf '  "loc_delta": {\n'
+            printf '    "enabled": true,\n'
+            printf '    "patch_delta": %s,\n' "$(calculate_loc_delta "patch")"
+            printf '    "minor_delta": %s,\n' "$(calculate_loc_delta "minor")"
+            printf '    "major_delta": %s,\n' "$(calculate_loc_delta "major")"
+            printf '    "patch_limit": %s,\n' "$VERSION_PATCH_LIMIT"
+            printf '    "minor_limit": %s,\n' "$VERSION_MINOR_LIMIT"
+            printf '    "base_loc": %s,\n' "${R[diff_size]:-0}"
+            printf '    "bonuses": {\n'
+            printf '      "breaking_cli": %s,\n' "${R[breaking_cli_changes]:-false}"
+            printf '      "api_breaking": %s,\n' "${R[api_breaking]:-false}"
+            printf '      "removed_options": %s,\n' "$((R[removed_short_count]:-0 + R[removed_long_count]:-0))"
+            printf '      "cli_changes": %s,\n' "${R[cli_changes]:-false}"
+            printf '      "new_files": %s,\n' "$((R[new_source_files]:-0 + R[new_test_files]:-0 + R[new_doc_files]:-0))"
+            printf '      "security_keywords": %s\n' "${R[security_keywords]:-0}"
+            printf '    }\n'
+            printf '  }'
+        fi
         printf '}\n'
     elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
         # Machine-readable key=value format - only SUGGESTION for --machine
@@ -1002,6 +1197,36 @@ main() {
             printf '  API breaking changes: %s\n' "${R[api_breaking]}"
             printf '  Security/crash keywords: %s\n' "${R[security_keywords]}"
             printf '\n'
+            if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
+                printf 'LOC-based delta system:\n'
+                printf '  Enabled: true\n'
+                printf '  Patch delta: %s\n' "$(calculate_loc_delta "patch")"
+                printf '  Minor delta: %s\n' "$(calculate_loc_delta "minor")"
+                printf '  Major delta: %s\n' "$(calculate_loc_delta "major")"
+                printf '  Patch limit: %s\n' "$VERSION_PATCH_LIMIT"
+                printf '  Minor limit: %s\n' "$VERSION_MINOR_LIMIT"
+                printf '  Base LOC: %s\n' "${R[diff_size]:-0}"
+                printf '  Bonuses applied:\n'
+                if [[ "${R[breaking_cli_changes]:-false}" = "true" ]]; then
+                    printf '    Breaking CLI changes: +%s\n' "$VERSION_BREAKING_CLI_BONUS"
+                fi
+                if [[ "${R[api_breaking]:-false}" = "true" ]]; then
+                    printf '    API breaking changes: +%s\n' "$VERSION_API_BREAKING_BONUS"
+                fi
+                if [[ "${R[removed_short_count]:-0}" -gt 0 ]] || [[ "${R[removed_long_count]:-0}" -gt 0 ]]; then
+                    printf '    Removed options: +%s\n' "$VERSION_REMOVED_OPTION_BONUS"
+                fi
+                if [[ "${R[cli_changes]:-false}" = "true" ]]; then
+                    printf '    CLI changes: +%s\n' "$VERSION_CLI_CHANGES_BONUS"
+                fi
+                if [[ "${R[new_source_files]:-0}" -gt 0 ]] || [[ "${R[new_test_files]:-0}" -gt 0 ]] || [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
+                    printf '    New files: +%s\n' "$VERSION_NEW_SOURCE_BONUS"
+                fi
+                if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then
+                    printf '    Security keywords: +%s\n' "$((R[security_keywords] * VERSION_SECURITY_BONUS))"
+                fi
+                printf '\n'
+            fi
             printf 'Thresholds:\n'
             printf '  Major: Breaking CLI changes or diff > %s lines (MAJOR_REQUIRE_BREAKING=%s)\n' "$MIN_MAJOR_DIFF_LINES" "$MAJOR_REQUIRE_BREAKING"
             printf '  Minor: CLI changes, new source files (≥%s), new test files (≥%s), new doc files (≥%s)\n' "$MIN_NEW_SOURCE_FILES" "$MIN_NEW_TEST_FILES" "$MIN_NEW_DOC_FILES"

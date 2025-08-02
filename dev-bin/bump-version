@@ -159,12 +159,74 @@ bump_version() {
 
     IFS='.' read -r current_major current_minor current_patch <<< "$CURRENT_VERSION"
 
-    case "$bump_type" in
-        major) new_major=$((current_major + 1)); new_minor=0; new_patch=0 ;;
-        minor) new_major=$current_major;         new_minor=$((current_minor + 1)); new_patch=0 ;;
-        patch) new_major=$current_major;         new_minor=$current_minor;         new_patch=$((current_patch + 1)) ;;
-        *) printf '%s\n' "${RED}Error: Invalid bump type '$bump_type'${RESET}" >&2; exit 1 ;;
-    esac
+    # Check if LOC-based delta system is enabled
+    if [[ "${VERSION_USE_LOC_DELTA:-false}" = "true" ]]; then
+        # Use semantic analyzer to calculate LOC-based delta
+        local delta=1
+        if [[ -x "./dev-bin/semantic-version-analyzer" ]]; then
+            # Get the delta from semantic analyzer
+            local analyzer_output
+            analyzer_output=$(VERSION_USE_LOC_DELTA=true ./dev-bin/semantic-version-analyzer --json 2>/dev/null || true)
+            
+            if [[ -n "$analyzer_output" ]]; then
+                # Extract delta from JSON output
+                case "$bump_type" in
+                    patch)
+                        delta=$(printf '%s' "$analyzer_output" | grep -o '"patch_delta":[0-9]*' | cut -d: -f2 || echo "1")
+                        ;;
+                    minor)
+                        delta=$(printf '%s' "$analyzer_output" | grep -o '"minor_delta":[0-9]*' | cut -d: -f2 || echo "5")
+                        ;;
+                    major)
+                        delta=$(printf '%s' "$analyzer_output" | grep -o '"major_delta":[0-9]*' | cut -d: -f2 || echo "10")
+                        ;;
+                esac
+            fi
+        fi
+        
+        # Ensure delta is numeric
+        if [[ ! "$delta" =~ ^[0-9]+$ ]]; then
+            case "$bump_type" in
+                patch) delta=1 ;;
+                minor) delta=5 ;;
+                major) delta=10 ;;
+            esac
+        fi
+        
+        # Apply delta with rollover logic
+        case "$bump_type" in
+            major|minor|patch)
+                local new_patch=$((current_patch + delta))
+                local patch_limit="${VERSION_PATCH_LIMIT:-100}"
+                local minor_limit="${VERSION_MINOR_LIMIT:-100}"
+                
+                if [[ "$new_patch" -ge "$patch_limit" ]]; then
+                    # Rollover to next minor
+                    local new_minor=$((current_minor + 1))
+                    if [[ "$new_minor" -ge "$minor_limit" ]]; then
+                        # Rollover to next major
+                        new_major=$((current_major + 1))
+                        new_minor=0
+                        new_patch=0
+                    else
+                        new_major=$current_major
+                        new_patch=0
+                    fi
+                else
+                    new_major=$current_major
+                    new_minor=$current_minor
+                fi
+                ;;
+        esac
+    else
+        # Traditional fixed deltas
+        case "$bump_type" in
+            major) new_major=$((current_major + 1)); new_minor=0; new_patch=0 ;;
+            minor) new_major=$current_major;         new_minor=$((current_minor + 1)); new_patch=0 ;;
+            patch) new_major=$current_major;         new_minor=$current_minor;         new_patch=$((current_patch + 1)) ;;
+            *) printf '%s\n' "${RED}Error: Invalid bump type '$bump_type'${RESET}" >&2; exit 1 ;;
+        esac
+    fi
 
     NEW_VERSION="$new_major.$new_minor.$new_patch"
 }
@@ -461,6 +523,12 @@ Environment:
   ANALYSIS_MESSAGE         Extra paragraph appended to default commit message
   TAG_PREFIX               Default tag prefix (overridden by --tag-prefix)
   REMOTE                   Default remote for push operations (overridden by --remote)
+  VERSION_USE_LOC_DELTA    Enable LOC-based delta system (default: false)
+  VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
+  VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
+  VERSION_PATCH_DELTA      Patch delta formula (default: 1*(1+LOC/250))
+  VERSION_MINOR_DELTA      Minor delta formula (default: 5*(1+LOC/500))
+  VERSION_MAJOR_DELTA      Major delta formula (default: 10*(1+LOC/1000))
 
 Examples:
   ./dev-bin/bump-version patch
