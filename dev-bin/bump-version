@@ -203,24 +203,33 @@ bump_version() {
         # Apply delta with rollover logic
         case "$bump_type" in
             major|minor|patch)
-                local new_patch=$((current_patch + delta))
                 local patch_limit="${VERSION_PATCH_LIMIT:-100}"
                 local minor_limit="${VERSION_MINOR_LIMIT:-100}"
+                
+                # Calculate new patch with modulo 100
+                local new_patch=$((current_patch + delta))
                 if [[ "$new_patch" -ge "$patch_limit" ]]; then
-                    # Rollover to next minor
-                    local new_minor=$((current_minor + 1))
+                    # Calculate how many minor increments we need
+                    local minor_increments=$((new_patch / patch_limit))
+                    local remaining_patch=$((new_patch % patch_limit))
+                    
+                    # Calculate new minor version
+                    local new_minor=$((current_minor + minor_increments))
+                    
                     if [[ "$new_minor" -ge "$minor_limit" ]]; then
-                        # Rollover to next major
-                        new_major=$((current_major + 1))
-                        new_minor=0
-                        new_patch=0
+                        # Calculate how many major increments we need
+                        local major_increments=$((new_minor / minor_limit))
+                        new_major=$((current_major + major_increments))
+                        new_minor=$((new_minor % minor_limit))
+                        new_patch=$remaining_patch
                     else
                         new_major=$current_major
-                        new_patch=0
+                        new_patch=$remaining_patch
                     fi
                 else
                     new_major=$current_major
                     new_minor=$current_minor
+                    new_patch=$new_patch
                 fi
                 ;;
         esac
