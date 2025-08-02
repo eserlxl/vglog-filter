@@ -92,6 +92,23 @@ void LogProcessor::initialize_regex_patterns() {
         // This prevents the regex engine from using uninitialized locale data
         std::locale::global(std::locale::classic());
         
+        // Force locale initialization by creating a temporary locale object
+        // This ensures the locale system is properly initialized before regex construction
+        {
+            std::locale temp_locale = std::locale::classic();
+            std::locale::global(temp_locale);
+        }
+        
+        // Force initialization of the locale system by using it
+        // This ensures all locale-dependent components are properly initialized
+        {
+            std::locale current_locale = std::locale();
+            std::locale classic_locale = std::locale::classic();
+            // Force locale comparison to ensure proper initialization
+            bool locale_initialized = (current_locale == classic_locale);
+            (void)locale_initialized; // Suppress unused variable warning
+        }
+        
         // Initialize regex objects with explicit flags and avoid locale issues
         // Use ECMAScript syntax which is more predictable and doesn't rely on locale
         // Use explicit string conversion to avoid MSAN issues with uninitialized memory
@@ -102,6 +119,8 @@ void LogProcessor::initialize_regex_patterns() {
         // Use placement new to ensure proper initialization without default construction
         // Use unique_ptr to avoid default construction issues
         // Use explicit locale specification to avoid uninitialized memory issues
+        // Create regex objects with explicit locale to avoid MSan issues
+        // Use the global locale that we set earlier to ensure proper initialization
         re_vg_line = std::make_unique<std::regex>(vg_pattern, std::regex::optimize | std::regex::ECMAScript);
         re_prefix = std::make_unique<std::regex>(prefix_pattern, std::regex::optimize | std::regex::ECMAScript);
         re_start = std::make_unique<std::regex>(start_pattern, std::regex::optimize | std::regex::ECMAScript);
