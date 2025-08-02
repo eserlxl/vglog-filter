@@ -72,8 +72,7 @@ LogProcessor::LogProcessor(const Options& options) :
 
 void LogProcessor::initialize_regex_patterns() {
     try {
-        // Ensure locale is properly initialized before regex compilation
-        // Use explicit locale construction to avoid uninitialized memory
+        // Set locale explicitly to avoid uninitialized memory issues
         std::locale current_locale;
         try {
             current_locale = std::locale("");
@@ -93,6 +92,7 @@ void LogProcessor::initialize_regex_patterns() {
         const std::string by_pattern(BY_PATTERN);
         const std::string q_pattern(Q_PATTERN);
         
+        // Initialize regex objects with explicit flags to avoid uninitialized memory
         re_vg_line = std::regex(vg_pattern, std::regex::optimize | std::regex::ECMAScript);
         re_prefix = std::regex(prefix_pattern, std::regex::optimize | std::regex::ECMAScript);
         re_start = std::regex(start_pattern, std::regex::optimize | std::regex::ECMAScript);
