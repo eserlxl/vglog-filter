@@ -239,7 +239,7 @@ std::string LogProcessor::replace_patterns(const std::string& line) const {
     while (pos < result.size()) {
         if (result[pos] == '?') {
             size_t start = pos;
-            int count = 0;
+            size_t count = 0;
             while (pos < result.size() && result[pos] == '?') {
                 count++;
                 pos++;
