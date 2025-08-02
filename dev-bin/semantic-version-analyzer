@@ -940,52 +940,93 @@ suggest_version_bump() {
 
 # Determine the reason for the version bump suggestion
 get_bump_reason() {
+    local loc="${R[diff_size]:-0}"
+    local version_type=""
+    local base_reason=""
+    
+    # Ensure LOC is numeric
+    if [[ ! "$loc" =~ ^[0-9]+$ ]]; then
+        loc=0
+    fi
+    
     # MAJOR reasons
-    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then printf 'breaking_cli'; return; fi
-    if [[ "${R[api_breaking]}" = "true"      ]]; then printf 'api_break';    return; fi
-    
-    # Ensure security_keywords is numeric for get_bump_reason
-    local security_keywords_reason="${R[security_keywords]:-0}"
-    if [[ ! "$security_keywords_reason" =~ ^[0-9]+$ ]]; then
-        security_keywords_reason=0
-    fi
-    if [[ "$security_keywords_reason" -gt 0 ]]; then printf 'security_keywords'; return; fi
-    
-    # Ensure diff_size is numeric for get_bump_reason
-    local diff_size_reason="${R[diff_size]:-0}"
-    if [[ ! "$diff_size_reason" =~ ^[0-9]+$ ]]; then
-        diff_size_reason=0
-    fi
-    if [[ "$diff_size_reason" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
-        if [[ "$REQ" = "true" || "$REQ" = "1" || "$REQ" = "yes" ]]; then
-            # When MAJOR_REQUIRE_BREAKING is true, large diffs alone don't trigger major
-            # Only breaking changes should trigger major
-            :
+    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then 
+        version_type="MAJOR"
+        base_reason="breaking_cli"
+    elif [[ "${R[api_breaking]}" = "true" ]]; then 
+        version_type="MAJOR"
+        base_reason="api_break"
+    else
+        # Ensure security_keywords is numeric for get_bump_reason
+        local security_keywords_reason="${R[security_keywords]:-0}"
+        if [[ ! "$security_keywords_reason" =~ ^[0-9]+$ ]]; then
+            security_keywords_reason=0
+        fi
+        if [[ "$security_keywords_reason" -gt 0 ]]; then 
+            version_type="MAJOR"
+            base_reason="security_keywords"
         else
-            # When MAJOR_REQUIRE_BREAKING is false, large diffs can trigger major
-            printf 'large_diff'; return
+            # Ensure diff_size is numeric for get_bump_reason
+            local diff_size_reason="${R[diff_size]:-0}"
+            if [[ ! "$diff_size_reason" =~ ^[0-9]+$ ]]; then
+                diff_size_reason=0
+            fi
+            if [[ "$diff_size_reason" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
+                if [[ "$REQ" = "true" || "$REQ" = "1" || "$REQ" = "yes" ]]; then
+                    # When MAJOR_REQUIRE_BREAKING is true, large diffs alone don't trigger major
+                    # Only breaking changes should trigger major
+                    :
+                else
+                    # When MAJOR_REQUIRE_BREAKING is false, large diffs can trigger major
+                    version_type="MAJOR"
+                    base_reason="large_diff"
+                fi
+            fi
         fi
     fi
 
-    # MINOR reasons
-    if [[ "${R[cli_changes]}" = "true" ]]; then printf 'cli_added'; return; fi
-    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then printf 'cli_added'; return; fi
-    if [[ "${R[new_source_files]:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then printf 'new_src';   return; fi
-    if [[ "${R[new_test_files]:-0}"  -ge "$MIN_NEW_TEST_FILES"  ]]; then printf 'new_tests'; return; fi
-    if [[ "${R[new_doc_files]:-0}"   -ge "$MIN_NEW_DOC_FILES"   ]]; then printf 'new_docs';  return; fi
+    # MINOR reasons (only if not already MAJOR)
+    if [[ -z "$version_type" ]]; then
+        if [[ "${R[cli_changes]}" = "true" ]]; then 
+            version_type="MINOR"
+            base_reason="cli_added"
+        elif [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then 
+            version_type="MINOR"
+            base_reason="cli_added"
+        elif [[ "${R[new_source_files]:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then 
+            version_type="MINOR"
+            base_reason="new_src"
+        elif [[ "${R[new_test_files]:-0}"  -ge "$MIN_NEW_TEST_FILES"  ]]; then 
+            version_type="MINOR"
+            base_reason="new_tests"
+        elif [[ "${R[new_doc_files]:-0}"   -ge "$MIN_NEW_DOC_FILES"   ]]; then 
+            version_type="MINOR"
+            base_reason="new_docs"
+        fi
+    fi
 
-    # PATCH reasons
-    local modified_files_reason="${R[modified_files]:-0}"
-    if [[ ! "$modified_files_reason" =~ ^[0-9]+$ ]]; then
-        modified_files_reason=0
+    # PATCH reasons (only if not already MAJOR or MINOR)
+    if [[ -z "$version_type" ]]; then
+        local modified_files_reason="${R[modified_files]:-0}"
+        if [[ ! "$modified_files_reason" =~ ^[0-9]+$ ]]; then
+            modified_files_reason=0
+        fi
+        
+        # Any changes should result in at least a patch bump
+        if [[ "$modified_files_reason" -gt 0 ]] || [[ "$diff_size_reason" -gt 0 ]]; then
+            version_type="PATCH"
+            base_reason="mods_only"
+        fi
+    fi
+
+    # If no version type determined, return none
+    if [[ -z "$version_type" ]]; then
+        printf 'none'
+        return
     fi
     
-    # Any changes should result in at least a patch bump
-    if [[ "$modified_files_reason" -gt 0 ]] || [[ "$diff_size_reason" -gt 0 ]]; then
-        printf 'mods_only'; return
-    fi
-
-    printf 'none'
+    # Return reason with LOC value and version update type
+    printf '%s (LOC: %s, %s)' "$base_reason" "$loc" "$version_type"
 }
 
 # Simple JSON string escaper for safe values (quotes and backslashes)

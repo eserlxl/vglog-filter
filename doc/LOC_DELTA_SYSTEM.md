@@ -2,7 +2,7 @@
 
 ## Overview
 
-The LOC-based delta system is an advanced versioning mechanism that adjusts version increments based on the magnitude of code changes. This system prevents version number inflation while maintaining semantic meaning.
+The LOC-based delta system is an advanced versioning mechanism that **always increases only the last identifier (patch)** with a delta calculated based on the magnitude of code changes. This system prevents version number inflation while maintaining semantic meaning and provides intelligent rollover logic.
 
 ## Problem Solved
 
@@ -15,7 +15,7 @@ For projects with rapid iteration cycles, traditional semantic versioning can le
 ## How It Works
 
 ### Core Concept
-The delta (increment amount) is calculated based on Lines of Code (LOC) changed plus bonus additions for specific types of changes. **Every change now results in at least a patch bump**, with the LOC-based system determining the actual increment amount:
+The new versioning system **always increases only the last identifier (patch)** with a delta calculated based on Lines of Code (LOC) changed plus bonus additions for specific types of changes. **Every change now results in at least a patch bump**, with the LOC-based system determining the actual increment amount:
 
 ```bash
 # Base delta from LOC
@@ -31,6 +31,13 @@ MAJOR: 10 * (1 + LOC/1000) # Large changes get large increments
 + New files: +1 each
 + Security keywords: +2 each
 ```
+
+### Key Features
+
+1. **Always Increase Only the Last Identifier**: All version changes increment only the patch version (the last number)
+2. **LOC-Based Delta Calculation**: The increment amount is calculated based on Lines of Code (LOC) changed plus bonus additions
+3. **Rollover Logic**: Uses mod 100 for patch and minor version limits with automatic rollover
+4. **Enhanced Reason Format**: Includes LOC value and version type in analysis output
 
 ### Bonus System
 The system automatically detects and applies bonuses for:
@@ -58,9 +65,19 @@ The system automatically detects and applies bonuses for:
 - The LOC-based delta system then calculates the actual increment amount
 - This ensures no meaningful changes are missed
 
-### Rollover System
-- **Patch limit**: 100 (x.y.100 → x.(y+1).0)
-- **Minor limit**: 100 (x.100.y → (x+1).0.0)
+### New Rollover System
+The system implements intelligent rollover logic:
+
+- **Patch rollover**: When patch + delta >= 100, apply mod 100 and increment minor
+- **Minor rollover**: When minor + 1 >= 100, apply mod 100 and increment major
+- **Example**: 9.3.95 + 6 = 9.4.1 (patch rollover)
+- **Example**: 9.99.95 + 6 = 10.0.1 (minor rollover)
+
+### Enhanced Reason Format
+The system now provides enhanced analysis output that includes:
+- **LOC value**: The actual lines of code changed
+- **Version type**: MAJOR, MINOR, or PATCH
+- **Example**: "cli_added (LOC: 200, MINOR)"
 
 ### Examples
 
@@ -88,7 +105,7 @@ Base MAJOR: 10 * (1 + 2000/1000) = 30
 Bonus: Breaking CLI (+2) + API breaking (+3) + Removed options (+2) = +7
 Final MAJOR: 30 + 7 = 37
 
-Result: 9.3.0 → 10.0.37 (major)
+Result: 9.3.0 → 9.3.37 (major)
 ```
 
 #### Security Fix (100 LOC) with Security Keywords
@@ -100,44 +117,35 @@ Final PATCH: 1 + 6 = 7
 Result: 9.3.0 → 9.3.7 (patch)
 ```
 
-#### New Feature (800 LOC) with New Files
+#### Rollover Examples
 ```bash
-Base MINOR: 5 * (1 + 800/500) = 13
-Bonus: New source files (+1) + New test files (+1) + New doc files (+1) = +3
-Final MINOR: 13 + 3 = 16
+# Patch rollover
+9.3.95 + 6 = 9.4.1
 
-Result: 9.3.0 → 9.4.16 (minor)
-```
+# Minor rollover  
+9.99.95 + 6 = 10.0.1
 
-#### Rollover Example with Bonuses
-```bash
-Current: 9.3.95
-LOC: 1000
-Base patch delta: 5
-Bonus: Breaking CLI (+2) + API breaking (+3) = +5
-Final delta: 5 + 5 = 10
-
-New patch: 9.3.95 + 10 = 9.4.5 (rollover to next minor)
+# Double rollover
+9.99.99 + 1 = 10.0.0
 ```
 
 ## Configuration
 
 ### Environment Variables
-
 ```bash
-# Enable the system
+# Enable the new versioning system
 VERSION_USE_LOC_DELTA=true
 
-# Set limits
-VERSION_PATCH_LIMIT=100
-VERSION_MINOR_LIMIT=100
-
-# Customize formulas
+# Delta formulas
 VERSION_PATCH_DELTA="1*(1+LOC/250)"
 VERSION_MINOR_DELTA="5*(1+LOC/500)"
 VERSION_MAJOR_DELTA="10*(1+LOC/1000)"
 
-# Customize bonus values
+# Rollover limits
+VERSION_PATCH_LIMIT=100
+VERSION_MINOR_LIMIT=100
+
+# Bonus values
 VERSION_BREAKING_CLI_BONUS=2
 VERSION_API_BREAKING_BONUS=3
 VERSION_REMOVED_OPTION_BONUS=1
@@ -178,6 +186,7 @@ export VERSION_USE_LOC_DELTA=true
 ### Normal Version Bumping
 ```bash
 # The system automatically calculates deltas based on LOC
+# All bumps now increment only the patch version with calculated delta
 ./dev-bin/bump-version patch --commit
 ./dev-bin/bump-version minor --commit
 ./dev-bin/bump-version major --commit
@@ -216,33 +225,48 @@ When enabled, the analyzer provides:
 - Rollover warnings
 - Detailed change analysis
 - JSON output with delta information
+- Enhanced reason format with LOC and version type
 
 ## Benefits
 
 ### For Rapid Iteration
 - **Proportional versioning**: Bigger changes = bigger version jumps
 - **Prevents inflation**: Version numbers stay manageable
-- **Predictable progression**: Clear rollover rules
+- **Predictable progression**: Clear rollover rules with mod 100
 - **Maintains semantics**: Still follows semver principles
+- **Always increases patch**: Consistent behavior across all change types
 
 ### For Different Project Sizes
 - **Small projects**: Small changes get small increments
 - **Large projects**: Large changes get appropriate increments
 - **Configurable**: Can be tuned per project needs
+- **Rollover protection**: Prevents version number overflow
 
 ## Testing
 
-Run the test script to see the system in action:
+Run the comprehensive test suite to see the system in action:
 
 ```bash
+# Test the new versioning system
+./test-workflows/core-tests/test_new_version_system.sh
+
+# Test rollover logic
+./test-workflows/core-tests/test_rollover_logic.sh
+
+# Test LOC delta system
 ./test-workflows/core-tests/test_loc_delta_system.sh
+
+# Test bump-version integration
+./test-workflows/core-tests/test_bump_version_loc_delta.sh
 ```
 
 This demonstrates:
 - Small, medium, and large changes
-- Delta calculations
-- Rollover scenarios
+- Delta calculations with new formulas
+- Rollover scenarios with mod 100 logic
 - Configuration options
+- Enhanced reason format
+- Integration with semantic analyzer
 
 ## Migration
 
@@ -250,11 +274,13 @@ This demonstrates:
 1. Enable the system: `export VERSION_USE_LOC_DELTA=true`
 2. Continue using normal bump commands
 3. The system automatically calculates appropriate deltas
+4. All changes now increment only the patch version
 
 ### Backward Compatibility
 - The system is enabled by default
 - Traditional versioning still works when disabled
 - Can be enabled/disabled per project
+- Existing workflows continue to function
 
 ## Advanced Configuration
 
@@ -292,6 +318,7 @@ VERSION_DOC_WEIGHT=0.3       # Documentation changes
 - Check current version numbers
 - Review LOC calculations
 - Adjust limits if needed
+- Remember: all changes increment only patch version
 
 #### Formula Errors
 - Ensure formulas use valid syntax
@@ -305,6 +332,9 @@ VERSION_DOC_WEIGHT=0.3       # Documentation changes
 
 # Check JSON output
 ./dev-bin/semantic-version-analyzer --json | jq '.loc_delta'
+
+# Test rollover logic directly
+./test-workflows/core-tests/test_rollover_logic.sh
 ```
 
 ## Future Enhancements
@@ -314,6 +344,7 @@ VERSION_DOC_WEIGHT=0.3       # Documentation changes
 - **Time-based factors**: Consider time since last release
 - **Complexity metrics**: Beyond just LOC
 - **Project-specific tuning**: Automatic configuration based on project size
+- **Enhanced rollover visualization**: Better display of rollover scenarios
 
 ### Contributing
-The system is designed to be extensible. New delta formulas and detection methods can be easily added. 
+The system is designed to be extensible. New delta formulas and detection methods can be easily added. The new versioning system maintains backward compatibility while providing enhanced functionality. 

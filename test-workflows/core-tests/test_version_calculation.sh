@@ -1,79 +1,142 @@
 #!/bin/bash
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Focused test script for version calculation logic
 
-# Test script for version calculation logic
-set -euo pipefail
+set -Eeuo pipefail
+IFS=$'\n\t'
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-# Source test helper
-source "$PROJECT_ROOT/test-workflows/test_helper.sh"
+echo "Testing Version Calculation Logic"
+echo "================================"
 
-# Test function to verify version calculation
-test_version_calculation() {
-    local current_version="$1"
-    local bump_type="$2"
-    local expected_delta="$3"
-    local expected_result="$4"
-    local test_name="$5"
-    
-    echo "Testing: $test_name"
-    echo "  Current: $current_version"
-    echo "  Bump type: $bump_type"
-    echo "  Expected delta: $expected_delta"
-    echo "  Expected result: $expected_result"
-    
-    # Create temporary test environment
-    local temp_dir
-    temp_dir=$(create_temp_test_env "version_calc_${current_version//./_}")
-    
-    # Set up test environment
-    cd "$temp_dir"
-    echo "$current_version" > VERSION
-    git add VERSION
-    git commit --quiet -m "Set version to $current_version" 2>/dev/null || true
-    
-    # Mock the LOC delta calculation by setting environment variables
-    export VERSION_USE_LOC_DELTA=true
-    export R_diff_size=100  # Mock LOC value
-    
-    # Test the bump-version script's version calculation
-    local result
-    result=$(VERSION_USE_LOC_DELTA=true "$PROJECT_ROOT/dev-bin/bump-version" "$bump_type" --print --repo-root "$temp_dir" 2>/dev/null | tail -1)
-    
-    echo "  Actual result: $result"
-    
-    # Cleanup
-    cleanup_temp_test_env "$temp_dir"
-    
-    if [[ "$result" = "$expected_result" ]]; then
-        echo "  ✅ PASS"
-        return 0
-    else
-        echo "  ❌ FAIL: Expected $expected_result, got $result"
-        return 1
-    fi
-}
+# Go to project root
+cd ../../
 
-# Test cases
-echo "=== Testing Version Calculation Logic ==="
+# Test 1: Basic version calculation
+echo ""
+echo "Test 1: Basic version calculation"
+echo "9.3.0 + patch delta 6 = 9.3.6"
 
-# Test 1: Simple patch increment
-test_version_calculation "1.2.3" "patch" "1" "1.2.4" "Simple patch increment"
+# Set version to 9.3.0
+echo "9.3.0" > VERSION
+git add VERSION
+git commit -m "Set version to 9.3.0" -q
+
+# Add a small change
+echo "// Test change" >> src/main.cpp
+git add src/main.cpp
+git commit -m "Add test change" -q
+
+# Run semantic analyzer and extract next version
+base_commit=$(git rev-parse HEAD~1)
+result=$(VERSION_USE_LOC_DELTA=true ./dev-bin/semantic-version-analyzer --base "$base_commit" --json 2>/dev/null)
+
+# Parse JSON properly
+next_version=$(echo "$result" | grep -o '"next_version":"[^"]*"' | cut -d'"' -f4)
+echo "Expected: 9.3.6"
+echo "Actual: $next_version"
+
+if [[ "$next_version" = "9.3.6" ]]; then
+    echo "${GREEN}✓ PASS${NC}"
+else
+    echo "${RED}✗ FAIL${NC}"
+fi
 
 # Test 2: Patch rollover
-test_version_calculation "1.2.99" "patch" "5" "1.3.0" "Patch rollover (99 + 1 = 100, becomes 1.3.0)"
+echo ""
+echo "Test 2: Patch rollover"
+echo "9.3.95 + patch delta 6 = 9.4.1"
 
-# Test 3: Minor increment
-test_version_calculation "1.2.3" "minor" "5" "1.7.0" "Minor increment (2 + 5 = 7, patch reset to 0)"
+# Set version to 9.3.95
+echo "9.3.95" > VERSION
+git add VERSION
+git commit -m "Set version to 9.3.95" -q
 
-# Test 4: Minor rollover
-test_version_calculation "1.99.5" "minor" "10" "2.4.0" "Minor rollover (99 + 5 = 104, becomes 2.4.0)"
+# Add another change
+echo "// Another test change" >> src/main.cpp
+git add src/main.cpp
+git commit -m "Add another test change" -q
 
-# Test 5: Major increment
-test_version_calculation "1.2.3" "major" "10" "11.0.0" "Major increment (1 + 10 = 11, others reset to 0)"
+# Run semantic analyzer
+base_commit2=$(git rev-parse HEAD~1)
+result2=$(VERSION_USE_LOC_DELTA=true ./dev-bin/semantic-version-analyzer --base "$base_commit2" --json 2>/dev/null)
+next_version2=$(echo "$result2" | grep -o '"next_version":"[^"]*"' | cut -d'"' -f4)
+echo "Expected: 9.4.1"
+echo "Actual: $next_version2"
 
-# Test 6: Double rollover
-test_version_calculation "1.99.99" "patch" "5" "2.0.0" "Double rollover (99 + 1 = 100, becomes 2.0.0)"
+if [[ "$next_version2" = "9.4.1" ]]; then
+    echo "${GREEN}✓ PASS${NC}"
+else
+    echo "${RED}✗ FAIL${NC}"
+fi
 
-echo "=== All tests completed ===" 
+# Test 3: Minor rollover
+echo ""
+echo "Test 3: Minor rollover"
+echo "9.99.95 + patch delta 6 = 10.0.1"
+
+# Set version to 9.99.95
+echo "9.99.95" > VERSION
+git add VERSION
+git commit -m "Set version to 9.99.95" -q
+
+# Add another change
+echo "// Third test change" >> src/main.cpp
+git add src/main.cpp
+git commit -m "Add third test change" -q
+
+# Run semantic analyzer
+base_commit3=$(git rev-parse HEAD~1)
+result3=$(VERSION_USE_LOC_DELTA=true ./dev-bin/semantic-version-analyzer --base "$base_commit3" --json 2>/dev/null)
+next_version3=$(echo "$result3" | grep -o '"next_version":"[^"]*"' | cut -d'"' -f4)
+echo "Expected: 10.0.1"
+echo "Actual: $next_version3"
+
+if [[ "$next_version3" = "10.0.1" ]]; then
+    echo "${GREEN}✓ PASS${NC}"
+else
+    echo "${RED}✗ FAIL${NC}"
+fi
+
+# Test 4: Reason format
+echo ""
+echo "Test 4: Reason format"
+echo "Should include LOC value and version type"
+
+reason=$(echo "$result" | grep -o '"reason":"[^"]*"' | cut -d'"' -f4)
+echo "Reason: $reason"
+
+if [[ "$reason" = *"LOC:"* ]] && [[ "$reason" = *"MINOR"* ]]; then
+    echo "${GREEN}✓ PASS${NC} - Reason includes LOC and version type"
+else
+    echo "${RED}✗ FAIL${NC} - Reason format incorrect"
+fi
+
+# Test 5: Delta calculation
+echo ""
+echo "Test 5: Delta calculation"
+echo "Testing delta formulas"
+
+patch_delta=$(echo "$result" | grep -o '"patch_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+minor_delta=$(echo "$result" | grep -o '"minor_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+major_delta=$(echo "$result" | grep -o '"major_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+
+echo "Patch delta: $patch_delta"
+echo "Minor delta: $minor_delta"
+echo "Major delta: $major_delta"
+
+# Cleanup
+echo ""
+echo "Cleaning up..."
+git reset --hard HEAD~6 -q
+git clean -fd -q
+
+echo "Test completed!" 

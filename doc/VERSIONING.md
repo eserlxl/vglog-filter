@@ -1,10 +1,11 @@
 # Versioning Strategy
 
-This document details the versioning strategy employed by `vglog-filter`, which adheres to [Semantic Versioning (SemVer)](https://semver.org/) principles. It covers how versions are structured, stored, and how changes are automatically and manually managed to ensure a clear and consistent release history.
+This document details the versioning strategy employed by `vglog-filter`, which adheres to [Semantic Versioning (SemVer)](https://semver.org/) principles with an advanced LOC-based delta system. It covers how versions are structured, stored, and how changes are automatically and manually managed to ensure a clear and consistent release history.
 
 ## Table of Contents
 
 - [Semantic Versioning Overview](#semantic-versioning-overview)
+- [New Versioning System](#new-versioning-system)
 - [Version Storage and Display](#version-storage-and-display)
 - [Automated Semantic Version Bumping](#automated-semantic-version-bumping)
   - [Automatic Release Detection Thresholds](#automatic-release-detection-thresholds)
@@ -29,6 +30,97 @@ This document details the versioning strategy employed by `vglog-filter`, which 
 -   `1.0.0` → `1.0.1`: A bug fix or minor internal improvement.
 -   `1.0.1` → `1.1.0`: A new feature was added, but existing functionality remains compatible.
 -   `1.1.0` → `2.0.0`: A breaking change was introduced, requiring users to update their integration.
+
+[↑ Back to top](#versioning-strategy)
+
+## New Versioning System
+
+`vglog-filter` implements an advanced versioning system that **always increases only the last identifier (patch)** with a delta calculated based on the magnitude of changes. This system prevents version number inflation while maintaining semantic meaning.
+
+### Core Principles
+
+1. **Always Increase Only the Last Identifier**: All version changes increment only the patch version (the last number)
+2. **LOC-Based Delta Calculation**: The increment amount is calculated based on Lines of Code (LOC) changed plus bonus additions
+3. **Rollover Logic**: Uses mod 100 for patch and minor version limits with automatic rollover
+4. **Enhanced Reason Format**: Includes LOC value and version type in analysis output
+
+### Delta Formulas
+
+The system uses the following formulas to calculate version increments:
+
+```bash
+# Base delta from LOC
+PATCH: 1 * (1 + LOC/250)  # Small changes get small increments
+MINOR: 5 * (1 + LOC/500)  # Medium changes get medium increments  
+MAJOR: 10 * (1 + LOC/1000) # Large changes get large increments
+
+# Bonus additions for impact
++ Breaking CLI changes: +2
++ API breaking changes: +3
++ Removed options: +1
++ CLI changes: +2
++ New files: +1 each
++ Security keywords: +2 each
+```
+
+### Rollover System
+
+The new system implements intelligent rollover logic:
+
+- **Patch rollover**: When patch + delta >= 100, apply mod 100 and increment minor
+- **Minor rollover**: When minor + 1 >= 100, apply mod 100 and increment major
+- **Example**: 9.3.95 + 6 = 9.4.1 (patch rollover)
+- **Example**: 9.99.95 + 6 = 10.0.1 (minor rollover)
+
+### Examples
+
+#### Medium Change (500 LOC) with CLI Additions
+```bash
+Base PATCH: 1 * (1 + 500/250) = 3
+Bonus: CLI changes (+2) + Added options (+1) = +3
+Final PATCH: 3 + 3 = 6
+
+Result: 9.3.0 → 9.3.6 (patch)
+```
+
+#### Large Change (2000 LOC) with Breaking Changes
+```bash
+Base MAJOR: 10 * (1 + 2000/1000) = 30
+Bonus: Breaking CLI (+2) + API breaking (+3) + Removed options (+2) = +7
+Final MAJOR: 30 + 7 = 37
+
+Result: 9.3.0 → 9.3.37 (major)
+```
+
+#### Security Fix (100 LOC) with Security Keywords
+```bash
+Base PATCH: 1 * (1 + 100/250) = 1.4 → 1
+Bonus: Security keywords (3 × +2) = +6
+Final PATCH: 1 + 6 = 7
+
+Result: 9.3.0 → 9.3.7 (patch)
+```
+
+#### Rollover Examples
+```bash
+# Patch rollover
+9.3.95 + 6 = 9.4.1
+
+# Minor rollover  
+9.99.95 + 6 = 10.0.1
+
+# Double rollover
+9.99.99 + 1 = 10.0.0
+```
+
+### Enhanced Reason Format
+
+The system now provides enhanced analysis output that includes:
+- **LOC value**: The actual lines of code changed
+- **Version type**: MAJOR, MINOR, or PATCH
+- **Example**: "cli_added (LOC: 200, MINOR)"
+
+For more details on the LOC-based delta system, see [LOC Delta System Documentation](LOC_DELTA_SYSTEM.md).
 
 [↑ Back to top](#versioning-strategy)
 
