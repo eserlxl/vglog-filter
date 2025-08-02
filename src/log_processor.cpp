@@ -109,6 +109,23 @@ void LogProcessor::initialize_regex_patterns() {
             (void)locale_initialized; // Suppress unused variable warning
         }
         
+        // Pre-initialize regex objects to avoid uninitialized memory issues
+        // Create temporary regex objects first to force initialization of internal structures
+        {
+            std::regex temp_regex("", std::regex::optimize | std::regex::ECMAScript);
+            (void)temp_regex; // Suppress unused variable warning
+        }
+        
+        // Force initialization of the regex engine by creating and using a regex object
+        // This ensures all internal structures are properly initialized
+        {
+            std::regex test_regex("test", std::regex::optimize | std::regex::ECMAScript);
+            std::string test_string = "test";
+            std::smatch test_match;
+            bool test_result = std::regex_match(test_string, test_match, test_regex);
+            (void)test_result; // Suppress unused variable warning
+        }
+        
         // Initialize regex objects with explicit flags and avoid locale issues
         // Use ECMAScript syntax which is more predictable and doesn't rely on locale
         // Use explicit string conversion to avoid MSAN issues with uninitialized memory
@@ -121,13 +138,17 @@ void LogProcessor::initialize_regex_patterns() {
         // Use explicit locale specification to avoid uninitialized memory issues
         // Create regex objects with explicit locale to avoid MSan issues
         // Use the global locale that we set earlier to ensure proper initialization
-        re_vg_line = std::make_unique<std::regex>(vg_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_prefix = std::make_unique<std::regex>(prefix_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_start = std::make_unique<std::regex>(start_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_bytes_head = std::make_unique<std::regex>(bytes_head_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_at = std::make_unique<std::regex>(at_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_by = std::make_unique<std::regex>(by_pattern, std::regex::optimize | std::regex::ECMAScript);
-        re_q = std::make_unique<std::regex>(q_pattern, std::regex::optimize | std::regex::ECMAScript);
+        // Initialize with explicit string literals to avoid any potential uninitialized memory
+        // Use c_str() to get explicit char* pointer and avoid any string_view issues
+        // Create regex objects with explicit locale to avoid MSan issues
+        // Use the global locale that we set earlier to ensure proper initialization
+        re_vg_line = std::make_unique<std::regex>(vg_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
+        re_prefix = std::make_unique<std::regex>(prefix_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
+        re_start = std::make_unique<std::regex>(start_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
+        re_bytes_head = std::make_unique<std::regex>(bytes_head_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
+        re_at = std::make_unique<std::regex>(at_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
+        re_by = std::make_unique<std::regex>(by_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
+        re_q = std::make_unique<std::regex>(q_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
     } catch (const std::regex_error& e) {
         throw std::runtime_error("Failed to initialize regex patterns: " + std::string(e.what()));
     } catch (const std::exception& e) {
