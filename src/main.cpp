@@ -80,10 +80,6 @@ namespace {
                 throw std::out_of_range("Depth out of valid range");
             }
             
-            if (depth_long > std::numeric_limits<int>::max()) {
-                throw std::out_of_range("Depth value too large");
-            }
-            
             return static_cast<int>(depth_long);
         } catch (const std::exception& e) {
             throw std::runtime_error("Invalid depth value '" + std::string(optarg) + 
