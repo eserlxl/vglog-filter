@@ -322,9 +322,9 @@ check_commit_range() {
     return 0
 }
 
-# Debug output function - only outputs when not in machine mode
+# Debug output function - only outputs when not in machine mode or JSON mode
 debug_output() {
-    if [[ "$MACHINE_OUTPUT" != "true" ]]; then
+    if [[ "$MACHINE_OUTPUT" != "true" ]] && [[ "$JSON_OUTPUT" != "true" ]]; then
         printf '%s\n' "$1" >&2
     fi
 }
@@ -1130,6 +1130,15 @@ main() {
         printf '    "added_long_count": %s\n' "${R[added_long_count]:-0}"
         printf '  }'
         if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
+            # Calculate bonus values to avoid arithmetic expression issues
+            local removed_short="${R[removed_short_count]:-0}"
+            local removed_long="${R[removed_long_count]:-0}"
+            local new_source="${R[new_source_files]:-0}"
+            local new_test="${R[new_test_files]:-0}"
+            local new_doc="${R[new_doc_files]:-0}"
+            local removed_options=$((removed_short + removed_long))
+            local new_files=$((new_source + new_test + new_doc))
+            
             printf ',\n'
             printf '  "loc_delta": {\n'
             printf '    "enabled": true,\n'
@@ -1142,9 +1151,9 @@ main() {
             printf '    "bonuses": {\n'
             printf '      "breaking_cli": %s,\n' "${R[breaking_cli_changes]:-false}"
             printf '      "api_breaking": %s,\n' "${R[api_breaking]:-false}"
-            printf '      "removed_options": %s,\n' "$((R[removed_short_count]:-0 + R[removed_long_count]:-0))"
+            printf '      "removed_options": %s,\n' "$removed_options"
             printf '      "cli_changes": %s,\n' "${R[cli_changes]:-false}"
-            printf '      "new_files": %s,\n' "$((R[new_source_files]:-0 + R[new_test_files]:-0 + R[new_doc_files]:-0))"
+            printf '      "new_files": %s,\n' "$new_files"
             printf '      "security_keywords": %s\n' "${R[security_keywords]:-0}"
             printf '    }\n'
             printf '  }'

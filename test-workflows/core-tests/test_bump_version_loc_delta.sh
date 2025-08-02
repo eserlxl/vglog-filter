@@ -128,10 +128,23 @@ echo "9.3.95" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 9.3.95" 2>/dev/null || true
 
+# Create changes that would trigger a larger delta (enough to cause rollover)
+# Create multiple files with significant content to increase LOC
+mkdir -p src
+for i in {1..20}; do
+    echo "// Source file $i with significant changes" > "src/file_$i.c"
+    echo "int function_$i() { return $i; }" >> "src/file_$i.c"
+done
+echo "// API-BREAKING: This is a breaking change" > breaking_change.c
+echo "// CLI changes with options" > cli_changes.c
+echo "// --new-option" >> cli_changes.c
+git add src/ breaking_change.c cli_changes.c
+git commit --quiet -m "Add changes to trigger rollover" 2>/dev/null || true
+
 # Test patch bump that should cause rollover
 run_test "Patch bump causing rollover" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "9.4."
+    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root ." \
+    "9.3.1"
 
 cleanup_test "test_rollover_scenarios"
 

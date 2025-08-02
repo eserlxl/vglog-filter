@@ -160,25 +160,38 @@ bump_version() {
     IFS='.' read -r current_major current_minor current_patch <<< "$CURRENT_VERSION"
 
     # Check if LOC-based delta system is enabled
+    printf "DEBUG: VERSION_USE_LOC_DELTA=${VERSION_USE_LOC_DELTA:-false}\n"
+    printf "DEBUG: Condition check: [[ \"${VERSION_USE_LOC_DELTA:-false}\" = \"true\" ]]\n"
     if [[ "${VERSION_USE_LOC_DELTA:-false}" = "true" ]]; then
+        printf "DEBUG: LOC delta system enabled\n"
         # Use semantic analyzer to calculate LOC-based delta
         local delta=1
+        # Try to find semantic analyzer in various locations
+        local analyzer_path=""
         if [[ -x "./dev-bin/semantic-version-analyzer" ]]; then
+            analyzer_path="./dev-bin/semantic-version-analyzer"
+        elif [[ -x "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/semantic-version-analyzer" ]]; then
+            analyzer_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/semantic-version-analyzer"
+        fi
+        
+        if [[ -n "$analyzer_path" ]]; then
+            printf "DEBUG: Found analyzer at: $analyzer_path\n"
             # Get the delta from semantic analyzer
             local analyzer_output
-            analyzer_output=$(VERSION_USE_LOC_DELTA=true ./dev-bin/semantic-version-analyzer --json 2>/dev/null || true)
+            analyzer_output=$(VERSION_USE_LOC_DELTA=true "$analyzer_path" --json 2>/dev/null || true)
+            printf "DEBUG: Analyzer output length: ${#analyzer_output}\n"
             
             if [[ -n "$analyzer_output" ]]; then
-                # Extract delta from JSON output
+                # Extract delta from JSON output - look for nested fields under loc_delta
                 case "$bump_type" in
                     patch)
-                        delta=$(printf '%s' "$analyzer_output" | grep -o '"patch_delta":[0-9]*' | cut -d: -f2 || echo "1")
+                        delta=$(printf '%s' "$analyzer_output" | grep -o '"patch_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "1")
                         ;;
                     minor)
-                        delta=$(printf '%s' "$analyzer_output" | grep -o '"minor_delta":[0-9]*' | cut -d: -f2 || echo "5")
+                        delta=$(printf '%s' "$analyzer_output" | grep -o '"minor_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "5")
                         ;;
                     major)
-                        delta=$(printf '%s' "$analyzer_output" | grep -o '"major_delta":[0-9]*' | cut -d: -f2 || echo "10")
+                        delta=$(printf '%s' "$analyzer_output" | grep -o '"major_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "10")
                         ;;
                 esac
             fi
