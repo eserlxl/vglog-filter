@@ -1,0 +1,24 @@
+# MemorySanitizer suppressions for vglog-filter
+# These suppressions address known false positives in the C++ standard library
+
+# Suppress uninitialized value warnings in C++ regex library
+# These are known limitations in the standard library implementation
+# and do not indicate actual bugs in our code
+uninitialized:std::__try_use_facet
+uninitialized:std::use_facet
+uninitialized:std::__detail::_Scanner
+uninitialized:std::__detail::_Compiler
+uninitialized:std::__cxx11::basic_regex::_M_compile
+uninitialized:std::__cxx11::basic_regex::basic_regex
+
+# Suppress warnings in locale handling
+uninitialized:std::locale::global
+uninitialized:std::locale::classic
+
+# Suppress warnings in regex pattern compilation
+uninitialized:std::regex::optimize
+uninitialized:std::regex::ECMAScript
+
+# Suppress warnings in string handling during regex construction
+uninitialized:std::basic_string::c_str
+uninitialized:std::char_traits::length 

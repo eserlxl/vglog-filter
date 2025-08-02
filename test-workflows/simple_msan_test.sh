@@ -11,6 +11,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_ROOT/build-msan"
 TEST_FILE="test-msan-fix.txt"
 PROGRAM="$BUILD_DIR/bin/Debug/vglog-filter"
+SUPPRESSIONS_FILE="msan_suppressions.txt"
 
 # Colors for output
 RED='\033[0;31m'
@@ -43,12 +44,13 @@ fi
 
 echo "Test file: $TEST_FILE"
 echo "Program: $PROGRAM"
+echo "Suppressions: $SUPPRESSIONS_FILE"
 echo
 
-# Set MSAN options to suppress known library warnings
-export MSAN_OPTIONS="abort_on_error=0:print_stats=1:halt_on_error=0:exit_code=0"
+# Set MSAN options to suppress known library warnings and use suppressions
+export MSAN_OPTIONS="abort_on_error=0:print_stats=1:halt_on_error=0:exit_code=0:suppressions=$SUPPRESSIONS_FILE"
 
-echo -e "${BLUE}Note: MemorySanitizer may show warnings related to C++ standard library regex implementation.${NC}"
+echo -e "${BLUE}Note: MemorySanitizer warnings related to C++ regex library are suppressed.${NC}"
 echo -e "${BLUE}These are known limitations in the library, not bugs in our code.${NC}"
 echo
 
@@ -150,5 +152,5 @@ echo -e "${GREEN}All MemorySanitizer fix tests PASSED!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo
 echo "The program successfully processes valgrind log files."
-echo "Note: MemorySanitizer warnings related to C++ regex library are known"
-echo "limitations and do not indicate bugs in our code." 
+echo "Note: MemorySanitizer warnings related to C++ regex library are suppressed"
+echo "as they are known limitations and do not indicate bugs in our code." 

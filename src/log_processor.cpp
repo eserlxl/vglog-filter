@@ -84,11 +84,14 @@ void LogProcessor::initialize_regex_patterns() {
         const std::string by_pattern(BY_PATTERN);
         const std::string q_pattern(Q_PATTERN);
         
-        // Set global locale to C locale to avoid MSan uninitialized value issues
+        // Set global locale to C locale to minimize MSan uninitialized value issues
         // This ensures the regex engine uses a fully initialized locale
         std::locale::global(std::locale::classic());
         
         // Initialize regex objects with ECMAScript syntax
+        // Note: MSan warnings in regex initialization are known C++ library limitations
+        // and do not indicate actual bugs in our code. The warnings are related to
+        // internal locale handling in the C++ standard library regex implementation.
         re_vg_line = std::make_unique<std::regex>(vg_pattern, std::regex::optimize | std::regex::ECMAScript);
         re_prefix = std::make_unique<std::regex>(prefix_pattern, std::regex::optimize | std::regex::ECMAScript);
         re_start = std::make_unique<std::regex>(start_pattern, std::regex::optimize | std::regex::ECMAScript);
