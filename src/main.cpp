@@ -184,8 +184,9 @@ namespace {
             } else {
                 // Validate and canonicalize the filename for security
                 try {
-                    auto validated_path = path_validation::validate_and_canonicalize(opt.filename);
-                    opt.filename = validated_path.string();
+                    // Use string-based validation to avoid MSAN issues with filesystem::path
+                    const std::string validated_path = path_validation::sanitize_path_for_file_access(opt.filename);
+                    opt.filename = validated_path;
                 } catch (const std::exception& e) {
                     throw std::runtime_error("Invalid filename: " + std::string(e.what()));
                 }

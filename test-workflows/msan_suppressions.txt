@@ -47,6 +47,9 @@ uninitialized:std::filesystem::__cxx11::path::begin
 uninitialized:std::filesystem::__cxx11::path::*
 uninitialized:std::__uniq_ptr_impl*
 uninitialized:std::unique_ptr*
+uninitialized:std::unique_ptr<std::filesystem::__cxx11::path::_List::_Impl, std::filesystem::__cxx11::path::_List::_Impl_deleter>::~unique_ptr
+uninitialized:std::filesystem::__cxx11::path::_List::~_List
+uninitialized:std::filesystem::__cxx11::path::~path
 
 # Suppress string stream-related warnings
 # These are known limitations in the C++ standard library string stream implementation

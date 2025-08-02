@@ -19,6 +19,10 @@ namespace path_validation {
 // Returns the absolute, canonical path if valid.
 [[nodiscard]] std::filesystem::path validate_and_canonicalize(std::string_view input_path);
 
+// Sanitizes and validates a path string, returning a safe path string for file operations.
+// This function avoids MSAN issues by using string-based validation instead of filesystem::path.
+[[nodiscard]] std::string sanitize_path_for_file_access(std::string_view input_path);
+
 // Safely opens a file stream (ifstream) after validating the path.
 [[nodiscard]] std::ifstream safe_ifstream(std::string_view filename);
 

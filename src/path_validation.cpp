@@ -104,19 +104,21 @@ namespace {
             }
         }
     }
+}
+
+// Sanitize and validate path, returning a safe path string for file operations
+std::string sanitize_path_for_file_access(std::string_view input_path) {
+    // Create explicit string copy to avoid uninitialized memory
+    const std::string path_str(input_path);
     
-    // Sanitize and validate path, returning a safe path string for file operations
-    std::string sanitize_path_for_file_access(std::string_view input_path) {
-        // Create explicit string copy to avoid uninitialized memory
-        const std::string path_str(input_path);
-        
-        // Validate the path using string-based validation to avoid MSAN issues
-        validate_path_string(path_str);
-        
-        // Return the validated path string - this is now safe for file operations
-        return path_str;
-    }
+    // Validate the path using string-based validation to avoid MSAN issues
+    validate_path_string(path_str);
     
+    // Return the validated path string - this is now safe for file operations
+    return path_str;
+}
+
+namespace {
     // String-based file validation to avoid MSAN issues with filesystem::path
     // This function expects a pre-validated path string that has been sanitized
     void validate_file_exists_and_regular_string(const std::string& sanitized_path) {
