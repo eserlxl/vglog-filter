@@ -88,6 +88,10 @@ void LogProcessor::initialize_regex_patterns() {
         const std::string by_pattern(BY_PATTERN, std::char_traits<char>::length(BY_PATTERN));
         const std::string q_pattern(Q_PATTERN, std::char_traits<char>::length(Q_PATTERN));
         
+        // Explicitly set locale to C locale to avoid MSan issues with uninitialized memory
+        // This prevents the regex engine from using uninitialized locale data
+        std::locale::global(std::locale::classic());
+        
         // Initialize regex objects with explicit flags and avoid locale issues
         // Use ECMAScript syntax which is more predictable and doesn't rely on locale
         // Use explicit string conversion to avoid MSAN issues with uninitialized memory
