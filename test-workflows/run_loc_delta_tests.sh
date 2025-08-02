@@ -7,6 +7,9 @@
 
 set -Euo pipefail
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -45,6 +48,9 @@ run_test() {
         chmod +x "$test_file" 2>/dev/null || true
     fi
     
+    # Change to the script directory before running the test
+    cd "$SCRIPT_DIR" || exit 1
+    
     # Run the test
     if bash "$test_file" >/dev/null 2>&1; then
         echo -e "${GREEN}PASSED${NC}"
@@ -63,15 +69,15 @@ echo ""
 
 # Run LOC delta specific tests
 echo -e "${CYAN}=== Core LOC Delta Tests ===${NC}"
-run_test "test-workflows/core-tests/test_loc_delta_system.sh"
-run_test "test-workflows/core-tests/test_loc_delta_system_comprehensive.sh"
-run_test "test-workflows/core-tests/test_bump_version_loc_delta.sh"
+run_test "$SCRIPT_DIR/core-tests/test_loc_delta_system.sh"
+run_test "$SCRIPT_DIR/core-tests/test_loc_delta_system_comprehensive.sh"
+run_test "$SCRIPT_DIR/core-tests/test_bump_version_loc_delta.sh"
 
-# Run updated existing tests that now include LOC delta functionality
+# Note: Other tests are run by the main test suite
 echo ""
-echo -e "${CYAN}=== Updated Existing Tests ===${NC}"
-run_test "test-workflows/core-tests/test_semantic_version_analyzer.sh"
-run_test "test-workflows/core-tests/test_bump_version.sh"
+echo -e "${CYAN}=== Note ===${NC}"
+echo "Other tests (test_semantic_version_analyzer.sh, test_bump_version.sh) are"
+echo "run by the main test suite and include LOC delta functionality."
 
 # Generate summary
 echo ""
