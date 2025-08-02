@@ -23,6 +23,7 @@ TOTAL_TESTS=0
 PASSED_TESTS=0
 FAILED_TESTS=0
 SKIPPED_TESTS=0
+FAILED_TEST_NAMES=()
 
 # Configuration
 TEST_TIMEOUT=${TEST_TIMEOUT:-30}  # Default 30 seconds timeout
@@ -120,10 +121,12 @@ run_test() {
             echo -e "${RED}TIMEOUT${NC}"
             log_test "$test_name" "TIMEOUT" "$(cat "$output_file")" "$duration"
             ((FAILED_TESTS++))
+            FAILED_TEST_NAMES+=("$test_name (TIMEOUT)")
         else
             echo -e "${RED}FAILED${NC}"
             log_test "$test_name" "FAILED" "$(cat "$output_file")" "$duration"
             ((FAILED_TESTS++))
+            FAILED_TEST_NAMES+=("$test_name")
         fi
     elif [[ "$test_file" == *.c ]]; then
         # C file test - compile and run if possible
@@ -145,6 +148,7 @@ run_test() {
                 echo -e "${RED}FAILED${NC}"
                 log_test "$test_name" "FAILED" "$(cat "$output_file")" "$duration"
                 ((FAILED_TESTS++))
+                FAILED_TEST_NAMES+=("$test_name")
             fi
         else
             local end_time
@@ -197,6 +201,11 @@ run_tests_in_directory() {
 echo "Starting test execution at $(date)"
 echo ""
 
+# Ensure we're in the project root directory
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
+
 # Run tests in each subdirectory
 run_tests_in_directory "test-workflows/core-tests"
 run_tests_in_directory "test-workflows/file-handling-tests"
@@ -235,6 +244,13 @@ fi
     if [[ $TOTAL_TESTS -gt 0 ]]; then
         echo "Success rate: $success_rate%"
     fi
+    if [[ $FAILED_TESTS -gt 0 ]]; then
+        echo ""
+        echo "Failed tests:"
+        for failed_test in "${FAILED_TEST_NAMES[@]}"; do
+            echo "  - $failed_test"
+        done
+    fi
     echo ""
     echo "Detailed results available in: $DETAILED_LOG"
     echo "Test outputs available in: $FIXED_OUTPUT_DIR/"
@@ -245,8 +261,13 @@ echo "Summary saved to: $SUMMARY_FILE"
 echo "Detailed log: $DETAILED_LOG"
 echo "Test outputs: $FIXED_OUTPUT_DIR/"
 
-# Exit with appropriate code
+# Display failed tests if any
 if [[ $FAILED_TESTS -gt 0 ]]; then
+    echo ""
+    echo -e "${RED}Failed tests:${NC}"
+    for failed_test in "${FAILED_TEST_NAMES[@]}"; do
+        echo -e "  ${RED}❌ $failed_test${NC}"
+    done
     echo ""
     echo -e "${RED}Some tests failed!${NC}"
     exit 1

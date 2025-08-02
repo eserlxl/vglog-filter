@@ -201,6 +201,20 @@ if [[ "$RUN_TESTS" == "ON" ]]; then
   # Post-test cleanup
   msg "Cleaning up any leftover test files after tests..."
   "$PROJECT_ROOT/cleanup_tests.sh" >/dev/null 2>&1 || true
+
+  # Run workflow tests if they exist
+  if [[ -f "$PROJECT_ROOT/test-workflows/run_workflow_tests.sh" ]]; then
+    msg "Running workflow tests..."
+    cd "$PROJECT_ROOT"
+    "$PROJECT_ROOT/test-workflows/run_workflow_tests.sh"
+    workflow_result=$?
+    
+    # Check if any workflow tests failed
+    if [[ $workflow_result -ne 0 ]]; then
+      warn "Some workflow tests failed. Check the detailed output above."
+      exit 1
+    fi
+  fi
 fi
 
 msg "Done."
