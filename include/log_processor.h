@@ -55,12 +55,12 @@ private:
     std::vector<Str> pending_blocks;
     bool marker_found = false;
 
-    // Regex members
-    std::regex re_vg_line;
-    std::regex re_prefix;
-    std::regex re_start;
-    std::regex re_bytes_head;
-    std::regex re_at;
-    std::regex re_by;
-    std::regex re_q;
+    // Regex members - initialize with default constructors to avoid MSAN issues
+    std::regex re_vg_line{};
+    std::regex re_prefix{};
+    std::regex re_start{};
+    std::regex re_bytes_head{};
+    std::regex re_at{};
+    std::regex re_by{};
+    std::regex re_q{};
 };
