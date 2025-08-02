@@ -26,36 +26,13 @@ namespace {
         }
     }
     
-    // Helper function to canonicalize path
-    std::filesystem::path canonicalize_path(const std::filesystem::path& full_path) {
-        try {
-            // Use weakly_canonical instead of canonical to avoid MSAN issues
-            // weakly_canonical is more forgiving and doesn't require the path to exist
-            const std::filesystem::path canonical_path = std::filesystem::weakly_canonical(full_path);
-            
-            // Return the canonical path directly without string conversion
-            // This avoids the MSAN issue with the string() method
-            return canonical_path;
-        } catch (const std::filesystem::filesystem_error& e) {
-            throw std::runtime_error("Failed to canonicalize path: " + std::string(e.what()));
-        }
-    }
-    
     // Helper function to check for path traversal attempts
-    void check_path_traversal(const std::filesystem::path& base_dir, 
-                             const std::filesystem::path& canonical_path,
-                             const std::string& path_str) {
-        auto base_it = base_dir.begin();
-        auto path_it = canonical_path.begin();
-        
-        // Check that the canonical path starts with the base directory
-        while (base_it != base_dir.end() && path_it != canonical_path.end() && *base_it == *path_it) {
-            ++base_it;
-            ++path_it;
-        }
-        
-        if (base_it != base_dir.end()) {
-            throw std::runtime_error("Path traversal attempt detected: " + path_str);
+    void check_path_traversal(const std::filesystem::path& path, const std::string& path_str) {
+        // Check if the path contains any parent directory references
+        for (const auto& component : path) {
+            if (component == ".." || component == "..\\" || component == "../") {
+                throw std::runtime_error("Path traversal attempt detected: " + path_str);
+            }
         }
     }
     
@@ -88,6 +65,9 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
     
     // Validate path is not absolute
     validate_not_absolute(path, path_str);
+    
+    // Check for path traversal attempts
+    check_path_traversal(path, path_str);
     
     // For now, return the path directly to avoid MSAN issues with complex path operations
     // This is a simplified approach that should work for most use cases
