@@ -204,7 +204,7 @@ echo ""
 # Ensure we're in the project root directory
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-cd "$PROJECT_ROOT"
+cd "$PROJECT_ROOT" || exit
 
 # Run tests in each subdirectory
 run_tests_in_directory "test-workflows/core-tests"
