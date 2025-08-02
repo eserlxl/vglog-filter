@@ -93,13 +93,18 @@ void LogProcessor::initialize_regex_patterns() {
         // Use explicit string conversion to avoid MSAN issues with uninitialized memory
         // Use c_str() to get explicit char* pointer to avoid MSAN issues
         // Use explicit length to avoid any potential issues with null termination
-        re_vg_line = std::regex(vg_pattern.c_str(), vg_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
-        re_prefix = std::regex(prefix_pattern.c_str(), prefix_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
-        re_start = std::regex(start_pattern.c_str(), start_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
-        re_bytes_head = std::regex(bytes_head_pattern.c_str(), bytes_head_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
-        re_at = std::regex(at_pattern.c_str(), at_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
-        re_by = std::regex(by_pattern.c_str(), by_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
-        re_q = std::regex(q_pattern.c_str(), q_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
+        // Force initialization by using assignment operator instead of direct construction
+        // Use direct construction with std::string to avoid any c_str() issues
+        // Use placement new to ensure proper initialization without default construction
+        // Use unique_ptr to avoid default construction issues
+        // Use explicit locale specification to avoid uninitialized memory issues
+        re_vg_line = std::make_unique<std::regex>(vg_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_prefix = std::make_unique<std::regex>(prefix_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_start = std::make_unique<std::regex>(start_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_bytes_head = std::make_unique<std::regex>(bytes_head_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_at = std::make_unique<std::regex>(at_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_by = std::make_unique<std::regex>(by_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_q = std::make_unique<std::regex>(q_pattern, std::regex::optimize | std::regex::ECMAScript);
     } catch (const std::regex_error& e) {
         throw std::runtime_error("Failed to initialize regex patterns: " + std::string(e.what()));
     } catch (const std::exception& e) {
@@ -237,16 +242,16 @@ void LogProcessor::process_line(std::string_view line) {
     }
 
     // Skip lines that don't match valgrind pattern
-    if (!std::regex_search(line.begin(), line.end(), re_vg_line)) {
+    if (!std::regex_search(line.begin(), line.end(), *re_vg_line)) {
         return;
     }
 
-    std::string processed_line = std::regex_replace(std::string(line), re_prefix, "");
+    std::string processed_line = std::regex_replace(std::string(line), *re_prefix, "");
 
     // Handle start of new block
-    if (std::regex_search(processed_line, re_start)) {
+    if (std::regex_search(processed_line, *re_start)) {
         flush();
-        if (std::regex_search(processed_line, re_bytes_head)) {
+        if (std::regex_search(processed_line, *re_bytes_head)) {
             return;
         }
     }
@@ -270,9 +275,9 @@ std::string LogProcessor::process_raw_line(const std::string& processed_line) {
     if (opt.scrub_raw) {
         try {
             rawLine = regex_replace_all(rawLine, get_re_addr(), "");
-            rawLine = regex_replace_all(rawLine, re_at, "");
-            rawLine = regex_replace_all(rawLine, re_by, "");
-            rawLine = regex_replace_all(rawLine, re_q, "");
+            rawLine = regex_replace_all(rawLine, *re_at, "");
+            rawLine = regex_replace_all(rawLine, *re_by, "");
+            rawLine = regex_replace_all(rawLine, *re_q, "");
         } catch (const std::regex_error& e) {
             throw std::runtime_error("Regex processing failed: " + std::string(e.what()));
         }

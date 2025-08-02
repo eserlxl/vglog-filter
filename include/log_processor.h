@@ -16,6 +16,8 @@
 #include <regex>
 #include <iostream>
 #include <span>
+#include <memory>
+#include <locale>
 
 class LogProcessor {
 public:
@@ -55,12 +57,12 @@ private:
     std::vector<Str> pending_blocks;
     bool marker_found = false;
 
-    // Regex members - initialize with default constructors to avoid MSAN issues
-    std::regex re_vg_line{};
-    std::regex re_prefix{};
-    std::regex re_start{};
-    std::regex re_bytes_head{};
-    std::regex re_at{};
-    std::regex re_by{};
-    std::regex re_q{};
+    // Regex members - use pointers to avoid default construction issues
+    std::unique_ptr<std::regex> re_vg_line;
+    std::unique_ptr<std::regex> re_prefix;
+    std::unique_ptr<std::regex> re_start;
+    std::unique_ptr<std::regex> re_bytes_head;
+    std::unique_ptr<std::regex> re_at;
+    std::unique_ptr<std::regex> re_by;
+    std::unique_ptr<std::regex> re_q;
 };
