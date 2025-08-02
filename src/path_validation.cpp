@@ -93,9 +93,10 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
     validate_not_absolute(path, path_str);
     
     // Get current working directory with proper initialization
+    // Use explicit copy construction to avoid move assignment MSAN issues
     std::filesystem::path base_dir;
     try {
-        base_dir = get_current_working_directory();
+        base_dir = std::filesystem::path(get_current_working_directory());
     } catch (const std::runtime_error& e) {
         throw std::runtime_error("Failed to get current working directory: " + std::string(e.what()));
     }
@@ -106,17 +107,20 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
     }
     
     // Construct full path with explicit initialization
-    const std::filesystem::path full_path = base_dir / path;
+    // Use explicit copy construction to avoid move assignment MSAN issues
+    const std::filesystem::path full_path(base_dir / path);
     
     // Canonicalize path with explicit initialization
-    const std::filesystem::path canonical_path = canonicalize_path(full_path);
+    // Use explicit copy construction to avoid move assignment MSAN issues
+    const std::filesystem::path canonical_path(canonicalize_path(full_path));
     
     // Check for path traversal attempts
     check_path_traversal(base_dir, canonical_path, path_str);
     
     // Return explicit copy to avoid move-related uninitialized memory issues
     // Use explicit copy construction instead of move assignment
-    return std::filesystem::path(canonical_path);
+    // Create a new path object with explicit string conversion to avoid MSAN issues
+    return std::filesystem::path(canonical_path.string());
 }
 
 std::ifstream safe_ifstream(std::string_view filename) {
@@ -129,7 +133,8 @@ std::ifstream safe_ifstream(std::string_view filename) {
     const std::string filename_str(filename);
     
     // Validate and canonicalize path
-    const std::filesystem::path validated_path = validate_and_canonicalize(filename_str);
+    // Use explicit copy construction to avoid move assignment MSAN issues
+    const std::filesystem::path validated_path(validate_and_canonicalize(filename_str));
     
     // Validate file exists and is regular
     validate_file_exists_and_regular(validated_path);
