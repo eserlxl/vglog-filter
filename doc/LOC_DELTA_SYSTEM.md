@@ -143,7 +143,7 @@ VERSION_SECURITY_BONUS=2
 ```
 
 ### Default Values
-- `VERSION_USE_LOC_DELTA=false` (enabled by default)
+- `VERSION_USE_LOC_DELTA=true` (enabled by default)
 - `VERSION_PATCH_LIMIT=100`
 - `VERSION_MINOR_LIMIT=100`
 - `VERSION_PATCH_DELTA="1*(1+LOC/250)"`
