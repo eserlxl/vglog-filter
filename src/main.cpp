@@ -8,6 +8,7 @@
 #include "options.h"
 #include "file_utils.h"
 #include "log_processor.h"
+#include "path_validation.h"
 #include <getopt.h>
 #include <iostream>
 #include <vector>
@@ -180,6 +181,14 @@ namespace {
             opt.filename = argv[optind];
             if (opt.filename == "-") {
                 opt.use_stdin = true;
+            } else {
+                // Validate and canonicalize the filename for security
+                try {
+                    auto validated_path = path_validation::validate_and_canonicalize(opt.filename);
+                    opt.filename = validated_path.string();
+                } catch (const std::exception& e) {
+                    throw std::runtime_error("Invalid filename: " + std::string(e.what()));
+                }
             }
         }
         

@@ -65,9 +65,6 @@ namespace {
         }
     }
     
-    // Note: These functions are no longer used after switching to string-based validation
-    // to avoid MSAN issues with filesystem::path operations
-    
     // String-based path validation to avoid MSAN issues with filesystem::path
     void validate_path_string(const std::string& path_str) {
         // Check for empty or null-containing paths
@@ -108,17 +105,31 @@ namespace {
         }
     }
     
+    // Sanitize and validate path, returning a safe path string for file operations
+    std::string sanitize_path_for_file_access(std::string_view input_path) {
+        // Create explicit string copy to avoid uninitialized memory
+        const std::string path_str(input_path);
+        
+        // Validate the path using string-based validation to avoid MSAN issues
+        validate_path_string(path_str);
+        
+        // Return the validated path string - this is now safe for file operations
+        return path_str;
+    }
+    
     // String-based file validation to avoid MSAN issues with filesystem::path
-    void validate_file_exists_and_regular_string(const std::string& path_str) {
+    // This function expects a pre-validated path string that has been sanitized
+    void validate_file_exists_and_regular_string(const std::string& sanitized_path) {
         // Use C-style file operations to avoid MSAN issues with filesystem operations
-        FILE* file = fopen(path_str.c_str(), "r");
+        // The path has been pre-validated and sanitized, so it's safe for file operations
+        FILE* file = fopen(sanitized_path.c_str(), "r");
         if (!file) {
             throw std::runtime_error("File does not exist");
         }
         
         // Check if it's a regular file using stat
         struct stat st;
-        if (stat(path_str.c_str(), &st) != 0) {
+        if (stat(sanitized_path.c_str(), &st) != 0) {
             fclose(file);
             throw std::runtime_error("Cannot stat file");
         }
@@ -169,16 +180,13 @@ std::ifstream safe_ifstream(std::string_view filename) {
         throw std::runtime_error("Cannot open stdin with ifstream.");
     }
     
-    // Create explicit string copy to avoid uninitialized memory
-    const std::string filename_str(filename);
-    
-    // Validate the path using string-based validation to avoid MSAN issues
-    validate_path_string(filename_str);
+    // Sanitize and validate the path, getting a safe path string for file operations
+    const std::string safe_filename = sanitize_path_for_file_access(filename);
     
     // Check if file exists and is regular using string-based approach
-    validate_file_exists_and_regular_string(filename_str);
+    validate_file_exists_and_regular_string(safe_filename);
     
-    return std::ifstream(filename_str);
+    return std::ifstream(safe_filename);
 }
 
 } // namespace path_validation
