@@ -114,10 +114,9 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
     // Check for path traversal attempts
     check_path_traversal(base_dir, canonical_path, path_str);
     
-    // Return a copy to avoid move-related uninitialized memory issues
-    // Use explicit copy construction instead of move
-    std::filesystem::path result = canonical_path;
-    return result;
+    // Return explicit copy to avoid move-related uninitialized memory issues
+    // Use explicit copy construction instead of move assignment
+    return std::filesystem::path(canonical_path);
 }
 
 std::ifstream safe_ifstream(std::string_view filename) {

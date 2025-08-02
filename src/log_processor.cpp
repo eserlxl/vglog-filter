@@ -75,18 +75,10 @@ LogProcessor::LogProcessor(const Options& options) :
 
 void LogProcessor::initialize_regex_patterns() {
     try {
-        // Set locale explicitly to avoid uninitialized memory issues
-        std::locale current_locale;
-        try {
-            current_locale = std::locale("");
-        } catch (const std::exception&) {
-            // Fallback to C locale if system locale fails
-            current_locale = std::locale::classic();
-        }
-        std::locale::global(current_locale);
+        // Initialize regex patterns with explicit locale to avoid uninitialized memory issues
+        // Use explicit string construction and avoid global locale manipulation
         
-        // Initialize regex patterns with explicit locale and proper initialization
-        // Use explicit string construction to avoid uninitialized memory
+        // Create explicit string copies to ensure proper initialization
         const std::string vg_pattern(VG_LINE_PATTERN);
         const std::string prefix_pattern(PREFIX_PATTERN);
         const std::string start_pattern(START_PATTERN);
@@ -95,7 +87,8 @@ void LogProcessor::initialize_regex_patterns() {
         const std::string by_pattern(BY_PATTERN);
         const std::string q_pattern(Q_PATTERN);
         
-        // Initialize regex objects with explicit flags to avoid uninitialized memory
+        // Initialize regex objects with explicit flags and avoid locale issues
+        // Use ECMAScript syntax which is more predictable and doesn't rely on locale
         re_vg_line = std::regex(vg_pattern, std::regex::optimize | std::regex::ECMAScript);
         re_prefix = std::regex(prefix_pattern, std::regex::optimize | std::regex::ECMAScript);
         re_start = std::regex(start_pattern, std::regex::optimize | std::regex::ECMAScript);
@@ -105,8 +98,8 @@ void LogProcessor::initialize_regex_patterns() {
         re_q = std::regex(q_pattern, std::regex::optimize | std::regex::ECMAScript);
     } catch (const std::regex_error& e) {
         throw std::runtime_error("Failed to initialize regex patterns: " + std::string(e.what()));
-    } catch (const std::runtime_error& e) {
-        throw std::runtime_error("Failed to set locale for regex patterns: " + std::string(e.what()));
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Failed to initialize regex patterns: " + std::string(e.what()));
     }
 }
 

@@ -513,6 +513,50 @@ test_threshold_configuration() {
     rm -rf "$test_dir"
 }
 
+# Test universal patch detection (any change triggers patch bump)
+test_universal_patch_detection() {
+    log_info "Testing universal patch detection..."
+    
+    local test_dir
+    test_dir=$(mktemp -d)
+    cd "$test_dir" || exit 1
+    
+    # Initialize git repository
+    git init >/dev/null 2>&1
+    echo "0.0.0" > VERSION
+    
+    # Create initial files
+    mkdir -p src test
+    echo "initial source code" > src/main.cpp
+    echo "initial test code" > test/main_test.cpp
+    
+    # Add and commit initial files
+    git add . >/dev/null 2>&1
+    git commit -m "Initial commit" >/dev/null 2>&1
+    
+    # Create a tag so we can analyze changes since the tag
+    git tag v0.0.0 >/dev/null 2>&1
+    
+    # Make a small change to a non-source file (should trigger patch bump)
+    echo "updated test code" > test/main_test.cpp
+    git add test/main_test.cpp >/dev/null 2>&1
+    git commit -m "Small update" >/dev/null 2>&1
+    
+    # Test that small changes trigger patch bump
+    local output
+    output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
+    
+    if [[ "$output" == "patch" ]]; then
+        log_success "Universal patch detection - small changes trigger patch"
+    else
+        log_error "Universal patch detection - small changes should trigger patch, got: $output"
+    fi
+    
+    # Cleanup
+    cd - >/dev/null 2>&1 || exit
+    rm -rf "$test_dir"
+}
+
 # Test error handling
 test_error_handling() {
     log_info "Testing error handling..."
@@ -663,6 +707,7 @@ main() {
     test_breaking_cli_changes
     test_no_changes
     test_threshold_configuration
+    test_universal_patch_detection
     test_error_handling
     test_json_output
     test_loc_delta_system

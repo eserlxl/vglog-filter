@@ -64,14 +64,14 @@ If the `VERSION` file is not found or accessible in any of these locations, the 
 
 ### Automatic Release Detection Thresholds
 
-The automated release workflow (`version-bump.yml` in `.github/workflows/`) uses conservative thresholds to prevent rapid and unnecessary version increases. A new release (and corresponding version bump) is automatically triggered only when changes meet these criteria:
+The automated release workflow (`version-bump.yml` in `.github/workflows/`) uses intelligent thresholds to ensure every meaningful change results in a version bump. The system is designed to be permissive rather than restrictive:
 
--   **MAJOR Release**: Triggered by the presence of any `BREAKING CHANGE` in the commit message footers. There is no size threshold for breaking changes, as their impact is always significant.
--   **MINOR Release**: Triggered by new features (`feat:` commit type) AND a significant total diff size (e.g., greater than 50 lines changed).
--   **PATCH Release**: Triggered by bug fixes (`fix:` commit type) AND a notable total diff size (e.g., greater than 20 lines changed).
--   **No Release**: Changes that do not meet the above thresholds (e.g., `docs:`, `style:`, `chore:`) will not trigger an automatic version bump.
+-   **MAJOR Release**: Triggered by breaking changes, API changes, or security issues. No size threshold applies as breaking changes are always significant.
+-   **MINOR Release**: Triggered by new features, CLI additions, or significant new content (new source files, test files, documentation).
+-   **PATCH Release**: Triggered by **any changes** that don't qualify for major or minor bumps. This ensures every change results in at least a patch version increment.
+-   **No Release**: Only occurs when there are truly no changes to analyze (e.g., single-commit repositories).
 
-These thresholds ensure that only truly significant changes result in a new official release, maintaining a meaningful version history.
+The system uses a LOC-based delta system to calculate the actual version increment, ensuring that even small changes get appropriate version bumps while larger changes get proportionally larger increments.
 
 ### Semantic Version Analyzer Tool
 
@@ -96,13 +96,14 @@ A dedicated script, `dev-bin/semantic-version-analyzer`, is used to analyze the 
 The `semantic-version-analyzer` performs a deep inspection of the codebase and Git history, with a particular focus on changes relevant to a command-line interface (CLI) tool:
 
 1.  **File Changes**: Identifies added, modified, and deleted files across the repository (source code, tests, documentation, build scripts).
-2.  **CLI Interface Analysis**: Specifically looks for patterns indicating changes to the CLI, such as:
+2.  **CLI Interface Analysis**: Specifically looks for patterns indicating changes to the CLI in C/C++ source files only:
     -   Introduction of new command-line options (suggests a `MINOR` bump).
     -   Removal of existing command-line options (suggests a `MAJOR` / breaking change).
     -   Enhancements to existing options (typically a `PATCH` or `MINOR` depending on impact).
 3.  **Source Code Structure**: Detects new source files, test files, or significant refactorings that might imply new functionality or breaking changes.
 4.  **Documentation Updates**: Notes new or significantly updated documentation files, which can sometimes correlate with new features.
-5.  **Change Magnitude**: Quantifies the size of changes (e.g., lines added/deleted) to inform the threshold-based decision for automatic releases.
+5.  **Change Magnitude**: Quantifies the size of changes (e.g., lines added/deleted) to calculate LOC-based delta increments.
+6.  **Universal Patch Detection**: **Any change** that doesn't qualify for major or minor bumps automatically triggers a patch bump, ensuring no changes are missed.
 
 [↑ Back to top](#versioning-strategy)
 

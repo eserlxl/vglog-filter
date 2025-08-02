@@ -10,11 +10,12 @@ For projects with rapid iteration cycles, traditional semantic versioning can le
 - Small bug fixes increment versions unnecessarily
 - Large changes get the same increment as small ones
 - Version numbers grow too quickly
+- **New Problem**: Restrictive thresholds prevent meaningful changes from getting version bumps
 
 ## How It Works
 
 ### Core Concept
-The delta (increment amount) is calculated based on Lines of Code (LOC) changed plus bonus additions for specific types of changes:
+The delta (increment amount) is calculated based on Lines of Code (LOC) changed plus bonus additions for specific types of changes. **Every change now results in at least a patch bump**, with the LOC-based system determining the actual increment amount:
 
 ```bash
 # Base delta from LOC
@@ -49,6 +50,13 @@ The system automatically detects and applies bonuses for:
 
 #### Security Fixes
 - **Security keywords**: +2 each (security-related terms in code)
+
+### Universal Patch Detection
+**Every change now results in at least a patch bump**, regardless of size. The old restrictive thresholds (requiring both file count AND line count) have been replaced with a permissive approach:
+
+- **Any modified files > 0** OR **any diff size > 0** triggers a patch bump
+- The LOC-based delta system then calculates the actual increment amount
+- This ensures no meaningful changes are missed
 
 ### Rollover System
 - **Patch limit**: 100 (x.y.100 → x.(y+1).0)

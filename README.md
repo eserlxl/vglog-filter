@@ -64,7 +64,7 @@ Valgrind is an indispensable tool for detecting memory errors and leaks in C/C++
 - **Flexible input**: Supports both file input and stdin streaming
 
 ### Development & Quality Assurance
-- **Automated semantic versioning**: Version bumps are automatically managed based on [Conventional Commits](https://www.conventionalcommits.org/) guidelines
+- **Automated semantic versioning**: Version bumps are automatically managed with universal patch detection (every change gets a version bump) and LOC-based delta increments
 - **Comprehensive CI/CD pipeline**: Features 12 distinct GitHub Actions workflows covering extensive testing, static analysis, memory sanitization, and security scanning
 - **Extensive Test Suite**: Includes unit, integration, and workflow tests to ensure high reliability and correctness
 

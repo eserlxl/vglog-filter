@@ -499,29 +499,37 @@ extract_cli_options() {
     
     # ... (The rest of the detections in extract_cli_options would be refactored similarly) ...
 
-    # Manual argv parser detection
+    # Manual argv parser detection - RESTRICTED to C/C++ source files only
     debug_output "DEBUG: Starting manual CLI detection"
+    
+    # Get diff only for C/C++ source files to avoid false positives from shell scripts
+    local cpp_diff
+    cpp_diff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
+        'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+        'include/*.h' 'include/*.hpp' 'include/*.hh' \
+        'src/*.h' 'src/*.hpp' 'src/*.hh' 2>/dev/null || true)
+    
     local added_long_opts
-    added_long_opts=$(printf '%s' "$srcdiff" | awk '/^\+.*--[a-zA-Z0-9-]+/ && !/^\+.*--[[:space:]]*["\x27]/ && !/^\+[[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^\+[[:space:]]*.*["\x27].*-[[:alpha:]]/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
+    added_long_opts=$(printf '%s' "$cpp_diff" | awk '/^\+.*--[a-zA-Z0-9-]+/ && !/^\+.*--[[:space:]]*["\x27]/ && !/^\+[[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^\+[[:space:]]*.*["\x27].*-[[:alpha:]]/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
     local removed_long_opts
-    removed_long_opts=$(printf '%s' "$srcdiff" | awk '/^-.*--[a-zA-Z0-9-]+/ && !/^-.*--[[:space:]]*["\x27]/ && !/^-.*--[[:space:]]*[a-zA-Z0-9_]+[[:space:]]*=/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
+    removed_long_opts=$(printf '%s' "$cpp_diff" | awk '/^-.*--[a-zA-Z0-9-]+/ && !/^-.*--[[:space:]]*["\x27]/ && !/^-.*--[[:space:]]*[a-zA-Z0-9_]+[[:space:]]*=/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
     R[manual_added_long_count]=$(printf '%s\n' "$added_long_opts" | wc -l | tr -d ' ' || printf '0')
     R[manual_removed_long_count]=$(printf '%s\n' "$removed_long_opts" | wc -l | tr -d ' ' || printf '0')
     R[manual_added_long_count]=${R[manual_added_long_count]:-0}
     R[manual_removed_long_count]=${R[manual_removed_long_count]:-0}
     (( R[manual_added_long_count] > 0 || R[manual_removed_long_count] > 0 )) && R[manual_cli_changes]=true
 
-    # Enhanced CLI detection for various patterns
+    # Enhanced CLI detection for various patterns - RESTRICTED to C/C++ source files only
     local getopt_changes
-    getopt_changes=$(printf '%s' "$srcdiff" | grep -c -E '(getopt_long|getopt)' || printf '0')
+    getopt_changes=$(printf '%s' "$cpp_diff" | grep -c -E '(getopt_long|getopt)' || printf '0')
     local arg_parsing_changes
-    arg_parsing_changes=$(printf '%s' "$srcdiff" | awk '/^\+[[:space:]]*if[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*while[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*for[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*switch[[:space:]]*\([[:space:]]*argv/ {print}' | wc -l | tr -d ' ' || printf '0')
+    arg_parsing_changes=$(printf '%s' "$cpp_diff" | awk '/^\+[[:space:]]*if[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*while[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*for[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*switch[[:space:]]*\([[:space:]]*argv/ {print}' | wc -l | tr -d ' ' || printf '0')
     local help_text_changes
-    help_text_changes=$(printf '%s' "$srcdiff" | grep -c -i -E '(usage|help|option|argument)' || printf '0')
+    help_text_changes=$(printf '%s' "$cpp_diff" | grep -c -i -E '(usage|help|option|argument)' || printf '0')
     local main_signature_changes
-    main_signature_changes=$(printf '%s' "$srcdiff" | awk '/^\+[[:space:]]*int[[:space:]]+main[[:space:]]*\(/ {print}' | wc -l | tr -d ' ' || printf '0')
+    main_signature_changes=$(printf '%s' "$cpp_diff" | awk '/^\+[[:space:]]*int[[:space:]]+main[[:space:]]*\(/ {print}' | wc -l | tr -d ' ' || printf '0')
     local enhanced_cli_patterns
-    enhanced_cli_patterns=$(printf '%s' "$srcdiff" | awk '
+    enhanced_cli_patterns=$(printf '%s' "$cpp_diff" | awk '
         /^\+[[:space:]]*.*-[[:alpha:]]/ && !/^\+[[:space:]]*\/\// && !/^\+[[:space:]]*#/ && !/^\+[[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^\+[[:space:]]*.*["\x27].*-[[:alpha:]]/ {print "short_option_change"}
         /^\+[[:space:]]*.*--[[:alnum:]-]+/ && !/^\+[[:space:]]*\/\// && !/^\+[[:space:]]*#/ && !/^\+[[:space:]]*.*git[[:space:]]+.*--[[:alnum:]-]+/ && !/^\+[[:space:]]*.*["\x27].*--[[:alnum:]-]+/ {print "long_option_change"}
         /^\+[[:space:]]*.*argc[[:space:]]*[<>=!]/ {print "argc_check_change"}
@@ -651,31 +659,8 @@ analyze_changes() {
 
     # Manual CLI detection - look for CLI parsing patterns in changed source files
     # Exclude the analyzer script itself to avoid false positives
-    local -a changed_source_files=()
-    while IFS= read -r -d '' f; do \
-        if [[ "$f" =~ \.(c|cc|cpp|cxx)$ ]] && [[ "$f" != "dev-bin/semantic-version-analyzer" ]]; then
-            changed_source_files+=("$f")
-        fi
-    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" 2>/dev/null || printf '')
-
-    # Simple manual CLI detection - look for CLI parsing patterns in the diff
-    # Exclude git command arguments and comments to avoid false positives
-    # But include string comparisons for CLI options (e.g., strcmp(argv[1], "--help"))
-    local manual_cli_detected
-    manual_cli_detected=$( \
-        git -c color.ui=false diff -M -C "$base_ref".."$target_ref" -- "${changed_source_files[@]}" 2>/dev/null \
-        | awk '/^[+-].*--[a-zA-Z0-9]/ && !/^[+-].*git[[:space:]]+.*--[a-zA-Z0-9]/ && !/^[+-][[:space:]]*#/ { count++ } END { print count+0 }' 2>/dev/null || printf '0' \
-    )
-    
-    # Ensure manual_cli_detected is numeric
-    if [[ ! "$manual_cli_detected" =~ ^[0-9]+$ ]]; then
-        manual_cli_detected=0
-    fi
-    
-    if [[ "$manual_cli_detected" -gt 0 ]]; then
-        R[manual_cli_changes]=true
-        R[manual_added_long_count]=1
-    fi
+    # This is now handled in extract_cli_options() with proper C/C++ file filtering
+    # No additional manual CLI detection needed here
 
     # Get diff size using numstat (binary-safe)
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
@@ -910,14 +895,18 @@ suggest_version_bump() {
     if [[ "${R[new_source_files]:-0}" -ge "$minor_sources" ]]; then printf 'minor'; return; fi
     if [[ "${R[new_test_files]:-0}"  -ge "$minor_tests"  ]]; then printf 'minor'; return; fi
     if [[ "${R[new_doc_files]:-0}"   -ge "$minor_docs"   ]]; then printf 'minor'; return; fi
-    # PATCH: Significant modifications without new features
+    # PATCH: Any significant modifications or any changes at all
     local modified_files="${R[modified_files]:-0}"
     if [[ ! "$modified_files" =~ ^[0-9]+$ ]]; then
         modified_files=0
     fi
-    if [[ "$modified_files" -ge "$patch_files" ]] && [[ "$diff_size" -gt "$patch_lines" ]]; then
+    
+    # Any changes should result in at least a patch bump
+    # The thresholds are now used only for determining the type, not whether to bump
+    if [[ "$modified_files" -gt 0 ]] || [[ "$diff_size" -gt 0 ]]; then
         printf 'patch'; return
     fi
+    
     printf 'none'
 }
 
@@ -962,7 +951,9 @@ get_bump_reason() {
     if [[ ! "$modified_files_reason" =~ ^[0-9]+$ ]]; then
         modified_files_reason=0
     fi
-    if [[ "$modified_files_reason" -ge "$MIN_PATCH_FILES" ]] && [[ "$diff_size_reason" -gt "$MIN_PATCH_DIFF_LINES" ]]; then
+    
+    # Any changes should result in at least a patch bump
+    if [[ "$modified_files_reason" -gt 0 ]] || [[ "$diff_size_reason" -gt 0 ]]; then
         printf 'mods_only'; return
     fi
 

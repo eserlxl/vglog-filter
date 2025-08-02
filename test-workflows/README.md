@@ -7,7 +7,7 @@ This directory contains comprehensive test workflows for the vglog-filter projec
 ### Core Tests (`core-tests/`)
 Tests for the main functionality of the project:
 - **`test_bump_version.sh`**: Tests version bumping functionality
-- **`test_semantic_version_analyzer.sh`**: Comprehensive tests for semantic version analysis
+- **`test_semantic_version_analyzer.sh`**: Comprehensive tests for semantic version analysis (including universal patch detection)
 - **`test_semantic_version_analyzer_fixes.sh`**: Tests for specific fixes and improvements
 - **`test_semantic_version_analyzer_simple.sh`**: Basic functionality tests
 - **`test_loc_delta_system.sh`**: Basic demonstration of LOC-based delta system
