@@ -95,7 +95,7 @@ test_basic_loc_deltas() {
     # Create a test repository with actual changes
     local test_dir="test_loc_delta_basic"
     mkdir -p "$test_dir"
-    cd "$test_dir"
+    cd "$test_dir" || exit
     
     # Initialize git repo
     git init --quiet
@@ -180,7 +180,7 @@ test_breaking_change_bonuses() {
     # Create a test repository with breaking changes
     local test_dir="test_breaking_changes"
     mkdir -p "$test_dir"
-    cd "$test_dir"
+    cd "$test_dir" || exit
     
     # Initialize git repo
     git init --quiet
@@ -223,10 +223,12 @@ test_breaking_change_bonuses() {
         "patch_delta" "3"  # 1 (base) + 1 (new file bonus) + 1 (LOC bonus)
     
     # Test combined breaking changes
-    echo "// Combined breaking changes" > src/combined.c
-    echo "// CLI-BREAKING: CLI change" >> src/combined.c
-    echo "// API-BREAKING: API change" >> src/combined.c
-    echo "// Removed: -x" >> src/combined.c
+    {
+        echo "// Combined breaking changes"
+        echo "// CLI-BREAKING: CLI change"
+        echo "// API-BREAKING: API change"
+        echo "// Removed: -x"
+    } > src/combined.c
     git add src/combined.c
     git commit --quiet -m "Add combined breaking changes" 2>/dev/null || true
     
@@ -247,7 +249,7 @@ test_feature_addition_bonuses() {
     # Create a test repository with feature additions
     local test_dir="test_feature_additions"
     mkdir -p "$test_dir"
-    cd "$test_dir"
+    cd "$test_dir" || exit
     
     # Initialize git repo
     git init --quiet
@@ -317,7 +319,7 @@ test_security_bonuses() {
     # Create a test repository with security keywords
     local test_dir="test_security"
     mkdir -p "$test_dir"
-    cd "$test_dir"
+    cd "$test_dir" || exit
     
     # Initialize git repo
     git init --quiet
@@ -364,7 +366,7 @@ test_combined_bonuses() {
     # Create a test repository with combined changes
     local test_dir="test_combined"
     mkdir -p "$test_dir"
-    cd "$test_dir"
+    cd "$test_dir" || exit
     
     # Initialize git repo
     git init --quiet
@@ -420,7 +422,7 @@ test_configuration_customization() {
     # Create a test repository with custom bonus configuration
     local test_dir="test_custom_config"
     mkdir -p "$test_dir"
-    cd "$test_dir"
+    cd "$test_dir" || exit
     
     # Initialize git repo
     git init --quiet
@@ -460,7 +462,7 @@ test_rollover_scenarios() {
     # Create a test repository with large changes
     local test_dir="test_rollover"
     mkdir -p "$test_dir"
-    cd "$test_dir"
+    cd "$test_dir" || exit
     
     # Initialize git repo
     git init --quiet
@@ -526,7 +528,7 @@ test_edge_cases() {
     # Create a test repository for edge cases
     local test_dir="test_edge_cases"
     mkdir -p "$test_dir"
-    cd "$test_dir"
+    cd "$test_dir" || exit
     
     # Initialize git repo
     git init --quiet
@@ -571,7 +573,7 @@ test_verbose_output() {
     # Create a test repository for verbose output
     local test_dir="test_verbose"
     mkdir -p "$test_dir"
-    cd "$test_dir"
+    cd "$test_dir" || exit
     
     # Initialize git repo
     git init --quiet
@@ -594,7 +596,7 @@ test_verbose_output() {
     git commit --quiet -m "Add changes for verbose test" 2>/dev/null || true
     
     local output
-    output=$(VERSION_USE_LOC_DELTA=true $SCRIPT_PATH --verbose --repo-root $(pwd) 2>/dev/null)
+    output=$(VERSION_USE_LOC_DELTA=true $SCRIPT_PATH --verbose --repo-root "$(pwd)" 2>/dev/null)
     
     # Check for bonus information in verbose output
     if [[ "$output" == *"LOC-based delta system:"* ]] && \
