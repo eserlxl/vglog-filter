@@ -76,6 +76,18 @@ bool test_invalid_paths() {
         "Null byte in path should be blocked"
     );
 
+    TEST_EXPECT_EXCEPTION(
+        path_validation::validate_and_canonicalize("file`with`backticks.txt"),
+        std::runtime_error,
+        "Dangerous characters should be blocked"
+    );
+
+    TEST_EXPECT_EXCEPTION(
+        path_validation::validate_and_canonicalize("file$(with)shell.txt"),
+        std::runtime_error,
+        "Shell injection characters should be blocked"
+    );
+
     return true;
 }
 
