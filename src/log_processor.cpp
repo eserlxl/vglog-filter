@@ -93,7 +93,8 @@ bool LogProcessor::matches_vg_line(std::string_view line) const {
     if (line[0] != '=' || line[1] != '=') return false;
     
     size_t i = 2;
-    while (i < line.size() && std::isdigit(line[i])) i++;
+    // Use manual digit check to avoid MSAN issues with std::isdigit
+    while (i < line.size() && line[i] >= '0' && line[i] <= '9') i++;
     if (i < 4 || i >= line.size() - 1) return false;
     if (line[i] != '=' || line[i+1] != '=') return false;
     
@@ -106,11 +107,13 @@ bool LogProcessor::matches_prefix(std::string_view line) const {
     
     // Find the end of ==[0-9]+==
     size_t i = 2;
-    while (i < line.size() && std::isdigit(line[i])) i++;
+    // Use manual digit check to avoid MSAN issues with std::isdigit
+    while (i < line.size() && line[i] >= '0' && line[i] <= '9') i++;
     i += 2; // Skip ==
     
-    // Check for whitespace
-    while (i < line.size() && std::isspace(line[i])) i++;
+    // Check for whitespace using manual checks to avoid MSAN issues with std::isspace
+    while (i < line.size() && (line[i] == ' ' || line[i] == '\t' || line[i] == '\v' || 
+                               line[i] == '\f' || line[i] == '\r' || line[i] == '\n')) i++;
     
     return true;
 }
@@ -141,11 +144,11 @@ bool LogProcessor::matches_bytes_head(std::string_view line) const {
     size_t pos = 0;
     
     // Find first number
-    while (pos < line.size() && !std::isdigit(line[pos])) pos++;
+    while (pos < line.size() && (line[pos] < '0' || line[pos] > '9')) pos++;
     if (pos >= line.size()) return false;
     
     // Skip first number
-    while (pos < line.size() && std::isdigit(line[pos])) pos++;
+    while (pos < line.size() && line[pos] >= '0' && line[pos] <= '9') pos++;
     
     // Check for " bytes in "
     if (pos + 10 >= line.size()) return false;
@@ -153,11 +156,11 @@ bool LogProcessor::matches_bytes_head(std::string_view line) const {
     pos += 10;
     
     // Find second number
-    while (pos < line.size() && !std::isdigit(line[pos])) pos++;
+    while (pos < line.size() && (line[pos] < '0' || line[pos] > '9')) pos++;
     if (pos >= line.size()) return false;
     
     // Skip second number
-    while (pos < line.size() && std::isdigit(line[pos])) pos++;
+    while (pos < line.size() && line[pos] >= '0' && line[pos] <= '9') pos++;
     
     // Check for " blocks"
     if (pos + 7 >= line.size()) return false;
@@ -314,7 +317,7 @@ void LogProcessor::process_stream(std::istream& in) {
     }
 
     std::string line;
-    line.reserve(1024); // Pre-allocate line buffer for better performance
+    // Don't pre-allocate to avoid MSAN uninitialized memory warnings
     
     while (std::getline(in, line)) {
         // Security validation
@@ -407,9 +410,9 @@ void LogProcessor::process_line(std::string_view line) {
     }
 
     // Add to current block
-    raw << rawLine << '\n';
+    raw += rawLine + '\n';
     std::string cl = canon(processed_line);
-    sig << cl << '\n';
+    sig += cl + '\n';
     sigLines.push_back(std::move(cl));
 }
 
@@ -425,14 +428,13 @@ std::string LogProcessor::process_raw_line(const std::string& processed_line) {
 }
 
 void LogProcessor::flush() {
-    const std::string rawStr = raw.str();
-    if (rawStr.empty()) {
+    if (raw.empty()) {
         clear_current_state();
         return;
     }
 
     // Security validation
-    validate_block_size(rawStr.size());
+    validate_block_size(raw.size());
 
     std::string key = generate_signature_key();
     
@@ -440,9 +442,9 @@ void LogProcessor::flush() {
         if (opt.stream_mode) {
             // Security validation for pending blocks
             validate_pending_blocks_count(pending_blocks.size());
-            pending_blocks.emplace_back(rawStr + '\n');
+            pending_blocks.emplace_back(raw + '\n');
         } else {
-            std::cout << rawStr << '\n';
+            std::cout << raw << '\n';
         }
     }
     
@@ -461,14 +463,12 @@ std::string LogProcessor::generate_signature_key() const {
         }
         return key;
     } else {
-        return sig.str();
+        return sig;
     }
 }
 
 void LogProcessor::clear_current_state() {
-    raw.str(""); 
     raw.clear();
-    sig.str(""); 
     sig.clear();
     sigLines.clear();
 }

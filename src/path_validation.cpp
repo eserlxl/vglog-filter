@@ -39,9 +39,25 @@ namespace {
     
     // Helper function to check for path traversal attempts
     void check_path_traversal(const std::filesystem::path& path, const std::string& path_str) {
+        // Use string-based checking to avoid MSAN issues with path iteration
         // Check if the path contains any parent directory references
-        for (const auto& component : path) {
-            if (component == ".." || component == "..\\" || component == "../") {
+        const std::string path_string = path.string();
+        
+        // Check for common path traversal patterns
+        if (path_string.find("..") != std::string::npos) {
+            // Additional check to avoid false positives on valid paths like "..config"
+            // Look for actual directory traversal patterns
+            if (path_string.find("/../") != std::string::npos ||
+                path_string.find("\\..\\") != std::string::npos ||
+                path_string.find("/..\\") != std::string::npos ||
+                path_string.find("\\../") != std::string::npos ||
+                path_string.find("/..") != std::string::npos ||
+                path_string.find("\\..") != std::string::npos ||
+                path_string.find("..\\") != std::string::npos ||
+                path_string.find("../") != std::string::npos ||
+                path_string == ".." ||
+                path_string.find("/..") == path_string.length() - 3 ||
+                path_string.find("\\..") == path_string.length() - 3) {
                 throw std::runtime_error("Path traversal attempt detected: " + path_str);
             }
         }

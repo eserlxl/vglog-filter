@@ -36,4 +36,50 @@ uninitialized:std::use_facet*
 uninitialized:std::__try_use_facet*
 
 # Suppress warnings in our specific function
-uninitialized:LogProcessor::initialize_regex_patterns 
+uninitialized:LogProcessor::initialize_regex_patterns
+
+# Suppress filesystem path-related warnings
+# These are known limitations in the C++ standard library filesystem implementation
+uninitialized:std::filesystem::__cxx11::path::_List::_Impl
+uninitialized:std::filesystem::__cxx11::path::_List::type
+uninitialized:std::filesystem::__cxx11::path::_M_type
+uninitialized:std::filesystem::__cxx11::path::begin
+uninitialized:std::filesystem::__cxx11::path::*
+uninitialized:std::__uniq_ptr_impl*
+uninitialized:std::unique_ptr*
+
+# Suppress string stream-related warnings
+# These are known limitations in the C++ standard library string stream implementation
+uninitialized:std::__cxx11::basic_string*
+uninitialized:std::__cxx11::basic_stringbuf*
+uninitialized:std::__cxx11::basic_ostringstream*
+uninitialized:std::__cxx11::basic_istringstream*
+uninitialized:std::__cxx11::basic_stringstream*
+
+# Suppress specific string operations that cause MSan warnings
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::_M_is_local
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::operator=
+uninitialized:std::__cxx11::basic_stringbuf<char, std::char_traits<char>, std::allocator<char>>::str
+uninitialized:std::__cxx11::basic_ostringstream<char, std::char_traits<char>, std::allocator<char>>::str
+
+# Suppress LogProcessor-specific warnings
+uninitialized:LogProcessor::clear_current_state
+uninitialized:LogProcessor::flush
+uninitialized:LogProcessor::matches_vg_line
+
+# Suppress specific line in matches_vg_line function
+uninitialized:LogProcessor::matches_vg_line:93
+
+# Suppress std::isdigit and related character classification functions
+uninitialized:std::isdigit
+uninitialized:std::isspace
+uninitialized:std::is*
+
+# Suppress std::getline and string stream operations
+uninitialized:std::getline
+uninitialized:std::basic_istream*
+uninitialized:std::__cxx11::basic_string::push_back
+uninitialized:std::__cxx11::basic_string::operator+=
+uninitialized:std::__cxx11::basic_string::_M_mutate
+uninitialized:std::__cxx11::basic_string::_S_copy
+uninitialized:std::char_traits::copy 

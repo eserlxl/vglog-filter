@@ -61,7 +61,7 @@ private:
     std::string replace_patterns(const std::string& line) const;
 
     const Options& opt;
-    std::ostringstream raw, sig;
+    std::string raw, sig;  // Use regular strings instead of ostringstream to avoid MSAN issues
     VecS sigLines;
     std::unordered_set<Str> seen;
     
