@@ -75,7 +75,7 @@ echo
 
 # Test 2: Test with stdin
 echo -e "${YELLOW}Test 2: Processing from stdin...${NC}"
-if output=$(cat "$TEST_FILE" | "$PROGRAM" 2>&1); then
+if output=$("$PROGRAM" < "$TEST_FILE" 2>&1); then
     echo -e "${GREEN}✓ Stdin processing successful${NC}"
 else
     echo -e "${RED}✗ Stdin processing failed${NC}"
