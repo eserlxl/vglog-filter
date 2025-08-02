@@ -26,15 +26,6 @@ namespace {
         }
     }
     
-    // Helper function to get current working directory
-    std::filesystem::path get_current_working_directory() {
-        try {
-            return std::filesystem::current_path();
-        } catch (const std::filesystem::filesystem_error& e) {
-            throw std::runtime_error("Failed to get current working directory: " + std::string(e.what()));
-        }
-    }
-    
     // Helper function to canonicalize path
     std::filesystem::path canonicalize_path(const std::filesystem::path& full_path) {
         try {
@@ -96,7 +87,9 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
     // Use explicit copy construction to avoid move assignment MSAN issues
     std::filesystem::path base_dir;
     try {
-        base_dir = std::filesystem::path(get_current_working_directory());
+        // Use explicit string construction to avoid MSAN issues
+        const std::string cwd_str = std::filesystem::current_path().string();
+        base_dir = std::filesystem::path(cwd_str);
     } catch (const std::runtime_error& e) {
         throw std::runtime_error("Failed to get current working directory: " + std::string(e.what()));
     }
@@ -120,7 +113,8 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
     // Return explicit copy to avoid move-related uninitialized memory issues
     // Use explicit copy construction instead of move assignment
     // Create a new path object with explicit string conversion to avoid MSAN issues
-    return std::filesystem::path(canonical_path.string());
+    const std::string canonical_str = canonical_path.string();
+    return std::filesystem::path(canonical_str);
 }
 
 std::ifstream safe_ifstream(std::string_view filename) {

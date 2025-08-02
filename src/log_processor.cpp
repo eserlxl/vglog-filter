@@ -79,24 +79,25 @@ void LogProcessor::initialize_regex_patterns() {
         // Use explicit string construction and avoid global locale manipulation
         
         // Create explicit string copies to ensure proper initialization
-        const std::string vg_pattern(VG_LINE_PATTERN);
-        const std::string prefix_pattern(PREFIX_PATTERN);
-        const std::string start_pattern(START_PATTERN);
-        const std::string bytes_head_pattern(BYTES_HEAD_PATTERN);
-        const std::string at_pattern(AT_PATTERN);
-        const std::string by_pattern(BY_PATTERN);
-        const std::string q_pattern(Q_PATTERN);
+        // Use std::string constructor with explicit length to avoid MSAN issues
+        const std::string vg_pattern(VG_LINE_PATTERN, std::char_traits<char>::length(VG_LINE_PATTERN));
+        const std::string prefix_pattern(PREFIX_PATTERN, std::char_traits<char>::length(PREFIX_PATTERN));
+        const std::string start_pattern(START_PATTERN, std::char_traits<char>::length(START_PATTERN));
+        const std::string bytes_head_pattern(BYTES_HEAD_PATTERN, std::char_traits<char>::length(BYTES_HEAD_PATTERN));
+        const std::string at_pattern(AT_PATTERN, std::char_traits<char>::length(AT_PATTERN));
+        const std::string by_pattern(BY_PATTERN, std::char_traits<char>::length(BY_PATTERN));
+        const std::string q_pattern(Q_PATTERN, std::char_traits<char>::length(Q_PATTERN));
         
-            // Initialize regex objects with explicit flags and avoid locale issues
-    // Use ECMAScript syntax which is more predictable and doesn't rely on locale
-    // Use explicit string conversion to avoid MSAN issues with uninitialized memory
-    re_vg_line = std::regex(vg_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-    re_prefix = std::regex(prefix_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-    re_start = std::regex(start_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-    re_bytes_head = std::regex(bytes_head_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-    re_at = std::regex(at_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-    re_by = std::regex(by_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-    re_q = std::regex(q_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
+        // Initialize regex objects with explicit flags and avoid locale issues
+        // Use ECMAScript syntax which is more predictable and doesn't rely on locale
+        // Use explicit string conversion to avoid MSAN issues with uninitialized memory
+        re_vg_line = std::regex(vg_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_prefix = std::regex(prefix_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_start = std::regex(start_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_bytes_head = std::regex(bytes_head_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_at = std::regex(at_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_by = std::regex(by_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_q = std::regex(q_pattern, std::regex::optimize | std::regex::ECMAScript);
     } catch (const std::regex_error& e) {
         throw std::runtime_error("Failed to initialize regex patterns: " + std::string(e.what()));
     } catch (const std::exception& e) {
