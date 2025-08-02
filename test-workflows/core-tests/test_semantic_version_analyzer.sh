@@ -8,6 +8,11 @@
 set -Euo pipefail
 IFS=
 
+# Source the test helper script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../test_helper.sh"
+
 # Colors for output
 # shellcheck disable=SC1001,SC2026,SC2289
 RED='\033[0;31m'
@@ -108,14 +113,10 @@ test_basic_functionality() {
 test_path_classification() {
     log_info "Testing path classification..."
     
-    # Create a temporary test repository
+    # Create a temporary test repository using the helper
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(create_temp_test_env "path-classification")
     cd "$test_dir" || exit 1
-    
-    # Initialize git repository
-    git init >/dev/null 2>&1
-    echo "0.0.0" > VERSION
     
     # Create test files with different paths
     mkdir -p src test doc third_party build
@@ -165,7 +166,7 @@ test_path_classification() {
     
     # Cleanup
     cd - >/dev/null 2>&1 || exit
-    rm -rf "$test_dir"
+    cleanup_temp_test_env "$test_dir"
 }
 
 # Test file paths with spaces and special characters
@@ -173,12 +174,8 @@ test_file_paths_with_spaces() {
     log_info "Testing file paths with spaces and special characters..."
     
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(create_temp_test_env "file-paths-with-spaces")
     cd "$test_dir" || exit 1
-    
-    # Initialize git repository
-    git init >/dev/null 2>&1
-    echo "0.0.0" > VERSION
     
     # Create initial files
     mkdir -p src test doc
@@ -217,7 +214,7 @@ test_file_paths_with_spaces() {
     
     # Cleanup
     cd - >/dev/null 2>&1 || exit
-    rm -rf "$test_dir"
+    cleanup_temp_test_env "$test_dir"
 }
 
 # Test rename and copy handling
@@ -225,12 +222,8 @@ test_rename_and_copy() {
     log_info "Testing rename and copy handling..."
     
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(create_temp_test_env "rename-and-copy")
     cd "$test_dir" || exit 1
-    
-    # Initialize git repository
-    git init >/dev/null 2>&1
-    echo "0.0.0" > VERSION
     
     # Create initial files
     mkdir -p src test
@@ -257,7 +250,7 @@ test_rename_and_copy() {
     
     # Cleanup
     cd - >/dev/null 2>&1 || exit
-    rm -rf "$test_dir"
+    cleanup_temp_test_env "$test_dir"
 }
 
 # Test CLI change detection
@@ -265,12 +258,8 @@ test_cli_change_detection() {
     log_info "Testing CLI change detection..."
     
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(create_temp_test_env "cli-change-detection")
     cd "$test_dir" || exit 1
-    
-    # Initialize git repository
-    git init >/dev/null 2>&1
-    echo "0.0.0" > VERSION
     
     # Create initial source file
     mkdir -p src
@@ -342,7 +331,7 @@ EOF
     
     # Cleanup
     cd - >/dev/null 2>&1 || exit
-    rm -rf "$test_dir"
+    cleanup_temp_test_env "$test_dir"
 }
 
 # Test breaking CLI changes
@@ -350,12 +339,8 @@ test_breaking_cli_changes() {
     log_info "Testing breaking CLI changes..."
     
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(create_temp_test_env "breaking-cli-changes")
     cd "$test_dir" || exit 1
-    
-    # Initialize git repository
-    git init >/dev/null 2>&1
-    echo "0.0.0" > VERSION
     
     # Create initial source file with CLI options
     mkdir -p src
@@ -427,7 +412,7 @@ EOF
     
     # Cleanup
     cd - >/dev/null 2>&1 || exit
-    rm -rf "$test_dir"
+    cleanup_temp_test_env "$test_dir"
 }
 
 # Test no changes scenario
@@ -435,21 +420,20 @@ test_no_changes() {
     log_info "Testing no changes scenario..."
     
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(create_temp_test_env "no-changes")
     cd "$test_dir" || exit 1
-    
-    # Initialize git repository
-    git init >/dev/null 2>&1
-    echo "0.0.0" > VERSION
     
     # Create a file and commit it
     echo "test" > test.txt
     git add . >/dev/null 2>&1
     git commit -m "Initial commit" >/dev/null 2>&1
     
-    # Test with no changes
+    # Create a tag so we can analyze changes since the tag
+    git tag v0.0.0 >/dev/null 2>&1
+    
+    # Test with no changes since the tag
     local output
-    output=$("$SCRIPT_PATH" --verbose 2>&1)
+    output=$("$SCRIPT_PATH" --machine 2>&1)
     
     if [[ "$output" == *"SUGGESTION=none"* ]]; then
         log_success "No changes scenario"
@@ -459,7 +443,7 @@ test_no_changes() {
     
     # Cleanup
     cd - >/dev/null 2>&1 || exit
-    rm -rf "$test_dir"
+    cleanup_temp_test_env "$test_dir"
 }
 
 # Test threshold configuration
@@ -467,12 +451,8 @@ test_threshold_configuration() {
     log_info "Testing threshold configuration..."
     
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(create_temp_test_env "threshold-configuration")
     cd "$test_dir" || exit 1
-    
-    # Initialize git repository
-    git init >/dev/null 2>&1
-    echo "0.0.0" > VERSION
     
     # Create initial files
     mkdir -p src test doc
@@ -510,7 +490,7 @@ test_threshold_configuration() {
     
     # Cleanup
     cd - >/dev/null 2>&1 || exit
-    rm -rf "$test_dir"
+    cleanup_temp_test_env "$test_dir"
 }
 
 # Test universal patch detection (any change triggers patch bump)
@@ -518,12 +498,8 @@ test_universal_patch_detection() {
     log_info "Testing universal patch detection..."
     
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(create_temp_test_env "universal-patch-detection")
     cd "$test_dir" || exit 1
-    
-    # Initialize git repository
-    git init >/dev/null 2>&1
-    echo "0.0.0" > VERSION
     
     # Create initial files
     mkdir -p src test
@@ -554,7 +530,7 @@ test_universal_patch_detection() {
     
     # Cleanup
     cd - >/dev/null 2>&1 || exit
-    rm -rf "$test_dir"
+    cleanup_temp_test_env "$test_dir"
 }
 
 # Test error handling
@@ -577,7 +553,7 @@ test_error_handling() {
     
     # Cleanup
     cd - >/dev/null 2>&1 || exit
-    rm -rf "$test_dir"
+    cleanup_temp_test_env "$test_dir"
 }
 
 # Test JSON output
@@ -585,12 +561,8 @@ test_json_output() {
     log_info "Testing JSON output..."
     
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(create_temp_test_env "json-output")
     cd "$test_dir" || exit 1
-    
-    # Initialize git repository
-    git init >/dev/null 2>&1
-    echo "0.0.0" > VERSION
     
     # Create initial test file
     echo "initial test" > test.txt
@@ -617,7 +589,7 @@ test_json_output() {
     
     # Cleanup
     cd - >/dev/null 2>&1 || exit
-    rm -rf "$test_dir"
+    cleanup_temp_test_env "$test_dir"
 }
 
 # Test LOC delta system
@@ -625,12 +597,8 @@ test_loc_delta_system() {
     log_info "Testing LOC delta system..."
     
     local test_dir
-    test_dir=$(mktemp -d)
+    test_dir=$(create_temp_test_env "loc-delta-system")
     cd "$test_dir" || exit 1
-    
-    # Initialize git repository
-    git init >/dev/null 2>&1
-    echo "0.0.0" > VERSION
     
     # Create initial test file
     echo "initial test" > test.txt
@@ -675,7 +643,7 @@ test_loc_delta_system() {
     
     # Cleanup
     cd - >/dev/null 2>&1 || exit
-    rm -rf "$test_dir"
+    cleanup_temp_test_env "$test_dir"
 }
 
 # Main test runner

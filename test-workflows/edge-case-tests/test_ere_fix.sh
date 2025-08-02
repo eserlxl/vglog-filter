@@ -72,7 +72,7 @@ cd "$temp_dir"
 printf '%s=== Test 1: ERE Fix for Manual CLI Detection ===%s\n' "${YELLOW}" "${NC}"
 
 # Create a test file without CLI parsing first
-mkdir -p test-workflows/source-fixtures/cli
+mkdir -p src
 {
     generate_license_header "c" "Test fixture for CLI detection testing"
     cat << 'EOF'
@@ -83,10 +83,10 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 EOF
-} > test-workflows/source-fixtures/cli/simple_cli_test.c
+} > src/simple_cli_test.c
 
 # Add the file without CLI
-git add test-workflows/source-fixtures/cli/simple_cli_test.c
+git add src/simple_cli_test.c
 git commit -m "Add basic test file" --no-verify
 
 # Now add CLI parsing
@@ -114,10 +114,10 @@ int main(int argc, char *argv[]) {
     return 1;
 }
 EOF
-} > test-workflows/source-fixtures/cli/simple_cli_test.c
+} > src/simple_cli_test.c
 
 # Commit the CLI changes
-git add test-workflows/source-fixtures/cli/simple_cli_test.c
+git add src/simple_cli_test.c
 git commit -m "Add manual CLI parser test" --no-verify
 
 # Get the commit hashes
@@ -161,9 +161,9 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 EOF
-} > test_getopt.c
+} > src/test_getopt.c
 
-git add test_getopt.c
+git add src/test_getopt.c
 git commit -m "Add getopt test" --no-verify
 
 # Get the commit hashes
@@ -180,8 +180,8 @@ run_test "Getopt and manual counts separation" \
 printf '%s=== Test 3: Breaking Changes Detection ===%s\n' "${YELLOW}" "${NC}"
 
 # Remove a long option from getopt
-sed -i 's/"version"/"old-option"/' test_getopt.c
-git add test_getopt.c
+sed -i 's/"version"/"old-option"/' src/test_getopt.c
+git add src/test_getopt.c
 git commit -m "Remove --version option (breaking change)" --no-verify
 
 # Get the commit hashes
@@ -232,8 +232,8 @@ run_test "API breaking change detection" \
 printf '%s=== Test 5: Whitespace Ignore ===%s\n' "${YELLOW}" "${NC}"
 
 # Add whitespace-only changes
-echo "   " >> test-workflows/source-fixtures/cli/simple_cli_test.c
-git add test-workflows/source-fixtures/cli/simple_cli_test.c
+echo "   " >> src/simple_cli_test.c
+git add src/simple_cli_test.c
 git commit -m "Add whitespace changes" --no-verify
 
 # Get the commit hashes
@@ -248,10 +248,14 @@ run_test "Whitespace ignore with --ignore-whitespace" \
 # Test 6: Repository without tags fallback
 printf '%s=== Test 6: No Tags Fallback ===%s\n' "${YELLOW}" "${NC}"
 
-# Create a temporary repo without tags
-TEMP_REPO=$(mktemp -d)
+# Create a temporary repo without tags using the helper
+TEMP_REPO=$(create_temp_test_env "no-tags-test")
 cd "$TEMP_REPO"
-git init
+
+# Remove the initial commit to simulate a repository without tags
+git reset --hard HEAD~1 2>/dev/null || true
+
+# Add test files
 echo "test" > test.txt
 git add test.txt
 git commit -m "Initial commit"
@@ -269,7 +273,7 @@ run_test "No tags fallback to HEAD~1" \
 
 # Cleanup
 cd "$PROJECT_ROOT"
-rm -rf "$TEMP_REPO"
+cleanup_temp_test_env "$TEMP_REPO"
 
 # Test 7: MAJOR_REQUIRE_BREAKING environment variable
 printf '%s=== Test 7: MAJOR_REQUIRE_BREAKING Environment Variable ===%s\n' "${YELLOW}" "${NC}"

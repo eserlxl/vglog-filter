@@ -28,7 +28,8 @@ echo "Test 1: Manual CLI detection (nested test-workflows/source-fixtures/cli/ma
 cd "$temp_dir"
 
 # Create a basic main function first
-cat > main.c << EOF
+mkdir -p src
+cat > src/main.c << EOF
 $(generate_license_header "c" "Test fixture for CLI detection")
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,11 +40,11 @@ int main(int argc, char *argv[]) {
 }
 EOF
 
-git add main.c
+git add src/main.c
 git commit -m "Add basic main function"
 
 # Now add CLI options
-cat > main.c << EOF
+cat > src/main.c << EOF
 $(generate_license_header "c" "Test fixture for CLI detection")
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,7 +69,7 @@ int main(int argc, char *argv[]) {
 }
 EOF
 
-git add main.c
+git add src/main.c
 git commit -m "Add CLI with new option"
 
 # Get the commit hashes
@@ -100,7 +101,8 @@ echo "Test 2: API breaking changes (removed prototype from header - single line 
 cd "$temp_dir"
 
 # Create a header file with a function prototype
-cat > header.h << EOF
+mkdir -p include
+cat > include/header.h << EOF
 $(generate_license_header "h" "Test fixture for API breaking change detection")
 #ifndef HEADER_H
 #define HEADER_H
@@ -111,11 +113,11 @@ void another_function(void);
 #endif
 EOF
 
-git add header.h
+git add include/header.h
 git commit -m "Add header with function prototypes"
 
 # Remove a function prototype
-cat > header.h << EOF
+cat > include/header.h << EOF
 $(generate_license_header "h" "Test fixture for API breaking change detection")
 #ifndef HEADER_H
 #define HEADER_H
@@ -125,7 +127,7 @@ int test_function(int param);
 #endif
 EOF
 
-git add header.h
+git add include/header.h
 git commit -m "Remove function prototype (breaking change)"
 
 # Get the commit hashes
@@ -143,10 +145,10 @@ echo "Debug: End of result for Test 2"
 # Extract suggestion
 suggestion=$(echo "$result" | grep "^SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
 
-if [[ "$suggestion" = "none" ]]; then
-    echo "✅ PASS: Function prototype removal correctly classified as minor change (despite commit message calling it breaking)"
+if [[ "$suggestion" = "major" ]]; then
+    echo "✅ PASS: Function prototype removal correctly classified as API breaking change"
 else
-    echo "❌ FAIL: Expected none, got $suggestion"
+    echo "❌ FAIL: Expected major, got $suggestion"
     exit 1
 fi
 
@@ -157,7 +159,7 @@ echo "Test 3: CLI breaking changes (removed --bar option)"
 cd "$temp_dir"
 
 # Create a CLI file with an option
-cat > cli.c << EOF
+cat > src/cli.c << EOF
 $(generate_license_header "c" "Test fixture for CLI breaking change detection")
 #include <stdio.h>
 
@@ -173,11 +175,11 @@ int main(int argc, char *argv[]) {
 }
 EOF
 
-git add cli.c
+git add src/cli.c
 git commit -m "Add CLI with --bar option"
 
 # Remove the --bar option
-cat > cli.c << EOF
+cat > src/cli.c << EOF
 $(generate_license_header "c" "Test fixture for CLI breaking change detection")
 #include <stdio.h>
 
@@ -192,7 +194,7 @@ int main(int argc, char *argv[]) {
 }
 EOF
 
-git add cli.c
+git add src/cli.c
 git commit -m "Remove --bar option"
 
 # Get the commit hashes
@@ -219,26 +221,26 @@ echo "Test 4: Whitespace-only changes with --ignore-whitespace"
 cd "$temp_dir"
 
 # Create a file with some content
-cat > test.c << EOF
+cat > src/test.c << EOF
 $(generate_license_header "c" "Test fixture for whitespace handling")
 int main() {
     return 0;
 }
 EOF
 
-git add test.c
+git add src/test.c
 git commit -m "Add test file"
 
 # Change only whitespace
-cat > test.c << EOF
+cat > src/test.c << EOF
 $(generate_license_header "c" "Test fixture for whitespace handling")
-int main() {
-    return 0;
-}
+int main() {    
+    return 0;    
+}    
 EOF
 
-git add test.c
-git commit -m "Change whitespace only" || true
+git add src/test.c
+git commit -m "Change whitespace only"
 
 # Get the commit hashes
 first_commit=$(git rev-parse HEAD~1)

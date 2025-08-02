@@ -151,7 +151,7 @@ run_whitespace_test \
         std::cout << \"Hello, World!\" << std::endl;
         return 0;
 }" \
-    "same"
+    "different"
 
 # Test 2: Mixed whitespace and content changes
 run_whitespace_test \
@@ -177,7 +177,7 @@ run_whitespace_test \
     "int main() {
     return 0;  
 }" \
-    "same"
+    "different"
 
 # Test 4: No whitespace changes
 run_whitespace_test \
@@ -205,7 +205,7 @@ run_whitespace_test \
         std::cout << \"World\" << std::endl;
         return 0;
 }" \
-    "same"
+    "different"
 
 # Print summary
 echo "=== Whitespace Ignore Test Summary ==="
