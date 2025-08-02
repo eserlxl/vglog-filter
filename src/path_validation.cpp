@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
+#include <sys/stat.h>
 
 namespace path_validation {
 
@@ -63,21 +65,70 @@ namespace {
         }
     }
     
-    // Helper function to validate file exists and is regular
-    void validate_file_exists_and_regular(const std::filesystem::path& validated_path) {
-        if (!std::filesystem::exists(validated_path)) {
-            throw std::runtime_error("File does not exist");
+    // Note: These functions are no longer used after switching to string-based validation
+    // to avoid MSAN issues with filesystem::path operations
+    
+    // String-based path validation to avoid MSAN issues with filesystem::path
+    void validate_path_string(const std::string& path_str) {
+        // Check for empty or null-containing paths
+        if (path_str.empty() || path_str.find('\0') != std::string::npos) {
+            throw std::runtime_error("Invalid path: empty or contains null bytes.");
         }
         
-        if (!std::filesystem::is_regular_file(validated_path)) {
-            throw std::runtime_error("Path is not a regular file");
+        // Check for dangerous characters
+        const std::string dangerous_chars = "`$(){}[]|&;<>\"'\\";
+        for (char c : path_str) {
+            if (dangerous_chars.find(c) != std::string::npos) {
+                throw std::runtime_error("Invalid path: contains dangerous characters.");
+            }
+        }
+        
+        // Check for absolute paths (start with / or drive letter on Windows)
+        if (path_str[0] == '/' || (path_str.length() > 2 && path_str[1] == ':' && (path_str[2] == '/' || path_str[2] == '\\'))) {
+            throw std::runtime_error("Absolute paths are not allowed for security reasons: " + path_str);
+        }
+        
+        // Check for path traversal attempts
+        if (path_str.find("..") != std::string::npos) {
+            // Additional check to avoid false positives on valid paths like "..config"
+            // Look for actual directory traversal patterns
+            if (path_str.find("/../") != std::string::npos ||
+                path_str.find("\\..\\") != std::string::npos ||
+                path_str.find("/..\\") != std::string::npos ||
+                path_str.find("\\../") != std::string::npos ||
+                path_str.find("/..") != std::string::npos ||
+                path_str.find("\\..") != std::string::npos ||
+                path_str.find("..\\") != std::string::npos ||
+                path_str.find("../") != std::string::npos ||
+                path_str == ".." ||
+                path_str.find("/..") == path_str.length() - 3 ||
+                path_str.find("\\..") == path_str.length() - 3) {
+                throw std::runtime_error("Path traversal attempt detected: " + path_str);
+            }
         }
     }
     
-    // Helper function to convert path to string in a way that CodeQL can better understand
-    std::string path_to_string(const std::filesystem::path& path) {
-        // Use native string representation to avoid encoding issues
-        return path.string();
+    // String-based file validation to avoid MSAN issues with filesystem::path
+    void validate_file_exists_and_regular_string(const std::string& path_str) {
+        // Use C-style file operations to avoid MSAN issues with filesystem operations
+        FILE* file = fopen(path_str.c_str(), "r");
+        if (!file) {
+            throw std::runtime_error("File does not exist");
+        }
+        
+        // Check if it's a regular file using stat
+        struct stat st;
+        if (stat(path_str.c_str(), &st) != 0) {
+            fclose(file);
+            throw std::runtime_error("Cannot stat file");
+        }
+        
+        if (!S_ISREG(st.st_mode)) {
+            fclose(file);
+            throw std::runtime_error("Path is not a regular file");
+        }
+        
+        fclose(file);
     }
 }
 
@@ -121,17 +172,13 @@ std::ifstream safe_ifstream(std::string_view filename) {
     // Create explicit string copy to avoid uninitialized memory
     const std::string filename_str(filename);
     
-    // Validate and canonicalize path
-    // Use explicit copy construction to avoid move assignment MSAN issues
-    const std::filesystem::path validated_path(validate_and_canonicalize(filename_str));
+    // Validate the path using string-based validation to avoid MSAN issues
+    validate_path_string(filename_str);
     
-    // Validate file exists and is regular
-    validate_file_exists_and_regular(validated_path);
+    // Check if file exists and is regular using string-based approach
+    validate_file_exists_and_regular_string(filename_str);
     
-    // Convert path to string explicitly to make the file access more transparent to CodeQL
-    const std::string final_path = path_to_string(validated_path);
-    
-    return std::ifstream(final_path);
+    return std::ifstream(filename_str);
 }
 
 } // namespace path_validation
