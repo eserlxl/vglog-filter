@@ -229,7 +229,6 @@ bump_version() {
                 else
                     new_major=$current_major
                     new_minor=$current_minor
-                    new_patch=$new_patch
                 fi
                 ;;
         esac
