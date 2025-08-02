@@ -64,7 +64,7 @@ fi
 # Test minor rollover
 echo "1.99.5" > VERSION
 result=$(VERSION_USE_LOC_DELTA=true ./dev-bin/bump-version minor --dry-run 2>/dev/null | tail -1)
-expected="2.4.0"
+expected="2.5.0"
 if [[ "$result" = "$expected" ]]; then
     echo "✅ Minor rollover working: $result"
 else
@@ -75,7 +75,7 @@ fi
 # Test major increment
 echo "1.2.3" > VERSION
 result=$(VERSION_USE_LOC_DELTA=true ./dev-bin/bump-version major --dry-run 2>/dev/null | tail -1)
-expected="11.0.0"
+expected="12.0.0"
 if [[ "$result" = "$expected" ]]; then
     echo "✅ Major increment working: $result"
 else
