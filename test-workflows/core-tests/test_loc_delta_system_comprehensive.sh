@@ -11,7 +11,6 @@ IFS=
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
@@ -22,7 +21,6 @@ TESTS_FAILED=0
 
 # Script paths
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../dev-bin/semantic-version-analyzer"
-BUMP_SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../dev-bin/bump-version"
 
 # Helper functions
 log_info() {
@@ -39,31 +37,7 @@ log_error() {
     ((TESTS_FAILED++))
 }
 
-log_warning() {
-    printf "%s[WARN]%s %s\n" "${YELLOW}" "${NC}" "$1"
-}
 
-# Test function
-run_test() {
-    local test_name="$1"
-    local test_command="$2"
-    local expected_output="$3"
-    
-    log_info "Running test: $test_name"
-    
-    local output
-    output=$($test_command 2>&1)
-    
-    if [[ "$output" == *"$expected_output"* ]]; then
-        log_success "$test_name"
-        return 0
-    else
-        log_error "$test_name"
-        printf "Expected: %s\n" "$expected_output"
-        printf "Got: %s\n" "$output"
-        return 1
-    fi
-}
 
 # Test JSON output parsing
 test_json_output() {
