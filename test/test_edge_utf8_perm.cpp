@@ -271,7 +271,7 @@ bool test_symlink_file() {
     out.close();
     
     // Create a symbolic link
-    std::string symlink_path = "test_symlink.tmp";
+    std::string symlink_path = "/tmp/test_symlink.tmp";
     if (symlink(tf.path(), symlink_path.c_str()) == 0) {
         // Test reading through symlink
         std::ifstream in(symlink_path);
@@ -300,7 +300,7 @@ bool test_hard_link_file() {
     out.close();
     
     // Create a hard link
-    std::string hardlink_path = "test_hardlink.tmp";
+    std::string hardlink_path = "/tmp/test_hardlink.tmp";
     if (link(tf.path(), hardlink_path.c_str()) == 0) {
         // Test reading through hard link
         std::ifstream in(hardlink_path);

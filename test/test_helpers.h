@@ -9,6 +9,7 @@
 #include <regex>
 #include <canonicalization.h>
 #include <fstream>
+#include <filesystem>
 
 #define TEST_ASSERT(condition, message) \
     do { \
@@ -30,26 +31,27 @@ inline std::string trim(std::string_view s) {
     return std::string(s.substr(start, end - start + 1));
 }
 
-
-
 inline std::string canon(std::string_view s) {
     return canonicalization::canon(s);
 }
 
 class TempFile {
 public:
-    explicit TempFile(const char* path, std::ios::openmode mode = std::ios::out) 
-        : path_(path), stream_(path, mode) {}
+    explicit TempFile(const char* filename, std::ios::openmode mode = std::ios::out) 
+        : path_(std::string("/tmp/") + filename), stream_(path_, mode) {}
+    
     ~TempFile() { 
         stream_.close();
-        std::remove(path_); 
+        std::remove(path_.c_str()); 
     }
+    
     std::ofstream& get_stream() { return stream_; }
-    const char* path() const { return path_; }
+    const char* path() const { return path_.c_str(); }
     void write(const std::string& content) { stream_ << content; }
     void close() { stream_.close(); }
     void flush() { stream_.flush(); }
+    
 private:
-    const char* path_;
+    std::string path_;
     std::ofstream stream_;
 };

@@ -114,8 +114,7 @@ else
 fi
 
 # Clean up
-# cleanup_temp_test_env "$temp_dir"  # Commented out for debugging
+cleanup_temp_test_env "$temp_dir"
 
-echo "Test directory: $temp_dir"
 echo "Exit code: $exit_code"
 exit $exit_code

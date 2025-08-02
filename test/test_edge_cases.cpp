@@ -37,7 +37,7 @@ bool test_malformed_valgrind_lines() {
     test_log.close(); // Close the stream before reading
     
     // Test that the file was created
-    std::ifstream check_file("test_malformed.tmp");
+    std::ifstream check_file("/tmp/test_malformed.tmp");
     if (check_file) {
         std::string line;
         int line_count = 0;
@@ -65,7 +65,7 @@ bool test_very_long_lines() {
     test_log.close();
     
     // Test that the file was created
-    if (std::ifstream check_file("test_long_lines.tmp"); check_file) {
+    if (std::ifstream check_file("/tmp/test_long_lines.tmp"); check_file) {
         TEST_ASSERT(check_file.good(), "Long lines test file should be created");
     }
     
@@ -93,7 +93,7 @@ bool test_unicode_and_special_chars() {
     test_log.close();
     
     // Test that the file was created
-    if (std::ifstream check_file("test_unicode.tmp"); check_file) {
+    if (std::ifstream check_file("/tmp/test_unicode.tmp"); check_file) {
         TEST_ASSERT(check_file.good(), "Unicode test file should be created");
     }
     
@@ -113,7 +113,7 @@ bool test_nested_templates_and_complex_types() {
     test_log.close();
     
     // Test that the file was created
-    std::ifstream check_file("test_complex_types.tmp");
+    std::ifstream check_file("/tmp/test_complex_types.tmp");
     TEST_ASSERT(check_file.good(), "Complex types test file should be created");
     
     // Clean up
@@ -131,7 +131,7 @@ bool test_file_permissions() {
     chmod("test_permissions.tmp", 0444);
     
     // Test that we can still read the file
-    std::ifstream check_file("test_permissions.tmp");
+    std::ifstream check_file("/tmp/test_permissions.tmp");
     TEST_ASSERT(check_file.good(), "Read-only file should still be readable");
     check_file.close();
     
@@ -149,7 +149,7 @@ bool test_error_handling_edge_cases() {
     TEST_ASSERT(!nonexistent.good(), "Non-existent file should not be readable");
     
     // Test with a directory (should fail)
-    std::ofstream dir_test("test_dir.tmp");
+    std::ofstream dir_test("/tmp/test_dir.tmp");
     dir_test.close();
     std::remove("test_dir.tmp");
     
@@ -167,7 +167,7 @@ bool test_invalid_input_scenarios() {
     // Test with completely empty file
     TempFile empty_file("test_empty.tmp");
     
-    std::ifstream check_empty("test_empty.tmp");
+    std::ifstream check_empty("/tmp/test_empty.tmp");
     TEST_ASSERT(check_empty.good(), "Empty file should be readable");
     check_empty.close();
     
@@ -176,7 +176,7 @@ bool test_invalid_input_scenarios() {
     whitespace_file.get_stream() << "   \n\t\n  \n";
     whitespace_file.close();
     
-    std::ifstream check_whitespace("test_whitespace.tmp");
+    std::ifstream check_whitespace("/tmp/test_whitespace.tmp");
     TEST_ASSERT(check_whitespace.good(), "Whitespace-only file should be readable");
     check_whitespace.close();
     
@@ -187,7 +187,7 @@ bool test_invalid_input_scenarios() {
     no_markers_file.get_stream() << "No ==PID== markers here\n";
     no_markers_file.close();
     
-    std::ifstream check_no_markers("test_no_markers.tmp");
+    std::ifstream check_no_markers("/tmp/test_no_markers.tmp");
     TEST_ASSERT(check_no_markers.good(), "File without markers should be readable");
     check_no_markers.close();
     
@@ -199,7 +199,7 @@ bool test_invalid_input_scenarios() {
     invalid_pid_file.get_stream() << "==12345==    at 0x401245: main (test.cpp:15)\n";
     invalid_pid_file.close();
     
-    std::ifstream check_invalid_pid("test_invalid_pid.tmp");
+    std::ifstream check_invalid_pid("/tmp/test_invalid_pid.tmp");
     TEST_ASSERT(check_invalid_pid.good(), "File with invalid PID format should be readable");
     check_invalid_pid.close();
     
@@ -210,7 +210,7 @@ bool test_invalid_input_scenarios() {
     null_bytes_file.get_stream() << "==12345==    at 0x401234: main (test.cpp:10)\n";
     null_bytes_file.close();
     
-    std::ifstream check_null_bytes("test_null_bytes.tmp");
+    std::ifstream check_null_bytes("/tmp/test_null_bytes.tmp");
     TEST_ASSERT(check_null_bytes.good(), "File with null bytes should be readable");
     check_null_bytes.close();
     
@@ -234,7 +234,7 @@ bool test_memory_allocation_failure_simulation() {
     long_lines_file.get_stream() << "==12345==    at 0x401234: main (test.cpp:10)\n";
     long_lines_file.close();
     
-    std::ifstream check_long_lines("test_memory_long_lines.tmp");
+    std::ifstream check_long_lines("/tmp/test_memory_long_lines.tmp");
     TEST_ASSERT(check_long_lines.good(), "File with extremely long lines should be readable");
     check_long_lines.close();
     
@@ -247,7 +247,7 @@ bool test_memory_allocation_failure_simulation() {
     }
     duplicates_file.close();
     
-    std::ifstream check_duplicates("test_memory_duplicates.tmp");
+    std::ifstream check_duplicates("/tmp/test_memory_duplicates.tmp");
     TEST_ASSERT(check_duplicates.good(), "File with many duplicates should be readable");
     check_duplicates.close();
     
@@ -260,7 +260,7 @@ bool test_memory_allocation_failure_simulation() {
     }
     unique_lines_file.close();
     
-    std::ifstream check_unique("test_memory_unique.tmp");
+    std::ifstream check_unique("/tmp/test_memory_unique.tmp");
     TEST_ASSERT(check_unique.good(), "File with many unique lines should be readable");
     check_unique.close();
     
@@ -279,7 +279,7 @@ bool test_file_system_error_scenarios() {
     temp_file.close();
     
     // Verify file exists and is readable
-    std::ifstream check_file("test_fs_error.tmp");
+    std::ifstream check_file("/tmp/test_fs_error.tmp");
     TEST_ASSERT(check_file.good(), "Temporary file should be readable");
     check_file.close();
     
@@ -295,7 +295,7 @@ bool test_file_system_error_scenarios() {
     // Change permissions to read-only
     chmod("test_fs_perm.tmp", S_IRUSR);
     
-    std::ifstream check_perm("test_fs_perm.tmp");
+    std::ifstream check_perm("/tmp/test_fs_perm.tmp");
     TEST_ASSERT(check_perm.good(), "Read-only file should still be readable");
     check_perm.close();
     
@@ -331,9 +331,9 @@ bool test_marker_trimming_edge_cases() {
     test_log3.close();
     
     // Verify files were created
-    std::ifstream check1("test_marker_begin.tmp");
-    std::ifstream check2("test_marker_end.tmp");
-    std::ifstream check3("test_marker_none.tmp");
+    std::ifstream check1("/tmp/test_marker_begin.tmp");
+    std::ifstream check2("/tmp/test_marker_end.tmp");
+    std::ifstream check3("/tmp/test_marker_none.tmp");
     
     TEST_ASSERT(check1.good(), "Marker begin test file should be created");
     TEST_ASSERT(check2.good(), "Marker end test file should be created");
@@ -384,7 +384,7 @@ bool test_concurrent_access_simulation() {
         temp_file->close(); // Close the stream
         
         // Check if file exists before it gets cleaned up
-        if (std::ifstream(filename).good()) {
+        if (std::ifstream(("/tmp/" + filename).c_str()).good()) {
             files.push_back(filename);
         }
         temp_files.push_back(std::move(temp_file));
@@ -413,7 +413,7 @@ bool test_memory_efficiency() {
     
     // Check file size
     struct stat file_stat;
-    if (stat("test_memory_efficiency.tmp", &file_stat) == 0) {
+    if (stat("/tmp/test_memory_efficiency.tmp", &file_stat) == 0) {
         TEST_ASSERT(file_stat.st_size > 100000, "Memory efficiency test file should be large");
     }
     
@@ -452,13 +452,13 @@ bool test_large_file_processing() {
     
     // Check file size
     struct stat file_stat;
-    if (stat("test_large_file.tmp", &file_stat) == 0) {
+    if (stat("/tmp/test_large_file.tmp", &file_stat) == 0) {
         TEST_ASSERT(file_stat.st_size > 5000000, "Large file test should be at least 5MB");
         std::cout << "Created large test file: " << (file_stat.st_size / 1024 / 1024) << " MB" << std::endl;
     }
     
     // Test that the file can be opened and read
-    std::ifstream check_file("test_large_file.tmp");
+    std::ifstream check_file("/tmp/test_large_file.tmp");
     TEST_ASSERT(check_file.good(), "Large file should be readable");
     
     // Read a few lines to verify content
@@ -490,7 +490,7 @@ bool test_progress_and_memory_features() {
     progress_test_file.close();
     
     // Verify progress test file was created
-    std::ifstream check_progress("test_progress.tmp");
+    std::ifstream check_progress("/tmp/test_progress.tmp");
     TEST_ASSERT(check_progress.good(), "Progress test file should be created");
     check_progress.close();
     
@@ -504,7 +504,7 @@ bool test_progress_and_memory_features() {
     memory_test_file.close();
     
     // Verify memory test file was created
-    std::ifstream check_memory("test_memory.tmp");
+    std::ifstream check_memory("/tmp/test_memory.tmp");
     TEST_ASSERT(check_memory.good(), "Memory test file should be created");
     check_memory.close();
     
@@ -523,7 +523,7 @@ bool test_progress_and_memory_features() {
     combined_test_file.close();
     
     // Verify combined test file was created
-    std::ifstream check_combined("test_combined.tmp");
+    std::ifstream check_combined("/tmp/test_combined.tmp");
     TEST_ASSERT(check_combined.good(), "Combined test file should be created");
     check_combined.close();
     

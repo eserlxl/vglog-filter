@@ -50,7 +50,7 @@ bool test_valgrind_log_processing() {
     test_log.close(); // Close the stream before reading
     
     // Test that the file was created
-    std::ifstream check_file("test_valgrind.tmp");
+    std::ifstream check_file("/tmp/test_valgrind.tmp");
     if (check_file) {
         TEST_ASSERT(check_file.good(), "Test Valgrind log file should be created");
         
@@ -82,7 +82,7 @@ bool test_deduplication_logic() {
     test_log.close(); // Close the stream before reading
     
     // Test that duplicates are present in the raw file
-    std::ifstream check_file("test_dedup.tmp");
+    std::ifstream check_file("/tmp/test_dedup.tmp");
     std::string line;
     int invalid_read_count = 0;
     while (std::getline(check_file, line)) {
@@ -108,7 +108,7 @@ bool test_marker_trimming() {
     test_log.close(); // Close the stream before reading
     
     // Test that marker is present
-    std::ifstream check_file("test_marker.tmp");
+    std::ifstream check_file("/tmp/test_marker.tmp");
     std::string line;
     bool found_marker = false;
     while (std::getline(check_file, line)) {
@@ -136,7 +136,7 @@ bool test_stream_processing_simulation() {
     }
     
     // Test file size
-    std::ifstream check_file("test_stream.tmp");
+    std::ifstream check_file("/tmp/test_stream.tmp");
     check_file.seekg(0, std::ios::end);
     std::streampos file_size = check_file.tellg();
     TEST_ASSERT(file_size > 100000, "Stream test file should be large");
@@ -153,7 +153,7 @@ bool test_error_conditions() {
     // Test with empty file
     TempFile empty_file("test_empty_integration.tmp");
     
-    std::ifstream check_empty("test_empty_integration.tmp");
+    std::ifstream check_empty("/tmp/test_empty_integration.tmp");
     std::string line;
     bool has_content = static_cast<bool>(std::getline(check_empty, line));
     TEST_ASSERT(!has_content, "Empty file should have no content");

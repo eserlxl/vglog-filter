@@ -48,7 +48,7 @@ bool test_memory_leak_simulation() {
     test_log.close(); // Close the stream before reading
     
     // Test that the file was created and has content
-    std::ifstream check_file("test_memory_leak.tmp");
+    std::ifstream check_file("/tmp/test_memory_leak.tmp");
     if (check_file) {
         std::string line;
         int line_count = 0;
@@ -94,7 +94,7 @@ bool test_multiple_memory_leaks() {
     log_stream << "==12345== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)\n";
     
     // Test that the file was created
-    std::ifstream check_file("test_multiple_leaks.tmp");
+    std::ifstream check_file("/tmp/test_multiple_leaks.tmp");
     TEST_ASSERT(check_file.good(), "Multiple memory leaks test file should be created");
     
     TEST_PASS("Multiple memory leaks simulation works");
@@ -118,7 +118,7 @@ bool test_no_memory_leaks() {
     log_stream << "==12345== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)\n";
     
     // Test that the file was created
-    std::ifstream check_file("test_no_leaks.tmp");
+    std::ifstream check_file("/tmp/test_no_leaks.tmp");
     TEST_ASSERT(check_file.good(), "No memory leaks test file should be created");
     
     TEST_PASS("No memory leaks simulation works");
@@ -168,7 +168,7 @@ bool test_memory_sanitizer_compatibility() {
     log_stream << "==12345== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)\n";
     
     // Test that the file was created
-    std::ifstream check_file("test_msan_compatibility.tmp");
+    std::ifstream check_file("/tmp/test_msan_compatibility.tmp");
     TEST_ASSERT(check_file.good(), "Memory sanitizer compatibility test file should be created");
     
     TEST_PASS("Memory sanitizer compatibility test works");
@@ -192,7 +192,7 @@ bool test_memory_efficiency_large_files() {
     
     // Check file size
     struct stat file_stat;
-    if (stat("test_memory_efficiency_large.tmp", &file_stat) == 0) {
+    if (stat("/tmp/test_memory_efficiency_large.tmp", &file_stat) == 0) {
         TEST_ASSERT(file_stat.st_size > 500000, "Large memory efficiency test file should be very large");
     }
     

@@ -21,7 +21,7 @@ echo "=== Testing Semantic Version Analyzer Fixes ==="
 
 # Create a temporary test environment
 temp_dir=$(create_temp_test_env)
-# trap 'cleanup_temp_test_env "$temp_dir"' EXIT
+trap 'cleanup_temp_test_env "$temp_dir"' EXIT
 
 # Test 1: Manual CLI detection in nested directories
 echo "Test 1: Manual CLI detection (nested test-workflows/source-fixtures/cli/main.c)"

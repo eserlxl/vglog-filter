@@ -170,8 +170,8 @@ if [[ "$RUN_TESTS" == "ON" ]]; then
   msg "Running tests..."
 
   # Pre-test cleanup of stray temp files
-  msg "Cleaning up any leftover test files (*.tmp) before tests..."
-  find "$PROJECT_ROOT" -type f -name '*.tmp' -delete 2>/dev/null || true
+  msg "Cleaning up any leftover test files before tests..."
+  "$PROJECT_ROOT/cleanup_tests.sh" >/dev/null 2>&1 || true
 
   if command -v ctest >/dev/null 2>&1; then
     # Prefer ctest, honoring CMake's test config
@@ -199,8 +199,8 @@ if [[ "$RUN_TESTS" == "ON" ]]; then
   fi
 
   # Post-test cleanup
-  msg "Cleaning up any leftover test files (*.tmp) after tests..."
-  find "$PROJECT_ROOT" -type f -name '*.tmp' -delete 2>/dev/null || true
+  msg "Cleaning up any leftover test files after tests..."
+  "$PROJECT_ROOT/cleanup_tests.sh" >/dev/null 2>&1 || true
 fi
 
 msg "Done."

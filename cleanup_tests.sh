@@ -5,15 +5,23 @@
 
 echo "🧹 Cleaning up test artifacts..."
 
-# Remove Valgrind concurrent test files
-echo "  Removing Valgrind concurrent test files..."
-rm -f test_concurrent_*.tmp
+# Remove Valgrind concurrent test files from /tmp
+echo "  Removing Valgrind concurrent test files from /tmp..."
+rm -f /tmp/test_concurrent_*.tmp
 
 # Remove any test files that might have been created in root directory
 echo "  Removing test files from root directory..."
 rm -f test_safe_ops.txt
 rm -f test_*.txt
 rm -f test_*.tmp
+
+# Remove any test files that might have been created in /tmp
+echo "  Removing test files from /tmp..."
+rm -f /tmp/test_*.tmp
+
+# Remove workflow test directories from /tmp
+echo "  Removing workflow test directories from /tmp..."
+rm -rf /tmp/vglog-filter-test-* 2>/dev/null || true
 
 # Remove any temporary executables (but keep build directory intact)
 echo "  Checking for temporary executables..."

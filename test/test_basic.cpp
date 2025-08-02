@@ -39,10 +39,10 @@ bool test_version_reading() {
 
 bool test_empty_file_handling() {
     TempFile cleanup("test_empty.tmp");
-    std::ofstream empty_file("test_empty.tmp");
+    std::ofstream empty_file("/tmp/test_empty.tmp");
     empty_file.close();
     bool has_content = false;
-    if (std::ifstream check_file("test_empty.tmp"); check_file) {
+    if (std::ifstream check_file("/tmp/test_empty.tmp"); check_file) {
         std::string line;
         has_content = static_cast<bool>(std::getline(check_file, line));
     }
@@ -53,7 +53,7 @@ bool test_empty_file_handling() {
 
 bool test_basic_valgrind_log_parsing() {
     // Create a simple test valgrind log
-    std::ofstream test_log("test_log.tmp");
+    std::ofstream test_log("/tmp/test_log.tmp");
     test_log << "==12345== Memcheck, a memory error detector\n";
     test_log << "==12345== Invalid read of size 4\n";
     test_log << "==12345==    at 0x401234: main (test.cpp:10)\n";
@@ -63,7 +63,7 @@ bool test_basic_valgrind_log_parsing() {
     test_log.close();
     
     // Test that the file was created and has content
-    std::ifstream check_log("test_log.tmp");
+    std::ifstream check_log("/tmp/test_log.tmp");
     std::string line;
     int line_count = 0;
     while (std::getline(check_log, line)) {
@@ -72,7 +72,7 @@ bool test_basic_valgrind_log_parsing() {
     TEST_ASSERT(line_count > 0, "Test log should have content");
     
     // Clean up
-    std::remove("test_log.tmp");
+    std::remove("/tmp/test_log.tmp");
     TEST_PASS("Basic valgrind log parsing test setup works");
     return true;
 }
@@ -149,14 +149,14 @@ bool test_edge_cases() {
 
 bool test_large_file_simulation() {
     // Simulate processing a large number of lines
-    std::ofstream large_file("test_large.tmp");
+    std::ofstream large_file("/tmp/test_large.tmp");
     for (int i = 0; i < 1000; ++i) {
         large_file << "==12345== Line " << i << " with 0x" << std::hex << (i * 1000) << std::dec << "\n";
     }
     large_file.close();
     
     // Test that we can read the large file
-    std::ifstream check_file("test_large.tmp");
+    std::ifstream check_file("/tmp/test_large.tmp");
     std::string line;
     int count = 0;
     while (std::getline(check_file, line)) {
@@ -170,20 +170,20 @@ bool test_large_file_simulation() {
     TEST_ASSERT(count == 1000, "Large file should have 1000 lines");
     
     // Clean up
-    std::remove("test_large.tmp");
+    std::remove("/tmp/test_large.tmp");
     TEST_PASS("Large file processing simulation works");
     return true;
 }
 
 bool test_large_file_detection() {
     // Create a small file (should not trigger large file detection)
-    std::ofstream small_file("test_small.tmp");
+    std::ofstream small_file("/tmp/test_small.tmp");
     small_file << "==12345== Small file test\n";
     small_file << "==12345== Only a few lines\n";
     small_file.close();
     
     // Create a "large" file for testing (we'll simulate by checking file size logic)
-    std::ofstream large_file("test_large_detect.tmp");
+    std::ofstream large_file("/tmp/test_large_detect.tmp");
     // Write enough content to simulate a large file
     for (int i = 0; i < 10000; ++i) {
         large_file << "==12345== Line " << i << " with some content to make the file larger\n";
@@ -191,11 +191,11 @@ bool test_large_file_detection() {
     large_file.close();
     
     // Test file size detection logic (simplified version)
-    std::ifstream small_check("test_small.tmp");
+    std::ifstream small_check("/tmp/test_small.tmp");
     small_check.seekg(0, std::ios::end);
     std::streampos small_size = small_check.tellg();
     
-    std::ifstream large_check("test_large_detect.tmp");
+    std::ifstream large_check("/tmp/test_large_detect.tmp");
     large_check.seekg(0, std::ios::end);
     std::streampos large_size = large_check.tellg();
     
@@ -203,8 +203,8 @@ bool test_large_file_detection() {
     TEST_ASSERT(large_size > small_size, "Large file should be bigger than small file");
     
     // Clean up
-    std::remove("test_small.tmp");
-    std::remove("test_large_detect.tmp");
+    std::remove("/tmp/test_small.tmp");
+    std::remove("/tmp/test_large_detect.tmp");
     TEST_PASS("Large file detection logic works");
     return true;
 }
