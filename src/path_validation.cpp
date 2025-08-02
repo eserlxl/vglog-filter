@@ -85,6 +85,7 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
         return std::filesystem::path(STDIN_MARKER);
     }
     
+    // Create explicit string copy to avoid uninitialized memory
     const std::string path_str(input_path);
     const std::filesystem::path path(path_str);
     
@@ -104,16 +105,17 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
         throw std::runtime_error("Current working directory is empty or invalid.");
     }
     
-    // Construct full path
+    // Construct full path with explicit initialization
     const std::filesystem::path full_path = base_dir / path;
     
-    // Canonicalize path
+    // Canonicalize path with explicit initialization
     const std::filesystem::path canonical_path = canonicalize_path(full_path);
     
     // Check for path traversal attempts
     check_path_traversal(base_dir, canonical_path, path_str);
     
-    return canonical_path;
+    // Return a copy to avoid move-related uninitialized memory issues
+    return std::filesystem::path(canonical_path);
 }
 
 std::ifstream safe_ifstream(std::string_view filename) {
@@ -122,8 +124,11 @@ std::ifstream safe_ifstream(std::string_view filename) {
         throw std::runtime_error("Cannot open stdin with ifstream.");
     }
     
+    // Create explicit string copy to avoid uninitialized memory
+    const std::string filename_str(filename);
+    
     // Validate and canonicalize path
-    const std::filesystem::path validated_path = validate_and_canonicalize(filename);
+    const std::filesystem::path validated_path = validate_and_canonicalize(filename_str);
     
     // Validate file exists and is regular
     validate_file_exists_and_regular(validated_path);

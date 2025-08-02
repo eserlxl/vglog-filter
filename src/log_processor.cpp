@@ -73,16 +73,33 @@ LogProcessor::LogProcessor(const Options& options) :
 void LogProcessor::initialize_regex_patterns() {
     try {
         // Ensure locale is properly initialized before regex compilation
-        std::locale::global(std::locale(""));
+        // Use explicit locale construction to avoid uninitialized memory
+        std::locale current_locale;
+        try {
+            current_locale = std::locale("");
+        } catch (const std::exception&) {
+            // Fallback to C locale if system locale fails
+            current_locale = std::locale::classic();
+        }
+        std::locale::global(current_locale);
         
         // Initialize regex patterns with explicit locale and proper initialization
-        re_vg_line = std::regex(VG_LINE_PATTERN, std::regex::optimize | std::regex::ECMAScript);
-        re_prefix = std::regex(PREFIX_PATTERN, std::regex::optimize | std::regex::ECMAScript);
-        re_start = std::regex(START_PATTERN, std::regex::optimize | std::regex::ECMAScript);
-        re_bytes_head = std::regex(BYTES_HEAD_PATTERN, std::regex::optimize | std::regex::ECMAScript);
-        re_at = std::regex(AT_PATTERN, std::regex::optimize | std::regex::ECMAScript);
-        re_by = std::regex(BY_PATTERN, std::regex::optimize | std::regex::ECMAScript);
-        re_q = std::regex(Q_PATTERN, std::regex::optimize | std::regex::ECMAScript);
+        // Use explicit string construction to avoid uninitialized memory
+        const std::string vg_pattern(VG_LINE_PATTERN);
+        const std::string prefix_pattern(PREFIX_PATTERN);
+        const std::string start_pattern(START_PATTERN);
+        const std::string bytes_head_pattern(BYTES_HEAD_PATTERN);
+        const std::string at_pattern(AT_PATTERN);
+        const std::string by_pattern(BY_PATTERN);
+        const std::string q_pattern(Q_PATTERN);
+        
+        re_vg_line = std::regex(vg_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_prefix = std::regex(prefix_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_start = std::regex(start_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_bytes_head = std::regex(bytes_head_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_at = std::regex(at_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_by = std::regex(by_pattern, std::regex::optimize | std::regex::ECMAScript);
+        re_q = std::regex(q_pattern, std::regex::optimize | std::regex::ECMAScript);
     } catch (const std::regex_error& e) {
         throw std::runtime_error("Failed to initialize regex patterns: " + std::string(e.what()));
     } catch (const std::runtime_error& e) {

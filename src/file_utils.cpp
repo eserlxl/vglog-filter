@@ -135,7 +135,9 @@ VecS read_file_lines(std::string_view fname) {
         throw std::invalid_argument("Filename cannot be empty");
     }
     
-    std::ifstream file = path_validation::safe_ifstream(std::string(fname));
+    // Create explicit string copy to avoid uninitialized memory
+    const std::string filename_str(fname);
+    std::ifstream file = path_validation::safe_ifstream(filename_str);
     if (!file) {
         throw std::runtime_error(create_error_message("opening file", fname, ""));
     }
@@ -163,7 +165,9 @@ bool is_large_file(std::string_view fname) {
     }
     
     try {
-        const auto validated_path = path_validation::validate_and_canonicalize(std::string(fname));
+        // Create explicit string copy to avoid uninitialized memory
+        const std::string filename_str(fname);
+        const auto validated_path = path_validation::validate_and_canonicalize(filename_str);
         const size_t file_size = std::filesystem::file_size(validated_path);
         
         // Security validation
@@ -181,7 +185,9 @@ void process_file_stream(std::string_view fname, const Options& opt) {
         throw std::invalid_argument("Filename cannot be empty");
     }
     
-    std::ifstream file = path_validation::safe_ifstream(std::string(fname));
+    // Create explicit string copy to avoid uninitialized memory
+    const std::string filename_str(fname);
+    std::ifstream file = path_validation::safe_ifstream(filename_str);
     if (!file) {
         throw std::runtime_error(create_error_message("opening file", fname, ""));
     }
