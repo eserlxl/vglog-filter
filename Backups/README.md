@@ -2,23 +2,34 @@
 
 This directory contains alternative implementations that were created during the development of the simple string matching solution to address MemorySanitizer warnings.
 
+## Directory Structure
+
+```
+Backups/
+├── README.md
+└── src/
+    ├── log_processor_alternative.cpp
+    ├── log_processor_pcre2.cpp
+    └── log_processor_suppressed.cpp
+```
+
 ## Files
 
-### `log_processor_alternative.cpp`
+### `src/log_processor_alternative.cpp`
 **Simple String Matching Implementation**
 - Complete alternative implementation using simple string matching functions
 - Replaces all regex functionality with custom string operations
 - No external dependencies, uses only standard C++ library
 - **Status**: Reference implementation (not used in production)
 
-### `log_processor_pcre2.cpp`
+### `src/log_processor_pcre2.cpp`
 **PCRE2 Library Implementation**
 - Alternative implementation using PCRE2 regex library
 - Requires external PCRE2 dependency (pcre2-dev package)
 - MSan-clean regex library with better performance than std::regex
 - **Status**: Reference implementation (not used in production)
 
-### `log_processor_suppressed.cpp`
+### `src/log_processor_suppressed.cpp`
 **Compiler Suppressions Implementation**
 - Implementation using compiler-specific pragmas to suppress MSan warnings
 - Keeps std::regex functionality but suppresses warnings
@@ -56,9 +67,16 @@ See `test-workflows/ALTERNATIVE_APPROACHES.md` for a detailed comparison of all 
 
 These files are **not compiled** or used in the current build system. They are kept for reference only. If you need to use one of these approaches:
 
-1. Copy the desired file back to `src/`
+1. Copy the desired file from `Backups/src/` to `src/`
 2. Update the build system if needed
 3. Update the main implementation to use the alternative approach
+
+## Project Structure Protection
+
+The `Backups/` directory maintains the same structure as the main project:
+- `Backups/src/` mirrors the main `src/` directory
+- This makes it easy to understand where files would go if restored
+- Maintains consistency and professionalism
 
 ## Last Updated
 
