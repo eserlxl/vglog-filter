@@ -159,7 +159,7 @@ bump_version() {
     IFS='.' read -r current_major current_minor current_patch <<< "$CURRENT_VERSION"
 
     # Check if LOC-based delta system is enabled
-    if [[ "${VERSION_USE_LOC_DELTA:-false}" = "true" ]]; then
+    if [[ "${VERSION_USE_LOC_DELTA:-true}" = "true" ]]; then
         # Use semantic analyzer to calculate LOC-based delta
         local delta=1
         # Try to find semantic analyzer in various locations
@@ -537,7 +537,7 @@ Environment:
   ANALYSIS_MESSAGE         Extra paragraph appended to default commit message
   TAG_PREFIX               Default tag prefix (overridden by --tag-prefix)
   REMOTE                   Default remote for push operations (overridden by --remote)
-  VERSION_USE_LOC_DELTA    Enable LOC-based delta system (default: false)
+  VERSION_USE_LOC_DELTA    Enable LOC-based delta system (default: true)
   VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
   VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
   VERSION_PATCH_DELTA      Patch delta formula (default: 1*(1+LOC/250))

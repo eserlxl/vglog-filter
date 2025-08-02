@@ -1314,37 +1314,49 @@ main() {
         case "$suggestion" in
             major)
                 printf 'Suggested bump: MAJOR version\n'
-                if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
-                    printf 'Reason: Breaking CLI changes detected\n'
-                elif [[ "${R[api_breaking]}" = "true" ]]; then
-                    printf 'Reason: API breaking changes detected\n'
-                elif [[ "$security_keywords" -gt 0 ]]; then
-                    printf 'Reason: Security/crash-related changes detected (%s keywords)\n' "$security_keywords"
+                if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
+                    printf 'Reason: %s\n' "$(get_bump_reason)"
                 else
-                    printf 'Reason: Very large code changes (%s lines)\n' "${R[diff_size]}"
+                    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
+                        printf 'Reason: Breaking CLI changes detected\n'
+                    elif [[ "${R[api_breaking]}" = "true" ]]; then
+                        printf 'Reason: API breaking changes detected\n'
+                    elif [[ "$security_keywords" -gt 0 ]]; then
+                        printf 'Reason: Security/crash-related changes detected (%s keywords)\n' "$security_keywords"
+                    else
+                        printf 'Reason: Very large code changes (%s lines)\n' "${R[diff_size]}"
+                    fi
                 fi
                 printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
                 ;;
             minor)
                 printf 'Suggested bump: MINOR version\n'
-                if [[ "${R[cli_changes]}" = "true" ]]; then
-                    printf 'Reason: New CLI options added\n'
-                elif [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
-                    printf 'Reason: Manual CLI changes detected\n'
-                elif [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
-                    printf 'Reason: New source files added (%s)\n' "${R[new_source_files]}"
-                elif [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
-                    printf 'Reason: New test files added (%s)\n' "${R[new_test_files]}"
-                elif [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
-                    printf 'Reason: New documentation added (%s)\n' "${R[new_doc_files]}"
+                if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
+                    printf 'Reason: %s\n' "$(get_bump_reason)"
                 else
-                    printf 'Reason: New features or significant additions\n'
+                    if [[ "${R[cli_changes]}" = "true" ]]; then
+                        printf 'Reason: New CLI options added\n'
+                    elif [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
+                        printf 'Reason: Manual CLI changes detected\n'
+                    elif [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
+                        printf 'Reason: New source files added (%s)\n' "${R[new_source_files]}"
+                    elif [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
+                        printf 'Reason: New test files added (%s)\n' "${R[new_test_files]}"
+                    elif [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
+                        printf 'Reason: New documentation added (%s)\n' "${R[new_doc_files]}"
+                    else
+                        printf 'Reason: New features or significant additions\n'
+                    fi
                 fi
                 printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
                 ;;
             patch)
                 printf 'Suggested bump: PATCH version\n'
-                printf 'Reason: Significant modifications (%s files, %s lines)\n' "${R[modified_files]}" "${R[diff_size]}"
+                if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
+                    printf 'Reason: %s\n' "$(get_bump_reason)"
+                else
+                    printf 'Reason: Significant modifications (%s files, %s lines)\n' "${R[modified_files]}" "${R[diff_size]}"
+                fi
                 printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
                 ;;
             none)
