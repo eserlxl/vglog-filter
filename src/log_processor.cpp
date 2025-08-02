@@ -13,6 +13,9 @@
 #include <stdexcept>
 #include <limits>
 #include <locale>
+#include <chrono>
+#include <thread>
+#include <atomic> // Added for atomic variables
 
 using namespace canonicalization;
 
@@ -113,6 +116,55 @@ void LogProcessor::process_stream(std::istream& in) {
 
     if (opt.show_progress && !opt.use_stdin) {
         total_bytes = get_file_size_for_progress();
+    }
+
+    // Add timeout for stdin input
+    if (opt.use_stdin) {
+        std::cerr << "Waiting for input from stdin... (timeout: 15 seconds)\n";
+        
+        // Use a background thread to check for input availability
+        std::atomic<bool> input_available{false};
+        std::atomic<bool> timeout_reached{false};
+        
+        auto input_checker = [&input_available, &timeout_reached]() {
+            // Wait for input or timeout
+            auto start_time = std::chrono::steady_clock::now();
+            const auto timeout_duration = std::chrono::seconds(15);
+            
+            while (!input_available && !timeout_reached) {
+                if (std::chrono::steady_clock::now() - start_time >= timeout_duration) {
+                    timeout_reached = true;
+                    break;
+                }
+                
+                // Check if stdin has data available
+                if (std::cin.peek() != EOF) {
+                    input_available = true;
+                    break;
+                }
+                
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        };
+        
+        std::thread timeout_thread(input_checker);
+        
+        // Wait for either input or timeout
+        while (!input_available && !timeout_reached) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        
+        timeout_thread.join();
+        
+        if (timeout_reached) {
+            std::cerr << "Error: No input received within 15 seconds.\n";
+            std::cerr << "Usage: vglog-filter [options] [valgrind_log]\n";
+            std::cerr << "       echo 'input' | vglog-filter\n";
+            std::cerr << "       vglog-filter log.txt\n";
+            std::exit(1);
+        }
+        
+        std::cerr << "Input detected, processing...\n";
     }
 
     std::string line;
