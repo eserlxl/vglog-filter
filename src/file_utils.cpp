@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <limits>
+#include <sys/stat.h> // Required for stat()
 
 using Str = std::string;
 using VecS = std::vector<Str>;
@@ -168,15 +169,14 @@ bool is_large_file(std::string_view fname) {
         // Use explicit string conversion to avoid MSAN issues with string_view data access
         const std::string filename_str(fname);
         
-        // Use direct file operations to avoid MSAN issues with filesystem path
-        // Open file directly and check size without path validation
-        std::ifstream file(filename_str, std::ios::binary | std::ios::ate);
-        if (!file) {
+        // Use stat() instead of std::ifstream to avoid MSAN issues
+        // This is more efficient and avoids the standard library MSAN problems
+        struct stat file_stat;
+        if (stat(filename_str.c_str(), &file_stat) != 0) {
             return false;
         }
         
-        const size_t file_size = static_cast<size_t>(file.tellg());
-        file.close();
+        const size_t file_size = static_cast<size_t>(file_stat.st_size);
         
         // Security validation
         validate_file_size(file_size);

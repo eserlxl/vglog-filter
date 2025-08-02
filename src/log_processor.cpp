@@ -92,13 +92,14 @@ void LogProcessor::initialize_regex_patterns() {
         // Use ECMAScript syntax which is more predictable and doesn't rely on locale
         // Use explicit string conversion to avoid MSAN issues with uninitialized memory
         // Use c_str() to get explicit char* pointer to avoid MSAN issues
-        re_vg_line = std::regex(vg_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-        re_prefix = std::regex(prefix_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-        re_start = std::regex(start_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-        re_bytes_head = std::regex(bytes_head_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-        re_at = std::regex(at_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-        re_by = std::regex(by_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
-        re_q = std::regex(q_pattern.c_str(), std::regex::optimize | std::regex::ECMAScript);
+        // Use explicit length to avoid any potential issues with null termination
+        re_vg_line = std::regex(vg_pattern.c_str(), vg_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
+        re_prefix = std::regex(prefix_pattern.c_str(), prefix_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
+        re_start = std::regex(start_pattern.c_str(), start_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
+        re_bytes_head = std::regex(bytes_head_pattern.c_str(), bytes_head_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
+        re_at = std::regex(at_pattern.c_str(), at_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
+        re_by = std::regex(by_pattern.c_str(), by_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
+        re_q = std::regex(q_pattern.c_str(), q_pattern.length(), std::regex::optimize | std::regex::ECMAScript);
     } catch (const std::regex_error& e) {
         throw std::runtime_error("Failed to initialize regex patterns: " + std::string(e.what()));
     } catch (const std::exception& e) {
