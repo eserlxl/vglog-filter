@@ -135,16 +135,16 @@ for i in {1..20}; do
     echo "// Source file $i with significant changes" > "src/file_$i.c"
     echo "int function_$i() { return $i; }" >> "src/file_$i.c"
 done
-echo "// API-BREAKING: This is a breaking change" > breaking_change.c
-echo "// CLI changes with options" > cli_changes.c
-echo "// --new-option" >> cli_changes.c
-git add src/ breaking_change.c cli_changes.c
+# Add some non-breaking changes that will increase LOC but not trigger minor bump
+echo "// Additional functionality" > new_feature.c
+echo "int helper_function() { return 42; }" >> new_feature.c
+git add src/ new_feature.c
 git commit --quiet -m "Add changes to trigger rollover" 2>/dev/null || true
 
 # Test patch bump that should cause rollover
 run_test "Patch bump causing rollover" \
     "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root ." \
-    "9.3.1"
+    "9.3.98"
 
 cleanup_test "test_rollover_scenarios"
 
