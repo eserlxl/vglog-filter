@@ -425,7 +425,11 @@ extract_cli_options() {
 
     # Get the combined diff for all changed files at once
     local srcdiff
-    srcdiff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- "${changed_files[@]}" 2>/dev/null || true)
+    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
+        srcdiff=$(git -c color.ui=false diff -M -C -w --unified=0 "$base_ref".."$target_ref" -- "${changed_files[@]}" 2>/dev/null || true)
+    else
+        srcdiff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- "${changed_files[@]}" 2>/dev/null || true)
+    fi
 
     # Enhanced breaking change detection: look for removed case labels
     local removed_cases
@@ -441,9 +445,15 @@ extract_cli_options() {
 
     # Check for API-breaking hints in headers
     local header_diff
-    header_diff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
-        'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        'src/*.h'     'src/*.hpp'     'src/*.hh' 2>/dev/null || true)
+    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
+        header_diff=$(git -c color.ui=false diff -M -C -w --unified=0 "$base_ref".."$target_ref" -- \
+            'include/*.h' 'include/*.hpp' 'include/*.hh' \
+            'src/*.h'     'src/*.hpp'     'src/*.hh' 2>/dev/null || true)
+    else
+        header_diff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
+            'include/*.h' 'include/*.hpp' 'include/*.hh' \
+            'src/*.h'     'src/*.hpp'     'src/*.hh' 2>/dev/null || true)
+    fi
     
     local removed_prototypes
     removed_prototypes=$(printf '%s' "$header_diff" | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/ && !/^-[[:space:]]*(typedef|#)/' | wc -l | tr -d ' ' || printf '0')
@@ -504,10 +514,17 @@ extract_cli_options() {
     
     # Get diff only for C/C++ source files to avoid false positives from shell scripts
     local cpp_diff
-    cpp_diff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
-        'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-        'include/*.h' 'include/*.hpp' 'include/*.hh' \
-        'src/*.h' 'src/*.hpp' 'src/*.hh' 2>/dev/null || true)
+    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
+        cpp_diff=$(git -c color.ui=false diff -M -C -w --unified=0 "$base_ref".."$target_ref" -- \
+            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+            'include/*.h' 'include/*.hpp' 'include/*.hh' \
+            'src/*.h' 'src/*.hpp' 'src/*.hh' 2>/dev/null || true)
+    else
+        cpp_diff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
+            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
+            'include/*.h' 'include/*.hpp' 'include/*.hh' \
+            'src/*.h' 'src/*.hpp' 'src/*.hh' 2>/dev/null || true)
+    fi
     
     local added_long_opts
     added_long_opts=$(printf '%s' "$cpp_diff" | awk '/^\+.*--[a-zA-Z0-9-]+/ && !/^\+.*--[[:space:]]*["\x27]/ && !/^\+[[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^\+[[:space:]]*.*["\x27].*-[[:alpha:]]/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
@@ -628,9 +645,16 @@ analyze_changes() {
     R[added_long_count]=0
 
     # Check if there are any changes
-    if git -c color.ui=false diff -M -C --quiet "$base_ref".."$target_ref"; then
-        printf 'Warning: No changes detected between %s and %s\n' "$base_ref" "$target_ref" >&2
-        return
+    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
+        if git -c color.ui=false diff -M -C -w --quiet "$base_ref".."$target_ref"; then
+            printf 'Warning: No changes detected between %s and %s (ignoring whitespace)\n' "$base_ref" "$target_ref" >&2
+            return
+        fi
+    else
+        if git -c color.ui=false diff -M -C --quiet "$base_ref".."$target_ref"; then
+            printf 'Warning: No changes detected between %s and %s\n' "$base_ref" "$target_ref" >&2
+            return
+        fi
     fi
 
     # NUL-delimited, handle renames/copies
@@ -652,7 +676,11 @@ analyze_changes() {
             R)   R[modified_files]=$((R[modified_files] + 1)) ;;
             C)   R[added_files]=$((R[added_files] + 1)); inc_counters_for "$file" ;;
         esac
-    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" 2>/dev/null)
+    done < <(if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
+        git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" 2>/dev/null
+    else
+        git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" 2>/dev/null
+    fi)
 
     # Extract CLI options for comparison
     extract_cli_options "$base_ref" "$target_ref"
