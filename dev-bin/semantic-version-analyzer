@@ -72,7 +72,7 @@ Environment Variables:
   MIN_NEW_TEST_FILES       Minimum new test files for minor (default: 3)
   MIN_NEW_DOC_FILES        Minimum new doc files for minor (default: 2)
   MAJOR_REQUIRE_BREAKING   Require breaking changes for major (default: true; accepts: true/1/yes)
-  VERSION_USE_LOC_DELTA    Enable LOC-based delta system (default: false)
+  VERSION_USE_LOC_DELTA    Enable LOC-based delta system (default: true)
   VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
   VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
   VERSION_PATCH_DELTA      Patch delta formula (default: 1*(1+LOC/250))
@@ -155,7 +155,7 @@ VERSION_MINOR_LIMIT="${VERSION_MINOR_LIMIT:-100}"
 VERSION_PATCH_DELTA="${VERSION_PATCH_DELTA:-1*(1+LOC/250)}"
 VERSION_MINOR_DELTA="${VERSION_MINOR_DELTA:-5*(1+LOC/500)}"
 VERSION_MAJOR_DELTA="${VERSION_MAJOR_DELTA:-10*(1+LOC/1000)}"
-VERSION_USE_LOC_DELTA="${VERSION_USE_LOC_DELTA:-false}"
+VERSION_USE_LOC_DELTA="${VERSION_USE_LOC_DELTA:-true}"
 
 # Bonus system configuration
 VERSION_BREAKING_CLI_BONUS="${VERSION_BREAKING_CLI_BONUS:-2}"

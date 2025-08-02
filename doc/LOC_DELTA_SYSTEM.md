@@ -143,7 +143,7 @@ VERSION_SECURITY_BONUS=2
 ```
 
 ### Default Values
-- `VERSION_USE_LOC_DELTA=false` (disabled by default)
+- `VERSION_USE_LOC_DELTA=false` (enabled by default)
 - `VERSION_PATCH_LIMIT=100`
 - `VERSION_MINOR_LIMIT=100`
 - `VERSION_PATCH_DELTA="1*(1+LOC/250)"`
@@ -244,7 +244,7 @@ This demonstrates:
 3. The system automatically calculates appropriate deltas
 
 ### Backward Compatibility
-- The system is disabled by default
+- The system is enabled by default
 - Traditional versioning still works when disabled
 - Can be enabled/disabled per project
 
