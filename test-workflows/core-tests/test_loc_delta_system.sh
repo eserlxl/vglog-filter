@@ -21,6 +21,57 @@ echo "=== Testing LOC-based Delta System with New Versioning System ==="
 TESTS_PASSED=0
 TESTS_FAILED=0
 
+# Function to run a test
+run_test() {
+    local test_name="$1"
+    local expected_patch="$2"
+    local expected_minor="$3"
+    local expected_major="$4"
+    
+    echo "Test: $test_name"
+    
+    # Run semantic analyzer
+    local result
+    result=$(VERSION_USE_LOC_DELTA=true ./dev-bin/semantic-version-analyzer --json 2>/dev/null || echo "{}")
+    
+    # Extract deltas
+    local patch_delta
+    patch_delta=$(echo "$result" | grep -o '"patch_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+    local minor_delta
+    minor_delta=$(echo "$result" | grep -o '"minor_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+    local major_delta
+    major_delta=$(echo "$result" | grep -o '"major_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+    
+    # Extract reason
+    local reason
+    reason=$(echo "$result" | grep -o '"reason":"[^"]*"' | cut -d'"' -f4 || echo "")
+    
+    # Check results
+    if [[ "$patch_delta" = "$expected_patch" ]] && [[ "$minor_delta" = "$expected_minor" ]] && [[ "$major_delta" = "$expected_major" ]]; then
+        echo "✓ PASS: Deltas match expected values"
+        ((TESTS_PASSED++))
+    else
+        echo "✗ FAIL: Expected PATCH=$expected_patch, MINOR=$expected_minor, MAJOR=$expected_major"
+        echo "  Got: PATCH=$patch_delta, MINOR=$minor_delta, MAJOR=$major_delta"
+        ((TESTS_FAILED++))
+    fi
+    
+    # Check reason format
+    if [[ "$reason" = *"LOC:"* ]] && [[ "$reason" = *"MAJOR"* || "$reason" = *"MINOR"* || "$reason" = *"PATCH"* ]]; then
+        echo "✓ PASS: Reason format includes LOC and version type"
+        ((TESTS_PASSED++))
+    else
+        echo "✗ FAIL: Reason format incorrect: $reason"
+        ((TESTS_FAILED++))
+    fi
+    
+    echo ""
+}
+
+# Test counter
+TESTS_PASSED=0
+TESTS_FAILED=0
+
 echo "Test 1: Verify LOC delta system is working"
 export VERSION_USE_LOC_DELTA=true
 
