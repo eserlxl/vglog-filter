@@ -96,10 +96,10 @@ echo "  MINOR: $minor_delta"
 echo "  MAJOR: $major_delta"
 
 if [[ "$patch_delta" = "2" ]] && [[ "$minor_delta" = "8" ]] && [[ "$major_delta" = "13" ]]; then
-    printf "${GREEN}✓ PASS${NC}: Delta formulas working correctly\n"
+    printf '%s✓ PASS%s: Delta formulas working correctly\n' "$GREEN" "$NC"
     ((TESTS_PASSED++))
 else
-    printf "${RED}✗ FAIL${NC}: Delta formulas incorrect\n"
+    printf '%s✗ FAIL%s: Delta formulas incorrect\n' "$RED" "$NC"
     ((TESTS_FAILED++))
 fi
 
@@ -169,10 +169,10 @@ if echo "$rollover_result" | grep -q "9.3.95 + 6 = 9.4.1" && \
    echo "$rollover_result" | grep -q "9.3.0 + 6 = 9.3.6" && \
    echo "$rollover_result" | grep -q "9.3.0 + 16 = 9.3.16" && \
    echo "$rollover_result" | grep -q "9.3.0 + 37 = 9.3.37"; then
-    printf "${GREEN}✓ PASS${NC}: Rollover logic working correctly\n"
+    printf '%s✓ PASS%s: Rollover logic working correctly\n' "$GREEN" "$NC"
     ((TESTS_PASSED++))
 else
-    printf "${RED}✗ FAIL${NC}: Rollover logic incorrect\n"
+    printf '%s✗ FAIL%s: Rollover logic incorrect\n' "$RED" "$NC"
     ((TESTS_FAILED++))
 fi
 
@@ -181,14 +181,14 @@ rm -f /tmp/rollover_test.sh
 
 # Print summary
 echo ""
-printf "${YELLOW}Final Verification Summary${NC}\n"
+printf '%sFinal Verification Summary%s\n' "$YELLOW" "$NC"
 printf "============================\n"
-printf "${GREEN}Tests passed: %d${NC}\n" "$TESTS_PASSED"
-printf "${RED}Tests failed: %d${NC}\n" "$TESTS_FAILED"
+printf '%sTests passed: %d%s\n' "$GREEN" "$TESTS_PASSED" "$NC"
+printf '%sTests failed: %d%s\n' "$RED" "$TESTS_FAILED" "$NC"
 printf "Total tests: %d\n" $((TESTS_PASSED + TESTS_FAILED))
 
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    printf "\n${GREEN}🎉 All tests passed!${NC}\n"
+    printf '\n%s🎉 All tests passed!%s\n' "$GREEN" "$NC"
     echo ""
     echo "✅ New versioning system is fully functional:"
     echo "   - Version calculation with rollover logic ✓"
@@ -205,6 +205,6 @@ if [[ $TESTS_FAILED -eq 0 ]]; then
     echo "   • Rollover Logic: 9.3.95 + 6 = 9.4.1, 9.99.95 + 6 = 10.0.1 ✓"
     exit 0
 else
-    printf "\n${RED}Some tests failed!${NC}\n"
+    printf '\n%sSome tests failed!%s\n' "$RED" "$NC"
     exit 1
 fi 

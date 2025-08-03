@@ -46,18 +46,18 @@ run_test() {
     
     # Check results
     if [[ "$actual_version" = "$expected_version" ]]; then
-        printf "${GREEN}✓ PASS${NC}: Version %s\n" "$actual_version"
+        printf '%s✓ PASS%s: Version %s\n' "$GREEN" "$NC" "$actual_version"
         ((TESTS_PASSED++))
     else
-        printf "${RED}✗ FAIL${NC}: Expected version %s, got %s\n" "$expected_version" "$actual_version"
+        printf '%s✗ FAIL%s: Expected version %s, got %s\n' "$RED" "$NC" "$expected_version" "$actual_version"
         ((TESTS_FAILED++))
     fi
     
     if [[ "$actual_reason" = *"$expected_reason_pattern"* ]]; then
-        printf "${GREEN}✓ PASS${NC}: Reason contains '%s'\n" "$expected_reason_pattern"
+        printf '%s✓ PASS%s: Reason contains '%s'\n' "$GREEN" "$NC" "$expected_reason_pattern"
         ((TESTS_PASSED++))
     else
-        printf "${RED}✗ FAIL${NC}: Expected reason to contain '%s', got '%s'\n" "$expected_reason_pattern" "$actual_reason"
+        printf '%s✗ FAIL%s: Expected reason to contain '%s', got '%s'\n' "$RED" "$NC" "$expected_reason_pattern" "$actual_reason"
         ((TESTS_FAILED++))
     fi
     
@@ -82,10 +82,10 @@ echo "Major delta: $major_delta"
 
 # Verify delta formulas are working
 if [[ "$patch_delta" =~ ^[0-9]+$ ]] && [[ "$minor_delta" =~ ^[0-9]+$ ]] && [[ "$major_delta" =~ ^[0-9]+$ ]]; then
-    printf "${GREEN}✓ PASS${NC}: Delta calculations working\n"
+    printf '%s✓ PASS%s: Delta calculations working\n' "$GREEN" "$NC"
     ((TESTS_PASSED++))
 else
-    printf "${RED}✗ FAIL${NC}: Delta calculations failed\n"
+    printf '%s✗ FAIL%s: Delta calculations failed\n' "$RED" "$NC"
     ((TESTS_FAILED++))
 fi
 
@@ -94,41 +94,41 @@ echo "Test 3: Verifying reason format"
 reason=$(echo "$result" | grep -o '"reason":"[^"]*"' | cut -d'"' -f4 || echo "")
 
 if [[ "$reason" = *"LOC:"* ]]; then
-    printf "${GREEN}✓ PASS${NC}: Reason includes LOC value\n"
+    printf '%s✓ PASS%s: Reason includes LOC value\n' "$GREEN" "$NC"
     ((TESTS_PASSED++))
 else
-    printf "${RED}✗ FAIL${NC}: Reason missing LOC value\n"
+    printf '%s✗ FAIL%s: Reason missing LOC value\n' "$RED" "$NC"
     ((TESTS_FAILED++))
 fi
 
 if [[ "$reason" = *"MAJOR"* ]] || [[ "$reason" = *"MINOR"* ]] || [[ "$reason" = *"PATCH"* ]]; then
-    printf "${GREEN}✓ PASS${NC}: Reason includes version type\n"
+    printf '%s✓ PASS%s: Reason includes version type\n' "$GREEN" "$NC"
     ((TESTS_PASSED++))
 else
-    printf "${RED}✗ FAIL${NC}: Reason missing version type\n"
+    printf '%s✗ FAIL%s: Reason missing version type\n' "$RED" "$NC"
     ((TESTS_FAILED++))
 fi
 
 # Test 4: JSON output structure verification
 echo "Test 4: Verifying JSON output structure"
 if echo "$result" | grep -q '"loc_delta"' && echo "$result" | grep -q '"enabled": true'; then
-    printf "${GREEN}✓ PASS${NC}: LOC delta system enabled in JSON\n"
+    printf '%s✓ PASS%s: LOC delta system enabled in JSON\n' "$GREEN" "$NC"
     ((TESTS_PASSED++))
 else
-    printf "${RED}✗ FAIL${NC}: LOC delta system not properly configured in JSON\n"
+    printf '%s✗ FAIL%s: LOC delta system not properly configured in JSON\n' "$RED" "$NC"
     ((TESTS_FAILED++))
 fi
 
 # Print summary
 echo ""
-printf "${YELLOW}Test Summary${NC}\n"
+printf '%sTest Summary%s\n' "$YELLOW" "$NC"
 printf "============\n"
-printf "${GREEN}Tests passed: %d${NC}\n" "$TESTS_PASSED"
-printf "${RED}Tests failed: %d${NC}\n" "$TESTS_FAILED"
+printf '%sTests passed: %d%s\n' "$GREEN" "$TESTS_PASSED" "$NC"
+printf '%sTests failed: %d%s\n' "$RED" "$TESTS_FAILED" "$NC"
 printf "Total tests: %d\n" $((TESTS_PASSED + TESTS_FAILED))
 
 if [[ $TESTS_FAILED -eq 0 ]]; then
-    printf "\n${GREEN}All tests passed!${NC}\n"
+    printf '\n%sAll tests passed!%s\n' "$GREEN" "$NC"
     echo ""
     echo "✅ New versioning system is working correctly:"
     echo "   - Version calculation with rollover logic ✓"
@@ -137,6 +137,6 @@ if [[ $TESTS_FAILED -eq 0 ]]; then
     echo "   - JSON output with delta information ✓"
     exit 0
 else
-    printf "\n${RED}Some tests failed!${NC}\n"
+    printf '\n%sSome tests failed!%s\n' "$RED" "$NC"
     exit 1
 fi 

@@ -13,7 +13,7 @@ set -uo pipefail
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
-cd "$PROJECT_ROOT"
+cd "$PROJECT_ROOT" || exit
 
 echo "=== Testing LOC-based Delta System with New Versioning System ==="
 
@@ -22,6 +22,7 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 # Function to run a test
+# shellcheck disable=SC2317
 run_test() {
     local test_name="$1"
     local expected_patch="$2"
