@@ -708,20 +708,23 @@ calculate_loc_delta() {
         loc=0
     fi
     
-    # Calculate base delta from LOC
+    # Calculate base delta from LOC using configurable formulas
     local base_delta=1
     case "$bump_type" in
         patch)
-            # Calculate: 1*(1+LOC/250)
-            base_delta=$(awk "BEGIN {printf \"%d\", 1 * (1 + $loc / 250)}" 2>/dev/null || echo "1")
+            # Use VERSION_PATCH_DELTA formula with LOC substitution
+            local formula="${VERSION_PATCH_DELTA//LOC/$loc}"
+            base_delta=$(awk "BEGIN {printf \"%d\", $formula}" 2>/dev/null || echo "1")
             ;;
         minor)
-            # Calculate: 5*(1+LOC/500)
-            base_delta=$(awk "BEGIN {printf \"%d\", 5 * (1 + $loc / 500)}" 2>/dev/null || echo "5")
+            # Use VERSION_MINOR_DELTA formula with LOC substitution
+            local formula="${VERSION_MINOR_DELTA//LOC/$loc}"
+            base_delta=$(awk "BEGIN {printf \"%d\", $formula}" 2>/dev/null || echo "5")
             ;;
         major)
-            # Calculate: 10*(1+LOC/1000)
-            base_delta=$(awk "BEGIN {printf \"%d\", 10 * (1 + $loc / 1000)}" 2>/dev/null || echo "10")
+            # Use VERSION_MAJOR_DELTA formula with LOC substitution
+            local formula="${VERSION_MAJOR_DELTA//LOC/$loc}"
+            base_delta=$(awk "BEGIN {printf \"%d\", $formula}" 2>/dev/null || echo "10")
             ;;
         *)
             base_delta=1
