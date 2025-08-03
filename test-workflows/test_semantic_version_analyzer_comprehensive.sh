@@ -98,7 +98,7 @@ create_temp_test_env() {
     
     # Create temporary directory
     mkdir -p "$temp_dir"
-    cd "$temp_dir"
+    cd "$temp_dir" || exit 1
     
     # Create initial files
     echo "1.0.0" > VERSION
@@ -131,7 +131,7 @@ test_basic_functionality() {
     local test_dir="$1"
     local analyzer_path="$2"
     
-    cd "$test_dir"
+    cd "$test_dir" || exit 1
     
     echo "=== Testing Basic Functionality ==="
     
@@ -171,7 +171,7 @@ test_configuration_validation() {
     local test_dir="$1"
     local analyzer_path="$2"
     
-    cd "$test_dir"
+    cd "$test_dir" || exit 1
     
     echo "=== Testing Configuration Validation ==="
     
@@ -205,7 +205,7 @@ test_core_version_calculation() {
     local test_dir="$1"
     local analyzer_path="$2"
     
-    cd "$test_dir"
+    cd "$test_dir" || exit 1
     
     echo "=== Testing Core Version Calculation ==="
     
@@ -257,7 +257,7 @@ test_advanced_features() {
     local test_dir="$1"
     local analyzer_path="$2"
     
-    cd "$test_dir"
+    cd "$test_dir" || exit 1
     
     echo "=== Testing Advanced Features ==="
     
@@ -309,7 +309,7 @@ test_edge_cases() {
     local test_dir="$1"
     local analyzer_path="$2"
     
-    cd "$test_dir"
+    cd "$test_dir" || exit 1
     
     echo "=== Testing Edge Cases ==="
     
@@ -351,7 +351,7 @@ test_verbose_output() {
     local test_dir="$1"
     local analyzer_path="$2"
     
-    cd "$test_dir"
+    cd "$test_dir" || exit 1
     
     echo "=== Testing Verbose Output ==="
     
@@ -405,7 +405,7 @@ test_force_flag() {
     local test_dir="$1"
     local analyzer_path="$2"
     
-    cd "$test_dir"
+    cd "$test_dir" || exit 1
     
     echo "=== Testing Force Flag ==="
     
@@ -434,7 +434,7 @@ test_yaml_configuration() {
     local test_dir="$1"
     local analyzer_path="$2"
     
-    cd "$test_dir"
+    cd "$test_dir" || exit 1
     
     echo "=== Testing YAML Configuration ==="
     
@@ -555,7 +555,8 @@ main() {
     echo
     
     # Check if analyzer exists
-    local analyzer_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../dev-bin/semantic-version-analyzer"
+    local analyzer_path
+    analyzer_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../dev-bin/semantic-version-analyzer"
     if [[ ! -f "$analyzer_path" ]]; then
         log_error "Semantic version analyzer not found: $analyzer_path"
         exit 1
