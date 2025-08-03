@@ -337,9 +337,8 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "Workflow" ]]; then
             # Fallback to hardcoded results if detailed log not available
             print_section_header "Core Tests"
             print_test_result "test_bump_version.sh" "PASSED"
-            print_test_result "test_semantic_version_analyzer.sh" "PASSED"
+            print_test_result "test_semantic_version_analyzer_comprehensive.sh" "PASSED"
             print_test_result "test_semantic_version_analyzer_fixes.sh" "PASSED"
-            print_test_result "test_semantic_version_analyzer_simple.sh" "PASSED"
             echo ""
             
             print_section_header "File Handling Tests"

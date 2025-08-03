@@ -6,7 +6,8 @@
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
 #
-# Comprehensive unit test for the semantic version analyzer
+# Comprehensive unified test for the semantic version analyzer
+# This test combines the best features from all previous test files
 
 set -uo pipefail
 
@@ -79,76 +80,412 @@ run_test() {
     echo
 }
 
+# Function to create test commit with specific message
+create_test_commit() {
+    local message="$1"
+    local file_content="${2:-test content}"
+    local filename="${3:-test_file.txt}"
+    
+    echo "$file_content" > "$filename"
+    git add "$filename"
+    git commit -m "$message" >/dev/null 2>&1
+}
+
+# Function to create temporary test environment
+create_temp_test_env() {
+    local test_name="${1:-default}"
+    local temp_dir="/tmp/vglog-filter-test-${test_name}-$$"
+    
+    # Create temporary directory
+    mkdir -p "$temp_dir"
+    cd "$temp_dir"
+    
+    # Create initial files
+    echo "1.0.0" > VERSION
+    echo "project(test)" > CMakeLists.txt
+    mkdir -p src
+    
+    # Initialize git repository
+    git init --quiet
+    git config user.name "Test User"
+    git config user.email "test@example.com"
+    
+    # Add initial files
+    git add . >/dev/null 2>&1
+    git commit -m "Initial commit" >/dev/null 2>&1
+    
+    echo "$temp_dir"
+}
+
+# Function to cleanup temporary test environment
+cleanup_temp_test_env() {
+    local temp_dir="$1"
+    if [[ -n "$temp_dir" && -d "$temp_dir" ]]; then
+        cd /tmp 2>/dev/null || true
+        rm -rf "$temp_dir" 2>/dev/null || true
+    fi
+}
+
 # Test 1: Basic functionality tests
 test_basic_functionality() {
+    local test_dir="$1"
+    local analyzer_path="$2"
+    
+    cd "$test_dir"
+    
     echo "=== Testing Basic Functionality ==="
     
     # Test 1: Help command
     run_test "Help command" \
-        "../dev-bin/semantic-version-analyzer --help" \
+        "$analyzer_path --help" \
         "0" \
         "Semantic Version Analyzer"
     
     # Test 2: Invalid version format
     run_test "Invalid version format" \
-        "../dev-bin/semantic-version-analyzer --dry-run --current-version invalid --commit-range HEAD~1..HEAD" \
+        "$analyzer_path --dry-run --current-version invalid --commit-range HEAD~1..HEAD" \
         "1" \
         "Invalid version format"
     
     # Test 3: Missing --current-version argument
     run_test "Missing --current-version argument" \
-        "../dev-bin/semantic-version-analyzer --current-version" \
+        "$analyzer_path --current-version" \
         "1" \
         "requires a value"
     
     # Test 4: Missing --commit-range argument
     run_test "Missing --commit-range argument" \
-        "../dev-bin/semantic-version-analyzer --commit-range" \
+        "$analyzer_path --commit-range" \
         "1" \
         "requires a value"
     
     # Test 5: Missing --config argument
     run_test "Missing --config argument" \
-        "../dev-bin/semantic-version-analyzer --config" \
+        "$analyzer_path --config" \
         "1" \
         "requires a value"
 }
 
 # Test 2: Configuration validation tests
 test_configuration_validation() {
+    local test_dir="$1"
+    local analyzer_path="$2"
+    
+    cd "$test_dir"
+    
     echo "=== Testing Configuration Validation ==="
     
     # Test 1: Invalid LOC_CAP
     run_test "Invalid LOC_CAP" \
-        "LOC_CAP=foo ../dev-bin/semantic-version-analyzer --help" \
+        "LOC_CAP=foo $analyzer_path --help" \
         "1" \
         "must be a positive integer"
     
     # Test 2: Invalid RADIX
     run_test "Invalid RADIX" \
-        "RADIX=bar ../dev-bin/semantic-version-analyzer --help" \
+        "RADIX=bar $analyzer_path --help" \
         "1" \
         "must be a positive integer"
     
     # Test 3: RADIX too small
     run_test "RADIX too small" \
-        "RADIX=0 ../dev-bin/semantic-version-analyzer --help" \
+        "RADIX=0 $analyzer_path --help" \
         "1" \
         "must be greater than 1"
     
     # Test 4: Valid numeric configuration
     run_test "Valid numeric configuration" \
-        "LOC_CAP=5000 RADIX=50 ../dev-bin/semantic-version-analyzer --help" \
+        "LOC_CAP=5000 RADIX=50 $analyzer_path --help" \
         "0" \
         ""
 }
 
-# Test 3: Key features check
+# Test 3: Core version calculation tests
+test_core_version_calculation() {
+    local test_dir="$1"
+    local analyzer_path="$2"
+    
+    cd "$test_dir"
+    
+    echo "=== Testing Core Version Calculation ==="
+    
+    # Test 1: Basic patch increment (simple commit)
+    create_test_commit "simple fix"
+    run_test "Basic patch increment" \
+        "$analyzer_path --dry-run --current-version 1.0.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 1.0.0 -> 1.0.1 (PATCH)"
+    
+    # Test 2: Breaking change
+    create_test_commit "BREAKING CHANGE: api breaking change"
+    run_test "Breaking change" \
+        "$analyzer_path --dry-run --current-version 1.0.1 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 1.0.1 -> 2.0.0 (MAJOR)"
+    
+    # Test 3: Security vulnerability
+    create_test_commit "fix: CVE-2024-1234 security vulnerability"
+    run_test "Security vulnerability" \
+        "$analyzer_path --dry-run --current-version 2.0.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 2.0.0 -> 2.1.0 (MINOR)"
+    
+    # Test 4: Performance improvement
+    create_test_commit "perf: 50% performance improvement"
+    run_test "Performance improvement" \
+        "$analyzer_path --dry-run --current-version 2.1.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 2.1.0 -> 2.2.0 (MINOR)"
+    
+    # Test 5: New feature
+    create_test_commit "feat: add new feature"
+    run_test "New feature" \
+        "$analyzer_path --dry-run --current-version 2.2.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 2.2.0 -> 2.3.0 (MINOR)"
+    
+    # Test 6: Database schema change
+    create_test_commit "feat: database schema change"
+    run_test "Database schema change" \
+        "$analyzer_path --dry-run --current-version 2.3.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 2.3.0 -> 3.0.0 (MAJOR)"
+}
+
+# Test 4: Advanced features
+test_advanced_features() {
+    local test_dir="$1"
+    local analyzer_path="$2"
+    
+    cd "$test_dir"
+    
+    echo "=== Testing Advanced Features ==="
+    
+    # Test 1: Zero-day vulnerability
+    create_test_commit "fix: zero-day vulnerability CVE-2024-5678"
+    run_test "Zero-day vulnerability" \
+        "$analyzer_path --dry-run --current-version 3.0.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 3.0.0 -> 3.1.0 (MINOR)"
+    
+    # Test 2: Production outage
+    create_test_commit "fix: production outage issue"
+    run_test "Production outage" \
+        "$analyzer_path --dry-run --current-version 3.1.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 3.1.0 -> 3.2.0 (MINOR)"
+    
+    # Test 3: Customer request
+    create_test_commit "feat: customer request implementation"
+    run_test "Customer request" \
+        "$analyzer_path --dry-run --current-version 3.2.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 3.2.0 -> 3.3.0 (MINOR)"
+    
+    # Test 4: Cross-platform support
+    create_test_commit "feat: cross-platform support"
+    run_test "Cross-platform support" \
+        "$analyzer_path --dry-run --current-version 3.3.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 3.3.0 -> 3.4.0 (MINOR)"
+    
+    # Test 5: Memory safety
+    create_test_commit "fix: memory safety issue"
+    run_test "Memory safety" \
+        "$analyzer_path --dry-run --current-version 3.4.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 3.4.0 -> 3.5.0 (MINOR)"
+    
+    # Test 6: Race condition
+    create_test_commit "fix: race condition"
+    run_test "Race condition" \
+        "$analyzer_path --dry-run --current-version 3.5.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 3.5.0 -> 3.6.0 (MINOR)"
+}
+
+# Test 5: Edge cases
+test_edge_cases() {
+    local test_dir="$1"
+    local analyzer_path="$2"
+    
+    cd "$test_dir"
+    
+    echo "=== Testing Edge Cases ==="
+    
+    # Test 1: Large LOC changes
+    # Create a large file to test LOC capping
+    for i in {1..1000}; do
+        echo "line $i" >> large_file.txt
+    done
+    git add large_file.txt
+    git commit -m "feat: large file addition" >/dev/null 2>&1
+    
+    run_test "Large LOC changes" \
+        "$analyzer_path --dry-run --current-version 1.0.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 1.0.0 -> 1.1.0 (MINOR)"
+    
+    # Test 2: Version rollover
+    run_test "Version rollover test" \
+        "$analyzer_path --dry-run --current-version 1.99.99 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 1.99.99 -> 2.0.0 (MAJOR)"
+    
+    # Test 3: Zero LOC changes
+    git commit --allow-empty -m "empty commit" >/dev/null 2>&1
+    run_test "Zero LOC changes" \
+        "$analyzer_path --dry-run --current-version 2.0.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 2.0.0 -> 2.0.1 (PATCH)"
+    
+    # Test 4: Environment variable overrides
+    run_test "Environment variable overrides" \
+        "LOC_CAP=1000 RADIX=10 $analyzer_path --dry-run --current-version 2.0.1 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "VERSION_BUMP: 2.0.1 -> 2.1.0 (MINOR)"
+}
+
+# Test 6: Verbose output
+test_verbose_output() {
+    local test_dir="$1"
+    local analyzer_path="$2"
+    
+    cd "$test_dir"
+    
+    echo "=== Testing Verbose Output ==="
+    
+    create_test_commit "feat: new feature with tests"
+    
+    # Test verbose output
+    run_test "Verbose output" \
+        "$analyzer_path --verbose --dry-run --current-version 1.0.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "=== Detailed Analysis ==="
+    
+    # Test verbose output contains specific sections
+    local verbose_output
+    verbose_output=$("$analyzer_path" --verbose --dry-run --current-version 1.0.0 --commit-range HEAD~1..HEAD 2>&1)
+    
+    if echo "$verbose_output" | grep -q "=== Configuration Used ==="; then
+        log_success "✓ Verbose config section present"
+        ((TESTS_PASSED++))
+    else
+        log_error "✗ Verbose config section missing"
+        ((TESTS_FAILED++))
+    fi
+    
+    if echo "$verbose_output" | grep -q "=== Bonus Breakdown ==="; then
+        log_success "✓ Verbose bonus section present"
+        ((TESTS_PASSED++))
+    else
+        log_error "✗ Verbose bonus section missing"
+        ((TESTS_FAILED++))
+    fi
+    
+    if echo "$verbose_output" | grep -q "=== Multiplier Breakdown ==="; then
+        log_success "✓ Verbose multiplier section present"
+        ((TESTS_PASSED++))
+    else
+        log_error "✗ Verbose multiplier section missing"
+        ((TESTS_FAILED++))
+    fi
+    
+    if echo "$verbose_output" | grep -q "=== Penalty Breakdown ==="; then
+        log_success "✓ Verbose penalty section present"
+        ((TESTS_PASSED++))
+    else
+        log_error "✗ Verbose penalty section missing"
+        ((TESTS_FAILED++))
+    fi
+}
+
+# Test 7: Force flag
+test_force_flag() {
+    local test_dir="$1"
+    local analyzer_path="$2"
+    
+    cd "$test_dir"
+    
+    echo "=== Testing Force Flag ==="
+    
+    # Create initial version
+    echo "1.0.0" > VERSION
+    
+    # Test actual file update with force
+    create_test_commit "fix: minor fix"
+    run_test "Actual file update with force" \
+        "$analyzer_path --force --current-version 1.0.0 --commit-range HEAD~1..HEAD" \
+        "0" \
+        "Updated VERSION from 1.0.0 to 1.0.1"
+    
+    # Verify file was updated
+    if [[ "$(cat VERSION)" == "1.0.1" ]]; then
+        log_success "✓ VERSION file updated correctly"
+        ((TESTS_PASSED++))
+    else
+        log_error "✗ VERSION file not updated correctly"
+        ((TESTS_FAILED++))
+    fi
+}
+
+# Test 8: YAML configuration
+test_yaml_configuration() {
+    local test_dir="$1"
+    local analyzer_path="$2"
+    
+    cd "$test_dir"
+    
+    echo "=== Testing YAML Configuration ==="
+    
+    # Create custom YAML config
+    cat > custom_config.yml <<EOF
+base_deltas:
+  patch: "2"
+  minor: "8"
+  major: "15"
+limits:
+  loc_cap: 5000
+  rollover: 50
+thresholds:
+  major_bonus: 10
+  minor_bonus: 6
+  patch_bonus: 1
+loc_divisors:
+  major: 800
+  minor: 400
+  patch: 200
+patterns:
+  performance:
+    memory_reduction_threshold: 25
+    build_time_threshold: 40
+    perf_50_threshold: 40
+  early_exit:
+    bonus_threshold: 10
+EOF
+    
+    # Test custom configuration
+    create_test_commit "fix: minor bug fix"
+    run_test "Custom YAML configuration" \
+        "$analyzer_path --dry-run --current-version 1.0.0 --commit-range HEAD~1..HEAD --config custom_config.yml" \
+        "0" \
+        "VERSION_BUMP: 1.0.0 -> 1.0.2 (PATCH)"
+    
+    # Test missing YAML file
+    run_test "Missing YAML file" \
+        "$analyzer_path --dry-run --current-version 1.0.2 --commit-range HEAD~1..HEAD --config nonexistent.yml" \
+        "0" \
+        "VERSION_BUMP: 1.0.2 -> 1.0.3 (PATCH)"
+}
+
+# Test 9: Key features check
 test_key_features() {
     echo "=== Testing Key Features ==="
     
+    local analyzer_path="$1"
+    
     # Check if it has YAML configuration support
-    if grep -q "yq eval" ../dev-bin/semantic-version-analyzer; then
+    if grep -q "yq eval" "$analyzer_path"; then
         log_success "✓ Has YAML configuration support"
         ((TESTS_PASSED++))
     else
@@ -157,7 +494,7 @@ test_key_features() {
     fi
     
     # Check if it has CI-friendly output
-    if grep -q "VERSION_BUMP:" ../dev-bin/semantic-version-analyzer; then
+    if grep -q "VERSION_BUMP:" "$analyzer_path"; then
         log_success "✓ Has CI-friendly VERSION_BUMP output"
         ((TESTS_PASSED++))
     else
@@ -166,7 +503,7 @@ test_key_features() {
     fi
     
     # Check if it has extensible configuration
-    if grep -q "\\-\\-config" ../dev-bin/semantic-version-analyzer; then
+    if grep -q "\\-\\-config" "$analyzer_path"; then
         log_success "✓ Has --config option for extensible configuration"
         ((TESTS_PASSED++))
     else
@@ -175,7 +512,7 @@ test_key_features() {
     fi
     
     # Check if it has performance optimizations
-    if grep -q "early exit" ../dev-bin/semantic-version-analyzer; then
+    if grep -q "early exit" "$analyzer_path"; then
         log_success "✓ Has early exit performance optimization"
         ((TESTS_PASSED++))
     else
@@ -184,7 +521,7 @@ test_key_features() {
     fi
     
     # Check if it has bonus system
-    if grep -q "declare -A BONUS" ../dev-bin/semantic-version-analyzer; then
+    if grep -q "declare -A BONUS" "$analyzer_path"; then
         log_success "✓ Has bonus system"
         ((TESTS_PASSED++))
     else
@@ -193,7 +530,7 @@ test_key_features() {
     fi
     
     # Check if it has multiplier system
-    if grep -q "declare -A MULT" ../dev-bin/semantic-version-analyzer; then
+    if grep -q "declare -A MULT" "$analyzer_path"; then
         log_success "✓ Has multiplier system"
         ((TESTS_PASSED++))
     else
@@ -202,184 +539,60 @@ test_key_features() {
     fi
     
     # Check if it has penalty system
-    if grep -q "declare -A PEN" ../dev-bin/semantic-version-analyzer; then
+    if grep -q "declare -A PEN" "$analyzer_path"; then
         log_success "✓ Has penalty system"
         ((TESTS_PASSED++))
     else
         log_warn "⚠ No penalty system detected"
         ((TESTS_FAILED++))
     fi
-    
-    # Check if it has LOC capping
-    if grep -q "LOC_CAP" ../dev-bin/semantic-version-analyzer; then
-        log_success "✓ Has LOC capping"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No LOC capping detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check if it has version rollover
-    if grep -q "RADIX" ../dev-bin/semantic-version-analyzer; then
-        log_success "✓ Has version rollover (RADIX)"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No version rollover detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check if it has decision tree
-    if grep -q "change_type" ../dev-bin/semantic-version-analyzer; then
-        log_success "✓ Has decision tree for change classification"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No decision tree detected"
-        ((TESTS_FAILED++))
-    fi
-}
-
-# Test 4: Pattern matching tests
-test_pattern_matching() {
-    echo "=== Testing Pattern Matching ==="
-    
-    # Check for breaking change patterns
-    if grep -q "breaking change" ../dev-bin/semantic-version-analyzer; then
-        log_success "✓ Has breaking change pattern matching"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No breaking change pattern matching detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check for security vulnerability patterns
-    if grep -q "cve-" ../dev-bin/semantic-version-analyzer; then
-        log_success "✓ Has CVE pattern matching"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No CVE pattern matching detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check for performance patterns
-    if grep -q "perf|performance" ../dev-bin/semantic-version-analyzer; then
-        log_success "✓ Has performance pattern matching"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No performance pattern matching detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check for feature patterns
-    if grep -q "feat:" ../dev-bin/semantic-version-analyzer; then
-        log_success "✓ Has feature pattern matching"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No feature pattern matching detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check for database schema patterns
-    if grep -q "database schema" ../dev-bin/semantic-version-analyzer; then
-        log_success "✓ Has database schema pattern matching"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No database schema pattern matching detected"
-        ((TESTS_FAILED++))
-    fi
-}
-
-# Test 5: Configuration file tests
-test_configuration_file() {
-    echo "=== Testing Configuration File ==="
-    
-    # Check if configuration file exists
-    if [[ -f "../dev-config/versioning.yml" ]]; then
-        log_success "✓ Configuration file exists"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ Configuration file not found"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check if configuration file has required sections
-    if grep -q "base_deltas:" ../dev-config/versioning.yml; then
-        log_success "✓ Configuration has base_deltas section"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ Configuration missing base_deltas section"
-        ((TESTS_FAILED++))
-    fi
-    
-    if grep -q "thresholds:" ../dev-config/versioning.yml; then
-        log_success "✓ Configuration has thresholds section"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ Configuration missing thresholds section"
-        ((TESTS_FAILED++))
-    fi
-    
-    if grep -q "loc_divisors:" ../dev-config/versioning.yml; then
-        log_success "✓ Configuration has loc_divisors section"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ Configuration missing loc_divisors section"
-        ((TESTS_FAILED++))
-    fi
-    
-    if grep -q "patterns:" ../dev-config/versioning.yml; then
-        log_success "✓ Configuration has patterns section"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ Configuration missing patterns section"
-        ((TESTS_FAILED++))
-    fi
-}
-
-# Test 6: Basic functionality (if git repo available)
-test_basic_git_functionality() {
-    echo "=== Testing Basic Git Functionality ==="
-    
-    if git rev-parse --git-dir &>/dev/null; then
-        log_info "Git repository detected, testing basic functionality"
-        
-        # Test that the analyzer can be called with basic arguments
-        if ../dev-bin/semantic-version-analyzer --dry-run --current-version 1.0.0 --commit-range HEAD~1..HEAD &>/dev/null; then
-            log_success "✓ Basic functionality works (exit code 0)"
-            ((TESTS_PASSED++))
-        else
-            log_warn "⚠ Basic functionality test failed (may be expected in test environment)"
-            ((TESTS_FAILED++))
-        fi
-    else
-        log_info "No git repository, skipping basic functionality test"
-    fi
 }
 
 # Main test function
 main() {
-    echo "Comprehensive Semantic Version Analyzer Test Suite"
-    echo "================================================="
+    echo "Comprehensive Unified Semantic Version Analyzer Test"
+    echo "=================================================="
     echo
     
     # Check if analyzer exists
-    if [[ ! -f "../dev-bin/semantic-version-analyzer" ]]; then
-        log_error "✗ Semantic version analyzer not found: ../dev-bin/semantic-version-analyzer"
+    local analyzer_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../dev-bin/semantic-version-analyzer"
+    if [[ ! -f "$analyzer_path" ]]; then
+        log_error "Semantic version analyzer not found: $analyzer_path"
         exit 1
     fi
     
-    log_success "✓ Found semantic version analyzer"
-    echo
+    log_success "✓ Semantic version analyzer found"
+    
+    # Check if yq is available
+    if ! command -v yq >/dev/null 2>&1; then
+        log_warn "yq not found - YAML configuration tests may use defaults"
+    fi
+    
+    # Create temporary test environment
+    log_info "Setting up temporary test environment..."
+    local temp_dir
+    temp_dir=$(create_temp_test_env "semantic-version-analyzer-comprehensive")
+    log_success "✓ Temporary environment created: $temp_dir"
+    
+    # Use absolute path for analyzer since we're now in a different directory
+    analyzer_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../dev-bin/semantic-version-analyzer"
     
     # Run all test suites
-    test_basic_functionality
-    test_configuration_validation
-    test_key_features
-    test_pattern_matching
-    test_configuration_file
-    test_basic_git_functionality
+    test_basic_functionality "$temp_dir" "$analyzer_path"
+    test_configuration_validation "$temp_dir" "$analyzer_path"
+    test_core_version_calculation "$temp_dir" "$analyzer_path"
+    test_advanced_features "$temp_dir" "$analyzer_path"
+    test_edge_cases "$temp_dir" "$analyzer_path"
+    test_verbose_output "$temp_dir" "$analyzer_path"
+    test_force_flag "$temp_dir" "$analyzer_path"
+    test_yaml_configuration "$temp_dir" "$analyzer_path"
+    test_key_features "$analyzer_path"
+    
+    # Cleanup
+    cleanup_temp_test_env "$temp_dir"
     
     # Print summary
-    echo "================================================="
+    echo "=================================================="
     echo "Test Summary:"
     echo "  Tests Passed: $TESTS_PASSED"
     echo "  Tests Failed: $TESTS_FAILED"
