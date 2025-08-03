@@ -708,23 +708,20 @@ calculate_loc_delta() {
         loc=0
     fi
     
-    # Calculate base delta from LOC using configurable formulas
+    # Calculate base delta from LOC
     local base_delta=1
     case "$bump_type" in
         patch)
-            # Use VERSION_PATCH_DELTA formula with LOC substitution
-            local formula="${VERSION_PATCH_DELTA//LOC/$loc}"
-            base_delta=$(awk "BEGIN {printf \"%d\", $formula}" 2>/dev/null || echo "1")
+            # Calculate: 1*(1+LOC/250)
+            base_delta=$(awk "BEGIN {printf \"%d\", 1 * (1 + $loc / 250)}" 2>/dev/null || echo "1")
             ;;
         minor)
-            # Use VERSION_MINOR_DELTA formula with LOC substitution
-            local formula="${VERSION_MINOR_DELTA//LOC/$loc}"
-            base_delta=$(awk "BEGIN {printf \"%d\", $formula}" 2>/dev/null || echo "5")
+            # Calculate: 5*(1+LOC/500)
+            base_delta=$(awk "BEGIN {printf \"%d\", 5 * (1 + $loc / 500)}" 2>/dev/null || echo "5")
             ;;
         major)
-            # Use VERSION_MAJOR_DELTA formula with LOC substitution
-            local formula="${VERSION_MAJOR_DELTA//LOC/$loc}"
-            base_delta=$(awk "BEGIN {printf \"%d\", $formula}" 2>/dev/null || echo "10")
+            # Calculate: 10*(1+LOC/1000)
+            base_delta=$(awk "BEGIN {printf \"%d\", 10 * (1 + $loc / 1000)}" 2>/dev/null || echo "10")
             ;;
         *)
             base_delta=1
@@ -1317,49 +1314,37 @@ main() {
         case "$suggestion" in
             major)
                 printf 'Suggested bump: MAJOR version\n'
-                if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
-                    printf 'Reason: %s\n' "$(get_bump_reason)"
+                if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
+                    printf 'Reason: Breaking CLI changes detected\n'
+                elif [[ "${R[api_breaking]}" = "true" ]]; then
+                    printf 'Reason: API breaking changes detected\n'
+                elif [[ "$security_keywords" -gt 0 ]]; then
+                    printf 'Reason: Security/crash-related changes detected (%s keywords)\n' "$security_keywords"
                 else
-                    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
-                        printf 'Reason: Breaking CLI changes detected\n'
-                    elif [[ "${R[api_breaking]}" = "true" ]]; then
-                        printf 'Reason: API breaking changes detected\n'
-                    elif [[ "$security_keywords" -gt 0 ]]; then
-                        printf 'Reason: Security/crash-related changes detected (%s keywords)\n' "$security_keywords"
-                    else
-                        printf 'Reason: Very large code changes (%s lines)\n' "${R[diff_size]}"
-                    fi
+                    printf 'Reason: Very large code changes (%s lines)\n' "${R[diff_size]}"
                 fi
                 printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
                 ;;
             minor)
                 printf 'Suggested bump: MINOR version\n'
-                if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
-                    printf 'Reason: %s\n' "$(get_bump_reason)"
+                if [[ "${R[cli_changes]}" = "true" ]]; then
+                    printf 'Reason: New CLI options added\n'
+                elif [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
+                    printf 'Reason: Manual CLI changes detected\n'
+                elif [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
+                    printf 'Reason: New source files added (%s)\n' "${R[new_source_files]}"
+                elif [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
+                    printf 'Reason: New test files added (%s)\n' "${R[new_test_files]}"
+                elif [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
+                    printf 'Reason: New documentation added (%s)\n' "${R[new_doc_files]}"
                 else
-                    if [[ "${R[cli_changes]}" = "true" ]]; then
-                        printf 'Reason: New CLI options added\n'
-                    elif [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
-                        printf 'Reason: Manual CLI changes detected\n'
-                    elif [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
-                        printf 'Reason: New source files added (%s)\n' "${R[new_source_files]}"
-                    elif [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
-                        printf 'Reason: New test files added (%s)\n' "${R[new_test_files]}"
-                    elif [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
-                        printf 'Reason: New documentation added (%s)\n' "${R[new_doc_files]}"
-                    else
-                        printf 'Reason: New features or significant additions\n'
-                    fi
+                    printf 'Reason: New features or significant additions\n'
                 fi
                 printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
                 ;;
             patch)
                 printf 'Suggested bump: PATCH version\n'
-                if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
-                    printf 'Reason: %s\n' "$(get_bump_reason)"
-                else
-                    printf 'Reason: Significant modifications (%s files, %s lines)\n' "${R[modified_files]}" "${R[diff_size]}"
-                fi
+                printf 'Reason: Significant modifications (%s files, %s lines)\n' "${R[modified_files]}" "${R[diff_size]}"
                 printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
                 ;;
             none)
