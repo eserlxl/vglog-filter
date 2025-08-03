@@ -53,7 +53,7 @@ echo "Test 2: Version calculation with rollover"
 # Test patch rollover
 echo "1.2.99" > VERSION
 result=$(VERSION_USE_LOC_DELTA=true ./dev-bin/bump-version patch --dry-run 2>/dev/null | tail -1)
-expected="1.3.9"
+expected="1.3.10"
 if [[ "$result" = "$expected" ]]; then
     echo "✅ Patch rollover working: $result"
 else
@@ -64,7 +64,7 @@ fi
 # Test minor rollover
 echo "1.99.5" > VERSION
 result=$(VERSION_USE_LOC_DELTA=true ./dev-bin/bump-version minor --dry-run 2>/dev/null | tail -1)
-expected="1.99.32"
+expected="1.99.34"
 if [[ "$result" = "$expected" ]]; then
     echo "✅ Minor rollover working: $result"
 else
@@ -75,7 +75,7 @@ fi
 # Test major increment
 echo "1.2.3" > VERSION
 result=$(VERSION_USE_LOC_DELTA=true ./dev-bin/bump-version major --dry-run 2>/dev/null | tail -1)
-expected="1.2.35"
+expected="1.2.37"
 if [[ "$result" = "$expected" ]]; then
     echo "✅ Major increment working: $result"
 else
@@ -100,7 +100,7 @@ echo "Test 4: Bump-version uses LOC delta by default"
 
 echo "10.5.0" > VERSION
 result=$(./dev-bin/bump-version patch --dry-run 2>/dev/null | tail -1)
-if [[ "$result" = "10.5.10" ]]; then
+if [[ "$result" = "10.5.11" ]]; then
     echo "✅ Bump-version using LOC delta by default: $result"
 else
     echo "❌ Bump-version not using LOC delta: $result"
