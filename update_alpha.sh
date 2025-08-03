@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+# Check if we are on alpha branch
+current_branch=$(git branch --show-current)
+if [ "$current_branch" != "alpha" ]; then
+    echo "Error: This script must be run on the alpha branch. Current branch: $current_branch"
+    exit 1
+fi
+
 # Configure Git identity once (or put in ~/.gitconfig)
 git config --global user.name "🤖"
 git config user.email "lxldev.contact@gmail.com"
