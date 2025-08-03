@@ -63,7 +63,12 @@ Options:
   --suggest-only           Output only the suggestion (major/minor/patch/none)
   --help, -h               Show this help
 
-Environment Variables:
+Configuration:
+  The script loads configuration from dev-config/versioning.yml if available.
+  If yq is not installed or the config file is missing, it falls back to
+  environment variables.
+
+Environment Variables (fallback):
   MIN_MAJOR_DIFF_LINES     Minimum lines for major bump (default: 10000)
   MIN_MINOR_DIFF_LINES     Minimum lines for minor bump (default: 50)
   MIN_PATCH_DIFF_LINES     Minimum lines for patch bump (default: 500)
@@ -118,6 +123,8 @@ Notes:
   - Header prototype detection is restricted to include/** or src/** header files with semicolon endings
   - Manual CLI detection (--verbose or not) scans for added/removed --[[:alnum:]-]+ tokens in C/C++ source files
   - JSON output includes manual_added_long_count and manual_removed_long_count fields
+  - Early exit optimization: if bonus threshold is met, skips expensive LOC calculation
+  - Configuration validation: LOC divisors must be > 0, multipliers must be numeric
 EOF
 }
 
@@ -137,7 +144,131 @@ IGNORE_WHITESPACE=false
 SUGGEST_ONLY=false
 ONLY_PATHS=""
 
+# --- configuration loading ----------------------------------------------------
+
+# Configuration file path
+CONFIG_FILE="dev-config/versioning.yml"
+
+# Load configuration from YAML file with validation
+load_config() {
+    # Check if yq is available
+    if ! command -v yq >/dev/null 2>&1; then
+        printf 'Warning: yq not found, using default configuration\n' >&2
+        return 1
+    fi
+    
+    # Check if config file exists
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        printf 'Warning: Configuration file %s not found, using defaults\n' "$CONFIG_FILE" >&2
+        return 1
+    fi
+    
+    # Load and validate configuration
+    local config_content
+    config_content=$(yq eval '.' "$CONFIG_FILE" 2>/dev/null || true)
+    if [[ -z "$config_content" ]]; then
+        printf 'Warning: Failed to parse configuration file %s, using defaults\n' "$CONFIG_FILE" >&2
+        return 1
+    fi
+    
+    # Helper function to safely extract numeric values
+    safe_numeric() {
+        local value
+        value=$(yq eval "$1" "$CONFIG_FILE" 2>/dev/null || printf '')
+        if [[ -n "$value" ]] && [[ "$value" =~ ^[0-9.]+$ ]]; then
+            printf '%s' "$value"
+        else
+            printf ''
+        fi
+    }
+    
+    # Helper function to safely extract string values
+    safe_string() {
+        local value
+        value=$(yq eval "$1" "$CONFIG_FILE" 2>/dev/null || printf '')
+        if [[ -n "$value" ]]; then
+            printf '%s' "$value"
+        else
+            printf ''
+        fi
+    }
+    
+    # Load base deltas
+    BASE_DELTA_PATCH=$(safe_numeric '.base_deltas.patch')
+    BASE_DELTA_MINOR=$(safe_numeric '.base_deltas.minor')
+    BASE_DELTA_MAJOR=$(safe_numeric '.base_deltas.major')
+    
+    # Load limits
+    LOC_CAP=$(safe_numeric '.limits.loc_cap')
+    ROLLOVER=$(safe_numeric '.limits.rollover')
+    
+    # Load thresholds
+    MAJOR_BONUS_THRESHOLD=$(safe_numeric '.thresholds.major_bonus')
+    MINOR_BONUS_THRESHOLD=$(safe_numeric '.thresholds.minor_bonus')
+    PATCH_BONUS_THRESHOLD=$(safe_numeric '.thresholds.patch_bonus')
+    
+    # Load LOC divisors with validation
+    LOC_DIVISOR_MAJOR=$(safe_numeric '.loc_divisors.major')
+    LOC_DIVISOR_MINOR=$(safe_numeric '.loc_divisors.minor')
+    LOC_DIVISOR_PATCH=$(safe_numeric '.loc_divisors.patch')
+    
+    # Validate LOC divisors (guard against zero)
+    for divisor_name in "major" "minor" "patch"; do
+        local divisor_var="LOC_DIVISOR_${divisor_name^^}"
+        local divisor_value="${!divisor_var}"
+        if [[ -n "$divisor_value" ]] && [[ "$divisor_value" -le 0 ]]; then
+            printf 'Error: Invalid LOC divisor for %s: %s (must be > 0)\n' "$divisor_name" "$divisor_value" >&2
+            exit 1
+        fi
+    done
+    
+    # Load early exit configuration
+    EARLY_EXIT_BONUS_THRESHOLD=$(safe_numeric '.patterns.early_exit.bonus_threshold')
+    EARLY_EXIT_CHANGE_TYPE=$(safe_string '.patterns.early_exit.change_type')
+    
+    # Load performance thresholds
+    MEMORY_REDUCTION_THRESHOLD=$(safe_numeric '.patterns.performance.memory_reduction_threshold')
+    BUILD_TIME_THRESHOLD=$(safe_numeric '.patterns.performance.build_time_threshold')
+    PERF_50_THRESHOLD=$(safe_numeric '.patterns.performance.perf_50_threshold')
+    
+    # Load bonus values
+    BONUS_API_BREAKING=$(safe_numeric '.bonuses.breaking_changes.api_breaking')
+    BONUS_CLI_BREAKING=$(safe_numeric '.bonuses.breaking_changes.cli_breaking')
+    BONUS_SECURITY_VULN=$(safe_numeric '.bonuses.security_stability.security_vuln')
+    BONUS_CVE=$(safe_numeric '.bonuses.security_stability.cve')
+    BONUS_MEMORY_SAFETY=$(safe_numeric '.bonuses.security_stability.memory_safety')
+    BONUS_CRASH_FIX=$(safe_numeric '.bonuses.security_stability.crash_fix')
+    BONUS_NEW_CLI_COMMAND=$(safe_numeric '.bonuses.features.new_cli_command')
+    BONUS_NEW_CONFIG_OPTION=$(safe_numeric '.bonuses.features.new_config_option')
+    BONUS_NEW_SOURCE_FILE=$(safe_numeric '.bonuses.code_quality.new_test_suite')
+    BONUS_NEW_TEST_FILE=$(safe_numeric '.bonuses.code_quality.new_test_suite')
+    BONUS_NEW_DOC_FILE=$(safe_numeric '.bonuses.code_quality.doc_overhaul')
+    
+    # Load multipliers with validation
+    MULTIPLIER_ZERO_DAY=$(safe_numeric '.multipliers.critical.zero_day')
+    MULTIPLIER_PRODUCTION_OUTAGE=$(safe_numeric '.multipliers.critical.production_outage')
+    MULTIPLIER_COMPLIANCE=$(safe_numeric '.multipliers.critical.compliance')
+    
+    # Validate multipliers (must be positive)
+    for multiplier_name in "zero_day" "production_outage" "compliance"; do
+        local multiplier_var="MULTIPLIER_${multiplier_name^^}"
+        local multiplier_value="${!multiplier_var}"
+        if [[ -n "$multiplier_value" ]] && [[ ! "$multiplier_value" =~ ^[0-9.]+$ ]]; then
+            printf 'Error: Invalid multiplier for %s: %s (must be numeric)\n' "$multiplier_name" "$multiplier_value" >&2
+            exit 1
+        fi
+    done
+    
+    return 0
+}
+
 # --- defaults / config --------------------------------------------------------
+
+# Load configuration from YAML file
+if ! load_config; then
+    # Fallback to environment variables with defaults
+    printf 'Using fallback configuration from environment variables\n' >&2
+fi
 
 # Configurable thresholds (can be overridden by environment)
 MIN_MAJOR_DIFF_LINES="${MIN_MAJOR_DIFF_LINES:-10000}"
@@ -149,25 +280,45 @@ MIN_NEW_TEST_FILES="${MIN_NEW_TEST_FILES:-3}"
 MIN_NEW_DOC_FILES="${MIN_NEW_DOC_FILES:-2}"
 MAJOR_REQUIRE_BREAKING="${MAJOR_REQUIRE_BREAKING:-true}"
 
-# LOC-based delta system configuration
-VERSION_PATCH_LIMIT="${VERSION_PATCH_LIMIT:-100}"
-VERSION_MINOR_LIMIT="${VERSION_MINOR_LIMIT:-100}"
-VERSION_PATCH_DELTA="${VERSION_PATCH_DELTA:-1*(1+LOC/250)}"
-VERSION_MINOR_DELTA="${VERSION_MINOR_DELTA:-5*(1+LOC/500)}"
-VERSION_MAJOR_DELTA="${VERSION_MAJOR_DELTA:-10*(1+LOC/1000)}"
+# LOC-based delta system configuration (use config values if available)
+VERSION_PATCH_LIMIT="${VERSION_PATCH_LIMIT:-${ROLLOVER:-100}}"
+VERSION_MINOR_LIMIT="${VERSION_MINOR_LIMIT:-${ROLLOVER:-100}}"
 VERSION_USE_LOC_DELTA="${VERSION_USE_LOC_DELTA:-true}"
 
-# Bonus system configuration
-VERSION_BREAKING_CLI_BONUS="${VERSION_BREAKING_CLI_BONUS:-2}"
-VERSION_API_BREAKING_BONUS="${VERSION_API_BREAKING_BONUS:-3}"
+# Use config divisors if available, otherwise fallback to hardcoded formulas
+if [[ -n "${LOC_DIVISOR_PATCH:-}" ]]; then
+    VERSION_PATCH_DELTA="${BASE_DELTA_PATCH:-1}*(1+LOC/$LOC_DIVISOR_PATCH)"
+else
+    VERSION_PATCH_DELTA="${VERSION_PATCH_DELTA:-1*(1+LOC/250)}"
+fi
+
+if [[ -n "${LOC_DIVISOR_MINOR:-}" ]]; then
+    VERSION_MINOR_DELTA="${BASE_DELTA_MINOR:-5}*(1+LOC/$LOC_DIVISOR_MINOR)"
+else
+    VERSION_MINOR_DELTA="${VERSION_MINOR_DELTA:-5*(1+LOC/500)}"
+fi
+
+if [[ -n "${LOC_DIVISOR_MAJOR:-}" ]]; then
+    VERSION_MAJOR_DELTA="${BASE_DELTA_MAJOR:-10}*(1+LOC/$LOC_DIVISOR_MAJOR)"
+else
+    VERSION_MAJOR_DELTA="${VERSION_MAJOR_DELTA:-10*(1+LOC/1000)}"
+fi
+
+# Bonus system configuration (use config values if available)
+VERSION_BREAKING_CLI_BONUS="${VERSION_BREAKING_CLI_BONUS:-${BONUS_CLI_BREAKING:-2}}"
+VERSION_API_BREAKING_BONUS="${VERSION_API_BREAKING_BONUS:-${BONUS_API_BREAKING:-3}}"
 VERSION_REMOVED_OPTION_BONUS="${VERSION_REMOVED_OPTION_BONUS:-1}"
 VERSION_CLI_CHANGES_BONUS="${VERSION_CLI_CHANGES_BONUS:-2}"
 VERSION_MANUAL_CLI_BONUS="${VERSION_MANUAL_CLI_BONUS:-1}"
-VERSION_NEW_SOURCE_BONUS="${VERSION_NEW_SOURCE_BONUS:-1}"
-VERSION_NEW_TEST_BONUS="${VERSION_NEW_TEST_BONUS:-1}"
-VERSION_NEW_DOC_BONUS="${VERSION_NEW_DOC_BONUS:-1}"
-VERSION_ADDED_OPTION_BONUS="${VERSION_ADDED_OPTION_BONUS:-1}"
-VERSION_SECURITY_BONUS="${VERSION_SECURITY_BONUS:-2}"
+VERSION_NEW_SOURCE_BONUS="${VERSION_NEW_SOURCE_BONUS:-${BONUS_NEW_SOURCE_FILE:-1}}"
+VERSION_NEW_TEST_BONUS="${VERSION_NEW_TEST_BONUS:-${BONUS_NEW_TEST_FILE:-1}}"
+VERSION_NEW_DOC_BONUS="${VERSION_NEW_DOC_BONUS:-${BONUS_NEW_DOC_FILE:-1}}"
+VERSION_ADDED_OPTION_BONUS="${VERSION_ADDED_OPTION_BONUS:-${BONUS_NEW_CONFIG_OPTION:-1}}"
+VERSION_SECURITY_BONUS="${VERSION_SECURITY_BONUS:-${BONUS_SECURITY_VULN:-2}}"
+
+# Early exit configuration
+EARLY_EXIT_BONUS_THRESHOLD="${EARLY_EXIT_BONUS_THRESHOLD:-8}"
+EARLY_EXIT_CHANGE_TYPE="${EARLY_EXIT_CHANGE_TYPE:-major}"
 
 # Normalize MAJOR_REQUIRE_BREAKING once for consistency
 REQ="${MAJOR_REQUIRE_BREAKING,,}"
@@ -619,6 +770,91 @@ sum_numstat() {
     printf '%s' $((total_ins + total_del))
 }
 
+# Fast bonus scoring for early exit optimization
+score_commits_fast() {
+    local base_ref="$1"
+    local target_ref="$2"
+    local total_bonus=0
+    
+    # Initialize basic counters
+    R[added_files]=0
+    R[modified_files]=0
+    R[deleted_files]=0
+    R[new_source_files]=0
+    R[new_test_files]=0
+    R[new_doc_files]=0
+    R[cli_changes]=false
+    R[breaking_cli_changes]=false
+    R[api_breaking]=false
+    R[security_keywords]=0
+    R[manual_cli_changes]=false
+    R[manual_added_long_count]=0
+    R[manual_removed_long_count]=0
+    R[removed_short_count]=0
+    R[added_short_count]=0
+    R[removed_long_count]=0
+    R[added_long_count]=0
+    
+    # Quick file status analysis (no diff content)
+    while IFS= read -r -d '' status; do
+        local path1 path2 file
+        IFS= read -r -d '' path1
+        file="$path1"
+        case "${status:0:1}" in
+            R|C)
+                IFS= read -r -d '' path2
+                file="$path2"
+                ;;
+        esac
+
+        case "${status:0:1}" in
+            A) R[added_files]=$((R[added_files] + 1)); inc_counters_for "$file" ;;
+            M|T) R[modified_files]=$((R[modified_files] + 1)) ;;
+            D)   R[deleted_files]=$((R[deleted_files] + 1)) ;;
+            R)   R[modified_files]=$((R[modified_files] + 1)) ;;
+            C)   R[added_files]=$((R[added_files] + 1)); inc_counters_for "$file" ;;
+        esac
+    done < <(if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
+        git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" 2>/dev/null
+    else
+        git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" 2>/dev/null
+    fi)
+    
+    # Quick CLI options detection (fast path)
+    extract_cli_options "$base_ref" "$target_ref"
+    
+    # Calculate bonus from fast analysis
+    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_BREAKING_CLI_BONUS))
+    fi
+    if [[ "${R[api_breaking]}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_API_BREAKING_BONUS))
+    fi
+    if [[ "${R[cli_changes]}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_CLI_CHANGES_BONUS))
+    fi
+    if [[ "${R[manual_cli_changes]}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_MANUAL_CLI_BONUS))
+    fi
+    if [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_NEW_SOURCE_BONUS))
+    fi
+    if [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_NEW_TEST_BONUS))
+    fi
+    if [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_NEW_DOC_BONUS))
+    fi
+    if [[ "${R[removed_short_count]:-0}" -gt 0 ]] || [[ "${R[removed_long_count]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_REMOVED_OPTION_BONUS))
+    fi
+    if [[ "${R[added_short_count]:-0}" -gt 0 ]] || [[ "${R[added_long_count]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_ADDED_OPTION_BONUS))
+    fi
+    
+    printf '%d' "$total_bonus"
+}
+
 # Enhanced change analysis with better diff parsing and rename/copy handling
 analyze_changes() {
     local base_ref="$1"
@@ -878,64 +1114,81 @@ calculate_next_version() {
 
 # Determine version bump suggestion based on improved rules
 suggest_version_bump() {
-    # Halve all thresholds if API breaking change detected
-    local major_lines minor_sources minor_tests minor_docs patch_files patch_lines
-    major_lines="$MIN_MAJOR_DIFF_LINES"
-    minor_sources="$MIN_NEW_SOURCE_FILES"
-    minor_tests="$MIN_NEW_TEST_FILES"
-    minor_docs="$MIN_NEW_DOC_FILES"
-    patch_files="$MIN_PATCH_FILES"
-    patch_lines="$MIN_PATCH_DIFF_LINES"
-    if [[ "${R[api_breaking]}" = "true" ]]; then
-        major_lines=$(awk "BEGIN {printf \"%d\", $major_lines * 0.5}")
-        minor_sources=$(awk "BEGIN {printf \"%d\", $minor_sources * 0.5}")
-        minor_tests=$(awk "BEGIN {printf \"%d\", $minor_tests * 0.5}")
-        minor_docs=$(awk "BEGIN {printf \"%d\", $minor_docs * 0.5}")
-        patch_files=$(awk "BEGIN {printf \"%d\", $patch_files * 0.5}")
-        patch_lines=$(awk "BEGIN {printf \"%d\", $patch_lines * 0.5}")
-    fi
-    # MAJOR: Breaking, security, or very large changes (if not requiring breaking)
-    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then printf 'major'; return; fi
-    if [[ "${R[api_breaking]}" = "true"      ]]; then printf 'major'; return; fi
+    # Use configuration thresholds if available, otherwise fallback to environment variables
+    local major_bonus_threshold="${MAJOR_BONUS_THRESHOLD:-8}"
+    local minor_bonus_threshold="${MINOR_BONUS_THRESHOLD:-4}"
+    local patch_bonus_threshold="${PATCH_BONUS_THRESHOLD:-0}"
     
-    # Ensure security_keywords is numeric
+    # Calculate total bonus from all sources
+    local total_bonus=0
+    
+    # Breaking changes (high priority)
+    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_BREAKING_CLI_BONUS))
+    fi
+    if [[ "${R[api_breaking]}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_API_BREAKING_BONUS))
+    fi
+    
+    # Security and stability
     local security_keywords="${R[security_keywords]:-0}"
     if [[ ! "$security_keywords" =~ ^[0-9]+$ ]]; then
         security_keywords=0
     fi
-    if [[ "$security_keywords" -gt 0 ]]; then printf 'major'; return; fi
+    if [[ "$security_keywords" -gt 0 ]]; then
+        total_bonus=$((total_bonus + security_keywords * VERSION_SECURITY_BONUS))
+    fi
     
-    # Ensure diff_size is numeric
+    # Feature additions
+    if [[ "${R[cli_changes]}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_CLI_CHANGES_BONUS))
+    fi
+    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_MANUAL_CLI_BONUS))
+    fi
+    if [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_NEW_SOURCE_BONUS))
+    fi
+    if [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_NEW_TEST_BONUS))
+    fi
+    if [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_NEW_DOC_BONUS))
+    fi
+    if [[ "${R[added_short_count]:-0}" -gt 0 ]] || [[ "${R[added_long_count]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_ADDED_OPTION_BONUS))
+    fi
+    
+    # Removed features
+    if [[ "${R[removed_short_count]:-0}" -gt 0 ]] || [[ "${R[removed_long_count]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_REMOVED_OPTION_BONUS))
+    fi
+    
+    # LOC-based adjustments (if available)
     local diff_size="${R[diff_size]:-0}"
     if [[ ! "$diff_size" =~ ^[0-9]+$ ]]; then
         diff_size=0
     fi
-    if [[ "$diff_size" -gt "$major_lines" ]]; then
-        if [[ "$REQ" = "true" || "$REQ" = "1" || "$REQ" = "yes" ]]; then
-            :
-        else
-            printf 'major'; return
-        fi
-    fi
-    # MINOR: New CLI or notable new content
-    if [[ "${R[cli_changes]}" = "true" ]]; then printf 'minor'; return; fi
-    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then printf 'minor'; return; fi
-    if [[ "${R[new_source_files]:-0}" -ge "$minor_sources" ]]; then printf 'minor'; return; fi
-    if [[ "${R[new_test_files]:-0}"  -ge "$minor_tests"  ]]; then printf 'minor'; return; fi
-    if [[ "${R[new_doc_files]:-0}"   -ge "$minor_docs"   ]]; then printf 'minor'; return; fi
-    # PATCH: Any significant modifications or any changes at all
-    local modified_files="${R[modified_files]:-0}"
-    if [[ ! "$modified_files" =~ ^[0-9]+$ ]]; then
-        modified_files=0
+    
+    # Apply LOC-based bonuses for large changes
+    if [[ "$diff_size" -gt 10000 ]]; then
+        total_bonus=$((total_bonus + 3))  # Large change bonus
+    elif [[ "$diff_size" -gt 5000 ]]; then
+        total_bonus=$((total_bonus + 2))  # Medium change bonus
+    elif [[ "$diff_size" -gt 1000 ]]; then
+        total_bonus=$((total_bonus + 1))  # Small change bonus
     fi
     
-    # Any changes should result in at least a patch bump
-    # The thresholds are now used only for determining the type, not whether to bump
-    if [[ "$modified_files" -gt 0 ]] || [[ "$diff_size" -gt 0 ]]; then
-        printf 'patch'; return
+    # Decision based on total bonus
+    if [[ "$total_bonus" -ge "$major_bonus_threshold" ]]; then
+        printf 'major'
+    elif [[ "$total_bonus" -ge "$minor_bonus_threshold" ]]; then
+        printf 'minor'
+    elif [[ "$total_bonus" -ge "$patch_bonus_threshold" ]] || [[ "${R[modified_files]:-0}" -gt 0 ]] || [[ "$diff_size" -gt 0 ]]; then
+        printf 'patch'
+    else
+        printf 'none'
     fi
-    
-    printf 'none'
 }
 
 # Determine the reason for the version bump suggestion
@@ -949,84 +1202,98 @@ get_bump_reason() {
         loc=0
     fi
     
-    # MAJOR reasons
-    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then 
+    # Calculate total bonus (same logic as suggest_version_bump)
+    local total_bonus=0
+    local bonus_details=()
+    
+    # Breaking changes (high priority)
+    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_BREAKING_CLI_BONUS))
+        bonus_details+=("breaking_cli:+${VERSION_BREAKING_CLI_BONUS}")
+    fi
+    if [[ "${R[api_breaking]}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_API_BREAKING_BONUS))
+        bonus_details+=("api_break:+${VERSION_API_BREAKING_BONUS}")
+    fi
+    
+    # Security and stability
+    local security_keywords="${R[security_keywords]:-0}"
+    if [[ ! "$security_keywords" =~ ^[0-9]+$ ]]; then
+        security_keywords=0
+    fi
+    if [[ "$security_keywords" -gt 0 ]]; then
+        local security_bonus=$((security_keywords * VERSION_SECURITY_BONUS))
+        total_bonus=$((total_bonus + security_bonus))
+        bonus_details+=("security:+${security_bonus}")
+    fi
+    
+    # Feature additions
+    if [[ "${R[cli_changes]}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_CLI_CHANGES_BONUS))
+        bonus_details+=("cli_changes:+${VERSION_CLI_CHANGES_BONUS}")
+    fi
+    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
+        total_bonus=$((total_bonus + VERSION_MANUAL_CLI_BONUS))
+        bonus_details+=("manual_cli:+${VERSION_MANUAL_CLI_BONUS}")
+    fi
+    if [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_NEW_SOURCE_BONUS))
+        bonus_details+=("new_src:+${VERSION_NEW_SOURCE_BONUS}")
+    fi
+    if [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_NEW_TEST_BONUS))
+        bonus_details+=("new_tests:+${VERSION_NEW_TEST_BONUS}")
+    fi
+    if [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_NEW_DOC_BONUS))
+        bonus_details+=("new_docs:+${VERSION_NEW_DOC_BONUS}")
+    fi
+    if [[ "${R[added_short_count]:-0}" -gt 0 ]] || [[ "${R[added_long_count]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_ADDED_OPTION_BONUS))
+        bonus_details+=("added_opts:+${VERSION_ADDED_OPTION_BONUS}")
+    fi
+    
+    # Removed features
+    if [[ "${R[removed_short_count]:-0}" -gt 0 ]] || [[ "${R[removed_long_count]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + VERSION_REMOVED_OPTION_BONUS))
+        bonus_details+=("removed_opts:+${VERSION_REMOVED_OPTION_BONUS}")
+    fi
+    
+    # LOC-based adjustments
+    if [[ "$loc" -gt 10000 ]]; then
+        total_bonus=$((total_bonus + 3))
+        bonus_details+=("large_loc:+3")
+    elif [[ "$loc" -gt 5000 ]]; then
+        total_bonus=$((total_bonus + 2))
+        bonus_details+=("medium_loc:+2")
+    elif [[ "$loc" -gt 1000 ]]; then
+        total_bonus=$((total_bonus + 1))
+        bonus_details+=("small_loc:+1")
+    fi
+    
+    # Determine version type based on bonus thresholds
+    local major_bonus_threshold="${MAJOR_BONUS_THRESHOLD:-8}"
+    local minor_bonus_threshold="${MINOR_BONUS_THRESHOLD:-4}"
+    local patch_bonus_threshold="${PATCH_BONUS_THRESHOLD:-0}"
+    
+    if [[ "$total_bonus" -ge "$major_bonus_threshold" ]]; then
         version_type="MAJOR"
-        base_reason="breaking_cli"
-    elif [[ "${R[api_breaking]}" = "true" ]]; then 
-        version_type="MAJOR"
-        base_reason="api_break"
+        base_reason="bonus_${total_bonus}_major"
+    elif [[ "$total_bonus" -ge "$minor_bonus_threshold" ]]; then
+        version_type="MINOR"
+        base_reason="bonus_${total_bonus}_minor"
+    elif [[ "$total_bonus" -ge "$patch_bonus_threshold" ]] || [[ "${R[modified_files]:-0}" -gt 0 ]] || [[ "$loc" -gt 0 ]]; then
+        version_type="PATCH"
+        base_reason="bonus_${total_bonus}_patch"
     else
-        # Ensure security_keywords is numeric for get_bump_reason
-        local security_keywords_reason="${R[security_keywords]:-0}"
-        if [[ ! "$security_keywords_reason" =~ ^[0-9]+$ ]]; then
-            security_keywords_reason=0
-        fi
-        if [[ "$security_keywords_reason" -gt 0 ]]; then 
-            version_type="MAJOR"
-            base_reason="security_keywords"
-        else
-            # Ensure diff_size is numeric for get_bump_reason
-            local diff_size_reason="${R[diff_size]:-0}"
-            if [[ ! "$diff_size_reason" =~ ^[0-9]+$ ]]; then
-                diff_size_reason=0
-            fi
-            if [[ "$diff_size_reason" -gt "$MIN_MAJOR_DIFF_LINES" ]]; then
-                if [[ "$REQ" = "true" || "$REQ" = "1" || "$REQ" = "yes" ]]; then
-                    # When MAJOR_REQUIRE_BREAKING is true, large diffs alone don't trigger major
-                    # Only breaking changes should trigger major
-                    :
-                else
-                    # When MAJOR_REQUIRE_BREAKING is false, large diffs can trigger major
-                    version_type="MAJOR"
-                    base_reason="large_diff"
-                fi
-            fi
-        fi
-    fi
-
-    # MINOR reasons (only if not already MAJOR)
-    if [[ -z "$version_type" ]]; then
-        if [[ "${R[cli_changes]}" = "true" ]]; then 
-            version_type="MINOR"
-            base_reason="cli_added"
-        elif [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then 
-            version_type="MINOR"
-            base_reason="cli_added"
-        elif [[ "${R[new_source_files]:-0}" -ge "$MIN_NEW_SOURCE_FILES" ]]; then 
-            version_type="MINOR"
-            base_reason="new_src"
-        elif [[ "${R[new_test_files]:-0}"  -ge "$MIN_NEW_TEST_FILES"  ]]; then 
-            version_type="MINOR"
-            base_reason="new_tests"
-        elif [[ "${R[new_doc_files]:-0}"   -ge "$MIN_NEW_DOC_FILES"   ]]; then 
-            version_type="MINOR"
-            base_reason="new_docs"
-        fi
-    fi
-
-    # PATCH reasons (only if not already MAJOR or MINOR)
-    if [[ -z "$version_type" ]]; then
-        local modified_files_reason="${R[modified_files]:-0}"
-        if [[ ! "$modified_files_reason" =~ ^[0-9]+$ ]]; then
-            modified_files_reason=0
-        fi
-        
-        # Any changes should result in at least a patch bump
-        if [[ "$modified_files_reason" -gt 0 ]] || [[ "$diff_size_reason" -gt 0 ]]; then
-            version_type="PATCH"
-            base_reason="mods_only"
-        fi
-    fi
-
-    # If no version type determined, return none
-    if [[ -z "$version_type" ]]; then
         printf 'none'
         return
     fi
     
-    # Return reason with LOC value and version update type
-    printf '%s (LOC: %s, %s)' "$base_reason" "$loc" "$version_type"
+    # Return reason with bonus details
+    local bonus_summary
+    bonus_summary=$(printf '%s' "${bonus_details[*]}" | tr ' ' ',' | tr '\n' ' ')
+    printf '%s (LOC: %s, %s, bonuses: %s)' "$base_reason" "$loc" "$version_type" "$bonus_summary"
 }
 
 # Simple JSON string escaper for safe values (quotes and backslashes)
@@ -1139,8 +1406,19 @@ main() {
     current_version=$(tr -d '[:space:]' < "$version_file" 2>/dev/null || printf '0.0.0')
     [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || current_version=0.0.0
 
-    # Analyze changes
-    analyze_changes "$base_ref" "$target_ref"
+    # Early exit optimization: check if bonus threshold is met before expensive LOC calculation
+    local bonus_only
+    bonus_only=$(score_commits_fast "$base_ref" "$target_ref")
+    
+    if [[ "$bonus_only" -ge "$EARLY_EXIT_BONUS_THRESHOLD" ]]; then
+        # Early exit: bonus threshold met, skip expensive LOC calculation
+        debug_output "DEBUG: Early exit triggered - bonus $bonus_only >= threshold $EARLY_EXIT_BONUS_THRESHOLD"
+        R[diff_size]=0  # Skip expensive diff calculation
+        # Use the fast analysis results that are already in R[]
+    else
+        # Full analysis needed - proceed with expensive LOC calculation
+        analyze_changes "$base_ref" "$target_ref"
+    fi
 
     # Determine suggestion and reason
     local suggestion
@@ -1296,7 +1574,23 @@ main() {
                 fi
                 printf '\n'
             fi
-            printf 'Thresholds:\n'
+            printf 'Configuration:\n'
+            if [[ -n "${MAJOR_BONUS_THRESHOLD:-}" ]]; then
+                printf '  Major bonus threshold: %s\n' "$MAJOR_BONUS_THRESHOLD"
+            fi
+            if [[ -n "${MINOR_BONUS_THRESHOLD:-}" ]]; then
+                printf '  Minor bonus threshold: %s\n' "$MINOR_BONUS_THRESHOLD"
+            fi
+            if [[ -n "${PATCH_BONUS_THRESHOLD:-}" ]]; then
+                printf '  Patch bonus threshold: %s\n' "$PATCH_BONUS_THRESHOLD"
+            fi
+            if [[ -n "${EARLY_EXIT_BONUS_THRESHOLD:-}" ]]; then
+                printf '  Early exit threshold: %s (change type: %s)\n' "$EARLY_EXIT_BONUS_THRESHOLD" "$EARLY_EXIT_CHANGE_TYPE"
+            fi
+            printf '  Rollover limit: %s\n' "$VERSION_PATCH_LIMIT"
+            printf '  LOC divisors: major=%s, minor=%s, patch=%s\n' "${LOC_DIVISOR_MAJOR:-1000}" "${LOC_DIVISOR_MINOR:-500}" "${LOC_DIVISOR_PATCH:-250}"
+            printf '\n'
+            printf 'Legacy thresholds (fallback):\n'
             printf '  Major: Breaking CLI changes or diff > %s lines (MAJOR_REQUIRE_BREAKING=%s)\n' "$MIN_MAJOR_DIFF_LINES" "$MAJOR_REQUIRE_BREAKING"
             printf '  Minor: CLI changes, new source files (≥%s), new test files (≥%s), new doc files (≥%s)\n' "$MIN_NEW_SOURCE_FILES" "$MIN_NEW_TEST_FILES" "$MIN_NEW_DOC_FILES"
             printf '  Patch: Modified files (≥%s) + diff > %s lines\n' "$MIN_PATCH_FILES" "$MIN_PATCH_DIFF_LINES"
