@@ -114,6 +114,7 @@ Exit codes:
   11 = minor version bump suggested
   12 = patch version bump suggested
   20 = no version bump suggested
+  Note: With --suggest-only (without --strict-status), always exits 0 unless fatal error
 
 Notes:
   - CLI option detection uses fold -w1 for short options (byte-based splitting)
@@ -167,7 +168,7 @@ load_config() {
     
     # Load and validate configuration
     local config_content
-    config_content=$(yq eval '.' "$CONFIG_FILE" 2>/dev/null || true)
+    config_content=$(yq '.' "$CONFIG_FILE" 2>/dev/null || true)
     if [[ -z "$config_content" ]]; then
         printf 'Warning: Failed to parse configuration file %s, using defaults\n' "$CONFIG_FILE" >&2
         return 1
@@ -176,7 +177,7 @@ load_config() {
     # Helper function to safely extract numeric values
     safe_numeric() {
         local value
-        value=$(yq eval "$1" "$CONFIG_FILE" 2>/dev/null || printf '')
+        value=$(yq "$1" "$CONFIG_FILE" 2>/dev/null || printf '')
         if [[ -n "$value" ]] && [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
             printf '%s' "$value"
         else
@@ -187,7 +188,7 @@ load_config() {
     # Helper function to safely extract string values
     safe_string() {
         local value
-        value=$(yq eval "$1" "$CONFIG_FILE" 2>/dev/null || printf '')
+        value=$(yq "$1" "$CONFIG_FILE" 2>/dev/null || printf '')
         if [[ -n "$value" ]]; then
             printf '%s' "$value"
         else
@@ -242,7 +243,7 @@ load_config() {
     BONUS_CRASH_FIX=$(safe_numeric '.bonuses.security_stability.crash_fix')
     BONUS_NEW_CLI_COMMAND=$(safe_numeric '.bonuses.features.new_cli_command')
     BONUS_NEW_CONFIG_OPTION=$(safe_numeric '.bonuses.features.new_config_option')
-    BONUS_NEW_SOURCE_FILE=$(safe_numeric '.bonuses.code_quality.new_test_suite')
+    BONUS_NEW_SOURCE_FILE=$(safe_numeric '.bonuses.features.new_source_file')
     BONUS_NEW_TEST_FILE=$(safe_numeric '.bonuses.code_quality.new_test_suite')
     BONUS_NEW_DOC_FILE=$(safe_numeric '.bonuses.code_quality.doc_overhaul')
     
@@ -253,12 +254,16 @@ load_config() {
     
     # Validate multipliers dynamically (must be positive)
     local multiplier_keys
-    multiplier_keys=$(yq eval '.multipliers.critical | keys | .[]' "$CONFIG_FILE" 2>/dev/null || printf '')
+    multiplier_keys=$(yq '.multipliers.critical | keys | .[]' "$CONFIG_FILE" 2>/dev/null || printf '')
     if [[ -n "$multiplier_keys" ]]; then
         while IFS= read -r multiplier_name; do
             [[ -n "$multiplier_name" ]] || continue
-            local multiplier_var="MULTIPLIER_${multiplier_name^^}"
-            local multiplier_value="${!multiplier_var}"
+            # Convert to uppercase and replace non-alphanumeric chars with underscore
+            local safe_name
+            safe_name=$(printf '%s' "$multiplier_name" | tr '[:lower:]' '[:upper:]' | tr -c '[:alnum:]' '_')
+            local multiplier_var="MULTIPLIER_${safe_name}"
+            local multiplier_value
+            multiplier_value="${!multiplier_var:-}"
             if [[ -n "$multiplier_value" ]] && [[ ! "$multiplier_value" =~ ^[0-9.]+$ ]]; then
                 printf 'Error: Invalid multiplier for %s: %s (must be numeric)\n' "$multiplier_name" "$multiplier_value" >&2
                 exit 1
@@ -820,7 +825,7 @@ score_commits_fast() {
             M|T) R[modified_files]=$((R[modified_files] + 1)) ;;
             D)   R[deleted_files]=$((R[deleted_files] + 1)) ;;
             R)   R[modified_files]=$((R[modified_files] + 1)) ;;
-            C)   R[added_files]=$((R[added_files] + 1)) ;; # Don't count copies as new files for bonuses
+            C)   R[modified_files]=$((R[modified_files] + 1)) ;; # Count copies as modifications, not additions
         esac
     done < <(if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
         git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
@@ -831,9 +836,9 @@ score_commits_fast() {
     # Quick CLI options detection (fast path)
     extract_cli_options "$base_ref" "$target_ref"
     
-    # Quick security keyword detection (fast path)
+    # Quick security keyword detection (fast path) - include commit bodies for CVEs
     local security_keywords
-    security_keywords=$(git -c color.ui=false log --format="%s" "$base_ref".."$target_ref" 2>/dev/null | \
+    security_keywords=$(git -c color.ui=false log --format="%s %b" "$base_ref".."$target_ref" 2>/dev/null | \
         grep -ci -E '(security|vulnerability|cve|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)' || printf '0')
     R[security_keywords]=$security_keywords
     
@@ -929,7 +934,7 @@ analyze_changes() {
             M|T) R[modified_files]=$((R[modified_files] + 1)) ;;
             D)   R[deleted_files]=$((R[deleted_files] + 1)) ;;
             R)   R[modified_files]=$((R[modified_files] + 1)) ;;
-            C)   R[added_files]=$((R[added_files] + 1)) ;; # Don't count copies as new files for bonuses
+            C)   R[modified_files]=$((R[modified_files] + 1)) ;; # Count copies as modifications, not additions
         esac
     done < <(if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
         git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
@@ -970,19 +975,19 @@ calculate_loc_delta() {
             # Use BASE_DELTA_PATCH if available, otherwise default to 1
             local base_patch="${BASE_DELTA_PATCH:-1}"
             local divisor_patch="${LOC_DIVISOR_PATCH:-250}"
-            base_delta=$(awk "BEGIN {printf \"%.0f\", $base_patch * (1 + $loc / $divisor_patch)}" 2>/dev/null || echo "$base_patch")
+            base_delta=$(awk "BEGIN {printf \"%.0f\", ($base_patch > 0 ? $base_patch * (1 + $loc / $divisor_patch) : 1)}" 2>/dev/null || echo "$base_patch")
             ;;
         minor)
             # Use BASE_DELTA_MINOR if available, otherwise default to 5
             local base_minor="${BASE_DELTA_MINOR:-5}"
             local divisor_minor="${LOC_DIVISOR_MINOR:-500}"
-            base_delta=$(awk "BEGIN {printf \"%.0f\", $base_minor * (1 + $loc / $divisor_minor)}" 2>/dev/null || echo "$base_minor")
+            base_delta=$(awk "BEGIN {printf \"%.0f\", ($base_minor > 0 ? $base_minor * (1 + $loc / $divisor_minor) : 1)}" 2>/dev/null || echo "$base_minor")
             ;;
         major)
             # Use BASE_DELTA_MAJOR if available, otherwise default to 10
             local base_major="${BASE_DELTA_MAJOR:-10}"
             local divisor_major="${LOC_DIVISOR_MAJOR:-1000}"
-            base_delta=$(awk "BEGIN {printf \"%.0f\", $base_major * (1 + $loc / $divisor_major)}" 2>/dev/null || echo "$base_major")
+            base_delta=$(awk "BEGIN {printf \"%.0f\", ($base_major > 0 ? $base_major * (1 + $loc / $divisor_major) : 1)}" 2>/dev/null || echo "$base_major")
             ;;
         *)
             base_delta=1
@@ -1037,6 +1042,19 @@ calculate_loc_delta() {
     
     # Calculate final delta
     local final_delta=$((base_delta + bonus))
+    
+    # Apply multipliers if any critical scenarios are detected
+    local multiplier=1
+    if [[ "${R[security_keywords]:-0}" -gt 0 ]] && [[ -n "${MULTIPLIER_ZERO_DAY:-}" ]]; then
+        # Security issues might indicate zero-day vulnerabilities
+        multiplier=$(echo "$multiplier * ${MULTIPLIER_ZERO_DAY}" | bc -l 2>/dev/null || echo "$multiplier")
+    fi
+    
+    # Apply multiplier to final delta
+    if [[ "$multiplier" != "1" ]]; then
+        final_delta=$(echo "$final_delta * $multiplier" | bc -l 2>/dev/null || echo "$final_delta")
+        final_delta=$(printf "%.0f" "$final_delta")
+    fi
     
     # Ensure minimum delta of 1
     if [[ "$final_delta" -lt 1 ]]; then
