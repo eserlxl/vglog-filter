@@ -61,6 +61,7 @@ Options:
   --json                   Output machine-readable JSON
   --ignore-whitespace      Ignore whitespace changes in diff size and signals
   --suggest-only           Output only the suggestion (major/minor/patch/none)
+  --strict-status          Use strict exit codes even with --suggest-only
   --help, -h               Show this help
 
 Configuration:
@@ -142,6 +143,7 @@ MACHINE_OUTPUT=false
 JSON_OUTPUT=false
 IGNORE_WHITESPACE=false
 SUGGEST_ONLY=false
+STRICT_STATUS=false
 ONLY_PATHS=""
 
 # --- configuration loading ----------------------------------------------------
@@ -175,7 +177,7 @@ load_config() {
     safe_numeric() {
         local value
         value=$(yq eval "$1" "$CONFIG_FILE" 2>/dev/null || printf '')
-        if [[ -n "$value" ]] && [[ "$value" =~ ^[0-9.]+$ ]]; then
+        if [[ -n "$value" ]] && [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
             printf '%s' "$value"
         else
             printf ''
@@ -249,15 +251,20 @@ load_config() {
     MULTIPLIER_PRODUCTION_OUTAGE=$(safe_numeric '.multipliers.critical.production_outage')
     MULTIPLIER_COMPLIANCE=$(safe_numeric '.multipliers.critical.compliance')
     
-    # Validate multipliers (must be positive)
-    for multiplier_name in "zero_day" "production_outage" "compliance"; do
-        local multiplier_var="MULTIPLIER_${multiplier_name^^}"
-        local multiplier_value="${!multiplier_var}"
-        if [[ -n "$multiplier_value" ]] && [[ ! "$multiplier_value" =~ ^[0-9.]+$ ]]; then
-            printf 'Error: Invalid multiplier for %s: %s (must be numeric)\n' "$multiplier_name" "$multiplier_value" >&2
-            exit 1
-        fi
-    done
+    # Validate multipliers dynamically (must be positive)
+    local multiplier_keys
+    multiplier_keys=$(yq eval '.multipliers.critical | keys | .[]' "$CONFIG_FILE" 2>/dev/null || printf '')
+    if [[ -n "$multiplier_keys" ]]; then
+        while IFS= read -r multiplier_name; do
+            [[ -n "$multiplier_name" ]] || continue
+            local multiplier_var="MULTIPLIER_${multiplier_name^^}"
+            local multiplier_value="${!multiplier_var}"
+            if [[ -n "$multiplier_value" ]] && [[ ! "$multiplier_value" =~ ^[0-9.]+$ ]]; then
+                printf 'Error: Invalid multiplier for %s: %s (must be numeric)\n' "$multiplier_name" "$multiplier_value" >&2
+                exit 1
+            fi
+        done <<< "$multiplier_keys"
+    fi
     
     return 0
 }
@@ -374,6 +381,7 @@ while [[ $# -gt 0 ]]; do
         --json)          JSON_OUTPUT=true; shift;;
         --ignore-whitespace) IGNORE_WHITESPACE=true; shift;;
         --suggest-only)  SUGGEST_ONLY=true; shift;;
+        --strict-status) STRICT_STATUS=true; shift;;
         --only-paths)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --only-paths requires a comma-separated globs list\n' >&2; exit 1; }
             ONLY_PATHS="$2"; shift 2;;
@@ -538,7 +546,7 @@ extract_cli_options() {
     local -a changed_files=()
     while IFS= read -r -d '' f; do
         changed_files+=("$f")
-    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" -- \
+    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" "${PATH_ARGS[@]}" -- \
         'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
         'include/*.h' 'include/*.hpp' 'include/*.hh' 2>/dev/null || printf '')
 
@@ -577,9 +585,9 @@ extract_cli_options() {
     # Get the combined diff for all changed files at once
     local srcdiff
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        srcdiff=$(git -c color.ui=false diff -M -C -w --unified=0 "$base_ref".."$target_ref" -- "${changed_files[@]}" 2>/dev/null || true)
+        srcdiff=$(git -c color.ui=false diff -M -C -w --unified=0 "$base_ref".."$target_ref" "${PATH_ARGS[@]}" -- "${changed_files[@]}" 2>/dev/null || true)
     else
-        srcdiff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- "${changed_files[@]}" 2>/dev/null || true)
+        srcdiff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" "${PATH_ARGS[@]}" -- "${changed_files[@]}" 2>/dev/null || true)
     fi
 
     # Enhanced breaking change detection: look for removed case labels
@@ -597,11 +605,11 @@ extract_cli_options() {
     # Check for API-breaking hints in headers
     local header_diff
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        header_diff=$(git -c color.ui=false diff -M -C -w --unified=0 "$base_ref".."$target_ref" -- \
+        header_diff=$(git -c color.ui=false diff -M -C -w --unified=0 "$base_ref".."$target_ref" "${PATH_ARGS[@]}" -- \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
             'src/*.h'     'src/*.hpp'     'src/*.hh' 2>/dev/null || true)
     else
-        header_diff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
+        header_diff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" "${PATH_ARGS[@]}" -- \
             'include/*.h' 'include/*.hpp' 'include/*.hh' \
             'src/*.h'     'src/*.hpp'     'src/*.hh' 2>/dev/null || true)
     fi
@@ -812,16 +820,22 @@ score_commits_fast() {
             M|T) R[modified_files]=$((R[modified_files] + 1)) ;;
             D)   R[deleted_files]=$((R[deleted_files] + 1)) ;;
             R)   R[modified_files]=$((R[modified_files] + 1)) ;;
-            C)   R[added_files]=$((R[added_files] + 1)); inc_counters_for "$file" ;;
+            C)   R[added_files]=$((R[added_files] + 1)) ;; # Don't count copies as new files for bonuses
         esac
     done < <(if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" 2>/dev/null
+        git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
     else
-        git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" 2>/dev/null
+        git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
     fi)
     
     # Quick CLI options detection (fast path)
     extract_cli_options "$base_ref" "$target_ref"
+    
+    # Quick security keyword detection (fast path)
+    local security_keywords
+    security_keywords=$(git -c color.ui=false log --format="%s" "$base_ref".."$target_ref" 2>/dev/null | \
+        grep -ci -E '(security|vulnerability|cve|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)' || printf '0')
+    R[security_keywords]=$security_keywords
     
     # Calculate bonus from fast analysis
     if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
@@ -850,6 +864,11 @@ score_commits_fast() {
     fi
     if [[ "${R[added_short_count]:-0}" -gt 0 ]] || [[ "${R[added_long_count]:-0}" -gt 0 ]]; then
         total_bonus=$((total_bonus + VERSION_ADDED_OPTION_BONUS))
+    fi
+    
+    # Security keyword bonus
+    if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + R[security_keywords] * VERSION_SECURITY_BONUS))
     fi
     
     printf '%d' "$total_bonus"
@@ -910,12 +929,12 @@ analyze_changes() {
             M|T) R[modified_files]=$((R[modified_files] + 1)) ;;
             D)   R[deleted_files]=$((R[deleted_files] + 1)) ;;
             R)   R[modified_files]=$((R[modified_files] + 1)) ;;
-            C)   R[added_files]=$((R[added_files] + 1)); inc_counters_for "$file" ;;
+            C)   R[added_files]=$((R[added_files] + 1)) ;; # Don't count copies as new files for bonuses
         esac
     done < <(if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" 2>/dev/null
+        git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
     else
-        git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" 2>/dev/null
+        git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
     fi)
 
     # Extract CLI options for comparison
@@ -928,9 +947,9 @@ analyze_changes() {
 
     # Get diff size using numstat (binary-safe)
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        R[diff_size]=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C -w --numstat "$base_ref".."$target_ref")
+        R[diff_size]=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C -w --numstat "$base_ref".."$target_ref" "${PATH_ARGS[@]}")
     else
-        R[diff_size]=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C    --numstat "$base_ref".."$target_ref")
+        R[diff_size]=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C    --numstat "$base_ref".."$target_ref" "${PATH_ARGS[@]}")
     fi
 }
 
@@ -944,20 +963,26 @@ calculate_loc_delta() {
         loc=0
     fi
     
-    # Calculate base delta from LOC
+    # Calculate base delta from LOC using configuration values
     local base_delta=1
     case "$bump_type" in
         patch)
-            # Calculate: 1*(1+LOC/250)
-            base_delta=$(awk "BEGIN {printf \"%d\", 1 * (1 + $loc / 250)}" 2>/dev/null || echo "1")
+            # Use BASE_DELTA_PATCH if available, otherwise default to 1
+            local base_patch="${BASE_DELTA_PATCH:-1}"
+            local divisor_patch="${LOC_DIVISOR_PATCH:-250}"
+            base_delta=$(awk "BEGIN {printf \"%.0f\", $base_patch * (1 + $loc / $divisor_patch)}" 2>/dev/null || echo "$base_patch")
             ;;
         minor)
-            # Calculate: 5*(1+LOC/500)
-            base_delta=$(awk "BEGIN {printf \"%d\", 5 * (1 + $loc / 500)}" 2>/dev/null || echo "5")
+            # Use BASE_DELTA_MINOR if available, otherwise default to 5
+            local base_minor="${BASE_DELTA_MINOR:-5}"
+            local divisor_minor="${LOC_DIVISOR_MINOR:-500}"
+            base_delta=$(awk "BEGIN {printf \"%.0f\", $base_minor * (1 + $loc / $divisor_minor)}" 2>/dev/null || echo "$base_minor")
             ;;
         major)
-            # Calculate: 10*(1+LOC/1000)
-            base_delta=$(awk "BEGIN {printf \"%d\", 10 * (1 + $loc / 1000)}" 2>/dev/null || echo "10")
+            # Use BASE_DELTA_MAJOR if available, otherwise default to 10
+            local base_major="${BASE_DELTA_MAJOR:-10}"
+            local divisor_major="${LOC_DIVISOR_MAJOR:-1000}"
+            base_delta=$(awk "BEGIN {printf \"%.0f\", $base_major * (1 + $loc / $divisor_major)}" 2>/dev/null || echo "$base_major")
             ;;
         *)
             base_delta=1
@@ -1123,10 +1148,10 @@ suggest_version_bump() {
     local total_bonus=0
     
     # Breaking changes (high priority)
-    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
+    if [[ "${R[breaking_cli_changes]:-false}" = "true" ]]; then
         total_bonus=$((total_bonus + VERSION_BREAKING_CLI_BONUS))
     fi
-    if [[ "${R[api_breaking]}" = "true" ]]; then
+    if [[ "${R[api_breaking]:-false}" = "true" ]]; then
         total_bonus=$((total_bonus + VERSION_API_BREAKING_BONUS))
     fi
     
@@ -1140,7 +1165,7 @@ suggest_version_bump() {
     fi
     
     # Feature additions
-    if [[ "${R[cli_changes]}" = "true" ]]; then
+    if [[ "${R[cli_changes]:-false}" = "true" ]]; then
         total_bonus=$((total_bonus + VERSION_CLI_CHANGES_BONUS))
     fi
     if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
@@ -1207,11 +1232,11 @@ get_bump_reason() {
     local bonus_details=()
     
     # Breaking changes (high priority)
-    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
+    if [[ "${R[breaking_cli_changes]:-false}" = "true" ]]; then
         total_bonus=$((total_bonus + VERSION_BREAKING_CLI_BONUS))
         bonus_details+=("breaking_cli:+${VERSION_BREAKING_CLI_BONUS}")
     fi
-    if [[ "${R[api_breaking]}" = "true" ]]; then
+    if [[ "${R[api_breaking]:-false}" = "true" ]]; then
         total_bonus=$((total_bonus + VERSION_API_BREAKING_BONUS))
         bonus_details+=("api_break:+${VERSION_API_BREAKING_BONUS}")
     fi
@@ -1228,7 +1253,7 @@ get_bump_reason() {
     fi
     
     # Feature additions
-    if [[ "${R[cli_changes]}" = "true" ]]; then
+    if [[ "${R[cli_changes]:-false}" = "true" ]]; then
         total_bonus=$((total_bonus + VERSION_CLI_CHANGES_BONUS))
         bonus_details+=("cli_changes:+${VERSION_CLI_CHANGES_BONUS}")
     fi
@@ -1409,6 +1434,12 @@ main() {
     # Early exit optimization: check if bonus threshold is met before expensive LOC calculation
     local bonus_only
     bonus_only=$(score_commits_fast "$base_ref" "$target_ref")
+    bonus_only="${bonus_only:-0}"
+    
+    # Ensure bonus_only is numeric
+    if [[ ! "$bonus_only" =~ ^[0-9]+$ ]]; then
+        bonus_only=0
+    fi
     
     if [[ "$bonus_only" -ge "$EARLY_EXIT_BONUS_THRESHOLD" ]]; then
         # Early exit: bonus threshold met, skip expensive LOC calculation
@@ -1668,13 +1699,19 @@ main() {
     fi
 
     # Set exit code based on suggestion
-    case "$suggestion" in
-        major) exit 10 ;;
-        minor) exit 11 ;;
-        patch) exit 12 ;;
-        none) exit 20 ;;
-        *) exit 0 ;;
-    esac
+    if [[ "$SUGGEST_ONLY" = "true" ]] && [[ "$STRICT_STATUS" != "true" ]]; then
+        # For --suggest-only without --strict-status, always exit 0 unless fatal error
+        exit 0
+    else
+        # For other modes or --strict-status, use traditional exit codes
+        case "$suggestion" in
+            major) exit 10 ;;
+            minor) exit 11 ;;
+            patch) exit 12 ;;
+            none) exit 20 ;;
+            *) exit 0 ;;
+        esac
+    fi
 }
 
 # Run main function
