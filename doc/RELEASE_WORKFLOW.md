@@ -19,6 +19,7 @@ This guide outlines the automated and manual processes for creating new releases
 - [Examples of Release Scenarios](#examples-of-release-scenarios)
 - [Troubleshooting Release Issues](#troubleshooting-release-issues)
 - [Best Practices for Releases](#best-practices-for-releases)
+- [Configuration and Customization](#configuration-and-customization)
 
 ## Overview of the Release Process
 
@@ -28,6 +29,7 @@ Key components of the release process include:
 -   **`semantic-version-analyzer`**: A utility script (`./dev-bin/semantic-version-analyzer`) that analyzes commit history to suggest the next semantic version bump using the advanced LOC-based delta system.
 -   **GitHub Actions Workflow (`version-bump.yml`)**: This workflow automates the version bumping, tag creation, and GitHub Release generation based on detected changes.
 -   **LOC-Based Delta System**: Advanced versioning that always increases only the patch version with calculated increments based on change magnitude.
+-   **Configuration System**: YAML-based configuration (`dev-config/versioning.yml`) for customizing bonus points, multipliers, and thresholds.
 
 [↑ Back to top](#release-workflow-guide)
 
@@ -51,6 +53,9 @@ Before initiating a release, it's good practice to analyze the changes since the
 
 # Restrict analysis to specific paths
 ./dev-bin/semantic-version-analyzer --only-paths "src/**,include/**" --verbose
+
+# Show only the suggested bump type
+./dev-bin/semantic-version-analyzer --suggest-only
 ```
 
 ### 2. Review Suggested Version Bump
@@ -74,6 +79,12 @@ For most feature additions, bug fixes, or breaking changes, simply push your fin
     git push origin main
     ```
 -   Monitor the GitHub Actions tab to see if the "Auto Version Bump with Semantic Release Notes" workflow is triggered and completes successfully.
+
+**Important**: The workflow automatically ignores changes to certain files to prevent infinite loops:
+- `VERSION`
+- `doc/VERSIONING.md`
+- `doc/TAG_MANAGEMENT.md`
+- `doc/RELEASE_WORKFLOW.md`
 
 #### Option B: Manual Release (For specific control or overriding automation)
 
@@ -110,6 +121,9 @@ git status
 # Verify the current version
 cat VERSION
 # Expected output: 10.5.0
+
+# Run tests to ensure everything is working
+./run_tests.sh
 ```
 
 ### Step 2: Analyze Changes for Versioning
@@ -128,6 +142,9 @@ Use the semantic version analyzer to understand the impact of your changes:
 
 # Analyze specific time period
 ./dev-bin/semantic-version-analyzer --since-date 2025-01-01 --verbose
+
+# Show configuration values
+./dev-bin/semantic-version-analyzer --print-base
 ```
 
 The analyzer will provide:
@@ -184,6 +201,9 @@ git tag --sort=-version:refname | head -5
 # Test the new version locally
 ./build.sh
 ./build/bin/vglog-filter --version
+
+# Run comprehensive tests
+./run_tests.sh
 ```
 
 ### Step 6: Post-Release Cleanup (Optional)
@@ -270,6 +290,19 @@ For maintenance releases, you may want to clean up old tags:
 
 **Result**: `10.5.0` → `10.5.30` (patch bump with major-level delta)
 
+### Scenario 6: Performance Improvement
+
+**Changes**: Optimized log parsing algorithm with 25% performance improvement (300 LOC changed)
+
+**Analysis**:
+```bash
+./dev-bin/semantic-version-analyzer --verbose
+# Output: SUGGESTION=minor
+# LOC: 300, Base MINOR: 5, Bonus: Performance 20-50% (+2), Final MINOR: 7
+```
+
+**Result**: `10.5.0` → `10.5.7` (patch bump with minor-level delta)
+
 [↑ Back to top](#release-workflow-guide)
 
 ## Troubleshooting Release Issues
@@ -283,6 +316,7 @@ For maintenance releases, you may want to clean up old tags:
 - Verify commit messages follow Conventional Commits format
 - Review GitHub Actions workflow configuration
 - Check workflow logs for errors
+- Ensure changes are not to ignored files (VERSION, doc files)
 
 #### Issue: Incorrect Version Bump
 **Symptoms**: Version bump doesn't match expected change type
@@ -291,6 +325,7 @@ For maintenance releases, you may want to clean up old tags:
 - Check LOC calculations and bonus point assignments
 - Review the LOC-based delta system configuration
 - Consider manual release with specific bump type
+- Verify the configuration in `dev-config/versioning.yml`
 
 #### Issue: Tag Conflicts
 **Symptoms**: Workflow fails due to existing tag
@@ -307,6 +342,14 @@ For maintenance releases, you may want to clean up old tags:
 - Check for conventional commit types (feat:, fix:, BREAKING CHANGE:)
 - Review the release notes generation logic
 - Consider adding custom release notes
+
+#### Issue: Workflow Concurrency Conflicts
+**Symptoms**: Multiple version bump workflows running simultaneously
+**Solutions**:
+- The workflow includes concurrency guards to prevent conflicts
+- Check if another workflow is already running
+- Wait for the current workflow to complete
+- Review workflow logs for concurrency issues
 
 ### Debugging Commands
 
@@ -326,6 +369,12 @@ cat .github/workflows/version-bump.yml
 
 # Test rollover logic
 ./test-workflows/core-tests/test_rollover_logic.sh
+
+# Run comprehensive versioning tests
+./test-workflows/test_semantic_version_analyzer_comprehensive.sh
+
+# Check for ignored files in workflow
+git log --oneline --since="1 day ago" --name-only
 ```
 
 [↑ Back to top](#release-workflow-guide)
@@ -354,6 +403,12 @@ docs: update installation instructions
 
 # Performance improvement
 perf: optimize log parsing algorithm
+
+# Security fix
+fix: patch buffer overflow vulnerability
+
+# Refactoring
+refactor: restructure log processing pipeline
 ```
 
 ### Release Planning
@@ -370,6 +425,7 @@ perf: optimize log parsing algorithm
 2. **Monitor LOC-Based Deltas**: Understand how the delta system affects version increments
 3. **Use Configuration**: Leverage the YAML configuration system for consistent behavior
 4. **Regular Cleanup**: Periodically clean up old tags to maintain repository health
+5. **Understand Rollover Logic**: Be aware of the rollover system for large changes
 
 ### Quality Assurance
 
@@ -377,6 +433,7 @@ perf: optimize log parsing algorithm
 2. **Integration Testing**: Test the release in a staging environment
 3. **Documentation Review**: Ensure documentation is up-to-date
 4. **Release Verification**: Verify the release works as expected
+5. **Performance Testing**: Ensure performance improvements are measurable
 
 ### Communication
 
@@ -384,5 +441,71 @@ perf: optimize log parsing algorithm
 2. **Breaking Changes**: Clearly communicate breaking changes
 3. **Migration Guides**: Provide migration guides for major releases
 4. **Support**: Be prepared to support users during the release
+5. **Changelog**: Review and enhance automatically generated release notes
+
+[↑ Back to top](#release-workflow-guide)
+
+## Configuration and Customization
+
+### Versioning Configuration
+
+The versioning system can be customized through `dev-config/versioning.yml`:
+
+```yaml
+# Base deltas for different change types
+base_deltas:
+  patch: "1"
+  minor: "5"
+  major: "10"
+
+# LOC cap and rollover configuration
+limits:
+  loc_cap: 10000
+  rollover: 100
+
+# Bonus system for different change types
+bonuses:
+  security_stability:
+    security_vuln: 5
+    cve: 2
+    memory_safety: 4
+  features:
+    new_cli_command: 2
+    new_config_option: 1
+  # ... more categories
+```
+
+### Customizing Bonus Points
+
+To adjust the versioning behavior for your project:
+
+1. **Edit Configuration**: Modify `dev-config/versioning.yml`
+2. **Test Changes**: Use `./dev-bin/semantic-version-analyzer --print-base` to verify
+3. **Run Tests**: Execute `./test-workflows/test_semantic_version_analyzer_comprehensive.sh`
+4. **Commit Changes**: Include configuration updates in your release
+
+### Workflow Customization
+
+The GitHub Actions workflow can be customized by editing `.github/workflows/version-bump.yml`:
+
+- **Trigger Conditions**: Modify the `on.push.paths-ignore` section
+- **Environment Variables**: Add custom environment variables
+- **Additional Steps**: Include custom verification or notification steps
+- **Permissions**: Adjust repository permissions as needed
+
+### Testing Configuration Changes
+
+Before applying configuration changes to production:
+
+```bash
+# Test with current configuration
+./dev-bin/semantic-version-analyzer --verbose
+
+# Test with modified configuration
+./test-workflows/core-tests/test_version_logic.sh
+
+# Run comprehensive tests
+./test-workflows/run_workflow_tests.sh
+```
 
 [↑ Back to top](#release-workflow-guide)
