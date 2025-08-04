@@ -23,7 +23,7 @@ This is achieved through:
 -   **Semantic Versioning**: All release tags adhere to the `vX.Y.Z` format, reflecting major, minor, and patch versions.
 -   **Automated Release Workflow**: New release tags are automatically created by GitHub Actions as part of the [Release Workflow](RELEASE_WORKFLOW.md).
 -   **Automated Tag Cleanup**: A dedicated GitHub Actions workflow periodically cleans up old tags.
--   **`tag-manager` Script**: A command-line utility for local and manual tag operations.
+-   **`tag-manager` Script**: A command-line utility for local and manual tag operations with advanced features.
 -   **LOC-Based Delta System**: Advanced versioning that ensures consistent tag progression.
 
 [↑ Back to top](#git-tag-management-guide)
@@ -101,9 +101,9 @@ The cleanup strategy prioritizes:
 
 ## Manual Tag Management with `tag-manager`
 
-The `dev-bin/tag-manager` script provides command-line utilities for local and manual management of Git tags. This is useful for development, specific cleanup tasks, or when direct Git commands are preferred.
+The `dev-bin/tag-manager` script provides comprehensive command-line utilities for local and manual management of Git tags. This advanced tool includes numerous configuration options and safety features.
 
-### Commands
+### Basic Commands
 
 -   **`./dev-bin/tag-manager list`**: Lists all Git tags in the repository, sorted by version (newest first).
     ```bash
@@ -125,10 +125,13 @@ The `dev-bin/tag-manager` script provides command-line utilities for local and m
     ./dev-bin/tag-manager cleanup 5
     ```
 
--   **`./dev-bin/tag-manager create <version>`**: Creates a new tag with the specified version. Use with caution, as this bypasses the automated release workflow.
+-   **`./dev-bin/tag-manager create <version> [commit]`**: Creates a new tag with the specified version at the given commit (defaults to HEAD). Use with caution, as this bypasses the automated release workflow.
     ```bash
-    # Create a tag for version 10.5.1 (use with caution)
-    ./dev-bin/tag-manager create v10.5.1
+    # Create a tag for version 10.5.1 at HEAD
+    ./dev-bin/tag-manager create 10.5.1
+
+    # Create a tag for version 10.5.1 at specific commit
+    ./dev-bin/tag-manager create 10.5.1 3f2c1d2
     ```
 
 -   **`./dev-bin/tag-manager info <tag>`**: Shows detailed information about a specific tag, including commit hash, author, date, and message.
@@ -137,7 +140,70 @@ The `dev-bin/tag-manager` script provides command-line utilities for local and m
     ./dev-bin/tag-manager info v10.5.0
     ```
 
-### Advanced Usage
+### Advanced Configuration Options
+
+The `tag-manager` script supports numerous environment variables for fine-grained control:
+
+#### Core Settings
+-   **`REMOTE`**: Remote name for push operations (default: `origin`)
+-   **`TAG_GLOB`**: Glob pattern for release tags (default: `v[0-9]*.[0-9]*.[0-9]*`)
+-   **`TAG_SIGN`**: Create signed tags if set to `1` (requires GPG, default: `0`)
+-   **`TAG_MSG_PREFIX`**: Message prefix for tag annotations (default: `vglog-filter`)
+
+#### Safety and Confirmation
+-   **`ASSUME_YES`**: Skip confirmations for non-interactive use (default: `0`)
+-   **`ALLOW_DIRTY_TAG`**: Allow tagging with dirty working tree (default: `0`)
+-   **`PROTECT_CURRENT`**: Never delete tags pointing at HEAD (default: `1`)
+-   **`PROTECT_GLOB`**: Space-separated glob patterns never to delete (e.g., `"v1.*.* v2.0.*"`)
+
+#### Cleanup Behavior
+-   **`DRY_RUN`**: Print actions without executing (cleanup only, default: `0`)
+-   **`LOCAL_ONLY`**: Delete only local tags (default: `0`)
+-   **`REMOTE_ONLY`**: Delete only remote tags (default: `0`)
+-   **`FETCH_BEFORE_CLEANUP`**: Fetch tags before cleanup (default: `1`)
+
+#### Tag Creation
+-   **`PUSH_AFTER_CREATE`**: Automatically push newly created tags (default: `0`)
+-   **`FIRST_PARENT`**: Show first-parent history in `info` (default: `0`)
+
+### Advanced Usage Examples
+
+#### Batch Operations with Safety
+```bash
+# Clean up with protection for major versions
+PROTECT_GLOB="v10.0.* v11.0.*" ./dev-bin/tag-manager cleanup 8
+
+# Dry run cleanup to see what would be deleted
+DRY_RUN=1 ./dev-bin/tag-manager cleanup 5
+
+# Clean up only remote tags (keep local for backup)
+REMOTE_ONLY=1 ./dev-bin/tag-manager cleanup 10
+```
+
+#### Tag Creation with Advanced Options
+```bash
+# Create and immediately push a signed tag
+TAG_SIGN=1 PUSH_AFTER_CREATE=1 ./dev-bin/tag-manager create 10.5.1
+
+# Create tag with custom message prefix
+TAG_MSG_PREFIX="Release" ./dev-bin/tag-manager create 10.5.1
+
+# Create tag even with uncommitted changes
+ALLOW_DIRTY_TAG=1 ./dev-bin/tag-manager create 10.5.1
+```
+
+#### Non-Interactive Operations
+```bash
+# Automated cleanup in CI/CD
+ASSUME_YES=1 ./dev-bin/tag-manager cleanup 10
+
+# List tags with custom pattern
+TAG_GLOB="v10.*" ./dev-bin/tag-manager list
+```
+
+### Direct Git Commands
+
+For advanced users who prefer direct Git operations:
 
 #### Batch Operations
 ```bash
@@ -161,6 +227,9 @@ git diff v10.4.0..v10.5.0 --stat
 
 # Show files changed between tags
 git diff v10.4.0..v10.5.0 --name-only
+
+# Show tag details with version-aware sorting
+git tag --sort=-version:refname | head -10
 ```
 
 [↑ Back to top](#git-tag-management-guide)
@@ -202,23 +271,34 @@ git diff v10.4.0..v10.5.0 --name-only
 - Use dry run mode first
 - Check for protected tags
 
+#### Issue: Tag Manager Script Errors
+**Symptoms**: `tag-manager` script fails or behaves unexpectedly
+**Solutions**:
+- Check Bash version (requires ≥ 4): `bash --version`
+- Verify environment variables: `./dev-bin/tag-manager --help`
+- Check Git repository status: `git status`
+- Ensure proper permissions: `ls -la dev-bin/tag-manager`
+
 ### Debugging Commands
 
 ```bash
-# Check current tags
+# Check current tags with version sorting
 git tag --list | sort -V
 
-# Verify tag format
+# Verify tag format consistency
 git tag --list | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$"
 
 # Check remote tags
 git ls-remote --tags origin
 
-# Show tag details
-git show v10.5.0 --stat
-
-# Compare tag dates
+# Show tag details with dates
 git for-each-ref --format='%(refname:short) %(creatordate)' refs/tags | sort -k2
+
+# Check tag-manager configuration
+./dev-bin/tag-manager --help
+
+# Verify Git configuration
+git config --list | grep -E "(user\.name|user\.email|remote\.origin)"
 ```
 
 ### Getting Help
@@ -241,10 +321,11 @@ git for-each-ref --format='%(refname:short) %(creatordate)' refs/tags | sort -k2
 
 ### Manual Tagging (When Necessary)
 
-1.  **Use `tag-manager`**: Prefer the `tag-manager` script over direct Git commands for consistency.
+1.  **Use `tag-manager`**: Prefer the `tag-manager` script over direct Git commands for consistency and safety.
 2.  **Follow Naming Convention**: Always use the `vX.Y.Z` format for release tags.
 3.  **Document Purpose**: Include meaningful commit messages when creating tags manually.
 4.  **Coordinate with Team**: Ensure team members are aware of manual tag operations.
+5.  **Use Safety Features**: Leverage `DRY_RUN`, `PROTECT_GLOB`, and `PROTECT_CURRENT` for safe operations.
 
 ### Tag Maintenance
 
@@ -252,6 +333,7 @@ git for-each-ref --format='%(refname:short) %(creatordate)' refs/tags | sort -k2
 2.  **Monitor Tag Count**: Keep the number of tags manageable (recommended: 10-20 recent tags).
 3.  **Preserve Important Tags**: Ensure major version tags are preserved during cleanup.
 4.  **Backup Strategy**: Consider backing up important tags before cleanup operations.
+5.  **Use Protection Patterns**: Configure `PROTECT_GLOB` to safeguard critical version tags.
 
 ### Integration with LOC-Based Delta System
 
@@ -266,6 +348,7 @@ git for-each-ref --format='%(refname:short) %(creatordate)' refs/tags | sort -k2
 2.  **Release Notes**: Ensure release notes are generated and attached to tags.
 3.  **Testing**: Test releases locally before pushing tags to remote.
 4.  **Documentation**: Keep tag management documentation up-to-date.
+5.  **Validation**: Use `./dev-bin/tag-manager info` to verify tag contents and metadata.
 
 ### Security Considerations
 
@@ -273,5 +356,13 @@ git for-each-ref --format='%(refname:short) %(creatordate)' refs/tags | sort -k2
 2.  **Access Control**: Limit tag creation and deletion permissions to authorized users.
 3.  **Audit Trail**: Maintain logs of tag operations for security auditing.
 4.  **Backup Strategy**: Implement backup strategies for critical tags.
+5.  **Signed Tags**: Use `TAG_SIGN=1` for cryptographic verification of tag authenticity.
+
+### Environment-Specific Considerations
+
+1.  **CI/CD Integration**: Use `ASSUME_YES=1` for automated environments.
+2.  **Development Workflows**: Use `DRY_RUN=1` for testing cleanup operations.
+3.  **Remote Management**: Use `FETCH_BEFORE_CLEANUP=1` to ensure remote synchronization.
+4.  **Local Development**: Use `LOCAL_ONLY=1` for development-only cleanup.
 
 [↑ Back to top](#git-tag-management-guide)
