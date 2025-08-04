@@ -228,6 +228,9 @@ vcpkg_installed/
 # Bot directory
 bot/
 
+# Backup files and directories
+Backups/
+
 # Development files
 .last_prompt
 .clang-format
