@@ -15,7 +15,6 @@ export LC_ALL=C
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Test counter
@@ -39,9 +38,7 @@ test_version_calculation() {
     
     # Run version calculator
     local output
-    output=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type "$bump_type" --loc "$loc" --bonus "$bonus" --machine 2>/dev/null)
-    
-    if [[ $? -ne 0 ]]; then
+    if ! output=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type "$bump_type" --loc "$loc" --bonus "$bonus" --machine 2>/dev/null); then
         printf '%bFAILED: Command failed%b\n' "$RED" "$NC"
         TESTS_FAILED=$((TESTS_FAILED + 1))
         return 1
@@ -106,9 +103,7 @@ test_rollover() {
     printf 'Testing Rollover: %s\n' "$test_name"
     
     local output
-    output=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type "$bump_type" --loc "$loc" --bonus "$bonus" --machine 2>/dev/null)
-    
-    if [[ $? -ne 0 ]]; then
+    if ! output=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type "$bump_type" --loc "$loc" --bonus "$bonus" --machine 2>/dev/null); then
         printf '%bFAILED: Command failed%b\n' "$RED" "$NC"
         TESTS_FAILED=$((TESTS_FAILED + 1))
         return 1

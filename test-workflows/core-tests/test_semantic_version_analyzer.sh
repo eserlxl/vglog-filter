@@ -29,7 +29,7 @@ TESTS_FAILED=0
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../dev-bin/semantic-version-analyzer"
 
 # Change to project root for tests
-cd "$(dirname "$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")")"
+cd "$(dirname "$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")")" || exit 1
 
 # Helper functions
 log_info() {

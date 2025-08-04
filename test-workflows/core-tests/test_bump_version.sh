@@ -109,7 +109,7 @@ run_test "Patch bump with LOC delta enabled" \
     "9.3.1"
 
 # Test that minor bump increments version
-minor_result=$($BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd) 2>/dev/null)
+minor_result=$("$BUMP_VERSION_SCRIPT" minor --print --repo-root "$(pwd)" 2>/dev/null)
 if [[ "$minor_result" =~ ^9\.3\.[0-9]+$ ]] && [[ "$minor_result" != "9.3.0" ]]; then
     echo "✓ PASS: Minor bump with LOC delta enabled ($minor_result)"
     ((TESTS_PASSED++))
@@ -119,7 +119,7 @@ else
 fi
 
 # Test that major bump increments version
-major_result=$($BUMP_VERSION_SCRIPT major --print --repo-root $(pwd) 2>/dev/null)
+major_result=$("$BUMP_VERSION_SCRIPT" major --print --repo-root "$(pwd)" 2>/dev/null)
 if [[ "$major_result" =~ ^9\.3\.[0-9]+$ ]] && [[ "$major_result" != "9.3.0" ]]; then
     echo "✓ PASS: Major bump with LOC delta enabled ($major_result)"
     ((TESTS_PASSED++))
