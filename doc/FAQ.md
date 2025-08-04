@@ -10,6 +10,7 @@ This document provides answers to common questions about `vglog-filter`, coverin
 - [Building and Testing](#building-and-testing)
 - [Versioning and Releases](#versioning-and-releases)
 - [Contributing and Support](#contributing-and-support)
+- [Troubleshooting](#troubleshooting)
 
 ## General Information
 
@@ -27,6 +28,12 @@ The default marker is the string `Successfully downloaded debug`. By default, `v
 
 ### Can `vglog-filter` be used with logs from tools other than Valgrind?
 `vglog-filter` is specifically designed and optimized for Valgrind log formats. While it might process other similar text-based log formats to some extent, its filtering and deduplication logic is tailored to Valgrind's output patterns. For optimal results, it's recommended for Valgrind logs.
+
+### What are the system requirements for running `vglog-filter`?
+-   **Operating System**: Linux and other POSIX-compliant systems (primarily tested on Linux)
+-   **Dependencies**: No external runtime dependencies - it's a statically linked binary
+-   **Memory**: Minimal memory footprint, with automatic stream processing for large files
+-   **Disk Space**: Only requires space for the executable (~1-2MB)
 
 [↑ Back to top](#frequently-asked-questions-faq)
 
@@ -71,6 +78,40 @@ vglog-filter --marker "--- START OF TEST RUN ---" my_custom_log.log
 ### What if I provide an invalid depth value?
 If you provide a non-numeric, negative value, or a value greater than 1000 for the depth option (`-d`), `vglog-filter` will display a clear error message indicating the invalid value and the expected format (a non-negative integer between 0 and 1000).
 
+### Can I process input from stdin?
+Yes! `vglog-filter` can read from stdin in several ways:
+
+```sh
+# Process from stdin (implicit)
+cat valgrind.log | ./vglog-filter
+
+# Process from stdin (explicit)
+./vglog-filter - < valgrind.log
+
+# Direct pipe from Valgrind
+valgrind ./your_program 2>&1 | ./vglog-filter
+```
+
+### What are some common usage patterns?
+Here are some typical usage scenarios:
+
+```sh
+# Basic file processing
+./vglog-filter valgrind.log > filtered.log
+
+# Process with custom marker and depth
+./vglog-filter --marker "TEST START" --depth 10 valgrind.log
+
+# Process large file with progress monitoring
+./vglog-filter --progress --memory large_valgrind.log
+
+# Force stream processing for consistent behavior
+./vglog-filter --stream small_log.log
+
+# Combine multiple options for comprehensive processing
+./vglog-filter --keep-debug-info --verbose --progress valgrind.log
+```
+
 [↑ Back to top](#frequently-asked-questions-faq)
 
 ## Performance and Monitoring
@@ -114,6 +155,13 @@ vglog-filter --progress --monitor-memory extremely_large_valgrind.log > filtered
 -   **`std::span`**: Utilized for memory-efficient handling of array-like data structures.
 -   **Stream Processing**: Automatic and forced stream processing modes ensure efficient memory usage for large inputs.
 -   **Memory Monitoring**: Built-in memory usage tracking helps identify and address performance bottlenecks.
+
+### What's the typical performance I can expect?
+Performance depends on file size and complexity:
+-   **Small files (< 1MB)**: Typically processed in milliseconds
+-   **Medium files (1-50MB)**: Usually processed in seconds
+-   **Large files (50MB+)**: May take several minutes, but with progress monitoring
+-   **Memory usage**: Generally stays under 100MB even for very large files due to stream processing
 
 [↑ Back to top](#frequently-asked-questions-faq)
 
@@ -281,5 +329,67 @@ Please use the GitHub Issues tracker to report bugs or request new features. Whe
 
 ### What license is used for `vglog-filter`?
 `vglog-filter` is licensed under the [GNU General Public License v3.0 (GPLv3)](LICENSE). This is a free, copyleft license that guarantees users the freedom to run, study, share, and modify the software. See the [LICENSE](LICENSE) file for full details.
+
+[↑ Back to top](#frequently-asked-questions-faq)
+
+## Troubleshooting
+
+### The tool exits with "Permission denied" when trying to read a file
+This usually indicates a file permissions issue. Check that:
+- The file exists and is readable by your user
+- You have the necessary permissions to access the file
+- The file path is correct (use absolute paths if unsure)
+
+```sh
+# Check file permissions
+ls -la your_valgrind.log
+
+# Try with explicit permissions
+chmod 644 your_valgrind.log
+```
+
+### Processing seems to hang on large files
+This might indicate memory issues. Try:
+- Using the `--stream` option to force stream processing
+- Using the `--progress` option to monitor processing
+- Checking available system memory
+
+```sh
+# Force stream processing
+./vglog-filter --stream --progress large_file.log
+```
+
+### The output doesn't match what I expected
+Common causes and solutions:
+- **No output**: Check if your marker string is correct or use `--keep-debug-info`
+- **Missing errors**: Verify the depth setting isn't too restrictive
+- **Different deduplication**: Try adjusting the `--depth` parameter
+
+```sh
+# Process entire file to see all content
+./vglog-filter --keep-debug-info --verbose input.log
+```
+
+### Build fails with compiler errors
+Ensure you have:
+- A C++20 compatible compiler (GCC 10+ or Clang 12+)
+- CMake 3.16 or newer
+- Required build tools installed
+
+```sh
+# Check compiler version
+g++ --version
+
+# Check CMake version
+cmake --version
+```
+
+### Tests fail locally but pass in CI
+This might indicate:
+- Different compiler versions or flags
+- Missing dependencies
+- Environment-specific issues
+
+Try running with debug builds and check the test output for specific error messages.
 
 [↑ Back to top](#frequently-asked-questions-faq)
