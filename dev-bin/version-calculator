@@ -24,12 +24,6 @@ Options:
   --bump-type <type>       Bump type: major, minor, patch
   --loc <number>           Lines of code changed
   --bonus <number>         Bonus points to add
-  --patch-limit <number>   Patch version limit (default: 100)
-  --minor-limit <number>   Minor version limit (default: 100)
-  --use-loc-delta <bool>   Enable LOC-based delta system (default: true)
-  --patch-delta <formula>  Patch delta formula (default: 1*(1+LOC/250))
-  --minor-delta <formula>  Minor delta formula (default: 5*(1+LOC/500))
-  --major-delta <formula>  Major delta formula (default: 10*(1+LOC/1000))
   --machine                Output machine-readable key=value format
   --json                   Output machine-readable JSON
   --help, -h               Show this help
@@ -46,12 +40,6 @@ CURRENT_VERSION=""
 BUMP_TYPE=""
 LOC=0
 BONUS=0
-PATCH_LIMIT=100
-MINOR_LIMIT=100
-USE_LOC_DELTA=true
-PATCH_DELTA="1*(1+LOC/250)"
-MINOR_DELTA="5*(1+LOC/500)"
-MAJOR_DELTA="10*(1+LOC/1000)"
 MACHINE_OUTPUT=false
 JSON_OUTPUT=false
 
@@ -69,24 +57,6 @@ while [[ $# -gt 0 ]]; do
         --bonus)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --bonus requires a value\n' >&2; exit 1; }
             BONUS="$2"; shift 2;;
-        --patch-limit)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --patch-limit requires a value\n' >&2; exit 1; }
-            PATCH_LIMIT="$2"; shift 2;;
-        --minor-limit)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --minor-limit requires a value\n' >&2; exit 1; }
-            MINOR_LIMIT="$2"; shift 2;;
-        --use-loc-delta)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --use-loc-delta requires a value\n' >&2; exit 1; }
-            USE_LOC_DELTA="$2"; shift 2;;
-        --patch-delta)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --patch-delta requires a value\n' >&2; exit 1; }
-            PATCH_DELTA="$2"; shift 2;;
-        --minor-delta)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --minor-delta requires a value\n' >&2; exit 1; }
-            MINOR_DELTA="$2"; shift 2;;
-        --major-delta)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --major-delta requires a value\n' >&2; exit 1; }
-            MAJOR_DELTA="$2"; shift 2;;
         --machine) MACHINE_OUTPUT=true; shift;;
         --json) JSON_OUTPUT=true; shift;;
         --help|-h) show_help; exit 0;;
@@ -122,62 +92,62 @@ if [[ ! "$BONUS" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
-if [[ ! "$PATCH_LIMIT" =~ ^[0-9]+$ ]] || [[ "$PATCH_LIMIT" -le 0 ]]; then
-    printf 'Error: --patch-limit must be a positive integer\n' >&2
-    exit 1
-fi
+# Constants for the versioning system
+MAIN_VERSION_MOD=1000
 
-if [[ ! "$MINOR_LIMIT" =~ ^[0-9]+$ ]] || [[ "$MINOR_LIMIT" -le 0 ]]; then
-    printf 'Error: --minor-limit must be a positive integer\n' >&2
-    exit 1
-fi
-
-# Calculate LOC-based delta for version increments with bonus additions
+# Calculate LOC-based delta for version increments
 calculate_loc_delta() {
     local bump_type="$1"
     local loc="$2"
-    local bonus="$3"
     
-    # Calculate base delta from LOC using configuration values
-    local base_delta=1
+    # Base delta calculation based on bump type and LOC
+    local base_delta=0
     case "$bump_type" in
         patch)
-            # Replace LOC in formula and evaluate
-            local formula="${PATCH_DELTA//LOC/$loc}"
-            base_delta=$(awk "BEGIN {printf \"%.0f\", ($formula > 0 ? $formula : 1)}" 2>/dev/null || echo "1")
+            # VERSION_PATCH_DELTA=1*(1+LOC/250)
+            base_delta=$(awk "BEGIN {printf \"%.0f\", 1 * (1 + $loc / 250)}" 2>/dev/null || echo "1")
             ;;
         minor)
-            # Replace LOC in formula and evaluate
-            local formula="${MINOR_DELTA//LOC/$loc}"
-            base_delta=$(awk "BEGIN {printf \"%.0f\", ($formula > 0 ? $formula : 1)}" 2>/dev/null || echo "1")
+            # VERSION_MINOR_DELTA=5*(1+LOC/500)
+            base_delta=$(awk "BEGIN {printf \"%.0f\", 5 * (1 + $loc / 500)}" 2>/dev/null || echo "5")
             ;;
         major)
-            # Replace LOC in formula and evaluate
-            local formula="${MAJOR_DELTA//LOC/$loc}"
-            base_delta=$(awk "BEGIN {printf \"%.0f\", ($formula > 0 ? $formula : 1)}" 2>/dev/null || echo "1")
+            # VERSION_MAJOR_DELTA=10*(1+LOC/1000)
+            base_delta=$(awk "BEGIN {printf \"%.0f\", 10 * (1 + $loc / 1000)}" 2>/dev/null || echo "10")
             ;;
         *)
             base_delta=1
             ;;
     esac
     
-    # Ensure minimum base_delta of 1 to prevent zero deltas from tiny changes
+    # Ensure minimum base_delta of 1
     if [[ "$base_delta" -lt 1 ]]; then
         base_delta=1
     fi
     
-    # Calculate final delta
-    local final_delta=$((base_delta + bonus))
-    
-    # Ensure minimum delta of 1
-    if [[ "$final_delta" -lt 1 ]]; then
-        final_delta=1
-    fi
-    
-    printf '%d' "$final_delta"
+    printf '%d' "$base_delta"
 }
 
-# Calculate next version with LOC-based delta system
+# Calculate bonus multiplier based on LOC and version type
+calculate_bonus_multiplier() {
+    local bump_type="$1"
+    local loc="$2"
+    
+    # Apply bonus additions multiplying with LOC gain: (1+LOC/L)
+    # where L=250, 500 or 1000 according to version change type
+    local loc_divisor=0
+    case "$bump_type" in
+        patch) loc_divisor=250 ;;
+        minor) loc_divisor=500 ;;
+        major) loc_divisor=1000 ;;
+        *) loc_divisor=250 ;;
+    esac
+    
+    local multiplier=$(awk "BEGIN {printf \"%.2f\", 1 + $loc / $loc_divisor}" 2>/dev/null || echo "1.0")
+    printf '%s' "$multiplier"
+}
+
+# Calculate next version with mathematical rollover system
 calculate_next_version() {
     local current_version="$1"
     local bump_type="$2"
@@ -202,77 +172,59 @@ calculate_next_version() {
     local major minor patch
     IFS='.' read -r major minor patch <<< "$current_version"
 
-    # Calculate delta based on LOC if enabled
-    local delta=1
-    if [[ "$USE_LOC_DELTA" = "true" ]]; then
-        delta=$(calculate_loc_delta "$bump_type" "$loc" "$bonus")
-    else
-        # Traditional fixed deltas
-        case "$bump_type" in
-            major) delta=1 ;;
-            minor) delta=1 ;;
-            patch) delta=1 ;;
-        esac
+    # Calculate base delta from LOC
+    local base_delta=$(calculate_loc_delta "$bump_type" "$loc")
+    
+    # Calculate bonus multiplier
+    local bonus_multiplier=$(calculate_bonus_multiplier "$bump_type" "$loc")
+    
+    # Calculate total bonus with multiplier
+    local total_bonus=$(awk "BEGIN {printf \"%.0f\", $bonus * $bonus_multiplier}" 2>/dev/null || echo "$bonus")
+    
+    # Calculate total delta_z (base delta + total bonus)
+    local delta_z=$((base_delta + total_bonus))
+    
+    # Ensure minimum delta_z of 1
+    if [[ "$delta_z" -lt 1 ]]; then
+        delta_z=1
     fi
-
-    case "$bump_type" in
-        major)
-            # Apply delta and handle rollover
-            local new_patch=$((patch + delta))
-            if [[ "$new_patch" -ge "$PATCH_LIMIT" ]]; then
-                # Rollover to next minor
-                local new_minor=$((minor + 1))
-                if [[ "$new_minor" -ge "$MINOR_LIMIT" ]]; then
-                    # Rollover to next major
-                    printf '%d.0.0' "$((major + 1))"
-                else
-                    printf '%d.%d.0' "$major" "$new_minor"
-                fi
-            else
-                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
-            fi
-            ;;
-        minor)
-            # Apply delta and handle rollover
-            local new_patch=$((patch + delta))
-            if [[ "$new_patch" -ge "$PATCH_LIMIT" ]]; then
-                # Rollover to next minor
-                local new_minor=$((minor + 1))
-                if [[ "$new_minor" -ge "$MINOR_LIMIT" ]]; then
-                    # Rollover to next major
-                    printf '%d.0.0' "$((major + 1))"
-                else
-                    printf '%d.%d.0' "$major" "$new_minor"
-                fi
-            else
-                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
-            fi
-            ;;
-        patch)
-            # Apply delta and handle rollover
-            local new_patch=$((patch + delta))
-            if [[ "$new_patch" -ge "$PATCH_LIMIT" ]]; then
-                # Rollover to next minor
-                local new_minor=$((minor + 1))
-                if [[ "$new_minor" -ge "$MINOR_LIMIT" ]]; then
-                    # Rollover to next major
-                    printf '%d.0.0' "$((major + 1))"
-                else
-                    printf '%d.%d.0' "$major" "$new_minor"
-                fi
-            else
-                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
-            fi
-            ;;
-        *)
-            printf '%s' "$current_version"
-            ;;
-    esac
+    
+    # Apply mathematical rollover system:
+    # z_new = (z + delta_z) % MAIN_VERSION_MOD
+    # delta_y = ((z + delta_z) - (z + delta_z) % MAIN_VERSION_MOD) / MAIN_VERSION_MOD
+    # y_new = (y + delta_y) % MAIN_VERSION_MOD
+    # delta_x = ((y + delta_y) - (y + delta_y) % MAIN_VERSION_MOD) / MAIN_VERSION_MOD
+    # x_new = x + delta_x
+    
+    local new_z=$((patch + delta_z))
+    local delta_y=$(((new_z - (new_z % MAIN_VERSION_MOD)) / MAIN_VERSION_MOD))
+    local final_z=$((new_z % MAIN_VERSION_MOD))
+    
+    local new_y=$((minor + delta_y))
+    local delta_x=$(((new_y - (new_y % MAIN_VERSION_MOD)) / MAIN_VERSION_MOD))
+    local final_y=$((new_y % MAIN_VERSION_MOD))
+    
+    local final_x=$((major + delta_x))
+    
+    printf '%d.%d.%d' "$final_x" "$final_y" "$final_z"
 }
 
 # Main execution
 NEXT_VERSION=$(calculate_next_version "$CURRENT_VERSION" "$BUMP_TYPE" "$LOC" "$BONUS")
-DELTA=$(calculate_loc_delta "$BUMP_TYPE" "$LOC" "$BONUS")
+
+# Calculate components for output
+BASE_DELTA=$(calculate_loc_delta "$BUMP_TYPE" "$LOC")
+BONUS_MULTIPLIER=$(calculate_bonus_multiplier "$BUMP_TYPE" "$LOC")
+TOTAL_BONUS=$(awk "BEGIN {printf \"%.0f\", $BONUS * $BONUS_MULTIPLIER}" 2>/dev/null || echo "$BONUS")
+TOTAL_DELTA=$((BASE_DELTA + TOTAL_BONUS))
+
+# Determine LOC divisor for reason
+LOC_DIVISOR=250
+case "$BUMP_TYPE" in
+    patch) LOC_DIVISOR=250 ;;
+    minor) LOC_DIVISOR=500 ;;
+    major) LOC_DIVISOR=1000 ;;
+esac
 
 # Output results
 if [[ "$JSON_OUTPUT" = "true" ]]; then
@@ -282,13 +234,13 @@ if [[ "$JSON_OUTPUT" = "true" ]]; then
     printf '  "next_version": "%s",\n' "$NEXT_VERSION"
     printf '  "loc": %s,\n' "$LOC"
     printf '  "bonus": %s,\n' "$BONUS"
-    printf '  "delta": %s,\n' "$DELTA"
-    printf '  "patch_limit": %s,\n' "$PATCH_LIMIT"
-    printf '  "minor_limit": %s,\n' "$MINOR_LIMIT"
-    printf '  "use_loc_delta": %s,\n' "$USE_LOC_DELTA"
-    printf '  "patch_delta_formula": "%s",\n' "$PATCH_DELTA"
-    printf '  "minor_delta_formula": "%s",\n' "$MINOR_DELTA"
-    printf '  "major_delta_formula": "%s"\n' "$MAJOR_DELTA"
+    printf '  "base_delta": %s,\n' "$BASE_DELTA"
+    printf '  "bonus_multiplier": %s,\n' "$BONUS_MULTIPLIER"
+    printf '  "total_bonus": %s,\n' "$TOTAL_BONUS"
+    printf '  "total_delta": %s,\n' "$TOTAL_DELTA"
+    printf '  "main_version_mod": %s,\n' "$MAIN_VERSION_MOD"
+    printf '  "loc_divisor": %s,\n' "$LOC_DIVISOR"
+    printf '  "reason": "LOC=%s, %s update, base_delta=%s, bonus=%s*%s=%s, total_delta=%s"\n' "$LOC" "$(printf '%s' "$BUMP_TYPE" | tr '[:lower:]' '[:upper:]')" "$BASE_DELTA" "$BONUS" "$BONUS_MULTIPLIER" "$TOTAL_BONUS" "$TOTAL_DELTA"
     printf '}\n'
 elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
     printf 'CURRENT_VERSION=%s\n' "$CURRENT_VERSION"
@@ -296,10 +248,13 @@ elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
     printf 'NEXT_VERSION=%s\n' "$NEXT_VERSION"
     printf 'LOC=%s\n' "$LOC"
     printf 'BONUS=%s\n' "$BONUS"
-    printf 'DELTA=%s\n' "$DELTA"
-    printf 'PATCH_LIMIT=%s\n' "$PATCH_LIMIT"
-    printf 'MINOR_LIMIT=%s\n' "$MINOR_LIMIT"
-    printf 'USE_LOC_DELTA=%s\n' "$USE_LOC_DELTA"
+    printf 'BASE_DELTA=%s\n' "$BASE_DELTA"
+    printf 'BONUS_MULTIPLIER=%s\n' "$BONUS_MULTIPLIER"
+    printf 'TOTAL_BONUS=%s\n' "$TOTAL_BONUS"
+    printf 'TOTAL_DELTA=%s\n' "$TOTAL_DELTA"
+    printf 'MAIN_VERSION_MOD=%s\n' "$MAIN_VERSION_MOD"
+    printf 'LOC_DIVISOR=%s\n' "$LOC_DIVISOR"
+    printf 'REASON=LOC=%s, %s update, base_delta=%s, bonus=%s*%s=%s, total_delta=%s\n' "$LOC" "$(printf '%s' "$BUMP_TYPE" | tr '[:lower:]' '[:upper:]')" "$BASE_DELTA" "$BONUS" "$BONUS_MULTIPLIER" "$TOTAL_BONUS" "$TOTAL_DELTA"
 else
     printf '=== Version Calculation ===\n'
     printf 'Current version: %s\n' "$CURRENT_VERSION"
@@ -307,14 +262,12 @@ else
     printf 'Next version: %s\n' "$NEXT_VERSION"
     printf '\nCalculation Details:\n'
     printf '  Lines of code: %s\n' "$LOC"
-    printf '  Bonus points: %s\n' "$BONUS"
-    printf '  Calculated delta: %s\n' "$DELTA"
-    printf '  Patch limit: %s\n' "$PATCH_LIMIT"
-    printf '  Minor limit: %s\n' "$MINOR_LIMIT"
-    printf '  LOC delta enabled: %s\n' "$USE_LOC_DELTA"
-    if [[ "$USE_LOC_DELTA" = "true" ]]; then
-        printf '  Patch delta formula: %s\n' "$PATCH_DELTA"
-        printf '  Minor delta formula: %s\n' "$MINOR_DELTA"
-        printf '  Major delta formula: %s\n' "$MAJOR_DELTA"
-    fi
+    printf '  Base bonus: %s\n' "$BONUS"
+    printf '  Base delta: %s\n' "$BASE_DELTA"
+    printf '  Bonus multiplier: %s\n' "$BONUS_MULTIPLIER"
+    printf '  Total bonus: %s\n' "$TOTAL_BONUS"
+    printf '  Total delta: %s\n' "$TOTAL_DELTA"
+    printf '  Main version mod: %s\n' "$MAIN_VERSION_MOD"
+    printf '  LOC divisor: %s\n' "$LOC_DIVISOR"
+    printf '\nReason: LOC=%s, %s update, base_delta=%s, bonus=%s*%s=%s, total_delta=%s\n' "$LOC" "$(printf '%s' "$BUMP_TYPE" | tr '[:lower:]' '[:upper:]')" "$BASE_DELTA" "$BONUS" "$BONUS_MULTIPLIER" "$TOTAL_BONUS" "$TOTAL_DELTA"
 fi 
