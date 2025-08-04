@@ -220,8 +220,10 @@ extract_cli_options() {
     added_long_opts=$(printf '%s' "$cpp_diff" | awk '/^\+.*--[a-zA-Z0-9-]+/ && !/^\+.*--[[:space:]]*["\x27]/ && !/^\+[[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^\+[[:space:]]*.*["\x27].*-[[:alpha:]]/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
     local removed_long_opts
     removed_long_opts=$(printf '%s' "$cpp_diff" | awk '/^-.*--[a-zA-Z0-9-]+/ && !/^-.*--[[:space:]]*["\x27]/ && !/^-.*--[[:space:]]*[a-zA-Z0-9_]+[[:space:]]*=/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
-    local manual_added_long_count=$(printf '%s\n' "$added_long_opts" | wc -l | tr -d ' ' || printf '0')
-    local manual_removed_long_count=$(printf '%s\n' "$removed_long_opts" | wc -l | tr -d ' ' || printf '0')
+    local manual_added_long_count
+    manual_added_long_count=$(printf '%s\n' "$added_long_opts" | wc -l | tr -d ' ' || printf '0')
+    local manual_removed_long_count
+    manual_removed_long_count=$(printf '%s\n' "$removed_long_opts" | wc -l | tr -d ' ' || printf '0')
     local manual_cli_changes=false
     (( manual_added_long_count > 0 || manual_removed_long_count > 0 )) && manual_cli_changes=true
 
@@ -257,7 +259,7 @@ extract_cli_options() {
     enhanced_cli_patterns=$(printf '%s' "$enhanced_cli_patterns" | tr -cd '0-9' || printf '0')
 
     local total_cli_indicators
-    total_cli_indicators=$(($manual_added_long_count + manual_removed_long_count + getopt_changes + arg_parsing_changes + help_text_changes + main_signature_changes + enhanced_cli_patterns))
+    total_cli_indicators=$((manual_added_long_count + manual_removed_long_count + getopt_changes + arg_parsing_changes + help_text_changes + main_signature_changes + enhanced_cli_patterns))
     
     if [[ "$total_cli_indicators" -gt 0 ]]; then
         manual_cli_changes=true

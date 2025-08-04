@@ -163,6 +163,7 @@ parse_machine_output() {
 # Main analysis function
 main() {
     # Step 1: Resolve references
+    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Resolving git references...\n' >&2
     local ref_args
     ref_args=$(build_ref_args)
     local ref_output
@@ -196,6 +197,7 @@ main() {
     fi
     
     # Step 2: Load configuration
+    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Loading version configuration...\n' >&2
     local config_output
     config_output=$(./dev-bin/version-config-loader --machine)
     
@@ -206,16 +208,19 @@ main() {
     done <<< "$config_output"
     
     # Step 3: Analyze file changes
+    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing file changes...\n' >&2
     local common_args
     common_args=$(build_common_args)
     local file_output
     file_output=$(eval "./dev-bin/file-change-analyzer $common_args")
     
     # Step 4: Analyze CLI options
+    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing CLI options...\n' >&2
     local cli_output
     cli_output=$(eval "./dev-bin/cli-options-analyzer $common_args")
     
     # Step 5: Analyze security keywords
+    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing security keywords...\n' >&2
     local security_output
     security_output=$(eval "./dev-bin/security-keyword-analyzer $common_args")
     

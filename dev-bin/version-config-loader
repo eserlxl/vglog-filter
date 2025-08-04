@@ -129,6 +129,9 @@ load_config() {
     MINOR_BONUS_THRESHOLD=$(safe_numeric '.thresholds.minor_bonus')
     PATCH_BONUS_THRESHOLD=$(safe_numeric '.thresholds.patch_bonus')
     
+    # Export configuration variables for external use
+    export LOC_CAP MAJOR_BONUS_THRESHOLD MINOR_BONUS_THRESHOLD PATCH_BONUS_THRESHOLD
+    
     # Load LOC divisors with validation
     LOC_DIVISOR_MAJOR=$(safe_numeric '.loc_divisors.major')
     LOC_DIVISOR_MINOR=$(safe_numeric '.loc_divisors.minor')
@@ -153,6 +156,9 @@ load_config() {
     BUILD_TIME_THRESHOLD=$(safe_numeric '.patterns.performance.build_time_threshold')
     PERF_50_THRESHOLD=$(safe_numeric '.patterns.performance.perf_50_threshold')
     
+    # Export performance thresholds
+    export MEMORY_REDUCTION_THRESHOLD BUILD_TIME_THRESHOLD PERF_50_THRESHOLD
+    
     # Load bonus values
     BONUS_API_BREAKING=$(safe_numeric '.bonuses.breaking_changes.api_breaking')
     BONUS_CLI_BREAKING=$(safe_numeric '.bonuses.breaking_changes.cli_breaking')
@@ -161,6 +167,9 @@ load_config() {
     BONUS_MEMORY_SAFETY=$(safe_numeric '.bonuses.security_stability.memory_safety')
     BONUS_CRASH_FIX=$(safe_numeric '.bonuses.security_stability.crash_fix')
     BONUS_NEW_CLI_COMMAND=$(safe_numeric '.bonuses.features.new_cli_command')
+    
+    # Export bonus values
+    export BONUS_CVE BONUS_MEMORY_SAFETY BONUS_CRASH_FIX BONUS_NEW_CLI_COMMAND
     BONUS_NEW_CONFIG_OPTION=$(safe_numeric '.bonuses.features.new_config_option')
     BONUS_NEW_SOURCE_FILE=$(safe_numeric '.bonuses.code_quality.new_source_file')
     BONUS_NEW_TEST_FILE=$(safe_numeric '.bonuses.code_quality.new_test_suite')
@@ -170,6 +179,9 @@ load_config() {
     MULTIPLIER_ZERO_DAY=$(safe_numeric '.multipliers.critical.zero_day')
     MULTIPLIER_PRODUCTION_OUTAGE=$(safe_numeric '.multipliers.critical.production_outage')
     MULTIPLIER_COMPLIANCE=$(safe_numeric '.multipliers.critical.compliance')
+    
+    # Export multiplier values
+    export MULTIPLIER_ZERO_DAY MULTIPLIER_PRODUCTION_OUTAGE MULTIPLIER_COMPLIANCE
     
     # Validate multipliers dynamically (must be positive)
     local multiplier_keys

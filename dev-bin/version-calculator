@@ -143,7 +143,8 @@ calculate_bonus_multiplier() {
         *) loc_divisor=250 ;;
     esac
     
-    local multiplier=$(awk "BEGIN {printf \"%.2f\", 1 + $loc / $loc_divisor}" 2>/dev/null || echo "1.0")
+    local multiplier
+    multiplier=$(awk "BEGIN {printf \"%.2f\", 1 + $loc / $loc_divisor}" 2>/dev/null || echo "1.0")
     printf '%s' "$multiplier"
 }
 
@@ -173,13 +174,16 @@ calculate_next_version() {
     IFS='.' read -r major minor patch <<< "$current_version"
 
     # Calculate base delta from LOC
-    local base_delta=$(calculate_loc_delta "$bump_type" "$loc")
+    local base_delta
+    base_delta=$(calculate_loc_delta "$bump_type" "$loc")
     
     # Calculate bonus multiplier
-    local bonus_multiplier=$(calculate_bonus_multiplier "$bump_type" "$loc")
+    local bonus_multiplier
+    bonus_multiplier=$(calculate_bonus_multiplier "$bump_type" "$loc")
     
     # Calculate total bonus with multiplier
-    local total_bonus=$(awk "BEGIN {printf \"%.0f\", $bonus * $bonus_multiplier}" 2>/dev/null || echo "$bonus")
+    local total_bonus
+    total_bonus=$(awk "BEGIN {printf \"%.0f\", $bonus * $bonus_multiplier}" 2>/dev/null || echo "$bonus")
     
     # Calculate total delta_z (base delta + total bonus)
     local delta_z=$((base_delta + total_bonus))
