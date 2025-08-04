@@ -96,9 +96,8 @@ has_cmake_version_field() {
 
 check_dirty_tree() {
     local exclude_paths=()
-    if [[ "$NEW_VERSION" == *-* ]]; then
-        exclude_paths+=("VERSION")
-    fi
+    # Always exclude VERSION from dirty check since we'll be updating it
+    exclude_paths+=("VERSION")
     if [[ "$UPDATE_CMAKE" != "true" ]]; then
         exclude_paths+=("CMakeLists.txt")
     fi
@@ -109,13 +108,8 @@ check_dirty_tree() {
     done
 
     if ! git diff --quiet "${diff_args[@]}"; then
-        local allowed=""
-        if [[ "$NEW_VERSION" != *-* ]]; then
-            allowed="VERSION"
-            [[ "$UPDATE_CMAKE" != "true" ]] && allowed+=" and CMakeLists.txt"
-        elif [[ "$UPDATE_CMAKE" != "true" ]]; then
-            allowed="CMakeLists.txt"
-        fi
+        local allowed="VERSION"
+        [[ "$UPDATE_CMAKE" != "true" ]] && allowed+=" and CMakeLists.txt"
 
         printf '%s' "${RED}Error:${RESET} working tree has disallowed changes. Use --allow-dirty to override." >&2
         [[ -n "$allowed" ]] && printf ' Allowed: %s.' "$allowed" >&2
