@@ -29,25 +29,30 @@ TESTS_FAILED=0
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../dev-bin/semantic-version-analyzer"
 
 # Helper functions
+# shellcheck disable=SC2317
 log_info() {
     printf "%s[INFO]%s %s\n" "${BLUE}" "${NC}" "$1"
 }
 
+# shellcheck disable=SC2317
 log_success() {
     printf "%s[PASS]%s %s\n" "${GREEN}" "${NC}" "$1"
     ((TESTS_PASSED++))
 }
 
+# shellcheck disable=SC2317
 log_error() {
     printf "%s[FAIL]%s %s\n" "${RED}" "${NC}" "$1"
     ((TESTS_FAILED++))
 }
 
+# shellcheck disable=SC2317
 log_warning() {
     printf "%s[WARN]%s %s\n" "${YELLOW}" "${NC}" "$1"
 }
 
 # Test function
+# shellcheck disable=SC2317
 run_test() {
     local test_name="$1"
     local test_command="$2"
