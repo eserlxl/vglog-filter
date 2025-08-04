@@ -1,0 +1,201 @@
+#!/bin/bash
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
+# Security Keyword Analyzer
+# Detects security-related keywords in commit messages and code changes
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+export LC_ALL=C
+# Prevent any pager and avoid unnecessary repo locks for better performance.
+export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
+
+show_help() {
+    cat << EOF
+Security Keyword Analyzer
+
+Usage: $(basename "$0") [options]
+
+Options:
+  --base <ref>             Base reference for comparison
+  --target <ref>           Target reference for comparison (default: HEAD)
+  --repo-root <path>       Set repository root directory
+  --only-paths <globs>     Restrict analysis to comma-separated path globs
+  --ignore-whitespace      Ignore whitespace changes in diff analysis
+  --machine                Output machine-readable key=value format
+  --json                   Output machine-readable JSON
+  --help, -h               Show this help
+
+Examples:
+  $(basename "$0") --base v1.0.0 --target HEAD
+  $(basename "$0") --base HEAD~5 --target HEAD --machine
+  $(basename "$0") --base v1.0.0 --target v1.1.0 --json
+EOF
+}
+
+# Parse arguments
+BASE_REF=""
+TARGET_REF="HEAD"
+REPO_ROOT=""
+ONLY_PATHS=""
+IGNORE_WHITESPACE=false
+MACHINE_OUTPUT=false
+JSON_OUTPUT=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --base)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --base requires a value\n' >&2; exit 1; }
+            BASE_REF="$2"; shift 2;;
+        --target)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --target requires a value\n' >&2; exit 1; }
+            TARGET_REF="$2"; shift 2;;
+        --repo-root)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --repo-root requires a value\n' >&2; exit 1; }
+            REPO_ROOT="$2"; shift 2;;
+        --only-paths)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --only-paths requires a comma-separated globs list\n' >&2; exit 1; }
+            ONLY_PATHS="$2"; shift 2;;
+        --ignore-whitespace) IGNORE_WHITESPACE=true; shift;;
+        --machine) MACHINE_OUTPUT=true; shift;;
+        --json) JSON_OUTPUT=true; shift;;
+        --help|-h) show_help; exit 0;;
+        *) printf 'Error: Unknown option: %s\n' "$1" >&2; show_help; exit 1;;
+    esac
+done
+
+# Validate required arguments
+if [[ -z "$BASE_REF" ]]; then
+    printf 'Error: --base is required\n' >&2
+    exit 1
+fi
+
+# Check git command
+if ! command -v git >/dev/null 2>&1; then
+    printf 'Error: git command not found\n' >&2
+    exit 1
+fi
+
+# Change to repo root if specified
+if [[ -n "$REPO_ROOT" ]]; then
+    cd "$REPO_ROOT"
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+        printf 'Error: Not in a git repository at %s\n' "$REPO_ROOT" >&2
+        exit 1
+    }
+fi
+
+# Build PATH_ARGS array from --only-paths
+PATH_ARGS=()
+if [[ -n "$ONLY_PATHS" ]]; then
+    IFS=',' read -r -a tmp <<< "$ONLY_PATHS"
+    PATH_ARGS+=(--)
+    for g in "${tmp[@]}"; do
+        # Trim surrounding spaces
+        g="${g##+([[:space:]])}"
+        g="${g%%+([[:space:]])}"
+        [[ -n "$g" ]] && PATH_ARGS+=("$g")
+    done
+fi
+
+# Validate git references
+verify_ref() {
+    local ref="$1"
+    if ! git -c color.ui=false rev-parse -q --verify "$ref^{commit}" >/dev/null; then
+        printf 'Error: Invalid reference: %s\n' "$ref" >&2
+        exit 1
+    fi
+}
+
+verify_ref "$BASE_REF"
+verify_ref "$TARGET_REF"
+
+# Analyze security keywords
+analyze_security_keywords() {
+    local base_ref="$1"
+    local target_ref="$2"
+    
+    # Quick security keyword detection (fast path) - include commit bodies for CVEs
+    local security_keywords
+    security_keywords=$(git -c color.ui=false log --format="%s %b" "$base_ref".."$target_ref" 2>/dev/null | \
+        grep -ci -E '(security|vulnerability|cve|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)' || printf '0')
+    
+    # Ensure it's a valid integer
+    security_keywords=$(printf '%s' "$security_keywords" | tr -cd '0-9' || printf '0')
+    
+    # Check for specific security patterns in code changes
+    local security_patterns=0
+    local cve_patterns=0
+    local memory_safety_issues=0
+    local crash_fixes=0
+    
+    # Get diff for security pattern analysis
+    local diff_content
+    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
+        diff_content=$(git -c color.ui=false diff -M -C -w "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null || true)
+    else
+        diff_content=$(git -c color.ui=false diff -M -C "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null || true)
+    fi
+    
+    # Count specific security patterns
+    if [[ -n "$diff_content" ]]; then
+        security_patterns=$(printf '%s' "$diff_content" | grep -ci -E '(security|vulnerability|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)' || printf '0')
+        cve_patterns=$(printf '%s' "$diff_content" | grep -ci -E 'CVE-[0-9]{4}-[0-9]+' || printf '0')
+        memory_safety_issues=$(printf '%s' "$diff_content" | grep -ci -E '(buffer.*overflow|use.*after.*free|double.*free|null.*pointer|dereference|memory.*leak|stack.*overflow|heap.*overflow|format.*string|integer.*overflow)' || printf '0')
+        crash_fixes=$(printf '%s' "$diff_content" | grep -ci -E '(crash|segfault|segmentation.*fault|abort|assert|panic|fatal|error.*handling|exception.*handling)' || printf '0')
+    fi
+    
+    # Sanitize all counts to be integers
+    security_patterns=$(printf '%s' "$security_patterns" | tr -cd '0-9' || printf '0')
+    cve_patterns=$(printf '%s' "$cve_patterns" | tr -cd '0-9' || printf '0')
+    memory_safety_issues=$(printf '%s' "$memory_safety_issues" | tr -cd '0-9' || printf '0')
+    crash_fixes=$(printf '%s' "$crash_fixes" | tr -cd '0-9' || printf '0')
+    
+    # Calculate total security score
+    local total_security_score=$((security_keywords + security_patterns + cve_patterns + memory_safety_issues + crash_fixes))
+    
+    # Output results
+    if [[ "$JSON_OUTPUT" = "true" ]]; then
+        printf '{\n'
+        printf '  "security_keywords": %s,\n' "$security_keywords"
+        printf '  "security_patterns": %s,\n' "$security_patterns"
+        printf '  "cve_patterns": %s,\n' "$cve_patterns"
+        printf '  "memory_safety_issues": %s,\n' "$memory_safety_issues"
+        printf '  "crash_fixes": %s,\n' "$crash_fixes"
+        printf '  "total_security_score": %s\n' "$total_security_score"
+        printf '}\n'
+    elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
+        printf 'SECURITY_KEYWORDS=%s\n' "$security_keywords"
+        printf 'SECURITY_PATTERNS=%s\n' "$security_patterns"
+        printf 'CVE_PATTERNS=%s\n' "$cve_patterns"
+        printf 'MEMORY_SAFETY_ISSUES=%s\n' "$memory_safety_issues"
+        printf 'CRASH_FIXES=%s\n' "$crash_fixes"
+        printf 'TOTAL_SECURITY_SCORE=%s\n' "$total_security_score"
+    else
+        printf '=== Security Keyword Analysis ===\n'
+        printf 'Base reference: %s\n' "$base_ref"
+        printf 'Target reference: %s\n' "$target_ref"
+        printf '\nSecurity Analysis:\n'
+        printf '  Security keywords in commits: %s\n' "$security_keywords"
+        printf '  Security patterns in code: %s\n' "$security_patterns"
+        printf '  CVE references: %s\n' "$cve_patterns"
+        printf '  Memory safety issues: %s\n' "$memory_safety_issues"
+        printf '  Crash fixes: %s\n' "$crash_fixes"
+        printf '  Total security score: %s\n' "$total_security_score"
+        
+        if [[ "$total_security_score" -gt 0 ]]; then
+            printf '\nSecurity Keywords Detected:\n'
+            git -c color.ui=false log --format="%s" "$base_ref".."$target_ref" 2>/dev/null | \
+                grep -i -E '(security|vulnerability|cve|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)' | \
+                head -10 || printf '  None found in commit messages\n'
+        fi
+    fi
+}
+
+# Main execution
+analyze_security_keywords "$BASE_REF" "$TARGET_REF" 

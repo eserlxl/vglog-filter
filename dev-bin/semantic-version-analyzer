@@ -6,41 +6,16 @@
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
 #
-# Semantic Version Analyzer for vglog-filter
-# Simple, reliable version bumping based on actual code changes
-# Note: Short option detection is byte-based; non-ASCII options not supported
+# Semantic Version Analyzer v2 for vglog-filter
+# Orchestrates modular components for version analysis
 
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
-# Prevent any pager and avoid unnecessary repo locks for better performance.
-export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
-
-# --- Global Analysis Results ---
-# We use a global associative array to store analysis results.
-# This avoids complex string parsing between functions.
-declare -A R
-
-# --- early guards -------------------------------------------------------------
-
-# Check git command first before any git usage
-if ! command -v git >/dev/null 2>&1; then
-    printf 'Error: git command not found\n' >&2
-    exit 1
-fi
-
-
-
-# Early repository guard (only if --repo-root is not specified)
-# We'll check for --repo-root in the argument parsing loop
-EARLY_REPO_CHECK=true
-
-# Optional error trap for CI debugging (uncomment if needed)
-# trap 'printf "Error at line %d in %s\n" $LINENO "${BASH_SOURCE[0]}" >&2' ERR
 
 show_help() {
     cat << EOF
-Semantic Version Analyzer v3 for vglog-filter
+Semantic Version Analyzer v2 for vglog-filter
 
 Usage: $(basename "$0") [options]
 
@@ -53,42 +28,14 @@ Options:
   --target <ref>           Set target reference for comparison (default: HEAD)
   --repo-root <path>       Set repository root directory
   --no-merge-base          Disable automatic merge-base detection for disjoint branches
-  --print-base             Output the chosen base reference SHA on a single line
   --only-paths <globs>     Restrict analysis to comma-separated path globs
-                           (e.g. "src/**,include/**,tools/**")
+  --ignore-whitespace      Ignore whitespace changes in diff analysis
   --verbose                Show detailed analysis
   --machine                Output machine-readable key=value format (SUGGESTION only)
   --json                   Output machine-readable JSON
-  --ignore-whitespace      Ignore whitespace changes in diff size and signals
   --suggest-only           Output only the suggestion (major/minor/patch/none)
   --strict-status          Use strict exit codes even with --suggest-only
   --help, -h               Show this help
-
-Configuration:
-  The script loads configuration from dev-config/versioning.yml if available.
-  If yq is not installed or the config file is missing, it falls back to
-  environment variables.
-
-Environment Variables (fallback):
-  # PURELY MATHEMATICAL VERSIONING SYSTEM
-  # All version bump decisions are based on bonus point calculations
-  # No minimum thresholds or extra rules - pure math logic only
-  VERSION_USE_LOC_DELTA    Enable LOC-based delta system (default: true)
-  VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
-  VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
-  VERSION_PATCH_DELTA      Patch delta formula (default: 1*(1+LOC/250))
-  VERSION_MINOR_DELTA      Minor delta formula (default: 5*(1+LOC/500))
-  VERSION_MAJOR_DELTA      Major delta formula (default: 10*(1+LOC/1000))
-  VERSION_BREAKING_CLI_BONUS Breaking CLI bonus (default: 2)
-  VERSION_API_BREAKING_BONUS API breaking bonus (default: 3)
-  VERSION_REMOVED_OPTION_BONUS Removed option bonus (default: 1)
-  VERSION_CLI_CHANGES_BONUS CLI changes bonus (default: 2)
-  VERSION_MANUAL_CLI_BONUS Manual CLI bonus (default: 1)
-  VERSION_NEW_SOURCE_BONUS New source file bonus (default: 1)
-  VERSION_NEW_TEST_BONUS   New test file bonus (default: 1)
-  VERSION_NEW_DOC_BONUS    New doc file bonus (default: 1)
-  VERSION_ADDED_OPTION_BONUS Added option bonus (default: 1)
-  VERSION_SECURITY_BONUS   Security keyword bonus (default: 2)
 
 Examples:
   $(basename "$0") --since v1.1.0
@@ -100,32 +47,15 @@ Examples:
   $(basename "$0") --machine
   $(basename "$0") --json
 
-Machine output examples:
-  $(basename "$0") --machine | grep SUGGESTION
-  $(basename "$0") --json | jq -r .suggestion
-
 Exit codes:
   10 = major version bump suggested
   11 = minor version bump suggested
   12 = patch version bump suggested
   20 = no version bump suggested
-  Note: With --suggest-only (without --strict-status), always exits 0 unless fatal error
-
-Notes:
-  - CLI option detection uses fold -w1 for short options (byte-based splitting)
-  - Multi-byte characters in long options are not supported
-  - Colons are filtered from getopt strings to avoid false "removed option" detections
-  - All git commands use color.ui=false for consistent output
-  - All git diff commands use -M -C for deterministic parsing and rename detection
-  - Header prototype detection is restricted to include/** or src/** header files with semicolon endings
-  - Manual CLI detection (--verbose or not) scans for added/removed --[[:alnum:]-]+ tokens in C/C++ source files
-  - JSON output includes manual_added_long_count and manual_removed_long_count fields
-  - Early exit optimization: if bonus threshold is met, skips expensive LOC calculation
-  - Configuration validation: LOC divisors must be > 0, multipliers must be numeric
 EOF
 }
 
-# Default values
+# Parse arguments
 SINCE_TAG=""
 SINCE_COMMIT=""
 SINCE_DATE=""
@@ -133,216 +63,14 @@ BASE_REF=""
 TARGET_REF=""
 REPO_ROOT=""
 NO_MERGE_BASE=false
-PRINT_BASE=false
+ONLY_PATHS=""
+IGNORE_WHITESPACE=false
 VERBOSE=false
 MACHINE_OUTPUT=false
 JSON_OUTPUT=false
-IGNORE_WHITESPACE=false
 SUGGEST_ONLY=false
 STRICT_STATUS=false
-ONLY_PATHS=""
 
-# --- configuration loading ----------------------------------------------------
-
-# Configuration file path
-CONFIG_FILE="dev-config/versioning.yml"
-
-# Load configuration from YAML file with validation
-load_config() {
-    # Check if yq is available
-    if ! command -v yq >/dev/null 2>&1; then
-        printf 'Warning: yq not found, using default configuration\n' >&2
-        return 1
-    fi
-    
-    # Check if config file exists
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-        printf 'Warning: Configuration file %s not found, using defaults\n' "$CONFIG_FILE" >&2
-        return 1
-    fi
-    
-    # Load and validate configuration
-    local config_content
-    config_content=$(yq '.' "$CONFIG_FILE" 2>/dev/null || true)
-    if [[ -z "$config_content" ]]; then
-        printf 'Warning: Failed to parse configuration file %s, using defaults\n' "$CONFIG_FILE" >&2
-        return 1
-    fi
-    
-    # Helper function to safely extract numeric values
-    safe_numeric() {
-        local value
-        value=$(yq "$1" "$CONFIG_FILE" 2>/dev/null || printf '')
-        if [[ -n "$value" ]] && [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-            printf '%s' "$value"
-        else
-            printf ''
-        fi
-    }
-    
-    # Helper function to safely extract string values
-    safe_string() {
-        local value
-        value=$(yq "$1" "$CONFIG_FILE" 2>/dev/null || printf '')
-        if [[ -n "$value" ]]; then
-            printf '%s' "$value"
-        else
-            printf ''
-        fi
-    }
-    
-    # Load base deltas
-    BASE_DELTA_PATCH=$(safe_numeric '.base_deltas.patch')
-    BASE_DELTA_MINOR=$(safe_numeric '.base_deltas.minor')
-    BASE_DELTA_MAJOR=$(safe_numeric '.base_deltas.major')
-    
-    # Load limits
-    LOC_CAP=$(safe_numeric '.limits.loc_cap')
-    ROLLOVER=$(safe_numeric '.limits.rollover')
-    
-    # Load thresholds
-    MAJOR_BONUS_THRESHOLD=$(safe_numeric '.thresholds.major_bonus')
-    MINOR_BONUS_THRESHOLD=$(safe_numeric '.thresholds.minor_bonus')
-    PATCH_BONUS_THRESHOLD=$(safe_numeric '.thresholds.patch_bonus')
-    
-    # Load LOC divisors with validation
-    LOC_DIVISOR_MAJOR=$(safe_numeric '.loc_divisors.major')
-    LOC_DIVISOR_MINOR=$(safe_numeric '.loc_divisors.minor')
-    LOC_DIVISOR_PATCH=$(safe_numeric '.loc_divisors.patch')
-    
-    # Validate LOC divisors (guard against zero)
-    for divisor_name in "major" "minor" "patch"; do
-        local divisor_var="LOC_DIVISOR_${divisor_name^^}"
-        local divisor_value="${!divisor_var}"
-        if [[ -n "$divisor_value" ]] && [[ "$divisor_value" -le 0 ]]; then
-            printf 'Error: Invalid LOC divisor for %s: %s (must be > 0)\n' "$divisor_name" "$divisor_value" >&2
-            exit 1
-        fi
-    done
-    
-    # Load early exit configuration
-    EARLY_EXIT_BONUS_THRESHOLD=$(safe_numeric '.patterns.early_exit.bonus_threshold')
-    EARLY_EXIT_CHANGE_TYPE=$(safe_string '.patterns.early_exit.change_type')
-    
-    # Load performance thresholds
-    MEMORY_REDUCTION_THRESHOLD=$(safe_numeric '.patterns.performance.memory_reduction_threshold')
-    BUILD_TIME_THRESHOLD=$(safe_numeric '.patterns.performance.build_time_threshold')
-    PERF_50_THRESHOLD=$(safe_numeric '.patterns.performance.perf_50_threshold')
-    
-    # Load bonus values
-    BONUS_API_BREAKING=$(safe_numeric '.bonuses.breaking_changes.api_breaking')
-    BONUS_CLI_BREAKING=$(safe_numeric '.bonuses.breaking_changes.cli_breaking')
-    BONUS_SECURITY_VULN=$(safe_numeric '.bonuses.security_stability.security_vuln')
-    BONUS_CVE=$(safe_numeric '.bonuses.security_stability.cve')
-    BONUS_MEMORY_SAFETY=$(safe_numeric '.bonuses.security_stability.memory_safety')
-    BONUS_CRASH_FIX=$(safe_numeric '.bonuses.security_stability.crash_fix')
-    BONUS_NEW_CLI_COMMAND=$(safe_numeric '.bonuses.features.new_cli_command')
-    BONUS_NEW_CONFIG_OPTION=$(safe_numeric '.bonuses.features.new_config_option')
-    BONUS_NEW_SOURCE_FILE=$(safe_numeric '.bonuses.code_quality.new_source_file')
-    BONUS_NEW_TEST_FILE=$(safe_numeric '.bonuses.code_quality.new_test_suite')
-    BONUS_NEW_DOC_FILE=$(safe_numeric '.bonuses.code_quality.doc_overhaul')
-    
-    # Load multipliers with validation
-    MULTIPLIER_ZERO_DAY=$(safe_numeric '.multipliers.critical.zero_day')
-    MULTIPLIER_PRODUCTION_OUTAGE=$(safe_numeric '.multipliers.critical.production_outage')
-    MULTIPLIER_COMPLIANCE=$(safe_numeric '.multipliers.critical.compliance')
-    
-    # Validate multipliers dynamically (must be positive)
-    local multiplier_keys
-    multiplier_keys=$(yq '.multipliers.critical | keys | .[]' "$CONFIG_FILE" 2>/dev/null || printf '')
-    if [[ -n "$multiplier_keys" ]]; then
-        while IFS= read -r multiplier_name; do
-            [[ -n "$multiplier_name" ]] || continue
-            # Convert to uppercase and replace non-alphanumeric chars with underscore
-            local safe_name
-            safe_name=$(printf '%s' "$multiplier_name" | tr '[:lower:]' '[:upper:]' | tr -c '[:alnum:]' '_')
-            local multiplier_var="MULTIPLIER_${safe_name}"
-            local multiplier_value
-            multiplier_value="${!multiplier_var:-}"
-            if [[ -n "$multiplier_value" ]] && [[ ! "$multiplier_value" =~ ^[0-9.]+$ ]]; then
-                printf 'Error: Invalid multiplier for %s: %s (must be numeric)\n' "$multiplier_name" "$multiplier_value" >&2
-                exit 1
-            fi
-        done <<< "$multiplier_keys"
-    fi
-    
-    return 0
-}
-
-# --- defaults / config --------------------------------------------------------
-
-# Load configuration from YAML file
-if ! load_config; then
-    # Fallback to environment variables with defaults
-    printf 'Using fallback configuration from environment variables\n' >&2
-fi
-
-# PURELY MATHEMATICAL VERSIONING SYSTEM
-# All version bump decisions are based on bonus point calculations
-# No minimum thresholds or extra rules - pure math logic only
-
-# LOC-based delta system configuration (use config values if available)
-VERSION_PATCH_LIMIT="${VERSION_PATCH_LIMIT:-${ROLLOVER:-100}}"
-VERSION_MINOR_LIMIT="${VERSION_MINOR_LIMIT:-${ROLLOVER:-100}}"
-VERSION_USE_LOC_DELTA="${VERSION_USE_LOC_DELTA:-true}"
-
-# Use config divisors if available, otherwise fallback to hardcoded formulas
-if [[ -n "${LOC_DIVISOR_PATCH:-}" ]]; then
-    VERSION_PATCH_DELTA="${BASE_DELTA_PATCH:-1}*(1+LOC/$LOC_DIVISOR_PATCH)"
-else
-    VERSION_PATCH_DELTA="${VERSION_PATCH_DELTA:-1*(1+LOC/250)}"
-fi
-
-if [[ -n "${LOC_DIVISOR_MINOR:-}" ]]; then
-    VERSION_MINOR_DELTA="${BASE_DELTA_MINOR:-5}*(1+LOC/$LOC_DIVISOR_MINOR)"
-else
-    VERSION_MINOR_DELTA="${VERSION_MINOR_DELTA:-5*(1+LOC/500)}"
-fi
-
-if [[ -n "${LOC_DIVISOR_MAJOR:-}" ]]; then
-    VERSION_MAJOR_DELTA="${BASE_DELTA_MAJOR:-10}*(1+LOC/$LOC_DIVISOR_MAJOR)"
-else
-    VERSION_MAJOR_DELTA="${VERSION_MAJOR_DELTA:-10*(1+LOC/1000)}"
-fi
-
-# Bonus system configuration (use config values if available)
-VERSION_BREAKING_CLI_BONUS="${VERSION_BREAKING_CLI_BONUS:-${BONUS_CLI_BREAKING:-2}}"
-VERSION_API_BREAKING_BONUS="${VERSION_API_BREAKING_BONUS:-${BONUS_API_BREAKING:-3}}"
-VERSION_REMOVED_OPTION_BONUS="${VERSION_REMOVED_OPTION_BONUS:-1}"
-VERSION_CLI_CHANGES_BONUS="${VERSION_CLI_CHANGES_BONUS:-2}"
-VERSION_MANUAL_CLI_BONUS="${VERSION_MANUAL_CLI_BONUS:-1}"
-VERSION_NEW_SOURCE_BONUS="${VERSION_NEW_SOURCE_BONUS:-${BONUS_NEW_SOURCE_FILE:-1}}"
-VERSION_NEW_TEST_BONUS="${VERSION_NEW_TEST_BONUS:-${BONUS_NEW_TEST_FILE:-1}}"
-VERSION_NEW_DOC_BONUS="${VERSION_NEW_DOC_BONUS:-${BONUS_NEW_DOC_FILE:-1}}"
-VERSION_ADDED_OPTION_BONUS="${VERSION_ADDED_OPTION_BONUS:-${BONUS_NEW_CONFIG_OPTION:-1}}"
-VERSION_SECURITY_BONUS="${VERSION_SECURITY_BONUS:-${BONUS_SECURITY_VULN:-2}}"
-
-# Early exit configuration
-EARLY_EXIT_BONUS_THRESHOLD="${EARLY_EXIT_BONUS_THRESHOLD:-8}"
-EARLY_EXIT_CHANGE_TYPE="${EARLY_EXIT_CHANGE_TYPE:-major}"
-
-# PURELY MATHEMATICAL VERSIONING SYSTEM
-# All decisions based on bonus point calculations - no extra rules
-
-# Build a global PATH_ARGS array from --only-paths (applied to ALL diffs)
-PATH_ARGS=()
-build_path_args() {
-    PATH_ARGS=()
-    if [[ -n "$ONLY_PATHS" ]]; then
-        IFS=',' read -r -a tmp <<< "$ONLY_PATHS"
-        PATH_ARGS+=(--)
-        for g in "${tmp[@]}"; do
-            # Trim surrounding spaces
-            g="${g##+([[:space:]])}"
-            g="${g%%+([[:space:]])}"
-            [[ -n "$g" ]] && PATH_ARGS+=("$g")
-        done
-    fi
-}
-
-# --- arg parsing --------------------------------------------------------------
-
-# Parse arguments with proper validation
 while [[ $# -gt 0 ]]; do
     case $1 in
         --since|--since-tag)
@@ -353,11 +81,6 @@ while [[ $# -gt 0 ]]; do
             SINCE_COMMIT="$2"; shift 2;;
         --since-date)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --since-date requires a value\n' >&2; exit 1; }
-            # Validate date format (YYYY-MM-DD)
-            [[ "$2" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { printf 'Error: --since-date requires YYYY-MM-DD format\n' >&2; exit 1; }
-            IFS='-' read -r _ month day <<< "$2"
-            ((month>=1 && month<=12)) || { printf 'Error: Invalid month in date %s (must be 01-12)\n' "$2" >&2; exit 1; }
-            ((day>=1 && day<=31)) ||  { printf 'Error: Invalid day in date %s (must be 01-31)\n' "$2" >&2; exit 1; }
             SINCE_DATE="$2"; shift 2;;
         --base)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --base requires a value\n' >&2; exit 1; }
@@ -367,1406 +90,288 @@ while [[ $# -gt 0 ]]; do
             TARGET_REF="$2"; shift 2;;
         --repo-root)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --repo-root requires a value\n' >&2; exit 1; }
-            REPO_ROOT="$2"; EARLY_REPO_CHECK=false; shift 2;;
+            REPO_ROOT="$2"; shift 2;;
         --no-merge-base) NO_MERGE_BASE=true; shift;;
-        --print-base)    PRINT_BASE=true; shift;;
-        --verbose)       VERBOSE=true; shift;;
-        --machine)       MACHINE_OUTPUT=true; shift;;
-        --json)          JSON_OUTPUT=true; shift;;
-        --ignore-whitespace) IGNORE_WHITESPACE=true; shift;;
-        --suggest-only)  SUGGEST_ONLY=true; shift;;
-        --strict-status) STRICT_STATUS=true; shift;;
         --only-paths)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --only-paths requires a comma-separated globs list\n' >&2; exit 1; }
             ONLY_PATHS="$2"; shift 2;;
-        --help|-h)       show_help; exit 0;;
+        --ignore-whitespace) IGNORE_WHITESPACE=true; shift;;
+        --verbose) VERBOSE=true; shift;;
+        --machine) MACHINE_OUTPUT=true; shift;;
+        --json) JSON_OUTPUT=true; shift;;
+        --suggest-only) SUGGEST_ONLY=true; shift;;
+        --strict-status) STRICT_STATUS=true; shift;;
+        --help|-h) show_help; exit 0;;
         *) printf 'Error: Unknown option: %s\n' "$1" >&2; show_help; exit 1;;
     esac
 done
-build_path_args
 
-# Early repository guard (if not disabled by --repo-root)
-if [[ "$EARLY_REPO_CHECK" = "true" ]]; then
-    # Check for git repository in current directory
-    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
-        printf 'Not in a git repository\n' >&2
-        exit 1
-    }
-fi
-
-# Change to repo root if specified
-if [[ -n "$REPO_ROOT" ]]; then
-    cd "$REPO_ROOT"
-    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
-        printf 'Error: Not in a git repository at %s\n' "$REPO_ROOT" >&2
-        exit 1
-    }
-fi
-
-# --- helpers ------------------------------------------------------------------
-
-# Validate git reference
-verify_ref() {
-    local ref="$1"
-    if ! git -c color.ui=false rev-parse -q --verify "$ref^{commit}" >/dev/null; then
-        printf 'Error: Invalid reference: %s\n' "$ref" >&2
+# Check if required binaries exist
+check_binary() {
+    local binary="$1"
+    if [[ ! -x "$binary" ]]; then
+        printf 'Error: Required binary not found: %s\n' "$binary" >&2
         exit 1
     fi
 }
 
-# Determine the base for comparison with better error handling
-get_base_reference() {
-    # Handle explicit base/target references
-    if [[ -n "$BASE_REF" ]]; then
-        verify_ref "$BASE_REF"; printf '%s|explicit_base' "$BASE_REF"; return
-    fi
+check_binary "./dev-bin/ref-resolver"
+check_binary "./dev-bin/version-config-loader"
+check_binary "./dev-bin/file-change-analyzer"
+check_binary "./dev-bin/cli-options-analyzer"
+check_binary "./dev-bin/security-keyword-analyzer"
+check_binary "./dev-bin/version-calculator"
 
-    if [[ -n "$SINCE_COMMIT" ]]; then
-        verify_ref "$SINCE_COMMIT"; printf '%s|commit' "$SINCE_COMMIT"; return
-    elif [[ -n "$SINCE_TAG" ]]; then
-        verify_ref "$SINCE_TAG"; printf '%s|tag' "$SINCE_TAG"; return
-    elif [[ -n "$SINCE_DATE" ]]; then
-        # Find the latest commit before the specified date
-        local ref
-        ref=$(git -c color.ui=false rev-list -1 --before="$SINCE_DATE 23:59:59" HEAD 2>/dev/null || true)
-        if [[ -n "$ref" ]]; then
-            verify_ref "$ref"; printf '%s|date' "$ref"
-        else
-            printf 'Warning: No commits found before %s, using first commit\n' "$SINCE_DATE" >&2
-            local first_commit
-            first_commit=$(git -c color.ui=false rev-list --max-parents=0 HEAD 2>/dev/null || true)
-            [[ -n "$first_commit" ]] || { printf 'Error: No commits found in repository\n' >&2; exit 1; }
-            printf '%s|first' "$first_commit"
-        fi
-        return
-    fi
-
-    # Default to last tag, fallback to HEAD~1 if no tags exist
-    local last_tag
-    last_tag=$(git -c color.ui=false describe --tags --abbrev=0 2>/dev/null || true)
-    if [[ -n "$last_tag" ]]; then
-        verify_ref "$last_tag"
-        printf '%s|last_tag' "$last_tag"
-    else
-        # If no tags exist, use HEAD~1 instead of first commit
-        local parent_commit
-        parent_commit=$(git -c color.ui=false rev-parse HEAD~1 2>/dev/null || true)
-        if [[ -n "$parent_commit" ]]; then
-            printf '%s|parent' "$parent_commit"
-        else
-            # Only use first commit if HEAD~1 doesn't exist (single-commit repo)
-            local first_commit
-            first_commit=$(git -c color.ui=false rev-list --max-parents=0 HEAD 2>/dev/null || true)
-            [[ -n "$first_commit" ]] || { printf 'Error: No commits found in repository\n' >&2; exit 1; }
-            printf '%s|first' "$first_commit"
-        fi
-    fi
+# Build common arguments for all components
+build_common_args() {
+    local args=""
+    [[ -n "$BASE_REF" ]] && args="$args --base '$BASE_REF'"
+    [[ -n "$TARGET_REF" ]] && args="$args --target '$TARGET_REF'"
+    [[ -n "$REPO_ROOT" ]] && args="$args --repo-root '$REPO_ROOT'"
+    [[ -n "$ONLY_PATHS" ]] && args="$args --only-paths '$ONLY_PATHS'"
+    [[ "$IGNORE_WHITESPACE" = "true" ]] && args="$args --ignore-whitespace"
+    [[ "$MACHINE_OUTPUT" = "true" ]] && args="$args --machine"
+    [[ "$JSON_OUTPUT" = "true" ]] && args="$args --json"
+    printf '%s' "$args"
 }
 
-# Check if there are commits in the range
-check_commit_range() {
-    local base_ref="$1"
-    local target_ref="$2"
-
-    local commit_count
-    commit_count=$(git -c color.ui=false rev-list --count "$base_ref".."$target_ref" 2>/dev/null || printf '0')
-
-    (( commit_count > 0 )) || { printf 'Warning: No commits found between %s and %s\n' "$base_ref" "$target_ref" >&2; return 1; }
-    return 0
+# Build ref resolver arguments
+build_ref_args() {
+    local args=""
+    [[ -n "$SINCE_TAG" ]] && args="$args --since '$SINCE_TAG'"
+    [[ -n "$SINCE_COMMIT" ]] && args="$args --since-commit '$SINCE_COMMIT'"
+    [[ -n "$SINCE_DATE" ]] && args="$args --since-date '$SINCE_DATE'"
+    [[ -n "$BASE_REF" ]] && args="$args --base '$BASE_REF'"
+    [[ -n "$TARGET_REF" ]] && args="$args --target '$TARGET_REF'"
+    [[ -n "$REPO_ROOT" ]] && args="$args --repo-root '$REPO_ROOT'"
+    [[ "$NO_MERGE_BASE" = "true" ]] && args="$args --no-merge-base"
+    [[ "$MACHINE_OUTPUT" = "true" ]] && args="$args --machine"
+    [[ "$JSON_OUTPUT" = "true" ]] && args="$args --json"
+    printf '%s' "$args"
 }
 
-# Debug output function - only outputs when not in machine mode or JSON mode
-debug_output() {
-    if [[ "$MACHINE_OUTPUT" != "true" ]] && [[ "$JSON_OUTPUT" != "true" ]]; then
-        printf '%s\n' "$1" >&2
-    fi
+# Parse machine output into associative array
+parse_machine_output() {
+    local output="$1"
+    local -A result
+    while IFS='=' read -r key value; do
+        [[ -n "$key" ]] && result["$key"]="$value"
+    done <<< "$output"
+    printf '%s' "$(declare -p result)"
 }
 
-# Classify file path - improved to handle multiple folder patterns and nested directories
-classify_path() {
-    local path="$1"
-    local path_lower
-    path_lower=$(printf '%s' "$path" | tr '[:upper:]' '[:lower:]')
-
-    # Skip noise directories and binary/lock artifacts (including nested ones)
-    if [[ "$path" =~ /(build|dist|out|third_party|vendor|\.git|node_modules|target|bin|obj)/ ]] || \
-       [[ "$path" =~ ^(build|dist|out|third_party|vendor|\.git|node_modules|target|bin|obj)/ ]] || \
-       [[ "$path" =~ \.(lock|exe|dll|so|dylib|jar|war|ear|zip|tar|gz|bz2|xz|7z|rar)$ ]]; then
-        printf '0'
-        return
-    fi
-
-    # Source files (including headers)
-    if [[ "$path" =~ (^|/)src/ ]] || [[ "$path" =~ (^|/)source/ ]] || [[ "$path" =~ (^|/)app/ ]] || \
-       [[ "$path" =~ \.(c|cc|cpp|cxx|h|hpp|hh)$ ]]; then
-        printf '30'
-        return
-    fi
-
-    # Test files
-    if [[ "$path" =~ (^|/)(test|tests|unittests)/ ]] || [[ "$path" =~ \.(test|spec)\.(c|cpp|sh|py)$ ]]; then
-        printf '10'
-        return
-    fi
-
-    # Documentation files (case-insensitive)
-    if [[ "$path_lower" =~ (^|/)(doc|docs)/ ]] || \
-       [[ "$path_lower" =~ (^|/)(readme|changelog|contributing|license|copying|authors|install|news|history) ]] || \
-       [[ "$path_lower" =~ \.(md|rst|adoc|txt)$ ]]; then
-        printf '20'
-        return
-    fi
-
-    printf '0'
-}
-
-# Helper function to increment counters for new files
-inc_counters_for() {
-    local file="$1"
-    case "$(classify_path "$file")" in
-        30) R[new_source_files]=$((${R[new_source_files]} + 1)) ;;
-        10) R[new_test_files]=$((${R[new_test_files]} + 1)) ;;
-        20) R[new_doc_files]=$((${R[new_doc_files]} + 1)) ;;
-    esac
-}
-
-# Enhanced CLI options detection with better accuracy - restrict to changed lines
-extract_cli_options() {
-    local base_ref="$1"
-    local target_ref="$2"
-    local -A file_contents_before file_contents_after
-
-    # Get a list of changed source files
-    local -a changed_files=()
-    while IFS= read -r -d '' f; do
-        changed_files+=("$f")
-    done < <(git -c color.ui=false -c core.quotepath=false diff -M -C -z --name-only "$base_ref".."$target_ref" "${PATH_ARGS[@]}" -- \
-        'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-        'include/*.h' 'include/*.hpp' 'include/*.hh' 2>/dev/null || printf '')
-
-    if (( ${#changed_files[@]} == 0 )); then
-        return
-    fi
-
-    # Pre-fetch file contents to avoid repeated git show calls
-    for file in "${changed_files[@]}"; do
-        file_contents_before["$file"]=$(git -c color.ui=false show "$base_ref:$file" 2>/dev/null || true)
-        file_contents_after["$file"]=$(git -c color.ui=false show "$target_ref:$file" 2>/dev/null || true)
-    done
-
-    # Extract short options / long options from changed source files
-    local short_before_all=""
-    local short_after_all=""
-    local long_before_all=""
-    local long_after_all=""
-
-    for file in "${changed_files[@]}"; do
-        short_before_all+=$(printf '%s' "${file_contents_before[$file]}" | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' || true)
-        short_after_all+=$(printf '%s' "${file_contents_after[$file]}" | grep -E 'getopt\(|getopt_long\(' | grep -o '"[^"]*"' | tr -d '"' || true)
-        long_before_all+=$(printf '%s' "${file_contents_before[$file]}" | awk '/struct option/,/};/' | grep '{"[^\"]*"' | grep -o '"[^"]*"' | tr -d '"' | tr '\n' ',' || true)
-        long_after_all+=$(printf '%s' "${file_contents_after[$file]}" | awk '/struct option/,/};/' | grep '{"[^\"]*"' | grep -o '"[^"]*"' | tr -d '"' | tr '\n' ',' || true)
-    done
-
-    local short_before
-    short_before=$(printf '%s' "$short_before_all" | sort -u | tr -d '\n')
-    local short_after
-    short_after=$(printf '%s' "$short_after_all" | sort -u | tr -d '\n')
-    local long_before
-    long_before=$(printf '%s' "$long_before_all" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
-    local long_after
-    long_after=$(printf '%s' "$long_after_all" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
-
-    # Get the combined diff for all changed files at once
-    local srcdiff
-    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        srcdiff=$(git -c color.ui=false diff -M -C -w --unified=0 "$base_ref".."$target_ref" "${PATH_ARGS[@]}" -- "${changed_files[@]}" 2>/dev/null || true)
-    else
-        srcdiff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" "${PATH_ARGS[@]}" -- "${changed_files[@]}" 2>/dev/null || true)
-    fi
-
-    # Enhanced breaking change detection: look for removed case labels
-    local removed_cases
-    removed_cases=$(printf '%s' "$srcdiff" | grep -E '^-[[:space:]]*case[[:space:]]' | sed 's/^-[[:space:]]*case[[:space:]]*//' | sort -u || true)
-    
-    if [[ -n "$removed_cases" ]]; then
-        local added_cases
-        added_cases=$(printf '%s' "$srcdiff" | grep -E '^\+[[:space:]]*case[[:space:]]' | sed 's/^\+[[:space:]]*case[[:space:]]*//' | sort -u || true)
-        local missing_cases
-        missing_cases=$(comm -23 <(printf '%s\n' "$removed_cases") <(printf '%s\n' "$added_cases") 2>/dev/null || true)
-        [[ -n "$missing_cases" ]] && R[breaking_cli_changes]=true
-    fi
-
-    # Check for API-breaking hints in headers
-    local header_diff
-    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        header_diff=$(git -c color.ui=false diff -M -C -w --unified=0 "$base_ref".."$target_ref" "${PATH_ARGS[@]}" -- \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-            'src/*.h'     'src/*.hpp'     'src/*.hh' 2>/dev/null || true)
-    else
-        header_diff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" "${PATH_ARGS[@]}" -- \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-            'src/*.h'     'src/*.hpp'     'src/*.hh' 2>/dev/null || true)
-    fi
-    
-    local removed_prototypes
-    removed_prototypes=$(printf '%s' "$header_diff" | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/ && !/^-[[:space:]]*(typedef|#)/' | wc -l | tr -d ' ' || printf '0')
-    if [[ "${removed_prototypes:-0}" -gt 0 ]]; then
-        R[api_breaking]=true
-    fi
-
-    # Check for main function signature changes
-    local main_cli_additions
-    main_cli_additions=$(printf '%s' "$srcdiff" | awk '
-        /^\+[[:space:]]*int[[:space:]]+main[[:space:]]*\([^)]*argc[^)]*argv[^)]*\)/ { print "main_cli_addition" }
-        /^-[[:space:]]*int[[:space:]]+main[[:space:]]*\([^)]*\)/ && !/^-[[:space:]]*int[[:space:]]+main[[:space:]]*\([[:space:]]*\)/ { print "main_parameter_removal" }
-    ' | wc -l | tr -d ' ' || printf '0')
-    
-    if [[ "$main_cli_additions" -gt 0 ]]; then
-        : # No-op, handled by manual_cli_changes
-    fi
-
-    # Explicit API-BREAKING comments
-    local explicit_breaking
-    explicit_breaking=$(printf '%s' "$srcdiff" | grep -ci 'API-BREAKING:' 2>/dev/null | tr -d ' ' || printf '0')
-    explicit_breaking=${explicit_breaking:-0}
-    explicit_breaking=$(printf '%s' "$explicit_breaking" | tr -cd '0-9' || printf '0')
-    if [[ "$explicit_breaking" -gt 0 ]]; then
-        R[api_breaking]=true
-    fi
-
-    # Check for removed switch cases
-    local removed_switch_cases
-    removed_switch_cases=$(printf '%s' "$srcdiff" | awk '
-        /^-[[:space:]]*case[[:space:]]+/ {
-            gsub(/^-[[:space:]]*case[[:space:]]+/, ""); gsub(/[[:space:]]*:.*$/, ""); gsub(/[[:space:]]*$/, "");
-            if ($0 != "" && $0 != "default") print $0
-        }' | sort -u || true)
-    
-    if [[ -n "$removed_switch_cases" ]]; then
-        local added_switch_cases
-        added_switch_cases=$(printf '%s' "$srcdiff" | awk '
-            /^\+[[:space:]]*case[[:space:]]+/ {
-                gsub(/^\+[[:space:]]*case[[:space:]]+/, ""); gsub(/[[:space:]]*:.*$/, ""); gsub(/[[:space:]]*$/, "");
-                if ($0 != "" && $0 != "default") print $0
-            }' | sort -u || true)
-        
-        local net_removed_cases
-        net_removed_cases=$(comm -23 <(printf '%s\n' "$removed_switch_cases") <(printf '%s\n' "$added_switch_cases") 2>/dev/null | wc -l | tr -d ' ' || printf '0')
-        net_removed_cases=${net_removed_cases:-0}
-        net_removed_cases=$(printf '%s' "$net_removed_cases" | tr -cd '0-9' || printf '0')
-        
-        if [[ "$net_removed_cases" -gt 0 ]]; then
-            R[api_breaking]=true
-        fi
-    fi
-    
-    # ... (The rest of the detections in extract_cli_options would be refactored similarly) ...
-
-    # Manual argv parser detection - RESTRICTED to C/C++ source files only
-    debug_output "DEBUG: Starting manual CLI detection"
-    
-    # Get diff only for C/C++ source files to avoid false positives from shell scripts
-    local cpp_diff
-    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        cpp_diff=$(git -c color.ui=false diff -M -C -w --unified=0 "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-            'src/*.h' 'src/*.hpp' 'src/*.hh' 2>/dev/null || true)
-    else
-        cpp_diff=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" -- \
-            'src/*.c' 'src/*.cc' 'src/*.cpp' 'src/*.cxx' \
-            'include/*.h' 'include/*.hpp' 'include/*.hh' \
-            'src/*.h' 'src/*.hpp' 'src/*.hh' 2>/dev/null || true)
-    fi
-    
-    local added_long_opts
-    added_long_opts=$(printf '%s' "$cpp_diff" | awk '/^\+.*--[a-zA-Z0-9-]+/ && !/^\+.*--[[:space:]]*["\x27]/ && !/^\+[[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^\+[[:space:]]*.*["\x27].*-[[:alpha:]]/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
-    local removed_long_opts
-    removed_long_opts=$(printf '%s' "$cpp_diff" | awk '/^-.*--[a-zA-Z0-9-]+/ && !/^-.*--[[:space:]]*["\x27]/ && !/^-.*--[[:space:]]*[a-zA-Z0-9_]+[[:space:]]*=/ { match($0, /--([a-zA-Z0-9-]+)/, arr); print "--" arr[1] }' | sort -u || true)
-    R[manual_added_long_count]=$(printf '%s\n' "$added_long_opts" | wc -l | tr -d ' ' || printf '0')
-    R[manual_removed_long_count]=$(printf '%s\n' "$removed_long_opts" | wc -l | tr -d ' ' || printf '0')
-    R[manual_added_long_count]=${R[manual_added_long_count]:-0}
-    R[manual_removed_long_count]=${R[manual_removed_long_count]:-0}
-    (( R[manual_added_long_count] > 0 || R[manual_removed_long_count] > 0 )) && R[manual_cli_changes]=true
-
-    # Enhanced CLI detection for various patterns - RESTRICTED to C/C++ source files only
-    local getopt_changes
-    getopt_changes=$(printf '%s' "$cpp_diff" | grep -c -E '(getopt_long|getopt)' || printf '0')
-    local arg_parsing_changes
-    arg_parsing_changes=$(printf '%s' "$cpp_diff" | awk '/^\+[[:space:]]*if[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*while[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*for[[:space:]]*\([[:space:]]*argc/ || /^\+[[:space:]]*switch[[:space:]]*\([[:space:]]*argv/ {print}' | wc -l | tr -d ' ' || printf '0')
-    local help_text_changes
-    help_text_changes=$(printf '%s' "$cpp_diff" | grep -c -i -E '(usage|help|option|argument)' || printf '0')
-    local main_signature_changes
-    main_signature_changes=$(printf '%s' "$cpp_diff" | awk '/^\+[[:space:]]*int[[:space:]]+main[[:space:]]*\(/ {print}' | wc -l | tr -d ' ' || printf '0')
-    local enhanced_cli_patterns
-    enhanced_cli_patterns=$(printf '%s' "$cpp_diff" | awk '
-        /^\+[[:space:]]*.*-[[:alpha:]]/ && !/^\+[[:space:]]*\/\// && !/^\+[[:space:]]*#/ && !/^\+[[:space:]]*.*git[[:space:]]+.*-[[:alpha:]]/ && !/^\+[[:space:]]*.*["\x27].*-[[:alpha:]]/ {print "short_option_change"}
-        /^\+[[:space:]]*.*--[[:alnum:]-]+/ && !/^\+[[:space:]]*\/\// && !/^\+[[:space:]]*#/ && !/^\+[[:space:]]*.*git[[:space:]]+.*--[[:alnum:]-]+/ && !/^\+[[:space:]]*.*["\x27].*--[[:alnum:]-]+/ {print "long_option_change"}
-        /^\+[[:space:]]*.*argc[[:space:]]*[<>=!]/ {print "argc_check_change"}
-        /^\+[[:space:]]*.*argv\[/ {print "argv_access_change"}
-    ' | sort -u | wc -l | tr -d ' ' || printf '0')
-
-    # Sanitize all variables to be integers
-    R[manual_added_long_count]=$(printf '%s' "${R[manual_added_long_count]}" | tr -cd '0-9' || printf '0')
-    R[manual_removed_long_count]=$(printf '%s' "${R[manual_removed_long_count]}" | tr -cd '0-9' || printf '0')
-    getopt_changes=${getopt_changes:-0}
-    getopt_changes=$(printf '%s' "$getopt_changes" | tr -cd '0-9' || printf '0')
-    arg_parsing_changes=${arg_parsing_changes:-0}
-    arg_parsing_changes=$(printf '%s' "$arg_parsing_changes" | tr -cd '0-9' || printf '0')
-    help_text_changes=${help_text_changes:-0}
-    help_text_changes=$(printf '%s' "$help_text_changes" | tr -cd '0-9' || printf '0')
-    main_signature_changes=${main_signature_changes:-0}
-    main_signature_changes=$(printf '%s' "$main_signature_changes" | tr -cd '0-9' || printf '0')
-    enhanced_cli_patterns=${enhanced_cli_patterns:-0}
-    enhanced_cli_patterns=$(printf '%s' "$enhanced_cli_patterns" | tr -cd '0-9' || printf '0')
-
-    local total_cli_indicators
-    total_cli_indicators=$((${R[manual_added_long_count]} + ${R[manual_removed_long_count]} + getopt_changes + arg_parsing_changes + help_text_changes + main_signature_changes + enhanced_cli_patterns))
-    
-    if [[ "$total_cli_indicators" -gt 0 ]]; then
-        R[manual_cli_changes]=true
-    fi
-
-    # Compute counts for removed/added options
-    if [[ -n "$short_before" ]] || [[ -n "$short_after" ]]; then
-        R[removed_short_count]=$(comm -23 <(printf '%s\n' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) <(printf '%s\n' "${short_after:-}" | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0')
-        R[added_short_count]=$(comm -13 <(printf '%s\n' "${short_before:-}" | tr -d ':' | fold -w1 | sort -u) <(printf '%s\n' "${short_after:-}" | tr -d ':' | fold -w1 | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0')
-    fi
-
-    if [[ -n "$long_before" ]] || [[ -n "$long_after" ]]; then
-        R[removed_long_count]=$(comm -23 <(printf '%s\n' "${long_before:-}" | tr ',' '\n' | sort -u) <(printf '%s\n' "${long_after:-}" | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0')
-        R[added_long_count]=$(comm -13 <(printf '%s\n' "${long_before:-}" | tr ',' '\n' | sort -u) <(printf '%s\n' "${long_after:-}" | tr ',' '\n' | sort -u) 2>/dev/null | wc -l | tr -d ' ' || printf '0')
-    fi
-
-    # Check for CLI changes by comparing option sets
-    local short_before_norm
-    short_before_norm=$(printf '%s' "$short_before" | tr -d ':')
-    local short_after_norm
-    short_after_norm=$(printf '%s' "$short_after" | tr -d ':')
-
-    if [[ -n "$short_after" ]] && [[ "$short_after_norm" != "$short_before_norm" ]]; then
-        R[cli_changes]=true
-        local removed_short
-        removed_short=$(comm -23 <(printf '%s\n' "$short_before" | tr -d ':' | fold -w1 | sort -u) <(printf '%s\n' "$short_after" | tr -d ':' | fold -w1 | sort -u) 2>/dev/null || true)
-        [[ -n "$removed_short" ]] && R[breaking_cli_changes]=true
-            if [[ -n "$removed_short" ]]; then
-        echo "DEBUG: Detected removed short options: $removed_short" >&2
-    fi
-    fi
-
-    if [[ -n "$long_after" ]] && [[ "$long_after" != "$long_before" ]]; then
-        R[cli_changes]=true
-        local removed_long
-        removed_long=$(comm -23 <(printf '%s\n' "$long_before" | tr ',' '\n' | sort -u) <(printf '%s\n' "$long_after" | tr ',' '\n' | sort -u) 2>/dev/null || true)
-        [[ -n "$removed_long" ]] && R[breaking_cli_changes]=true
-    fi
-}
-
-# Binary-safe numstat summation function
-sum_numstat() {
-    local cmd=("$@")
-    local total_ins=0 total_del=0
-    while IFS=$'\t' read -r ins del _; do
-        [[ $ins =~ ^[0-9]+$ ]] || ins=0
-        [[ $del =~ ^[0-9]+$ ]] || del=0
-        total_ins=$((total_ins + ins))
-        total_del=$((total_del + del))
-    done < <("${cmd[@]}")
-    printf '%s' $((total_ins + total_del))
-}
-
-# Global variable to store bonus from fast analysis
-FAST_BONUS_RESULT=0
-
-# Fast bonus scoring for early exit optimization
-score_commits_fast() {
-    local base_ref="$1"
-    local target_ref="$2"
-    local total_bonus=0
-    
-    # Initialize basic counters
-    R[added_files]=0
-    R[modified_files]=0
-    R[deleted_files]=0
-    R[new_source_files]=0
-    R[new_test_files]=0
-    R[new_doc_files]=0
-    R[cli_changes]=false
-    R[breaking_cli_changes]=false
-    R[api_breaking]=false
-    R[security_keywords]=0
-    R[manual_cli_changes]=false
-    R[manual_added_long_count]=0
-    R[manual_removed_long_count]=0
-    R[removed_short_count]=0
-    R[added_short_count]=0
-    R[removed_long_count]=0
-    R[added_long_count]=0
-    
-    # Quick file status analysis (no diff content)
-    while IFS= read -r -d '' status; do
-        local path1 path2 file
-        IFS= read -r -d '' path1
-        file="$path1"
-        case "${status:0:1}" in
-            R|C)
-                IFS= read -r -d '' path2
-                file="$path2"
-                ;;
-        esac
-
-        case "${status:0:1}" in
-            A) R[added_files]=$((${R[added_files]} + 1)); inc_counters_for "$file" ;;
-            M|T) R[modified_files]=$((${R[modified_files]} + 1)) ;;
-            D)   R[deleted_files]=$((${R[deleted_files]} + 1)) ;;
-            R)   R[modified_files]=$((${R[modified_files]} + 1)) ;;
-            C)   R[modified_files]=$((${R[modified_files]} + 1)) ;; # Count copies as modifications, not additions
-        esac
-    done < <(if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
-    else
-        git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
-    fi)
-    
-    # Quick CLI options detection (fast path)
-    echo "DEBUG: About to call extract_cli_options" >&2
-    extract_cli_options "$base_ref" "$target_ref"
-    echo "DEBUG: Finished calling extract_cli_options" >&2
-    
-    # Quick security keyword detection (fast path) - include commit bodies for CVEs
-    local security_keywords
-    security_keywords=$(git -c color.ui=false log --format="%s %b" "$base_ref".."$target_ref" 2>/dev/null | \
-        grep -ci -E '(security|vulnerability|cve|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)' || printf '0')
-    R[security_keywords]=$security_keywords
-    
-    # Calculate bonus from fast analysis
-    if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_BREAKING_CLI_BONUS))
-    fi
-    if [[ "${R[api_breaking]}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_API_BREAKING_BONUS))
-    fi
-    if [[ "${R[cli_changes]}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_CLI_CHANGES_BONUS))
-    fi
-    if [[ "${R[manual_cli_changes]}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_MANUAL_CLI_BONUS))
-    fi
-    if [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_NEW_SOURCE_BONUS))
-    fi
-    if [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_NEW_TEST_BONUS))
-    fi
-    if [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_NEW_DOC_BONUS))
-    fi
-    if [[ "${R[removed_short_count]:-0}" -gt 0 ]] || [[ "${R[removed_long_count]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_REMOVED_OPTION_BONUS))
-    fi
-    if [[ "${R[added_short_count]:-0}" -gt 0 ]] || [[ "${R[added_long_count]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_ADDED_OPTION_BONUS))
-    fi
-    
-    # Security keyword bonus
-    local sec_kwd_val
-    sec_kwd_val="${R[security_keywords]}"
-    # Remove all non-digit characters (should be integer, but sanitize just in case)
-    sec_kwd_val=$(printf '%s' "$sec_kwd_val" | tr -cd '0-9')
-    if [[ -z "$sec_kwd_val" ]]; then
-        sec_kwd_val=0
-    fi
-    echo "[DEBUG] R[security_keywords] raw: '${R[security_keywords]}' sanitized: '$sec_kwd_val'" >&2
-    if [[ "$sec_kwd_val" -gt 0 ]]; then
-        total_bonus=$((total_bonus + sec_kwd_val * VERSION_SECURITY_BONUS))
-    fi
-    
-    # Store the bonus value in global variable
-    FAST_BONUS_RESULT="$total_bonus"
-}
-
-# Enhanced change analysis with better diff parsing and rename/copy handling
-analyze_changes() {
-    local base_ref="$1"
-    local target_ref="$2"
-    # Initialize results
-    R[added_files]=0
-    R[modified_files]=0
-    R[deleted_files]=0
-    R[new_source_files]=0
-    R[new_test_files]=0
-    R[new_doc_files]=0
-    R[cli_changes]=false
-    R[breaking_cli_changes]=false
-    R[diff_size]=0
-    R[api_breaking]=false
-    R[security_keywords]=0
-    R[manual_cli_changes]=false
-    R[manual_added_long_count]=0
-    R[manual_removed_long_count]=0
-    R[removed_short_count]=0
-    R[added_short_count]=0
-    R[removed_long_count]=0
-    R[added_long_count]=0
-
-    # Check if there are any changes
-    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        if git -c color.ui=false diff -M -C -w --quiet "$base_ref".."$target_ref"; then
-            printf 'Warning: No changes detected between %s and %s (ignoring whitespace)\n' "$base_ref" "$target_ref" >&2
-            return
-        fi
-    else
-        if git -c color.ui=false diff -M -C --quiet "$base_ref".."$target_ref"; then
-            printf 'Warning: No changes detected between %s and %s\n' "$base_ref" "$target_ref" >&2
-            return
-        fi
-    fi
-
-    # NUL-delimited, handle renames/copies
-    while IFS= read -r -d '' status; do
-        local path1 path2 file
-        IFS= read -r -d '' path1
-        file="$path1"
-        case "${status:0:1}" in
-            R|C)
-                IFS= read -r -d '' path2
-                file="$path2"
-                ;;
-        esac
-
-        case "${status:0:1}" in
-            A) R[added_files]=$((${R[added_files]} + 1)); inc_counters_for "$file" ;;
-            M|T) R[modified_files]=$((${R[modified_files]} + 1)) ;;
-            D)   R[deleted_files]=$((${R[deleted_files]} + 1)) ;;
-            R)   R[modified_files]=$((${R[modified_files]} + 1)) ;;
-            C)   R[modified_files]=$((${R[modified_files]} + 1)) ;; # Count copies as modifications, not additions
-        esac
-    done < <(if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
-    else
-        git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
-    fi)
-
-    # Extract CLI options for comparison
-    extract_cli_options "$base_ref" "$target_ref"
-
-    # Manual CLI detection - look for CLI parsing patterns in changed source files
-    # Exclude the analyzer script itself to avoid false positives
-    # This is now handled in extract_cli_options() with proper C/C++ file filtering
-    # No additional manual CLI detection needed here
-
-    # Get diff size using numstat (binary-safe)
-    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        R[diff_size]=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C -w --numstat "$base_ref".."$target_ref" "${PATH_ARGS[@]}")
-    else
-        R[diff_size]=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C    --numstat "$base_ref".."$target_ref" "${PATH_ARGS[@]}")
-    fi
-}
-
-# Calculate LOC-based delta for version increments with bonus additions
-calculate_loc_delta() {
-    local bump_type="$1"
-    local loc="${R[diff_size]:-0}"
-    
-    # Ensure LOC is numeric
-    if [[ ! "$loc" =~ ^[0-9]+$ ]]; then
-        loc=0
-    fi
-    
-    # Calculate base delta from LOC using configuration values
-    local base_delta=1
-    case "$bump_type" in
-        patch)
-            # Use BASE_DELTA_PATCH if available, otherwise default to 1
-            local base_patch="${BASE_DELTA_PATCH:-1}"
-            local divisor_patch="${LOC_DIVISOR_PATCH:-250}"
-            base_delta=$(awk "BEGIN {printf \"%.0f\", ($base_patch > 0 ? $base_patch * (1 + $loc / $divisor_patch) : 1)}" 2>/dev/null || echo "$base_patch")
-            ;;
-        minor)
-            # Use BASE_DELTA_MINOR if available, otherwise default to 5
-            local base_minor="${BASE_DELTA_MINOR:-5}"
-            local divisor_minor="${LOC_DIVISOR_MINOR:-500}"
-            base_delta=$(awk "BEGIN {printf \"%.0f\", ($base_minor > 0 ? $base_minor * (1 + $loc / $divisor_minor) : 1)}" 2>/dev/null || echo "$base_minor")
-            ;;
-        major)
-            # Use BASE_DELTA_MAJOR if available, otherwise default to 10
-            local base_major="${BASE_DELTA_MAJOR:-10}"
-            local divisor_major="${LOC_DIVISOR_MAJOR:-1000}"
-            base_delta=$(awk "BEGIN {printf \"%.0f\", ($base_major > 0 ? $base_major * (1 + $loc / $divisor_major) : 1)}" 2>/dev/null || echo "$base_major")
-            ;;
-        *)
-            base_delta=1
-            ;;
-    esac
-    
-    # Calculate bonus additions
-    local bonus=0
-    
-    # Breaking change bonuses
-    if [[ "${R[breaking_cli_changes]:-false}" = "true" ]]; then
-        bonus=$((bonus + VERSION_BREAKING_CLI_BONUS))
-    fi
-    if [[ "${R[api_breaking]:-false}" = "true" ]]; then
-        bonus=$((bonus + VERSION_API_BREAKING_BONUS))
-    fi
-    if [[ "${R[removed_short_count]:-0}" -gt 0 ]]; then
-        bonus=$((bonus + VERSION_REMOVED_OPTION_BONUS))
-    fi
-    if [[ "${R[removed_long_count]:-0}" -gt 0 ]]; then
-        bonus=$((bonus + VERSION_REMOVED_OPTION_BONUS))
-    fi
-    
-    # Feature addition bonuses
-    if [[ "${R[cli_changes]:-false}" = "true" ]]; then
-        bonus=$((bonus + VERSION_CLI_CHANGES_BONUS))
-    fi
-    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
-        bonus=$((bonus + VERSION_MANUAL_CLI_BONUS))
-    fi
-    if [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
-        bonus=$((bonus + VERSION_NEW_SOURCE_BONUS))
-    fi
-    if [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
-        bonus=$((bonus + VERSION_NEW_TEST_BONUS))
-    fi
-    if [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
-        bonus=$((bonus + VERSION_NEW_DOC_BONUS))
-    fi
-    if [[ "${R[added_short_count]:-0}" -gt 0 ]]; then
-        bonus=$((bonus + VERSION_ADDED_OPTION_BONUS))
-    fi
-    if [[ "${R[added_long_count]:-0}" -gt 0 ]]; then
-        bonus=$((bonus + VERSION_ADDED_OPTION_BONUS))
-    fi
-    
-    # Security fix bonuses
-    local security_keywords="${R[security_keywords]:-0}"
-    if [[ "$security_keywords" -gt 0 ]]; then
-        bonus=$((bonus + security_keywords * VERSION_SECURITY_BONUS))
-    fi
-    
-    # Ensure minimum base_delta of 1 to prevent zero deltas from tiny changes
-    if [[ "$base_delta" -lt 1 ]]; then
-        base_delta=1
-    fi
-    
-    # Calculate final delta
-    local final_delta=$((base_delta + bonus))
-    
-    # Apply multipliers if any critical scenarios are detected
-    local multiplier=1
-    if [[ "${R[security_keywords]:-0}" -gt 0 ]] && [[ -n "${MULTIPLIER_ZERO_DAY:-}" ]]; then
-        # Security issues might indicate zero-day vulnerabilities
-        multiplier=$(echo "$multiplier * ${MULTIPLIER_ZERO_DAY}" | bc -l 2>/dev/null || echo "$multiplier")
-    fi
-    
-    # Apply multiplier to final delta
-    if [[ "$multiplier" != "1" ]]; then
-        final_delta=$(echo "$final_delta * $multiplier" | bc -l 2>/dev/null || echo "$final_delta")
-        final_delta=$(printf "%.0f" "$final_delta")
-    fi
-    
-    # Ensure minimum delta of 1
-    if [[ "$final_delta" -lt 1 ]]; then
-        final_delta=1
-    fi
-    
-    printf '%d' "$final_delta"
-}
-
-# Calculate next version with LOC-based delta system
-calculate_next_version() {
-    local current_version="$1"
-    local bump_type="$2"
-
-    if [[ -z "$current_version" ]] || [[ "$current_version" = "0.0.0" ]]; then
-        case "$bump_type" in
-            major) printf '1.0.0' ;;
-            minor) printf '0.1.0' ;;
-            patch) printf '0.0.1' ;;
-            *) printf '0.0.0' ;;
-        esac
-        return
-    fi
-
-    # FIXED: Validate VERSION format
-    if [[ ! $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        current_version=0.0.0
-    fi
-
-    local major minor patch
-    IFS='.' read -r major minor patch <<< "$current_version"
-
-    # Calculate delta based on LOC if enabled
-    local delta=1
-    if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
-        delta=$(calculate_loc_delta "$bump_type")
-    else
-        # Traditional fixed deltas
-        case "$bump_type" in
-            major) delta=1 ;;
-            minor) delta=1 ;;
-            patch) delta=1 ;;
-        esac
-    fi
-
-    case "$bump_type" in
-        major)
-            # Apply delta and handle rollover
-            local new_patch=$((patch + delta))
-            if [[ "$new_patch" -ge "$VERSION_PATCH_LIMIT" ]]; then
-                # Rollover to next minor
-                local new_minor=$((minor + 1))
-                if [[ "$new_minor" -ge "$VERSION_MINOR_LIMIT" ]]; then
-                    # Rollover to next major
-                    printf '%d.0.0' "$((major + 1))"
-                else
-                    printf '%d.%d.0' "$major" "$new_minor"
-                fi
-            else
-                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
-            fi
-            ;;
-        minor)
-            # Apply delta and handle rollover
-            local new_patch=$((patch + delta))
-            if [[ "$new_patch" -ge "$VERSION_PATCH_LIMIT" ]]; then
-                # Rollover to next minor
-                local new_minor=$((minor + 1))
-                if [[ "$new_minor" -ge "$VERSION_MINOR_LIMIT" ]]; then
-                    # Rollover to next major
-                    printf '%d.0.0' "$((major + 1))"
-                else
-                    printf '%d.%d.0' "$major" "$new_minor"
-                fi
-            else
-                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
-            fi
-            ;;
-        patch)
-            # Apply delta and handle rollover
-            local new_patch=$((patch + delta))
-            if [[ "$new_patch" -ge "$VERSION_PATCH_LIMIT" ]]; then
-                # Rollover to next minor
-                local new_minor=$((minor + 1))
-                if [[ "$new_minor" -ge "$VERSION_MINOR_LIMIT" ]]; then
-                    # Rollover to next major
-                    printf '%d.0.0' "$((major + 1))"
-                else
-                    printf '%d.%d.0' "$major" "$new_minor"
-                fi
-            else
-                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
-            fi
-            ;;
-        *)
-            printf '%s' "$current_version"
-            ;;
-    esac
-}
-
-# Determine version bump suggestion based on PURE MATHEMATICAL LOGIC
-suggest_version_bump() {
-    # If --ignore-whitespace is set and there are no non-whitespace changes, return 'none'
-    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        if git -c color.ui=false diff -M -C -w --quiet "$BASE_REF".."$TARGET_REF"; then
-            printf 'none'
-            return
-        fi
-    fi
-
-    # Use configuration thresholds if available, otherwise fallback to environment variables
-    local major_bonus_threshold="${MAJOR_BONUS_THRESHOLD:-8}"
-    local minor_bonus_threshold="${MINOR_BONUS_THRESHOLD:-4}"
-    local patch_bonus_threshold="${PATCH_BONUS_THRESHOLD:-0}"
-    
-    # Calculate total bonus from all sources - PURE MATHEMATICAL APPROACH
-    local total_bonus=0
-    
-    # Breaking changes (high priority)
-    if [[ "${R[breaking_cli_changes]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_BREAKING_CLI_BONUS))
-    fi
-    if [[ "${R[api_breaking]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_API_BREAKING_BONUS))
-    fi
-    
-    # Security and stability
-    local security_keywords="${R[security_keywords]:-0}"
-    if [[ ! "$security_keywords" =~ ^[0-9]+$ ]]; then
-        security_keywords=0
-    fi
-    if [[ "$security_keywords" -gt 0 ]]; then
-        total_bonus=$((total_bonus + security_keywords * VERSION_SECURITY_BONUS))
-    fi
-    
-    # Feature additions
-    if [[ "${R[cli_changes]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_CLI_CHANGES_BONUS))
-    fi
-    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_MANUAL_CLI_BONUS))
-    fi
-    if [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_NEW_SOURCE_BONUS))
-    fi
-    if [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_NEW_TEST_BONUS))
-    fi
-    if [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_NEW_DOC_BONUS))
-    fi
-    if [[ "${R[added_short_count]:-0}" -gt 0 ]] || [[ "${R[added_long_count]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_ADDED_OPTION_BONUS))
-    fi
-    
-    # Removed features
-    if [[ "${R[removed_short_count]:-0}" -gt 0 ]] || [[ "${R[removed_long_count]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_REMOVED_OPTION_BONUS))
-    fi
-    
-    # LOC-based adjustments (if available)
-    local diff_size="${R[diff_size]:-0}"
-    if [[ ! "$diff_size" =~ ^[0-9]+$ ]]; then
-        diff_size=0
-    fi
-    
-    # Apply LOC-based bonuses for large changes
-    if [[ "$diff_size" -gt 10000 ]]; then
-        total_bonus=$((total_bonus + 3))  # Large change bonus
-    elif [[ "$diff_size" -gt 5000 ]]; then
-        total_bonus=$((total_bonus + 2))  # Medium change bonus
-    elif [[ "$diff_size" -gt 1000 ]]; then
-        total_bonus=$((total_bonus + 1))  # Small change bonus
-    fi
-    
-    # PURE MATHEMATICAL DECISION TREE - NO EXTRA RULES
-    # Only bonus points determine the version bump type
-    if [[ "$total_bonus" -ge "$major_bonus_threshold" ]]; then
-        printf 'major'
-    elif [[ "$total_bonus" -ge "$minor_bonus_threshold" ]]; then
-        printf 'minor'
-    elif [[ "$total_bonus" -ge "$patch_bonus_threshold" ]]; then
-        printf 'patch'
-    else
-        printf 'none'
-    fi
-}
-
-# Determine the reason for the version bump suggestion
-get_bump_reason() {
-    local loc="${R[diff_size]:-0}"
-    local version_type=""
-    local base_reason=""
-    
-    # Ensure LOC is numeric
-    if [[ ! "$loc" =~ ^[0-9]+$ ]]; then
-        loc=0
-    fi
-    
-    # Calculate total bonus (same logic as suggest_version_bump)
-    local total_bonus=0
-    local bonus_details=()
-    
-    # Breaking changes (high priority)
-    if [[ "${R[breaking_cli_changes]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_BREAKING_CLI_BONUS))
-        bonus_details+=("breaking_cli:+${VERSION_BREAKING_CLI_BONUS}")
-    fi
-    if [[ "${R[api_breaking]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_API_BREAKING_BONUS))
-        bonus_details+=("api_break:+${VERSION_API_BREAKING_BONUS}")
-    fi
-    
-    # Security and stability
-    local security_keywords="${R[security_keywords]:-0}"
-    if [[ ! "$security_keywords" =~ ^[0-9]+$ ]]; then
-        security_keywords=0
-    fi
-    if [[ "$security_keywords" -gt 0 ]]; then
-        local security_bonus=$((security_keywords * VERSION_SECURITY_BONUS))
-        total_bonus=$((total_bonus + security_bonus))
-        bonus_details+=("security:+${security_bonus}")
-    fi
-    
-    # Feature additions
-    if [[ "${R[cli_changes]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_CLI_CHANGES_BONUS))
-        bonus_details+=("cli_changes:+${VERSION_CLI_CHANGES_BONUS}")
-    fi
-    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + VERSION_MANUAL_CLI_BONUS))
-        bonus_details+=("manual_cli:+${VERSION_MANUAL_CLI_BONUS}")
-    fi
-    if [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_NEW_SOURCE_BONUS))
-        bonus_details+=("new_src:+${VERSION_NEW_SOURCE_BONUS}")
-    fi
-    if [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_NEW_TEST_BONUS))
-        bonus_details+=("new_tests:+${VERSION_NEW_TEST_BONUS}")
-    fi
-    if [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_NEW_DOC_BONUS))
-        bonus_details+=("new_docs:+${VERSION_NEW_DOC_BONUS}")
-    fi
-    if [[ "${R[added_short_count]:-0}" -gt 0 ]] || [[ "${R[added_long_count]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_ADDED_OPTION_BONUS))
-        bonus_details+=("added_opts:+${VERSION_ADDED_OPTION_BONUS}")
-    fi
-    
-    # Removed features
-    if [[ "${R[removed_short_count]:-0}" -gt 0 ]] || [[ "${R[removed_long_count]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + VERSION_REMOVED_OPTION_BONUS))
-        bonus_details+=("removed_opts:+${VERSION_REMOVED_OPTION_BONUS}")
-    fi
-    
-    # LOC-based adjustments
-    if [[ "$loc" -gt 10000 ]]; then
-        total_bonus=$((total_bonus + 3))
-        bonus_details+=("large_loc:+3")
-    elif [[ "$loc" -gt 5000 ]]; then
-        total_bonus=$((total_bonus + 2))
-        bonus_details+=("medium_loc:+2")
-    elif [[ "$loc" -gt 1000 ]]; then
-        total_bonus=$((total_bonus + 1))
-        bonus_details+=("small_loc:+1")
-    fi
-    
-    # Determine version type based on bonus thresholds
-    local major_bonus_threshold="${MAJOR_BONUS_THRESHOLD:-8}"
-    local minor_bonus_threshold="${MINOR_BONUS_THRESHOLD:-4}"
-    local patch_bonus_threshold="${PATCH_BONUS_THRESHOLD:-0}"
-    
-    if [[ "$total_bonus" -ge "$major_bonus_threshold" ]]; then
-        version_type="MAJOR"
-        base_reason="bonus_${total_bonus}_major"
-    elif [[ "$total_bonus" -ge "$minor_bonus_threshold" ]]; then
-        version_type="MINOR"
-        base_reason="bonus_${total_bonus}_minor"
-    elif [[ "$total_bonus" -ge "$patch_bonus_threshold" ]]; then
-        version_type="PATCH"
-        base_reason="bonus_${total_bonus}_patch"
-    else
-        printf 'none'
-        return
-    fi
-    
-    # Return reason with bonus details
-    local bonus_summary
-    bonus_summary=$(printf '%s' "${bonus_details[*]}" | tr ' ' ',' | tr '\n' ' ')
-    printf '%s (LOC: %s, %s, bonuses: %s)' "$base_reason" "$loc" "$version_type" "$bonus_summary"
-}
-
-# Simple JSON string escaper for safe values (quotes and backslashes)
-json_escape() {
-    local s=${1-}
-    s=${s//\\/\\\\}
-    s=${s//\"/\\\"}
-    printf '%s' "$s"
-}
-
-# --- main ---------------------------------------------------------------------
-
-# Main analysis
+# Main analysis function
 main() {
-    local base_ref_info
-    base_ref_info=$(get_base_reference)
-    local base_ref ref_type
-    IFS='|' read -r base_ref ref_type <<< "$base_ref_info"
-
-    # Set target reference (default to HEAD)
-    local target_ref="${TARGET_REF:-HEAD}"
-    if [[ -n "$TARGET_REF" ]]; then
-        verify_ref "$target_ref"
-    fi
-
-    # Check and normalize disjoint branches with merge-base
-    local actual_base
-    actual_base=$(git -c color.ui=false merge-base "$base_ref" "$target_ref" 2>/dev/null || printf '')
-    if [[ -z "$actual_base" ]]; then
-        # Check if this is a single-commit repository
-        local commit_count
-        commit_count=$(git -c color.ui=false rev-list --count HEAD 2>/dev/null || printf '0')
-        if [[ "$commit_count" = "1" ]]; then
-            # Single commit repository - no changes to analyze
-            if [[ "$SUGGEST_ONLY" = "true" ]]; then
-                printf 'none\n'
-            elif [[ "$JSON_OUTPUT" = "true" ]]; then
-                printf '{\n'
-                printf '  "suggestion": "none",\n'
-                printf '  "reason": "No changes to analyze (single commit repository)",\n'
-                printf '  "current_version": "0.0.0",\n'
-                printf '  "base_ref": "%s",\n' "$(json_escape "$base_ref")"
-                printf '  "target_ref": "%s",\n' "$(json_escape "$target_ref")"
-                printf '  "changes": {\n'
-                printf '    "added_files": 0,\n'
-                printf '    "modified_files": 0,\n'
-                printf '    "deleted_files": 0,\n'
-                printf '    "diff_size": 0\n'
-                printf '  }\n'
-                printf '}\n'
-            elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
-                printf 'SUGGESTION=none\n'
-            else
-                printf '=== Semantic Version Analysis ===\n'
-                printf 'No changes to analyze (single commit repository)\n'
-                printf 'SUGGESTION=none\n'
-            fi
-            exit 20
-        else
-            printf 'Error: No common ancestor found between %s and %s. Exiting.\n' "$base_ref" "$target_ref" >&2
-            exit 1
-        fi
-    fi
-    if [[ "$actual_base" != "$base_ref" ]] && [[ "$NO_MERGE_BASE" != "true" ]]; then
-        if [[ "$MACHINE_OUTPUT" != "true" ]]; then
-            printf 'Info: Using merge-base %s instead of %s for disjoint branches\n' "$actual_base" "$base_ref" >&2
-        fi
-        base_ref="$actual_base"
-    fi
-
-    # Handle --print-base option
-    if [[ "$PRINT_BASE" = "true" ]]; then
-        printf '%s\n' "$base_ref"
-        exit 0
-    fi
-
-    if ! check_commit_range "$base_ref" "$target_ref"; then
-        if [[ "$MACHINE_OUTPUT" = "true" ]]; then
+    # Step 1: Resolve references
+    local ref_args
+    ref_args=$(build_ref_args)
+    local ref_output
+    ref_output=$(eval "./dev-bin/ref-resolver $ref_args")
+    
+    if [[ "$MACHINE_OUTPUT" = "true" ]]; then
+        # Parse machine output
+        local ref_data
+        ref_data=$(parse_machine_output "$ref_output")
+        eval "$ref_data"
+        
+        # Check if single commit repo
+        if [[ "${result[SINGLE_COMMIT_REPO]:-false}" = "true" ]]; then
             printf 'SUGGESTION=none\n'
-            exit 0
-        elif [[ "$SUGGEST_ONLY" = "true" ]]; then
-            printf 'none\n'
-            exit 0
-        elif [[ "$JSON_OUTPUT" = "true" ]]; then
-            printf '{\n'
-            printf '  "suggestion": "none",\n'
-            printf '  "reason": "No commits found between %s and %s",\n' "$base_ref" "$target_ref"
-            printf '  "current_version": "0.0.0",\n'
-            printf '  "base_ref": "%s",\n' "$(json_escape "$base_ref")"
-            printf '  "target_ref": "%s",\n' "$(json_escape "$target_ref")"
-            printf '  "changes": {\n'
-            printf '    "added_files": 0,\n'
-            printf '    "modified_files": 0,\n'
-            printf '    "deleted_files": 0,\n'
-            printf '    "diff_size": 0\n'
-            printf '  }\n'
-            printf '}\n'
-            exit 0
+            exit 20
+        fi
+        
+        # Check if no commits
+        if [[ "${result[HAS_COMMITS]:-false}" = "false" ]]; then
+            printf 'SUGGESTION=none\n'
+            exit 20
+        fi
+        
+        BASE_REF="${result[BASE_REF]}"
+        TARGET_REF="${result[TARGET_REF]}"
+    else
+        # For non-machine output, extract base and target from JSON or parse output
+        # This is a simplified version - in practice you'd parse JSON properly
+        BASE_REF=$(printf '%s' "$ref_output" | grep -o '"base_ref":"[^"]*"' | cut -d'"' -f4 || echo "HEAD~1")
+        TARGET_REF=$(printf '%s' "$ref_output" | grep -o '"target_ref":"[^"]*"' | cut -d'"' -f4 || echo "HEAD")
+    fi
+    
+    # Step 2: Load configuration
+    local config_output
+    config_output=$(./dev-bin/version-config-loader --machine)
+    
+    # Parse configuration output manually
+    declare -A config_data
+    while IFS='=' read -r key value; do
+        [[ -n "$key" ]] && config_data["$key"]="$value"
+    done <<< "$config_output"
+    
+    # Step 3: Analyze file changes
+    local common_args
+    common_args=$(build_common_args)
+    local file_output
+    file_output=$(eval "./dev-bin/file-change-analyzer $common_args")
+    
+    # Step 4: Analyze CLI options
+    local cli_output
+    cli_output=$(eval "./dev-bin/cli-options-analyzer $common_args")
+    
+    # Step 5: Analyze security keywords
+    local security_output
+    security_output=$(eval "./dev-bin/security-keyword-analyzer $common_args")
+    
+    # Parse all outputs
+    local file_data cli_data security_data
+    file_data=$(parse_machine_output "$file_output")
+    cli_data=$(parse_machine_output "$cli_output")
+    security_data=$(parse_machine_output "$security_output")
+    
+    # Initialize result arrays with defaults
+    declare -A file_result cli_result security_result
+    
+    # Parse file analysis results
+    if [[ -n "$file_data" ]]; then
+        eval "$file_data"
+        # Copy to file_result array
+        for key in "${!result[@]}"; do
+            file_result["$key"]="${result[$key]}"
+        done
+    fi
+    
+    # Parse CLI analysis results
+    if [[ -n "$cli_data" ]]; then
+        eval "$cli_data"
+        # Copy to cli_result array
+        for key in "${!result[@]}"; do
+            cli_result["$key"]="${result[$key]}"
+        done
+    fi
+    
+    # Parse security analysis results
+    if [[ -n "$security_data" ]]; then
+        eval "$security_data"
+        # Copy to security_result array
+        for key in "${!result[@]}"; do
+            security_result["$key"]="${result[$key]}"
+        done
+    fi
+    
+    # Step 6: Calculate bonus points
+    local total_bonus=0
+    
+    # Breaking changes
+    if [[ "${cli_result[BREAKING_CLI_CHANGES]:-false}" = "true" ]]; then
+        total_bonus=$((total_bonus + ${config_data[VERSION_BREAKING_CLI_BONUS]:-2}))
+    fi
+    if [[ "${cli_result[API_BREAKING]:-false}" = "true" ]]; then
+        total_bonus=$((total_bonus + ${config_data[VERSION_API_BREAKING_BONUS]:-3}))
+    fi
+    
+    # Security keywords
+    local security_keywords="${security_result[SECURITY_KEYWORDS]:-0}"
+    if [[ "$security_keywords" -gt 0 ]]; then
+        total_bonus=$((total_bonus + security_keywords * ${config_data[VERSION_SECURITY_BONUS]:-2}))
+    fi
+    
+    # Feature additions
+    if [[ "${cli_result[CLI_CHANGES]:-false}" = "true" ]]; then
+        total_bonus=$((total_bonus + ${config_data[VERSION_CLI_CHANGES_BONUS]:-2}))
+    fi
+    if [[ "${cli_result[MANUAL_CLI_CHANGES]:-false}" = "true" ]]; then
+        total_bonus=$((total_bonus + ${config_data[VERSION_MANUAL_CLI_BONUS]:-1}))
+    fi
+    if [[ "${file_result[NEW_SOURCE_FILES]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + ${config_data[VERSION_NEW_SOURCE_BONUS]:-1}))
+    fi
+    if [[ "${file_result[NEW_TEST_FILES]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + ${config_data[VERSION_NEW_TEST_BONUS]:-1}))
+    fi
+    if [[ "${file_result[NEW_DOC_FILES]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + ${config_data[VERSION_NEW_DOC_BONUS]:-1}))
+    fi
+    
+    # Removed features
+    if [[ "${cli_result[REMOVED_SHORT_COUNT]:-0}" -gt 0 ]] || [[ "${cli_result[REMOVED_LONG_COUNT]:-0}" -gt 0 ]]; then
+        total_bonus=$((total_bonus + ${config_data[VERSION_REMOVED_OPTION_BONUS]:-1}))
+    fi
+    
+    # Step 7: Determine suggestion based on bonus thresholds
+    local major_threshold="${config_data[MAJOR_BONUS_THRESHOLD]:-8}"
+    local minor_threshold="${config_data[MINOR_BONUS_THRESHOLD]:-4}"
+    local patch_threshold="${config_data[PATCH_BONUS_THRESHOLD]:-0}"
+    
+    # Use default values if not available from config
+    major_threshold="${major_threshold:-8}"
+    minor_threshold="${minor_threshold:-4}"
+    patch_threshold="${patch_threshold:-0}"
+    
+    local suggestion="none"
+    if [[ "$total_bonus" -ge "$major_threshold" ]]; then
+        suggestion="major"
+    elif [[ "$total_bonus" -ge "$minor_threshold" ]]; then
+        suggestion="minor"
+    elif [[ "$total_bonus" -ge "$patch_threshold" ]]; then
+        suggestion="patch"
+    fi
+    
+    # Step 8: Get current version
+    local current_version="0.0.0"
+    if [[ -f "VERSION" ]]; then
+        current_version=$(tr -d '[:space:]' < "VERSION" 2>/dev/null || printf '0.0.0')
+        [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || current_version=0.0.0
+    fi
+    
+    # Step 9: Calculate next version if needed
+    local next_version=""
+    if [[ "$suggestion" != "none" ]]; then
+        local calc_args="--current-version '$current_version' --bump-type '$suggestion' --loc '${file_result[DIFF_SIZE]:-0}' --bonus '$total_bonus'"
+        [[ "$MACHINE_OUTPUT" = "true" ]] && calc_args="$calc_args --machine"
+        [[ "$JSON_OUTPUT" = "true" ]] && calc_args="$calc_args --json"
+        
+        local calc_output
+        calc_output=$(eval "./dev-bin/version-calculator $calc_args")
+        
+        if [[ "$MACHINE_OUTPUT" = "true" ]]; then
+            local calc_data
+            calc_data=$(parse_machine_output "$calc_output")
+            eval "$calc_data"
+            next_version="${result[NEXT_VERSION]}"
         else
-            printf 'Error: No commits found between %s and %s. Exiting.\n' "$base_ref" "$target_ref" >&2
-            exit 1
+            next_version=$(printf '%s' "$calc_output" | grep -o '"next_version":"[^"]*"' | cut -d'"' -f4 || echo "")
         fi
     fi
-
-    # Get current version with proper whitespace handling and validation
-    local current_version
-    # Look for VERSION file in git repository root
-    local version_file
-    version_file=$(git -c color.ui=false rev-parse --show-toplevel 2>/dev/null)/VERSION
-    current_version=$(tr -d '[:space:]' < "$version_file" 2>/dev/null || printf '0.0.0')
-    [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || current_version=0.0.0
-
-    # Early exit optimization: check if bonus threshold is met before expensive LOC calculation
-    # Call score_commits_fast directly to avoid subshell issues with R array
-    score_commits_fast "$base_ref" "$target_ref"
-    local bonus_only
-    bonus_only="$FAST_BONUS_RESULT"
-    bonus_only="${bonus_only:-0}"
     
-    # Ensure bonus_only is numeric
-    if [[ ! "$bonus_only" =~ ^[0-9]+$ ]]; then
-        bonus_only=0
-    fi
-    
-    echo "DEBUG: bonus_only=$bonus_only, EARLY_EXIT_BONUS_THRESHOLD=$EARLY_EXIT_BONUS_THRESHOLD" >&2
-    
-    if [[ "$bonus_only" -ge "$EARLY_EXIT_BONUS_THRESHOLD" ]]; then
-        # Early exit: bonus threshold met, skip expensive LOC calculation
-        echo "DEBUG: Taking early exit path" >&2
-        debug_output "DEBUG: Early exit triggered - bonus $bonus_only >= threshold $EARLY_EXIT_BONUS_THRESHOLD"
-        R[diff_size]=0  # Skip expensive diff calculation
-        # Use the fast analysis results that are already in R[]
-    else
-        # Full analysis needed - proceed with expensive LOC calculation
-        echo "DEBUG: Taking full analysis path" >&2
-        analyze_changes "$base_ref" "$target_ref"
-    fi
-    
-    # Ensure all array variables are initialized for verbose output
-    R[added_files]=${R[added_files]:-0}
-    R[modified_files]=${R[modified_files]:-0}
-    R[deleted_files]=${R[deleted_files]:-0}
-    R[new_source_files]=${R[new_source_files]:-0}
-    R[new_test_files]=${R[new_test_files]:-0}
-    R[new_doc_files]=${R[new_doc_files]:-0}
-    R[cli_changes]=${R[cli_changes]:-false}
-    R[breaking_cli_changes]=${R[breaking_cli_changes]:-false}
-    R[api_breaking]=${R[api_breaking]:-false}
-    R[security_keywords]=${R[security_keywords]:-0}
-    R[manual_cli_changes]=${R[manual_cli_changes]:-false}
-    R[manual_added_long_count]=${R[manual_added_long_count]:-0}
-    R[manual_removed_long_count]=${R[manual_removed_long_count]:-0}
-    R[removed_short_count]=${R[removed_short_count]:-0}
-    R[added_short_count]=${R[added_short_count]:-0}
-    R[removed_long_count]=${R[removed_long_count]:-0}
-    R[added_long_count]=${R[added_long_count]:-0}
-
-    # Determine suggestion and reason
-    local suggestion
-    suggestion=$(suggest_version_bump)
-
-    local reason
-    reason=$(get_bump_reason)
-
-    # Calculate next version
-    local next_version
-    next_version=$(calculate_next_version "$current_version" "$suggestion")
-
-    # Output based on mode
+    # Step 10: Output results
     if [[ "$SUGGEST_ONLY" = "true" ]]; then
-        # Output only the suggestion - FIXED: now runs analysis
         printf '%s\n' "$suggestion"
     elif [[ "$JSON_OUTPUT" = "true" ]]; then
-        # JSON output for machine consumption
         printf '{\n'
-        printf '  "suggestion": "%s",\n' "$(json_escape "$suggestion")"
-        printf '  "reason": "%s",\n' "$(json_escape "$reason")"
-        printf '  "current_version": "%s",\n' "$(json_escape "$current_version")"
-        if [[ -n "$next_version" ]] && [[ "$suggestion" != "none" ]]; then
-            printf '  "next_version": "%s",\n' "$(json_escape "$next_version")"
+        printf '  "suggestion": "%s",\n' "$suggestion"
+        printf '  "current_version": "%s",\n' "$current_version"
+        if [[ -n "$next_version" ]]; then
+            printf '  "next_version": "%s",\n' "$next_version"
         fi
-        printf '  "base_ref": "%s",\n' "$(json_escape "$base_ref")"
-        printf '  "base_ref_type": "%s",\n' "$(json_escape "$ref_type")"
-        printf '  "target_ref": "%s",\n' "$(json_escape "$target_ref")"
-        printf '  "changes": {\n'
-        printf '    "added_files": %s,\n' "${R[added_files]:-0}"
-        printf '    "modified_files": %s,\n' "${R[modified_files]:-0}"
-        printf '    "deleted_files": %s,\n' "${R[deleted_files]:-0}"
-        printf '    "new_source_files": %s,\n' "${R[new_source_files]:-0}"
-        printf '    "new_test_files": %s,\n' "${R[new_test_files]:-0}"
-        printf '    "new_doc_files": %s,\n' "${R[new_doc_files]:-0}"
-        printf '    "cli_changes": %s,\n' "${R[cli_changes]:-false}"
-        printf '    "breaking_cli_changes": %s,\n' "${R[breaking_cli_changes]:-false}"
-        printf '    "diff_size": %s,\n' "${R[diff_size]:-0}"
-        printf '    "api_breaking": %s,\n' "${R[api_breaking]:-false}"
-        printf '    "security_keywords": %s,\n' "${R[security_keywords]:-0}"
-        printf '    "manual_cli_changes": %s,\n' "${R[manual_cli_changes]:-false}"
-        printf '    "manual_added_long_count": %s,\n' "${R[manual_added_long_count]:-0}"
-        printf '    "manual_removed_long_count": %s,\n' "${R[manual_removed_long_count]:-0}"
-        printf '    "removed_short_count": %s,\n' "${R[removed_short_count]:-0}"
-        printf '    "added_short_count": %s,\n' "${R[added_short_count]:-0}"
-        printf '    "removed_long_count": %s,\n' "${R[removed_long_count]:-0}"
-        printf '    "added_long_count": %s\n' "${R[added_long_count]:-0}"
-        printf '  }'
-        if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
-            # Calculate bonus values to avoid arithmetic expression issues
-            local removed_short="${R[removed_short_count]:-0}"
-            local removed_long="${R[removed_long_count]:-0}"
-            local new_source="${R[new_source_files]:-0}"
-            local new_test="${R[new_test_files]:-0}"
-            local new_doc="${R[new_doc_files]:-0}"
-            local removed_options=$((removed_short + removed_long))
-            local new_files=$((new_source + new_test + new_doc))
-            
-            printf ',\n'
-            printf '  "loc_delta": {\n'
-            printf '    "enabled": true,\n'
-            printf '    "patch_delta": %s,\n' "$(calculate_loc_delta "patch")"
-            printf '    "minor_delta": %s,\n' "$(calculate_loc_delta "minor")"
-            printf '    "major_delta": %s,\n' "$(calculate_loc_delta "major")"
-            printf '    "patch_limit": %s,\n' "$VERSION_PATCH_LIMIT"
-            printf '    "minor_limit": %s,\n' "$VERSION_MINOR_LIMIT"
-            printf '    "base_loc": %s,\n' "${R[diff_size]:-0}"
-            printf '    "bonuses": {\n'
-            printf '      "breaking_cli": %s,\n' "${R[breaking_cli_changes]:-false}"
-            printf '      "api_breaking": %s,\n' "${R[api_breaking]:-false}"
-            printf '      "removed_options": %s,\n' "$removed_options"
-            printf '      "cli_changes": %s,\n' "${R[cli_changes]:-false}"
-            printf '      "new_files": %s,\n' "$new_files"
-            printf '      "security_keywords": %s\n' "${R[security_keywords]:-0}"
-            printf '    }\n'
-            printf '  }'
-        fi
+        printf '  "total_bonus": %s,\n' "$total_bonus"
+        printf '  "base_ref": "%s",\n' "$BASE_REF"
+        printf '  "target_ref": "%s"\n' "$TARGET_REF"
         printf '}\n'
     elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
-        # Machine-readable key=value format - only SUGGESTION for --machine
         printf 'SUGGESTION=%s\n' "$suggestion"
     else
-        # Human-readable output
-        printf '=== Semantic Version Analysis ===\n'
-        printf 'Analyzing changes: %s (%s) -> %s\n' "$base_ref" "$ref_type" "$target_ref"
-        printf '\n'
-
-        if [[ "$VERBOSE" = "true" ]]; then
-            local base_commit_info
-            base_commit_info=$(git -c color.ui=false log -1 --format="%H %s (%ad)" --date=short "$base_ref" 2>/dev/null || printf 'Unknown')
-            printf 'Base reference: %s\n' "$base_commit_info"
-            printf '\n'
+        printf '=== Semantic Version Analysis v2 ===\n'
+        printf 'Analyzing changes: %s -> %s\n' "$BASE_REF" "$TARGET_REF"
+        printf '\nCurrent version: %s\n' "$current_version"
+        printf 'Total bonus points: %s\n' "$total_bonus"
+        printf '\nSuggested bump: %s\n' "$(printf '%s' "$suggestion" | tr '[:lower:]' '[:upper:]')"
+        if [[ -n "$next_version" ]]; then
+            printf 'Next version: %s\n' "$next_version"
         fi
-
-        printf 'Current version: %s\n' "$current_version"
-        printf '\n'
-
-        if [[ "$VERBOSE" = "true" ]]; then
-            printf '=== Detailed Analysis ===\n'
-            printf 'File changes:\n'
-            printf '  Added files: %s\n' "${R[added_files]}"
-            printf '  Modified files: %s\n' "${R[modified_files]}"
-            printf '  Deleted files: %s\n' "${R[deleted_files]}"
-            printf '\n'
-            printf 'New content:\n'
-            printf '  New source files: %s\n' "${R[new_source_files]}"
-            printf '  New test files: %s\n' "${R[new_test_files]}"
-            printf '  New doc files: %s\n' "${R[new_doc_files]}"
-            printf '\n'
-            printf 'CLI changes:\n'
-            printf '  CLI interface changes: %s\n' "${R[cli_changes]}"
-            printf '  Breaking CLI changes: %s\n' "${R[breaking_cli_changes]}"
-            printf '  Manual CLI changes: %s\n' "${R[manual_cli_changes]}"
-            printf '  Removed short options: %s\n' "${R[removed_short_count]}"
-            printf '  Added short options: %s\n' "${R[added_short_count]}"
-            printf '  Removed long options: %s\n' "${R[removed_long_count]}"
-            printf '  Added long options: %s\n' "${R[added_long_count]}"
-            printf '\n'
-            printf 'Change magnitude:\n'
-            printf '  Diff size: %s lines\n' "${R[diff_size]}"
-            printf '\n'
-            printf 'Advanced analysis:\n'
-            printf '  API breaking changes: %s\n' "${R[api_breaking]}"
-            printf '  Security/crash keywords: %s\n' "${R[security_keywords]}"
-            printf '\n'
-            if [[ "$VERSION_USE_LOC_DELTA" = "true" ]]; then
-                printf 'LOC-based delta system:\n'
-                printf '  Enabled: true\n'
-                printf '  Patch delta: %s\n' "$(calculate_loc_delta "patch")"
-                printf '  Minor delta: %s\n' "$(calculate_loc_delta "minor")"
-                printf '  Major delta: %s\n' "$(calculate_loc_delta "major")"
-                printf '  Patch limit: %s\n' "$VERSION_PATCH_LIMIT"
-                printf '  Minor limit: %s\n' "$VERSION_MINOR_LIMIT"
-                printf '  Base LOC: %s\n' "${R[diff_size]:-0}"
-                printf '  Bonuses applied:\n'
-                if [[ "${R[breaking_cli_changes]:-false}" = "true" ]]; then
-                    printf '    Breaking CLI changes: +%s\n' "$VERSION_BREAKING_CLI_BONUS"
-                fi
-                if [[ "${R[api_breaking]:-false}" = "true" ]]; then
-                    printf '    API breaking changes: +%s\n' "$VERSION_API_BREAKING_BONUS"
-                fi
-                if [[ "${R[removed_short_count]:-0}" -gt 0 ]] || [[ "${R[removed_long_count]:-0}" -gt 0 ]]; then
-                    printf '    Removed options: +%s\n' "$VERSION_REMOVED_OPTION_BONUS"
-                fi
-                if [[ "${R[cli_changes]:-false}" = "true" ]]; then
-                    printf '    CLI changes: +%s\n' "$VERSION_CLI_CHANGES_BONUS"
-                fi
-                if [[ "${R[new_source_files]:-0}" -gt 0 ]] || [[ "${R[new_test_files]:-0}" -gt 0 ]] || [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
-                    printf '    New files: +%s\n' "$VERSION_NEW_SOURCE_BONUS"
-                fi
-                if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then
-                    printf '    Security keywords: +%s\n' "$((${R[security_keywords]:-0} * VERSION_SECURITY_BONUS))"
-                fi
-                printf '\n'
-            fi
-            printf 'Configuration:\n'
-            if [[ -n "${MAJOR_BONUS_THRESHOLD:-}" ]]; then
-                printf '  Major bonus threshold: %s\n' "$MAJOR_BONUS_THRESHOLD"
-            fi
-            if [[ -n "${MINOR_BONUS_THRESHOLD:-}" ]]; then
-                printf '  Minor bonus threshold: %s\n' "$MINOR_BONUS_THRESHOLD"
-            fi
-            if [[ -n "${PATCH_BONUS_THRESHOLD:-}" ]]; then
-                printf '  Patch bonus threshold: %s\n' "$PATCH_BONUS_THRESHOLD"
-            fi
-            if [[ -n "${EARLY_EXIT_BONUS_THRESHOLD:-}" ]]; then
-                printf '  Early exit threshold: %s (change type: %s)\n' "$EARLY_EXIT_BONUS_THRESHOLD" "$EARLY_EXIT_CHANGE_TYPE"
-            fi
-            printf '  Rollover limit: %s\n' "$VERSION_PATCH_LIMIT"
-            printf '  LOC divisors: major=%s, minor=%s, patch=%s\n' "${LOC_DIVISOR_MAJOR:-1000}" "${LOC_DIVISOR_MINOR:-500}" "${LOC_DIVISOR_PATCH:-250}"
-            printf '\n'
-            printf 'PURE MATHEMATICAL VERSIONING SYSTEM:\n'
-            printf '  Major: Total bonus >= %s points\n' "${MAJOR_BONUS_THRESHOLD:-8}"
-            printf '  Minor: Total bonus >= %s points\n' "${MINOR_BONUS_THRESHOLD:-4}"
-            printf '  Patch: Total bonus >= %s points (any change gets at least patch)\n' "${PATCH_BONUS_THRESHOLD:-0}"
-            printf '  No minimum thresholds or extra rules - pure math logic only\n'
-            printf '\n'
-            printf 'Recent commits:\n'
-            if git -c color.ui=false rev-list "$base_ref".."$target_ref" >/dev/null 2>&1; then
-                git -c color.ui=false log --oneline "$base_ref".."$target_ref" 2>/dev/null | head -20 || printf 'No commits found\n'
-            else
-                printf 'No commits in range\n'
-            fi
-            printf '\n'
-        fi
-
-        printf '=== Version Bump Suggestion ===\n'
-        case "$suggestion" in
-            major)
-                printf 'Suggested bump: MAJOR version\n'
-                if [[ "${R[breaking_cli_changes]}" = "true" ]]; then
-                    printf 'Reason: Breaking CLI changes detected\n'
-                elif [[ "${R[api_breaking]}" = "true" ]]; then
-                    printf 'Reason: API breaking changes detected\n'
-                elif [[ "$security_keywords" -gt 0 ]]; then
-                    printf 'Reason: Security/crash-related changes detected (%s keywords)\n' "$security_keywords"
-                else
-                    printf 'Reason: Very large code changes (%s lines)\n' "${R[diff_size]}"
-                fi
-                printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
-                ;;
-            minor)
-                printf 'Suggested bump: MINOR version\n'
-                if [[ "${R[cli_changes]}" = "true" ]]; then
-                    printf 'Reason: New CLI options added\n'
-                elif [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
-                    printf 'Reason: Manual CLI changes detected\n'
-                elif [[ "${R[new_source_files]:-0}" -gt 0 ]]; then
-                    printf 'Reason: New source files added (%s)\n' "${R[new_source_files]}"
-                elif [[ "${R[new_test_files]:-0}" -gt 0 ]]; then
-                    printf 'Reason: New test files added (%s)\n' "${R[new_test_files]}"
-                elif [[ "${R[new_doc_files]:-0}" -gt 0 ]]; then
-                    printf 'Reason: New documentation added (%s)\n' "${R[new_doc_files]}"
-                else
-                    printf 'Reason: New features or significant additions\n'
-                fi
-                printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
-                ;;
-            patch)
-                printf 'Suggested bump: PATCH version\n'
-                printf 'Reason: Significant modifications (%s files, %s lines)\n' "${R[modified_files]}" "${R[diff_size]}"
-                printf 'Current: %s -> New: %s\n' "$current_version" "$next_version"
-                ;;
-            none)
-                printf 'Suggested bump: NONE\n'
-                printf 'Reason: No significant changes detected\n'
-                ;;
-        esac
-
-        printf '\n'
-
-        # Only show apply command if there's a suggestion and the script exists
-        if [[ "$suggestion" != "none" ]]; then
-            if [[ -x ./dev-bin/bump-version ]]; then
-                printf 'To apply this suggestion:\n'
-                printf '  ./dev-bin/bump-version %s --commit\n' "$suggestion"
-                printf '\n'
-                printf 'Or use GitHub Actions:\n'
-                printf '  Go to Actions -> Auto Version Bump -> Run workflow -> Choose: %s\n' "$suggestion"
-            else
-                printf 'Note: bump-version script not found at ./dev-bin/bump-version\n'
-                printf 'Preview unavailable - manual version update required\n'
-            fi
-        fi
-
-        # Always include SUGGESTION= line in human/verbose output
-        printf 'SUGGESTION=%s\n' "$suggestion"
+        printf '\nSUGGESTION=%s\n' "$suggestion"
     fi
-
-    # Set exit code based on suggestion
+    
+    # Set exit code
     if [[ "$SUGGEST_ONLY" = "true" ]] && [[ "$STRICT_STATUS" != "true" ]]; then
-        # For --suggest-only without --strict-status, always exit 0 unless fatal error
         exit 0
     else
-        # For other modes or --strict-status, use traditional exit codes
         case "$suggestion" in
             major) exit 10 ;;
             minor) exit 11 ;;
@@ -1778,4 +383,4 @@ main() {
 }
 
 # Run main function
-main "$@"
+main "$@" 

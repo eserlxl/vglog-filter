@@ -1,0 +1,303 @@
+#!/bin/bash
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
+# Version Configuration Loader
+# Loads and validates versioning configuration from YAML files and environment variables
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+export LC_ALL=C
+
+# Configuration file path
+CONFIG_FILE="dev-config/versioning.yml"
+
+show_help() {
+    cat << EOF
+Version Configuration Loader
+
+Usage: $(basename "$0") [options]
+
+Options:
+  --config-file <path>     Path to configuration file (default: dev-config/versioning.yml)
+  --validate-only          Only validate configuration without output
+  --machine                Output machine-readable key=value format
+  --json                   Output machine-readable JSON
+  --help, -h               Show this help
+
+Environment Variables (fallback):
+  VERSION_USE_LOC_DELTA    Enable LOC-based delta system (default: true)
+  VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
+  VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
+  VERSION_PATCH_DELTA      Patch delta formula (default: 1*(1+LOC/250))
+  VERSION_MINOR_DELTA      Minor delta formula (default: 5*(1+LOC/500))
+  VERSION_MAJOR_DELTA      Major delta formula (default: 10*(1+LOC/1000))
+  VERSION_BREAKING_CLI_BONUS Breaking CLI bonus (default: 2)
+  VERSION_API_BREAKING_BONUS API breaking bonus (default: 3)
+  VERSION_REMOVED_OPTION_BONUS Removed option bonus (default: 1)
+  VERSION_CLI_CHANGES_BONUS CLI changes bonus (default: 2)
+  VERSION_MANUAL_CLI_BONUS Manual CLI bonus (default: 1)
+  VERSION_NEW_SOURCE_BONUS New source file bonus (default: 1)
+  VERSION_NEW_TEST_BONUS   New test file bonus (default: 1)
+  VERSION_NEW_DOC_BONUS    New doc file bonus (default: 1)
+  VERSION_ADDED_OPTION_BONUS Added option bonus (default: 1)
+  VERSION_SECURITY_BONUS   Security keyword bonus (default: 2)
+
+Examples:
+  $(basename "$0") --validate-only
+  $(basename "$0") --machine
+  $(basename "$0") --json
+EOF
+}
+
+# Parse arguments
+VALIDATE_ONLY=false
+MACHINE_OUTPUT=false
+JSON_OUTPUT=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --config-file)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --config-file requires a value\n' >&2; exit 1; }
+            CONFIG_FILE="$2"; shift 2;;
+        --validate-only) VALIDATE_ONLY=true; shift;;
+        --machine) MACHINE_OUTPUT=true; shift;;
+        --json) JSON_OUTPUT=true; shift;;
+        --help|-h) show_help; exit 0;;
+        *) printf 'Error: Unknown option: %s\n' "$1" >&2; show_help; exit 1;;
+    esac
+done
+
+# Load configuration from YAML file with validation
+load_config() {
+    # Check if yq is available
+    if ! command -v yq >/dev/null 2>&1; then
+        printf 'Warning: yq not found, using default configuration\n' >&2
+        return 1
+    fi
+    
+    # Check if config file exists
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        printf 'Warning: Configuration file %s not found, using defaults\n' "$CONFIG_FILE" >&2
+        return 1
+    fi
+    
+    # Load and validate configuration
+    local config_content
+    config_content=$(yq '.' "$CONFIG_FILE" 2>/dev/null || true)
+    if [[ -z "$config_content" ]]; then
+        printf 'Warning: Failed to parse configuration file %s, using defaults\n' "$CONFIG_FILE" >&2
+        return 1
+    fi
+    
+    # Helper function to safely extract numeric values
+    safe_numeric() {
+        local value
+        value=$(yq "$1" "$CONFIG_FILE" 2>/dev/null || printf '')
+        if [[ -n "$value" ]] && [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+            printf '%s' "$value"
+        else
+            printf ''
+        fi
+    }
+    
+    # Helper function to safely extract string values
+    safe_string() {
+        local value
+        value=$(yq "$1" "$CONFIG_FILE" 2>/dev/null || printf '')
+        if [[ -n "$value" ]]; then
+            printf '%s' "$value"
+        else
+            printf ''
+        fi
+    }
+    
+    # Load base deltas
+    BASE_DELTA_PATCH=$(safe_numeric '.base_deltas.patch')
+    BASE_DELTA_MINOR=$(safe_numeric '.base_deltas.minor')
+    BASE_DELTA_MAJOR=$(safe_numeric '.base_deltas.major')
+    
+    # Load limits
+    LOC_CAP=$(safe_numeric '.limits.loc_cap')
+    ROLLOVER=$(safe_numeric '.limits.rollover')
+    
+    # Load thresholds
+    MAJOR_BONUS_THRESHOLD=$(safe_numeric '.thresholds.major_bonus')
+    MINOR_BONUS_THRESHOLD=$(safe_numeric '.thresholds.minor_bonus')
+    PATCH_BONUS_THRESHOLD=$(safe_numeric '.thresholds.patch_bonus')
+    
+    # Load LOC divisors with validation
+    LOC_DIVISOR_MAJOR=$(safe_numeric '.loc_divisors.major')
+    LOC_DIVISOR_MINOR=$(safe_numeric '.loc_divisors.minor')
+    LOC_DIVISOR_PATCH=$(safe_numeric '.loc_divisors.patch')
+    
+    # Validate LOC divisors (guard against zero)
+    for divisor_name in "major" "minor" "patch"; do
+        local divisor_var="LOC_DIVISOR_${divisor_name^^}"
+        local divisor_value="${!divisor_var}"
+        if [[ -n "$divisor_value" ]] && [[ "$divisor_value" -le 0 ]]; then
+            printf 'Error: Invalid LOC divisor for %s: %s (must be > 0)\n' "$divisor_name" "$divisor_value" >&2
+            exit 1
+        fi
+    done
+    
+    # Load early exit configuration
+    EARLY_EXIT_BONUS_THRESHOLD=$(safe_numeric '.patterns.early_exit.bonus_threshold')
+    EARLY_EXIT_CHANGE_TYPE=$(safe_string '.patterns.early_exit.change_type')
+    
+    # Load performance thresholds
+    MEMORY_REDUCTION_THRESHOLD=$(safe_numeric '.patterns.performance.memory_reduction_threshold')
+    BUILD_TIME_THRESHOLD=$(safe_numeric '.patterns.performance.build_time_threshold')
+    PERF_50_THRESHOLD=$(safe_numeric '.patterns.performance.perf_50_threshold')
+    
+    # Load bonus values
+    BONUS_API_BREAKING=$(safe_numeric '.bonuses.breaking_changes.api_breaking')
+    BONUS_CLI_BREAKING=$(safe_numeric '.bonuses.breaking_changes.cli_breaking')
+    BONUS_SECURITY_VULN=$(safe_numeric '.bonuses.security_stability.security_vuln')
+    BONUS_CVE=$(safe_numeric '.bonuses.security_stability.cve')
+    BONUS_MEMORY_SAFETY=$(safe_numeric '.bonuses.security_stability.memory_safety')
+    BONUS_CRASH_FIX=$(safe_numeric '.bonuses.security_stability.crash_fix')
+    BONUS_NEW_CLI_COMMAND=$(safe_numeric '.bonuses.features.new_cli_command')
+    BONUS_NEW_CONFIG_OPTION=$(safe_numeric '.bonuses.features.new_config_option')
+    BONUS_NEW_SOURCE_FILE=$(safe_numeric '.bonuses.code_quality.new_source_file')
+    BONUS_NEW_TEST_FILE=$(safe_numeric '.bonuses.code_quality.new_test_suite')
+    BONUS_NEW_DOC_FILE=$(safe_numeric '.bonuses.code_quality.doc_overhaul')
+    
+    # Load multipliers with validation
+    MULTIPLIER_ZERO_DAY=$(safe_numeric '.multipliers.critical.zero_day')
+    MULTIPLIER_PRODUCTION_OUTAGE=$(safe_numeric '.multipliers.critical.production_outage')
+    MULTIPLIER_COMPLIANCE=$(safe_numeric '.multipliers.critical.compliance')
+    
+    # Validate multipliers dynamically (must be positive)
+    local multiplier_keys
+    multiplier_keys=$(yq '.multipliers.critical | keys | .[]' "$CONFIG_FILE" 2>/dev/null || printf '')
+    if [[ -n "$multiplier_keys" ]]; then
+        while IFS= read -r multiplier_name; do
+            [[ -n "$multiplier_name" ]] || continue
+            # Convert to uppercase and replace non-alphanumeric chars with underscore
+            local safe_name
+            safe_name=$(printf '%s' "$multiplier_name" | tr '[:lower:]' '[:upper:]' | tr -c '[:alnum:]' '_')
+            local multiplier_var="MULTIPLIER_${safe_name}"
+            local multiplier_value
+            multiplier_value="${!multiplier_var:-}"
+            if [[ -n "$multiplier_value" ]] && [[ ! "$multiplier_value" =~ ^[0-9.]+$ ]]; then
+                printf 'Error: Invalid multiplier for %s: %s (must be numeric)\n' "$multiplier_name" "$multiplier_value" >&2
+                exit 1
+            fi
+        done <<< "$multiplier_keys"
+    fi
+    
+    return 0
+}
+
+# Load configuration from YAML file
+if ! load_config; then
+    # Fallback to environment variables with defaults
+    printf 'Using fallback configuration from environment variables\n' >&2
+fi
+
+# PURELY MATHEMATICAL VERSIONING SYSTEM
+# All version bump decisions are based on bonus point calculations
+# No minimum thresholds or extra rules - pure math logic only
+
+# LOC-based delta system configuration (use config values if available)
+VERSION_PATCH_LIMIT="${VERSION_PATCH_LIMIT:-${ROLLOVER:-100}}"
+VERSION_MINOR_LIMIT="${VERSION_MINOR_LIMIT:-${ROLLOVER:-100}}"
+VERSION_USE_LOC_DELTA="${VERSION_USE_LOC_DELTA:-true}"
+
+# Use config divisors if available, otherwise fallback to hardcoded formulas
+if [[ -n "${LOC_DIVISOR_PATCH:-}" ]]; then
+    VERSION_PATCH_DELTA="${BASE_DELTA_PATCH:-1}*(1+LOC/$LOC_DIVISOR_PATCH)"
+else
+    VERSION_PATCH_DELTA="${VERSION_PATCH_DELTA:-1*(1+LOC/250)}"
+fi
+
+if [[ -n "${LOC_DIVISOR_MINOR:-}" ]]; then
+    VERSION_MINOR_DELTA="${BASE_DELTA_MINOR:-5}*(1+LOC/$LOC_DIVISOR_MINOR)"
+else
+    VERSION_MINOR_DELTA="${VERSION_MINOR_DELTA:-5*(1+LOC/500)}"
+fi
+
+if [[ -n "${LOC_DIVISOR_MAJOR:-}" ]]; then
+    VERSION_MAJOR_DELTA="${BASE_DELTA_MAJOR:-10}*(1+LOC/$LOC_DIVISOR_MAJOR)"
+else
+    VERSION_MAJOR_DELTA="${VERSION_MAJOR_DELTA:-10*(1+LOC/1000)}"
+fi
+
+# Bonus system configuration (use config values if available)
+VERSION_BREAKING_CLI_BONUS="${VERSION_BREAKING_CLI_BONUS:-${BONUS_CLI_BREAKING:-2}}"
+VERSION_API_BREAKING_BONUS="${VERSION_API_BREAKING_BONUS:-${BONUS_API_BREAKING:-3}}"
+VERSION_REMOVED_OPTION_BONUS="${VERSION_REMOVED_OPTION_BONUS:-1}"
+VERSION_CLI_CHANGES_BONUS="${VERSION_CLI_CHANGES_BONUS:-2}"
+VERSION_MANUAL_CLI_BONUS="${VERSION_MANUAL_CLI_BONUS:-1}"
+VERSION_NEW_SOURCE_BONUS="${VERSION_NEW_SOURCE_BONUS:-${BONUS_NEW_SOURCE_FILE:-1}}"
+VERSION_NEW_TEST_BONUS="${VERSION_NEW_TEST_BONUS:-${BONUS_NEW_TEST_FILE:-1}}"
+VERSION_NEW_DOC_BONUS="${VERSION_NEW_DOC_BONUS:-${BONUS_NEW_DOC_FILE:-1}}"
+VERSION_ADDED_OPTION_BONUS="${VERSION_ADDED_OPTION_BONUS:-${BONUS_NEW_CONFIG_OPTION:-1}}"
+VERSION_SECURITY_BONUS="${VERSION_SECURITY_BONUS:-${BONUS_SECURITY_VULN:-2}}"
+
+# Early exit configuration
+EARLY_EXIT_BONUS_THRESHOLD="${EARLY_EXIT_BONUS_THRESHOLD:-8}"
+EARLY_EXIT_CHANGE_TYPE="${EARLY_EXIT_CHANGE_TYPE:-major}"
+
+# Output configuration based on mode
+if [[ "$VALIDATE_ONLY" = "true" ]]; then
+    printf 'Configuration validation completed successfully\n'
+    exit 0
+elif [[ "$JSON_OUTPUT" = "true" ]]; then
+    printf '{\n'
+    printf '  "config_file": "%s",\n' "$CONFIG_FILE"
+    printf '  "loc_delta": {\n'
+    printf '    "enabled": %s,\n' "$VERSION_USE_LOC_DELTA"
+    printf '    "patch_limit": %s,\n' "$VERSION_PATCH_LIMIT"
+    printf '    "minor_limit": %s,\n' "$VERSION_MINOR_LIMIT"
+    printf '    "patch_delta": "%s",\n' "$VERSION_PATCH_DELTA"
+    printf '    "minor_delta": "%s",\n' "$VERSION_MINOR_DELTA"
+    printf '    "major_delta": "%s"\n' "$VERSION_MAJOR_DELTA"
+    printf '  },\n'
+    printf '  "bonuses": {\n'
+    printf '    "breaking_cli": %s,\n' "$VERSION_BREAKING_CLI_BONUS"
+    printf '    "api_breaking": %s,\n' "$VERSION_API_BREAKING_BONUS"
+    printf '    "removed_option": %s,\n' "$VERSION_REMOVED_OPTION_BONUS"
+    printf '    "cli_changes": %s,\n' "$VERSION_CLI_CHANGES_BONUS"
+    printf '    "manual_cli": %s,\n' "$VERSION_MANUAL_CLI_BONUS"
+    printf '    "new_source": %s,\n' "$VERSION_NEW_SOURCE_BONUS"
+    printf '    "new_test": %s,\n' "$VERSION_NEW_TEST_BONUS"
+    printf '    "new_doc": %s,\n' "$VERSION_NEW_DOC_BONUS"
+    printf '    "added_option": %s,\n' "$VERSION_ADDED_OPTION_BONUS"
+    printf '    "security": %s\n' "$VERSION_SECURITY_BONUS"
+    printf '  },\n'
+    printf '  "early_exit": {\n'
+    printf '    "bonus_threshold": %s,\n' "$EARLY_EXIT_BONUS_THRESHOLD"
+    printf '    "change_type": "%s"\n' "$EARLY_EXIT_CHANGE_TYPE"
+    printf '  }\n'
+    printf '}\n'
+elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
+    printf 'CONFIG_FILE=%s\n' "$CONFIG_FILE"
+    printf 'VERSION_USE_LOC_DELTA=%s\n' "$VERSION_USE_LOC_DELTA"
+    printf 'VERSION_PATCH_LIMIT=%s\n' "$VERSION_PATCH_LIMIT"
+    printf 'VERSION_MINOR_LIMIT=%s\n' "$VERSION_MINOR_LIMIT"
+    printf 'VERSION_BREAKING_CLI_BONUS=%s\n' "$VERSION_BREAKING_CLI_BONUS"
+    printf 'VERSION_API_BREAKING_BONUS=%s\n' "$VERSION_API_BREAKING_BONUS"
+    printf 'VERSION_SECURITY_BONUS=%s\n' "$VERSION_SECURITY_BONUS"
+    printf 'EARLY_EXIT_BONUS_THRESHOLD=%s\n' "$EARLY_EXIT_BONUS_THRESHOLD"
+else
+    printf '=== Version Configuration ===\n'
+    printf 'Config file: %s\n' "$CONFIG_FILE"
+    printf '\nLOC Delta System:\n'
+    printf '  Enabled: %s\n' "$VERSION_USE_LOC_DELTA"
+    printf '  Patch limit: %s\n' "$VERSION_PATCH_LIMIT"
+    printf '  Minor limit: %s\n' "$VERSION_MINOR_LIMIT"
+    printf '  Patch delta: %s\n' "$VERSION_PATCH_DELTA"
+    printf '  Minor delta: %s\n' "$VERSION_MINOR_DELTA"
+    printf '  Major delta: %s\n' "$VERSION_MAJOR_DELTA"
+    printf '\nBonus Values:\n'
+    printf '  Breaking CLI: %s\n' "$VERSION_BREAKING_CLI_BONUS"
+    printf '  API breaking: %s\n' "$VERSION_API_BREAKING_BONUS"
+    printf '  Security: %s\n' "$VERSION_SECURITY_BONUS"
+    printf '  Early exit threshold: %s\n' "$EARLY_EXIT_BONUS_THRESHOLD"
+fi 

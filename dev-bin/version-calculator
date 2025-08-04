@@ -1,0 +1,320 @@
+#!/bin/bash
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
+# Version Calculator
+# Calculates next version based on LOC-based delta system and bonus points
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+export LC_ALL=C
+
+show_help() {
+    cat << EOF
+Version Calculator
+
+Usage: $(basename "$0") [options]
+
+Options:
+  --current-version <ver>  Current version (e.g., 1.2.3)
+  --bump-type <type>       Bump type: major, minor, patch
+  --loc <number>           Lines of code changed
+  --bonus <number>         Bonus points to add
+  --patch-limit <number>   Patch version limit (default: 100)
+  --minor-limit <number>   Minor version limit (default: 100)
+  --use-loc-delta <bool>   Enable LOC-based delta system (default: true)
+  --patch-delta <formula>  Patch delta formula (default: 1*(1+LOC/250))
+  --minor-delta <formula>  Minor delta formula (default: 5*(1+LOC/500))
+  --major-delta <formula>  Major delta formula (default: 10*(1+LOC/1000))
+  --machine                Output machine-readable key=value format
+  --json                   Output machine-readable JSON
+  --help, -h               Show this help
+
+Examples:
+  $(basename "$0") --current-version 1.2.3 --bump-type minor --loc 500
+  $(basename "$0") --current-version 1.2.3 --bump-type major --bonus 10 --machine
+  $(basename "$0") --current-version 1.2.3 --bump-type patch --loc 100 --json
+EOF
+}
+
+# Parse arguments
+CURRENT_VERSION=""
+BUMP_TYPE=""
+LOC=0
+BONUS=0
+PATCH_LIMIT=100
+MINOR_LIMIT=100
+USE_LOC_DELTA=true
+PATCH_DELTA="1*(1+LOC/250)"
+MINOR_DELTA="5*(1+LOC/500)"
+MAJOR_DELTA="10*(1+LOC/1000)"
+MACHINE_OUTPUT=false
+JSON_OUTPUT=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --current-version)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --current-version requires a value\n' >&2; exit 1; }
+            CURRENT_VERSION="$2"; shift 2;;
+        --bump-type)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --bump-type requires a value\n' >&2; exit 1; }
+            BUMP_TYPE="$2"; shift 2;;
+        --loc)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --loc requires a value\n' >&2; exit 1; }
+            LOC="$2"; shift 2;;
+        --bonus)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --bonus requires a value\n' >&2; exit 1; }
+            BONUS="$2"; shift 2;;
+        --patch-limit)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --patch-limit requires a value\n' >&2; exit 1; }
+            PATCH_LIMIT="$2"; shift 2;;
+        --minor-limit)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --minor-limit requires a value\n' >&2; exit 1; }
+            MINOR_LIMIT="$2"; shift 2;;
+        --use-loc-delta)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --use-loc-delta requires a value\n' >&2; exit 1; }
+            USE_LOC_DELTA="$2"; shift 2;;
+        --patch-delta)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --patch-delta requires a value\n' >&2; exit 1; }
+            PATCH_DELTA="$2"; shift 2;;
+        --minor-delta)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --minor-delta requires a value\n' >&2; exit 1; }
+            MINOR_DELTA="$2"; shift 2;;
+        --major-delta)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --major-delta requires a value\n' >&2; exit 1; }
+            MAJOR_DELTA="$2"; shift 2;;
+        --machine) MACHINE_OUTPUT=true; shift;;
+        --json) JSON_OUTPUT=true; shift;;
+        --help|-h) show_help; exit 0;;
+        *) printf 'Error: Unknown option: %s\n' "$1" >&2; show_help; exit 1;;
+    esac
+done
+
+# Validate required arguments
+if [[ -z "$CURRENT_VERSION" ]]; then
+    printf 'Error: --current-version is required\n' >&2
+    exit 1
+fi
+
+if [[ -z "$BUMP_TYPE" ]]; then
+    printf 'Error: --bump-type is required\n' >&2
+    exit 1
+fi
+
+# Validate bump type
+case "$BUMP_TYPE" in
+    major|minor|patch) ;;
+    *) printf 'Error: --bump-type must be major, minor, or patch\n' >&2; exit 1;;
+esac
+
+# Validate numeric inputs
+if [[ ! "$LOC" =~ ^[0-9]+$ ]]; then
+    printf 'Error: --loc must be a non-negative integer\n' >&2
+    exit 1
+fi
+
+if [[ ! "$BONUS" =~ ^[0-9]+$ ]]; then
+    printf 'Error: --bonus must be a non-negative integer\n' >&2
+    exit 1
+fi
+
+if [[ ! "$PATCH_LIMIT" =~ ^[0-9]+$ ]] || [[ "$PATCH_LIMIT" -le 0 ]]; then
+    printf 'Error: --patch-limit must be a positive integer\n' >&2
+    exit 1
+fi
+
+if [[ ! "$MINOR_LIMIT" =~ ^[0-9]+$ ]] || [[ "$MINOR_LIMIT" -le 0 ]]; then
+    printf 'Error: --minor-limit must be a positive integer\n' >&2
+    exit 1
+fi
+
+# Calculate LOC-based delta for version increments with bonus additions
+calculate_loc_delta() {
+    local bump_type="$1"
+    local loc="$2"
+    local bonus="$3"
+    
+    # Calculate base delta from LOC using configuration values
+    local base_delta=1
+    case "$bump_type" in
+        patch)
+            # Replace LOC in formula and evaluate
+            local formula="${PATCH_DELTA//LOC/$loc}"
+            base_delta=$(awk "BEGIN {printf \"%.0f\", ($formula > 0 ? $formula : 1)}" 2>/dev/null || echo "1")
+            ;;
+        minor)
+            # Replace LOC in formula and evaluate
+            local formula="${MINOR_DELTA//LOC/$loc}"
+            base_delta=$(awk "BEGIN {printf \"%.0f\", ($formula > 0 ? $formula : 1)}" 2>/dev/null || echo "1")
+            ;;
+        major)
+            # Replace LOC in formula and evaluate
+            local formula="${MAJOR_DELTA//LOC/$loc}"
+            base_delta=$(awk "BEGIN {printf \"%.0f\", ($formula > 0 ? $formula : 1)}" 2>/dev/null || echo "1")
+            ;;
+        *)
+            base_delta=1
+            ;;
+    esac
+    
+    # Ensure minimum base_delta of 1 to prevent zero deltas from tiny changes
+    if [[ "$base_delta" -lt 1 ]]; then
+        base_delta=1
+    fi
+    
+    # Calculate final delta
+    local final_delta=$((base_delta + bonus))
+    
+    # Ensure minimum delta of 1
+    if [[ "$final_delta" -lt 1 ]]; then
+        final_delta=1
+    fi
+    
+    printf '%d' "$final_delta"
+}
+
+# Calculate next version with LOC-based delta system
+calculate_next_version() {
+    local current_version="$1"
+    local bump_type="$2"
+    local loc="$3"
+    local bonus="$4"
+
+    if [[ -z "$current_version" ]] || [[ "$current_version" = "0.0.0" ]]; then
+        case "$bump_type" in
+            major) printf '1.0.0' ;;
+            minor) printf '0.1.0' ;;
+            patch) printf '0.0.1' ;;
+            *) printf '0.0.0' ;;
+        esac
+        return
+    fi
+
+    # Validate VERSION format
+    if [[ ! $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        current_version=0.0.0
+    fi
+
+    local major minor patch
+    IFS='.' read -r major minor patch <<< "$current_version"
+
+    # Calculate delta based on LOC if enabled
+    local delta=1
+    if [[ "$USE_LOC_DELTA" = "true" ]]; then
+        delta=$(calculate_loc_delta "$bump_type" "$loc" "$bonus")
+    else
+        # Traditional fixed deltas
+        case "$bump_type" in
+            major) delta=1 ;;
+            minor) delta=1 ;;
+            patch) delta=1 ;;
+        esac
+    fi
+
+    case "$bump_type" in
+        major)
+            # Apply delta and handle rollover
+            local new_patch=$((patch + delta))
+            if [[ "$new_patch" -ge "$PATCH_LIMIT" ]]; then
+                # Rollover to next minor
+                local new_minor=$((minor + 1))
+                if [[ "$new_minor" -ge "$MINOR_LIMIT" ]]; then
+                    # Rollover to next major
+                    printf '%d.0.0' "$((major + 1))"
+                else
+                    printf '%d.%d.0' "$major" "$new_minor"
+                fi
+            else
+                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
+            fi
+            ;;
+        minor)
+            # Apply delta and handle rollover
+            local new_patch=$((patch + delta))
+            if [[ "$new_patch" -ge "$PATCH_LIMIT" ]]; then
+                # Rollover to next minor
+                local new_minor=$((minor + 1))
+                if [[ "$new_minor" -ge "$MINOR_LIMIT" ]]; then
+                    # Rollover to next major
+                    printf '%d.0.0' "$((major + 1))"
+                else
+                    printf '%d.%d.0' "$major" "$new_minor"
+                fi
+            else
+                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
+            fi
+            ;;
+        patch)
+            # Apply delta and handle rollover
+            local new_patch=$((patch + delta))
+            if [[ "$new_patch" -ge "$PATCH_LIMIT" ]]; then
+                # Rollover to next minor
+                local new_minor=$((minor + 1))
+                if [[ "$new_minor" -ge "$MINOR_LIMIT" ]]; then
+                    # Rollover to next major
+                    printf '%d.0.0' "$((major + 1))"
+                else
+                    printf '%d.%d.0' "$major" "$new_minor"
+                fi
+            else
+                printf '%d.%d.%d' "$major" "$minor" "$new_patch"
+            fi
+            ;;
+        *)
+            printf '%s' "$current_version"
+            ;;
+    esac
+}
+
+# Main execution
+NEXT_VERSION=$(calculate_next_version "$CURRENT_VERSION" "$BUMP_TYPE" "$LOC" "$BONUS")
+DELTA=$(calculate_loc_delta "$BUMP_TYPE" "$LOC" "$BONUS")
+
+# Output results
+if [[ "$JSON_OUTPUT" = "true" ]]; then
+    printf '{\n'
+    printf '  "current_version": "%s",\n' "$CURRENT_VERSION"
+    printf '  "bump_type": "%s",\n' "$BUMP_TYPE"
+    printf '  "next_version": "%s",\n' "$NEXT_VERSION"
+    printf '  "loc": %s,\n' "$LOC"
+    printf '  "bonus": %s,\n' "$BONUS"
+    printf '  "delta": %s,\n' "$DELTA"
+    printf '  "patch_limit": %s,\n' "$PATCH_LIMIT"
+    printf '  "minor_limit": %s,\n' "$MINOR_LIMIT"
+    printf '  "use_loc_delta": %s,\n' "$USE_LOC_DELTA"
+    printf '  "patch_delta_formula": "%s",\n' "$PATCH_DELTA"
+    printf '  "minor_delta_formula": "%s",\n' "$MINOR_DELTA"
+    printf '  "major_delta_formula": "%s"\n' "$MAJOR_DELTA"
+    printf '}\n'
+elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
+    printf 'CURRENT_VERSION=%s\n' "$CURRENT_VERSION"
+    printf 'BUMP_TYPE=%s\n' "$BUMP_TYPE"
+    printf 'NEXT_VERSION=%s\n' "$NEXT_VERSION"
+    printf 'LOC=%s\n' "$LOC"
+    printf 'BONUS=%s\n' "$BONUS"
+    printf 'DELTA=%s\n' "$DELTA"
+    printf 'PATCH_LIMIT=%s\n' "$PATCH_LIMIT"
+    printf 'MINOR_LIMIT=%s\n' "$MINOR_LIMIT"
+    printf 'USE_LOC_DELTA=%s\n' "$USE_LOC_DELTA"
+else
+    printf '=== Version Calculation ===\n'
+    printf 'Current version: %s\n' "$CURRENT_VERSION"
+    printf 'Bump type: %s\n' "$BUMP_TYPE"
+    printf 'Next version: %s\n' "$NEXT_VERSION"
+    printf '\nCalculation Details:\n'
+    printf '  Lines of code: %s\n' "$LOC"
+    printf '  Bonus points: %s\n' "$BONUS"
+    printf '  Calculated delta: %s\n' "$DELTA"
+    printf '  Patch limit: %s\n' "$PATCH_LIMIT"
+    printf '  Minor limit: %s\n' "$MINOR_LIMIT"
+    printf '  LOC delta enabled: %s\n' "$USE_LOC_DELTA"
+    if [[ "$USE_LOC_DELTA" = "true" ]]; then
+        printf '  Patch delta formula: %s\n' "$PATCH_DELTA"
+        printf '  Minor delta formula: %s\n' "$MINOR_DELTA"
+        printf '  Major delta formula: %s\n' "$MAJOR_DELTA"
+    fi
+fi 
