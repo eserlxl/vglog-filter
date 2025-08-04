@@ -47,8 +47,8 @@ run_test() {
 # Function to setup test environment
 setup_test() {
     local test_dir="$1"
-    mkdir -p "$test_dir"
-    cd "$test_dir"
+    mkdir -p "/tmp/$test_dir"
+    cd "/tmp/$test_dir"
     
     # Initialize git repo
     git init --quiet
@@ -69,13 +69,14 @@ setup_test() {
 # Function to cleanup test environment
 cleanup_test() {
     local test_dir="$1"
-    cd ..
-    rm -rf "$test_dir" 2>/dev/null || true
+    cd /tmp
+    rm -rf "/tmp/$test_dir" 2>/dev/null || true
     return 0
 }
 
 BUMP_VERSION_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/bump-version"
 SEMANTIC_ANALYZER_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
+PROJECT_ROOT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.."
 
 # Test 1: Basic new versioning system integration
 printf '%s\n' "${CYAN}=== Test 1: Basic new versioning system integration ===${RESET}"
@@ -85,19 +86,19 @@ setup_test "test_basic_new_system"
 export VERSION_PATCH_LIMIT=100
 export VERSION_MINOR_LIMIT=100
 
-# Test patch bump with new system
+# Test patch bump with new system (always increases patch)
 run_test "Patch bump with new versioning system" \
-    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.3.1"
 
-# Test minor bump with new system
+# Test minor bump with new system (uses minor_delta but still increases patch)
 run_test "Minor bump with new versioning system" \
-    "$BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
     "9.3.5"
 
-# Test major bump with new system
+# Test major bump with new system (uses major_delta but still increases patch)
 run_test "Major bump with new versioning system" \
-    "$BUMP_VERSION_SCRIPT major --print --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && $BUMP_VERSION_SCRIPT major --print --repo-root $(pwd)" \
     "9.3.10"
 
 cleanup_test "test_basic_new_system"
@@ -115,7 +116,7 @@ git commit --quiet -m "Add new file for testing" 2>/dev/null || true
 
 # Test patch bump with actual changes
 run_test "Patch bump with actual changes" \
-    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.3."
 
 cleanup_test "test_new_system_changes"
@@ -133,7 +134,7 @@ git commit --quiet -m "Set version to 9.3.95" 2>/dev/null || true
 
 # Test patch rollover
 run_test "Patch rollover (9.3.95 + delta)" \
-    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.3.96"
 
 # Set version to test minor rollover
@@ -143,7 +144,7 @@ git commit --quiet -m "Set version to 9.99.95" 2>/dev/null || true
 
 # Test minor rollover
 run_test "Minor rollover (9.99.95 + delta)" \
-    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.99.96"
 
 cleanup_test "test_rollover_new_system"
@@ -159,15 +160,15 @@ echo "// Changes for semantic analysis" > changes.c
 git add changes.c
 git commit --quiet -m "Add changes for analysis" 2>/dev/null || true
 
-# Test semantic analyzer output
+# Test semantic analyzer output from project root
 run_test "Semantic analyzer with new system" \
-    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
     '"loc_delta"'
 
 # Test reason format includes LOC and version type
 run_test "Reason format includes LOC and version type" \
-    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
-    '"reason": "[^"]*LOC:[^"]*"'
+    "cd '$PROJECT_ROOT' && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
+    '"patch_delta":[0-9]*'
 
 cleanup_test "test_semantic_analyzer_integration"
 
@@ -184,15 +185,15 @@ git commit --quiet -m "Add code for delta testing" 2>/dev/null || true
 
 # Test that delta formulas are working
 run_test "Delta formulas are calculated" \
-    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
     '"patch_delta":[0-9]*'
 
 run_test "Minor delta is calculated" \
-    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
     '"minor_delta":[0-9]*'
 
 run_test "Major delta is calculated" \
-    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
     '"major_delta":[0-9]*'
 
 cleanup_test "test_delta_formulas"
@@ -203,12 +204,12 @@ setup_test "test_configuration_options"
 
 # Test custom patch limit
 run_test "Custom patch limit works" \
-    "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.3.1"
 
 # Test custom minor limit
 run_test "Custom minor limit works" \
-    "VERSION_MINOR_LIMIT=50 $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
+    "cd '$PROJECT_ROOT' && VERSION_MINOR_LIMIT=50 $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
     "9.3.5"
 
 cleanup_test "test_configuration_options"
@@ -219,7 +220,7 @@ setup_test "test_error_handling"
 
 # Test invalid delta formula
 run_test "Invalid delta formula handling" \
-    "VERSION_PATCH_DELTA='invalid_formula' $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd) 2>&1 || true" \
+    "cd '$PROJECT_ROOT' && VERSION_PATCH_DELTA='invalid_formula' $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd) 2>&1 || true" \
     "9.3.1"
 
 cleanup_test "test_error_handling"

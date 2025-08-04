@@ -158,7 +158,9 @@ bump_version() {
     local delta=1
     # Try to find semantic analyzer in various locations
     local analyzer_path=""
-    if [[ -x "./dev-bin/semantic-version-analyzer" ]]; then
+    if [[ -x "$ORIGINAL_PROJECT_ROOT/dev-bin/semantic-version-analyzer" ]]; then
+        analyzer_path="$ORIGINAL_PROJECT_ROOT/dev-bin/semantic-version-analyzer"
+    elif [[ -x "./dev-bin/semantic-version-analyzer" ]]; then
         analyzer_path="./dev-bin/semantic-version-analyzer"
     elif [[ -x "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/semantic-version-analyzer" ]]; then
         analyzer_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/semantic-version-analyzer"
@@ -167,7 +169,12 @@ bump_version() {
     if [[ -n "$analyzer_path" ]]; then
         # Get the delta from semantic analyzer
         local analyzer_output
-        analyzer_output=$("$analyzer_path" --json 2>/dev/null || true)
+        local analyzer_args="--json"
+        if [[ -n "$REPO_ROOT" ]]; then
+            analyzer_args="$analyzer_args --repo-root '$REPO_ROOT'"
+        fi
+        # Call semantic analyzer from original project root to ensure it can find its dependencies
+        analyzer_output=$(cd "$ORIGINAL_PROJECT_ROOT" && "$analyzer_path" $analyzer_args 2>/dev/null || true)
         
         if [[ -n "$analyzer_output" ]]; then
             # Extract delta from JSON output - look for nested fields under loc_delta
@@ -612,6 +619,9 @@ done
 if [[ "$NO_COLOR" != "true" && -t 2 ]]; then
     RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'; CYAN=$'\033[0;36m'; RESET=$'\033[0m'
 fi
+
+# Store original project root for semantic analyzer
+ORIGINAL_PROJECT_ROOT="$PROJECT_ROOT"
 
 # --repo-root handling
 if [[ -n "$REPO_ROOT" ]]; then
