@@ -6,10 +6,13 @@ This guide provides comprehensive information for developers contributing to `vg
 
 - [Build Options](#build-options)
   - [Using `build.sh`](#using-buildsh)
+  - [Build Configurations](#build-configurations)
 - [Versioning System](#versioning-system)
   - [Current Version Retrieval](#current-version-retrieval)
+  - [LOC-Based Delta System](#loc-based-delta-system)
   - [Automated Version Bumping](#automated-version-bumping)
   - [Manual Version Management](#manual-version-management)
+  - [Configuration Management](#configuration-management)
 - [Testing & CI/CD](#testing--cicd)
   - [Test Suite Overview](#test-suite-overview)
   - [GitHub Actions Workflows](#github-actions-workflows)
@@ -26,6 +29,8 @@ For detailed information on building, including prerequisites and cross-compilat
 ### Using `build.sh`
 
 The `build.sh` script simplifies the process of configuring and compiling `vglog-filter` with different options. It automates CMake commands and manages build directories.
+
+#### Build Configurations
 
 -   **Default build (Release with `-O2`)**:
     ```sh
@@ -69,6 +74,14 @@ The `build.sh` script simplifies the process of configuring and compiling `vglog
     ```
 
 **Note**: If both `debug` and `performance` options are provided, `debug` mode will take precedence. The `clean` and `tests` options can be combined with any other build configuration options.
+
+**Build Directory Structure**: The script creates build directories with descriptive names:
+- `build/` - Default release build
+- `build-debug/` - Debug build
+- `build-performance/` - Performance-optimized build
+- `build-asan/` - AddressSanitizer build
+- `build-msan/` - MemorySanitizer build
+- `build-clang-tidy/` - Clang-Tidy analysis build
 
 [↑ Back to top](#developer-guide)
 
@@ -146,6 +159,9 @@ While automated versioning is preferred, tools are available for manual inspecti
 
 # Get detailed information about a specific tag
 ./dev-bin/tag-manager info v10.5.0
+
+# Update alpha version for development releases
+./dev-bin/update_alpha.sh
 ```
 
 ### Configuration Management
@@ -191,12 +207,13 @@ Located in the `test/` directory, these tests are written in C++ and cover speci
 -   **`test_regex_patterns.cpp`**: Tests the regular expression matching and replacement capabilities.
 -   **`test_cli_options.cpp`**: Validates the parsing and behavior of command-line arguments.
 -   **`test_edge_utf8_perm.cpp`**: Tests edge cases related to UTF-8 character permutations.
+-   **`test_canonicalization.cpp`**: Tests path canonicalization and normalization logic.
 
 #### Workflow Tests
 Located in the `test-workflows/` directory, these are shell scripts that test the end-to-end behavior of the `vglog-filter` executable and its integration with other tools.
 
 -   **`cli-tests/`**: Tests related to the command-line interface, including input/output handling and option parsing.
--   **`core-tests/`**: Tests core functionalities and utilities, including versioning tools.
+-   **`core-tests/`**: Tests core functionalities and utilities, including versioning tools and LOC delta system.
 -   **`debug-tests/`**: Scripts for debugging and manual verification of debug builds.
 -   **`edge-case-tests/`**: Workflow-level tests for specific tricky scenarios.
 -   **`ere-tests/`**: Tests for extended regular expression (ERE) functionality.
@@ -204,6 +221,13 @@ Located in the `test-workflows/` directory, these are shell scripts that test th
 -   **`fixture-tests/`**: Contains test data and fixtures used by other tests.
 -   **`source-fixtures/`**: Source code fixtures for testing various scenarios.
 -   **`utility-tests/`**: Tests for various utility scripts and functions.
+
+#### Memory Safety Tests
+The project includes specialized tests for memory safety:
+
+-   **MSAN Tests**: MemorySanitizer tests to detect uninitialized memory access
+-   **ASAN Tests**: AddressSanitizer tests to detect memory corruption
+-   **Valgrind Tests**: Memory leak detection and analysis
 
 ### GitHub Actions Workflows
 
@@ -224,6 +248,9 @@ Developers are strongly encouraged to run tests locally before pushing changes. 
 
 # Run only workflow tests
 ./test-workflows/run_workflow_tests.sh
+
+# Run LOC delta system tests specifically
+./test-workflows/run_loc_delta_tests.sh
 ```
 
 #### Individual Test Suites
@@ -236,6 +263,9 @@ To run specific C++ test executables or individual workflow test scripts:
 
 # Run a specific workflow test script
 ./test-workflows/cli-tests/test_extract.sh
+
+# Run comprehensive semantic version analyzer tests
+./test-workflows/test_semantic_version_analyzer_comprehensive.sh
 ```
 
 #### Build and Test Combinations
@@ -248,6 +278,22 @@ Use the `build.sh` script to build with specific configurations and then run tes
 
 # Build in debug mode with warnings and run all tests
 ./build.sh tests debug warnings
+
+# Build with sanitizers and run tests
+./build.sh tests asan
+```
+
+#### Memory Safety Testing
+
+```sh
+# Run MSAN tests
+./test-workflows/simple_msan_test.sh
+
+# Run MSAN simulation tests
+./test-workflows/test_msan_simulation.sh
+
+# Run MSAN fix verification
+./test-workflows/test_msan_fix.sh
 ```
 
 [↑ Back to top](#developer-guide)
@@ -261,11 +307,14 @@ Several utility scripts and tools are provided in the `dev-bin/` directory to as
 -   **`bump-version`**: A script to manually increment the project's version (major, minor, or patch) and update the `VERSION` file.
 -   **`tag-manager`**: Helps manage Git tags, including listing and cleaning up old tags.
 -   **`cursor-version-bump`**: A utility specifically for integration with the Cursor IDE for version bumping.
+-   **`update_alpha.sh`**: Updates alpha version numbers for development releases.
 
 #### Testing Tools
 -   **`run_tests.sh`**: The primary script to execute all C++ unit tests and workflow tests.
 -   **`run_unit_tests.sh`**: Executes only the C++ unit tests.
 -   **`run_workflow_tests.sh`**: Executes only the shell-based workflow tests.
+-   **`run_loc_delta_tests.sh`**: Executes LOC delta system tests.
+-   **`test_helper.sh`**: Common test utilities and helper functions.
 
 #### Build Tools
 -   **`build.sh`**: The main script for building the project with various configurations.
@@ -280,6 +329,11 @@ This section outlines a typical development workflow for contributing to `vglog-
 ### 1. Setup Your Development Environment
 
 Start by cloning the repository and installing the necessary build dependencies as described in the [Build Guide](BUILD.md).
+
+```sh
+git clone https://github.com/eserlxl/vglog-filter.git
+cd vglog-filter
+```
 
 ### 2. Build and Test Locally
 
@@ -318,6 +372,13 @@ git commit -m "feat: add new feature for X functionality"
 # Example: "fix(cli): resolve issue with -s option parsing"
 ```
 
+**Commit Message Guidelines**:
+- Use conventional commit types: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `test:`, `chore:`
+- Include scope when relevant: `feat(cli):`, `fix(versioning):`
+- Use imperative mood: "add feature" not "added feature"
+- Keep the first line under 72 characters
+- Add detailed description after a blank line if needed
+
 ### 5. Push and Monitor CI/CD
 
 Push your changes to your feature branch or directly to `main` (if appropriate for small fixes). Monitor the GitHub Actions workflows for feedback.
@@ -331,11 +392,20 @@ git push origin your-feature-branch
 
 For changes merged into `main`, the version will be automatically bumped by the CI/CD pipeline based on your commit messages. You typically do not need to manually manage the `VERSION` file or create tags.
 
+### 7. Testing Best Practices
+
+- **Run tests before committing**: Always ensure all tests pass locally
+- **Add tests for new features**: Include both unit tests and workflow tests
+- **Test edge cases**: Consider boundary conditions and error scenarios
+- **Use appropriate build configurations**: Debug builds for development, performance builds for benchmarking
+
 [↑ Back to top](#developer-guide)
 
 ## Code Quality and Best Practices
 
 Maintaining high code quality is paramount for `vglog-filter`. Adhere to the following best practices:
+
+### Code Style and Standards
 
 -   **Readability**: Write clear, concise, and well-structured code. Use meaningful variable and function names.
 -   **Modularity**: Design components to be modular and loosely coupled, promoting reusability and easier maintenance.
@@ -344,6 +414,33 @@ Maintaining high code quality is paramount for `vglog-filter`. Adhere to the fol
 -   **Security**: Write secure code, paying attention to potential vulnerabilities like buffer overflows, uninitialized memory access, and path traversal issues. The sanitizers and CodeQL workflows are there to help.
 -   **Consistency**: Follow existing coding style and conventions within the project. Automated tools like Clang-Tidy and ShellCheck help enforce this.
 -   **Documentation**: Add comments to explain complex logic or non-obvious design choices. Update relevant documentation files (like this guide) when introducing new features or changing existing behavior.
+
+### C++ Best Practices
+
+- Use C++20 features appropriately (concepts, ranges, etc.)
+- Prefer RAII and smart pointers over raw pointers
+- Use `const` correctness throughout
+- Leverage the standard library algorithms
+- Write exception-safe code
+- Use `std::string_view` for read-only string parameters
+- Prefer `std::array` over C-style arrays
+
+### Testing Best Practices
+
+- Write tests for all new functionality
+- Include both positive and negative test cases
+- Test edge cases and boundary conditions
+- Use descriptive test names that explain the scenario
+- Keep tests independent and isolated
+- Use appropriate test fixtures and setup/teardown
+
+### Git Best Practices
+
+- Write clear, descriptive commit messages
+- Use conventional commits for automated versioning
+- Keep commits focused and atomic
+- Use feature branches for significant changes
+- Review your changes before pushing
 
 [↑ Back to top](#developer-guide)
 
@@ -357,6 +454,7 @@ If you encounter issues during development, here are some common problems and tr
 2.  **Compiler not C++20 compatible**: Verify your compiler (GCC 10+ or Clang 12+) supports C++20. Update your compiler if it's outdated.
 3.  **Missing dependencies**: Ensure all build essentials (e.g., `build-essential` on Debian/Ubuntu) and CMake are installed.
 4.  **Permission issues**: Check file permissions and ownership in your project directory, especially after cloning or extracting.
+5.  **Build directory conflicts**: Use `./build.sh clean` to remove old build artifacts if you encounter strange build issues.
 
 ### Common Test Failures
 
@@ -364,12 +462,22 @@ If you encounter issues during development, here are some common problems and tr
 2.  **Workflow test failures**: These often indicate issues with script logic, environment variables, or unexpected program output. Reproduce the workflow test locally step-by-step.
 3.  **Memory sanitizer errors**: If you're running a sanitized build, these indicate memory-related bugs (e.g., use-after-free, uninitialized reads). Use a debugger (like GDB) to pinpoint the exact location.
 4.  **Performance test failures**: Could be due to a performance regression in your code, or an unstable test environment. Check system resources and ensure optimization flags are correctly applied.
+5.  **Version-related test failures**: Ensure the `VERSION` file is present and accessible, and that version resolution logic is working correctly.
 
 ### Versioning Issues
 
 1.  **Version not detected**: Ensure the `VERSION` file exists in the expected locations and is readable by the `vglog-filter` executable.
 2.  **Tag conflicts**: If you're manually managing tags, use `tag-manager cleanup` to remove old or conflicting tags.
 3.  **Automated release not created**: Verify that your commit messages adhere to Conventional Commits and that the changes warrant a version bump (e.g., `feat:` or `fix:`).
+4.  **LOC delta calculation issues**: Check the versioning configuration in `dev-config/versioning.yml` and ensure the semantic version analyzer is working correctly.
+
+### Debugging Tips
+
+1.  **Use debug builds**: Build with `./build.sh debug` for better debugging information
+2.  **Enable sanitizers**: Use ASAN/MSAN builds to catch memory issues early
+3.  **Use GDB**: Attach GDB to debug crashes and examine program state
+4.  **Check logs**: Look for error messages and debug output
+5.  **Reproduce locally**: Try to reproduce issues in your local environment
 
 ### Getting Help
 
@@ -377,5 +485,6 @@ If you encounter issues during development, here are some common problems and tr
 -   **GitHub Issues**: If you encounter a bug or have a feature request, please [open an issue](https://github.com/eserlxl/vglog-filter/issues) on the GitHub repository.
 -   **GitHub Discussions**: For general questions, architectural discussions, or seeking advice, consider using GitHub Discussions.
 -   **Contributing Guidelines**: Ensure you review and follow the [Contributing Guidelines](.github/CONTRIBUTING.md) before submitting pull requests.
+-   **Test Workflows**: Check the `test-workflows/README.md` for detailed information about the testing infrastructure.
 
 [↑ Back to top](#developer-guide)
