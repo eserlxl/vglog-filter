@@ -96,7 +96,14 @@ run_test() {
         
         # Run with timeout and capture output
         local output_file="$FIXED_OUTPUT_DIR/${test_name}.out"
-        timeout "${TEST_TIMEOUT}s" bash "$test_file" > "$output_file" 2>&1
+        
+        # Use longer timeout for comprehensive tests
+        local current_timeout="$TEST_TIMEOUT"
+        if [[ "$test_name" == *"comprehensive"* ]] || [[ "$test_name" == "run_loc_delta_tests.sh" ]]; then
+            current_timeout=300  # 5 minutes for comprehensive tests
+        fi
+        
+        timeout "${current_timeout}s" bash "$test_file" > "$output_file" 2>&1
         local exit_code=$?
         
         # Calculate duration

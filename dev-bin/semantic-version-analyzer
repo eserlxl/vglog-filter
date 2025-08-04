@@ -535,9 +535,9 @@ classify_path() {
 inc_counters_for() {
     local file="$1"
     case "$(classify_path "$file")" in
-        30) R[new_source_files]=$((R[new_source_files] + 1)) ;;
-        10) R[new_test_files]=$((R[new_test_files] + 1)) ;;
-        20) R[new_doc_files]=$((R[new_doc_files] + 1)) ;;
+        30) R[new_source_files]=$((${R[new_source_files]} + 1)) ;;
+        10) R[new_test_files]=$((${R[new_test_files]} + 1)) ;;
+        20) R[new_doc_files]=$((${R[new_doc_files]} + 1)) ;;
     esac
 }
 
@@ -732,7 +732,7 @@ extract_cli_options() {
     enhanced_cli_patterns=$(printf '%s' "$enhanced_cli_patterns" | tr -cd '0-9' || printf '0')
 
     local total_cli_indicators
-    total_cli_indicators=$((R[manual_added_long_count] + R[manual_removed_long_count] + getopt_changes + arg_parsing_changes + help_text_changes + main_signature_changes + enhanced_cli_patterns))
+    total_cli_indicators=$((${R[manual_added_long_count]} + ${R[manual_removed_long_count]} + getopt_changes + arg_parsing_changes + help_text_changes + main_signature_changes + enhanced_cli_patterns))
     
     if [[ "$total_cli_indicators" -gt 0 ]]; then
         R[manual_cli_changes]=true
@@ -760,6 +760,9 @@ extract_cli_options() {
         local removed_short
         removed_short=$(comm -23 <(printf '%s\n' "$short_before" | tr -d ':' | fold -w1 | sort -u) <(printf '%s\n' "$short_after" | tr -d ':' | fold -w1 | sort -u) 2>/dev/null || true)
         [[ -n "$removed_short" ]] && R[breaking_cli_changes]=true
+            if [[ -n "$removed_short" ]]; then
+        echo "DEBUG: Detected removed short options: $removed_short" >&2
+    fi
     fi
 
     if [[ -n "$long_after" ]] && [[ "$long_after" != "$long_before" ]]; then
@@ -782,6 +785,9 @@ sum_numstat() {
     done < <("${cmd[@]}")
     printf '%s' $((total_ins + total_del))
 }
+
+# Global variable to store bonus from fast analysis
+FAST_BONUS_RESULT=0
 
 # Fast bonus scoring for early exit optimization
 score_commits_fast() {
@@ -821,11 +827,11 @@ score_commits_fast() {
         esac
 
         case "${status:0:1}" in
-            A) R[added_files]=$((R[added_files] + 1)); inc_counters_for "$file" ;;
-            M|T) R[modified_files]=$((R[modified_files] + 1)) ;;
-            D)   R[deleted_files]=$((R[deleted_files] + 1)) ;;
-            R)   R[modified_files]=$((R[modified_files] + 1)) ;;
-            C)   R[modified_files]=$((R[modified_files] + 1)) ;; # Count copies as modifications, not additions
+            A) R[added_files]=$((${R[added_files]} + 1)); inc_counters_for "$file" ;;
+            M|T) R[modified_files]=$((${R[modified_files]} + 1)) ;;
+            D)   R[deleted_files]=$((${R[deleted_files]} + 1)) ;;
+            R)   R[modified_files]=$((${R[modified_files]} + 1)) ;;
+            C)   R[modified_files]=$((${R[modified_files]} + 1)) ;; # Count copies as modifications, not additions
         esac
     done < <(if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
         git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
@@ -834,7 +840,9 @@ score_commits_fast() {
     fi)
     
     # Quick CLI options detection (fast path)
+    echo "DEBUG: About to call extract_cli_options" >&2
     extract_cli_options "$base_ref" "$target_ref"
+    echo "DEBUG: Finished calling extract_cli_options" >&2
     
     # Quick security keyword detection (fast path) - include commit bodies for CVEs
     local security_keywords
@@ -872,18 +880,26 @@ score_commits_fast() {
     fi
     
     # Security keyword bonus
-    if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + R[security_keywords] * VERSION_SECURITY_BONUS))
+    local sec_kwd_val
+    sec_kwd_val="${R[security_keywords]}"
+    # Remove all non-digit characters (should be integer, but sanitize just in case)
+    sec_kwd_val=$(printf '%s' "$sec_kwd_val" | tr -cd '0-9')
+    if [[ -z "$sec_kwd_val" ]]; then
+        sec_kwd_val=0
+    fi
+    echo "[DEBUG] R[security_keywords] raw: '${R[security_keywords]}' sanitized: '$sec_kwd_val'" >&2
+    if [[ "$sec_kwd_val" -gt 0 ]]; then
+        total_bonus=$((total_bonus + sec_kwd_val * VERSION_SECURITY_BONUS))
     fi
     
-    printf '%d' "$total_bonus"
+    # Store the bonus value in global variable
+    FAST_BONUS_RESULT="$total_bonus"
 }
 
 # Enhanced change analysis with better diff parsing and rename/copy handling
 analyze_changes() {
     local base_ref="$1"
     local target_ref="$2"
-
     # Initialize results
     R[added_files]=0
     R[modified_files]=0
@@ -930,11 +946,11 @@ analyze_changes() {
         esac
 
         case "${status:0:1}" in
-            A) R[added_files]=$((R[added_files] + 1)); inc_counters_for "$file" ;;
-            M|T) R[modified_files]=$((R[modified_files] + 1)) ;;
-            D)   R[deleted_files]=$((R[deleted_files] + 1)) ;;
-            R)   R[modified_files]=$((R[modified_files] + 1)) ;;
-            C)   R[modified_files]=$((R[modified_files] + 1)) ;; # Count copies as modifications, not additions
+            A) R[added_files]=$((${R[added_files]} + 1)); inc_counters_for "$file" ;;
+            M|T) R[modified_files]=$((${R[modified_files]} + 1)) ;;
+            D)   R[deleted_files]=$((${R[deleted_files]} + 1)) ;;
+            R)   R[modified_files]=$((${R[modified_files]} + 1)) ;;
+            C)   R[modified_files]=$((${R[modified_files]} + 1)) ;; # Count copies as modifications, not additions
         esac
     done < <(if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
         git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
@@ -1157,6 +1173,14 @@ calculate_next_version() {
 
 # Determine version bump suggestion based on improved rules
 suggest_version_bump() {
+    # If --ignore-whitespace is set and there are no non-whitespace changes, return 'none'
+    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
+        if git -c color.ui=false diff -M -C -w --quiet "$BASE_REF".."$TARGET_REF"; then
+            printf 'none'
+            return
+        fi
+    fi
+
     # Use configuration thresholds if available, otherwise fallback to environment variables
     local major_bonus_threshold="${MAJOR_BONUS_THRESHOLD:-8}"
     local minor_bonus_threshold="${MINOR_BONUS_THRESHOLD:-4}"
@@ -1222,7 +1246,18 @@ suggest_version_bump() {
         total_bonus=$((total_bonus + 1))  # Small change bonus
     fi
     
-    # Decision based on total bonus
+    # If API breaking changes, ensure at least a major bump
+    if [[ "${R[api_breaking]:-false}" = "true" ]]; then
+        if [[ "$total_bonus" -lt "$major_bonus_threshold" ]]; then
+            total_bonus="$major_bonus_threshold"
+        fi
+    fi
+    # If manual CLI changes, ensure at least a minor bump unless a higher bump is triggered
+    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
+        if [[ "$total_bonus" -lt "$minor_bonus_threshold" ]]; then
+            total_bonus="$minor_bonus_threshold"
+        fi
+    fi
     if [[ "$total_bonus" -ge "$major_bonus_threshold" ]]; then
         printf 'major'
     elif [[ "$total_bonus" -ge "$minor_bonus_threshold" ]]; then
@@ -1450,8 +1485,10 @@ main() {
     [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || current_version=0.0.0
 
     # Early exit optimization: check if bonus threshold is met before expensive LOC calculation
+    # Call score_commits_fast directly to avoid subshell issues with R array
+    score_commits_fast "$base_ref" "$target_ref"
     local bonus_only
-    bonus_only=$(score_commits_fast "$base_ref" "$target_ref")
+    bonus_only="$FAST_BONUS_RESULT"
     bonus_only="${bonus_only:-0}"
     
     # Ensure bonus_only is numeric
@@ -1459,15 +1496,38 @@ main() {
         bonus_only=0
     fi
     
+    echo "DEBUG: bonus_only=$bonus_only, EARLY_EXIT_BONUS_THRESHOLD=$EARLY_EXIT_BONUS_THRESHOLD" >&2
+    
     if [[ "$bonus_only" -ge "$EARLY_EXIT_BONUS_THRESHOLD" ]]; then
         # Early exit: bonus threshold met, skip expensive LOC calculation
+        echo "DEBUG: Taking early exit path" >&2
         debug_output "DEBUG: Early exit triggered - bonus $bonus_only >= threshold $EARLY_EXIT_BONUS_THRESHOLD"
         R[diff_size]=0  # Skip expensive diff calculation
         # Use the fast analysis results that are already in R[]
     else
         # Full analysis needed - proceed with expensive LOC calculation
+        echo "DEBUG: Taking full analysis path" >&2
         analyze_changes "$base_ref" "$target_ref"
     fi
+    
+    # Ensure all array variables are initialized for verbose output
+    R[added_files]=${R[added_files]:-0}
+    R[modified_files]=${R[modified_files]:-0}
+    R[deleted_files]=${R[deleted_files]:-0}
+    R[new_source_files]=${R[new_source_files]:-0}
+    R[new_test_files]=${R[new_test_files]:-0}
+    R[new_doc_files]=${R[new_doc_files]:-0}
+    R[cli_changes]=${R[cli_changes]:-false}
+    R[breaking_cli_changes]=${R[breaking_cli_changes]:-false}
+    R[api_breaking]=${R[api_breaking]:-false}
+    R[security_keywords]=${R[security_keywords]:-0}
+    R[manual_cli_changes]=${R[manual_cli_changes]:-false}
+    R[manual_added_long_count]=${R[manual_added_long_count]:-0}
+    R[manual_removed_long_count]=${R[manual_removed_long_count]:-0}
+    R[removed_short_count]=${R[removed_short_count]:-0}
+    R[added_short_count]=${R[added_short_count]:-0}
+    R[removed_long_count]=${R[removed_long_count]:-0}
+    R[added_long_count]=${R[added_long_count]:-0}
 
     # Determine suggestion and reason
     local suggestion
@@ -1619,7 +1679,7 @@ main() {
                     printf '    New files: +%s\n' "$VERSION_NEW_SOURCE_BONUS"
                 fi
                 if [[ "${R[security_keywords]:-0}" -gt 0 ]]; then
-                    printf '    Security keywords: +%s\n' "$((R[security_keywords] * VERSION_SECURITY_BONUS))"
+                    printf '    Security keywords: +%s\n' "$((${R[security_keywords]:-0} * VERSION_SECURITY_BONUS))"
                 fi
                 printf '\n'
             fi

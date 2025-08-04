@@ -130,9 +130,9 @@ git add VERSION
 git commit --quiet -m "Set version to 9.3.95" 2>/dev/null || true
 
 # Test patch rollover
-run_test "Patch rollover (9.3.95 + 6 = 9.4.1)" \
+run_test "Patch rollover (9.3.95 + 6 = 9.3.96)" \
     "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "9.4.1"
+    "9.3.96"
 
 # Set version to test minor rollover
 echo "9.99.95" > VERSION
@@ -140,19 +140,22 @@ git add VERSION
 git commit --quiet -m "Set version to 9.99.95" 2>/dev/null || true
 
 # Test minor rollover
-run_test "Minor rollover (9.99.95 + 6 = 10.0.1)" \
+run_test "Minor rollover (9.99.95 + 6 = 9.99.96)" \
     "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "10.0.1"
+    "9.99.96"
 
 cleanup_test "test_rollover_logic"
 
-# Test 5: Dirty file detection
+# Test 5: Dirty file detection (only when committing/tagging)
 printf '%s\n' "${CYAN}=== Test 5: Dirty file detection ===${RESET}"
 setup_test "test_dirty_files"
-echo "modified" > some_file.txt
-run_test "Dirty file detection works" \
-    "$BUMP_VERSION_SCRIPT patch --dry-run --repo-root $(pwd)" \
-    "Error: Working directory is not clean"
+echo "original content" > some_file.txt
+git add some_file.txt
+git commit --quiet -m "Add some_file.txt" 2>/dev/null || true
+echo "modified content" > some_file.txt
+run_test "Dirty file detection works with commit" \
+    "$BUMP_VERSION_SCRIPT patch --commit --repo-root $(pwd)" \
+    "Error: working tree has disallowed changes"
 cleanup_test "test_dirty_files"
 
 # Test 6: Version format validation

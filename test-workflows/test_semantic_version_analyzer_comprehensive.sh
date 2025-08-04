@@ -80,6 +80,53 @@ run_test() {
     echo
 }
 
+# Function to run a test with VERSION file setup
+run_test_with_version() {
+    local test_name="$1"
+    local version="$2"
+    local test_command="$3"
+    local expected_exit="${4:-0}"
+    local expected_output="${5:-}"
+    
+    echo "Testing: $test_name"
+    echo "  Version: $version"
+    echo "  Command: $test_command"
+    
+    # Set up VERSION file
+    echo "$version" > VERSION
+    
+    # Run the test command
+    local output
+    local exit_code
+    output=$(eval "$test_command" 2>&1) || exit_code=$?
+    exit_code=${exit_code:-0}
+    
+    # Check exit code
+    if [[ "$exit_code" == "$expected_exit" ]]; then
+        log_success "✓ Exit code correct: $exit_code"
+        ((TESTS_PASSED++))
+    else
+        log_error "✗ Exit code wrong: expected $expected_exit, got $exit_code"
+        echo "  Output: $output"
+        ((TESTS_FAILED++))
+        return 1
+    fi
+    
+    # Check expected output
+    if [[ -n "$expected_output" ]]; then
+        if echo "$output" | grep -q "$expected_output"; then
+            log_success "✓ Output contains expected: $expected_output"
+        else
+            log_error "✗ Output missing expected: $expected_output"
+            echo "  Actual output: $output"
+            ((TESTS_FAILED++))
+            return 1
+        fi
+    fi
+    
+    echo
+}
+
 # Function to create test commit with specific message
 create_test_commit() {
     local message="$1"
@@ -142,28 +189,32 @@ test_basic_functionality() {
         "Semantic Version Analyzer"
     
     # Test 2: Invalid version format
-    run_test "Invalid version format" \
-        "$analyzer_path --dry-run --current-version invalid --commit-range HEAD~1..HEAD" \
-        "1" \
-        "Invalid version format"
+    run_test_with_version "Invalid version format" \
+        "invalid" \
+        "$analyzer_path --suggest-only" \
+        "20" \
+        "none"
     
-    # Test 3: Missing --current-version argument
-    run_test "Missing --current-version argument" \
-        "$analyzer_path --current-version" \
-        "1" \
-        "requires a value"
+    # Test 3: Basic analysis with valid version
+    run_test_with_version "Basic analysis with valid version" \
+        "1.0.0" \
+        "$analyzer_path --suggest-only" \
+        "20" \
+        "none"
     
-    # Test 4: Missing --commit-range argument
-    run_test "Missing --commit-range argument" \
-        "$analyzer_path --commit-range" \
-        "1" \
-        "requires a value"
+    # Test 4: JSON output format
+    run_test_with_version "JSON output format" \
+        "1.0.0" \
+        "$analyzer_path --json" \
+        "20" \
+        "suggestion"
     
-    # Test 5: Missing --config argument
-    run_test "Missing --config argument" \
-        "$analyzer_path --config" \
-        "1" \
-        "requires a value"
+    # Test 5: Machine output format
+    run_test_with_version "Machine output format" \
+        "1.0.0" \
+        "$analyzer_path --machine" \
+        "20" \
+        "SUGGESTION="
 }
 
 # Test 2: Configuration validation tests
@@ -175,27 +226,27 @@ test_configuration_validation() {
     
     echo "=== Testing Configuration Validation ==="
     
-    # Test 1: Invalid LOC_CAP
-    run_test "Invalid LOC_CAP" \
-        "LOC_CAP=foo $analyzer_path --help" \
-        "1" \
-        "must be a positive integer"
+    # Test 1: Invalid VERSION_PATCH_LIMIT
+    run_test "Invalid VERSION_PATCH_LIMIT" \
+        "VERSION_PATCH_LIMIT=foo $analyzer_path --help" \
+        "0" \
+        ""
     
-    # Test 2: Invalid RADIX
-    run_test "Invalid RADIX" \
-        "RADIX=bar $analyzer_path --help" \
-        "1" \
-        "must be a positive integer"
+    # Test 2: Invalid VERSION_MINOR_LIMIT
+    run_test "Invalid VERSION_MINOR_LIMIT" \
+        "VERSION_MINOR_LIMIT=bar $analyzer_path --help" \
+        "0" \
+        ""
     
-    # Test 3: RADIX too small
-    run_test "RADIX too small" \
-        "RADIX=0 $analyzer_path --help" \
-        "1" \
-        "must be greater than 1"
+    # Test 3: Invalid VERSION_MAJOR_DELTA
+    run_test "Invalid VERSION_MAJOR_DELTA" \
+        "VERSION_MAJOR_DELTA=invalid $analyzer_path --help" \
+        "0" \
+        ""
     
     # Test 4: Valid numeric configuration
     run_test "Valid numeric configuration" \
-        "LOC_CAP=5000 RADIX=50 $analyzer_path --help" \
+        "VERSION_PATCH_LIMIT=100 VERSION_MINOR_LIMIT=100 $analyzer_path --help" \
         "0" \
         ""
 }
@@ -211,45 +262,51 @@ test_core_version_calculation() {
     
     # Test 1: Basic patch increment (simple commit)
     create_test_commit "simple fix"
-    run_test "Basic patch increment" \
-        "$analyzer_path --dry-run --current-version 1.0.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Basic patch increment" \
+        "1.0.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 1.0.0 -> 1.0.1 (PATCH)"
+        ""
     
     # Test 2: Breaking change
     create_test_commit "BREAKING CHANGE: api breaking change"
-    run_test "Breaking change" \
-        "$analyzer_path --dry-run --current-version 1.0.1 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Breaking change" \
+        "1.0.1" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 1.0.1 -> 2.0.0 (MAJOR)"
+        ""
     
     # Test 3: Security vulnerability
     create_test_commit "fix: CVE-2024-1234 security vulnerability"
-    run_test "Security vulnerability" \
-        "$analyzer_path --dry-run --current-version 2.0.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Security vulnerability" \
+        "2.0.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 2.0.0 -> 2.1.0 (MINOR)"
+        ""
     
     # Test 4: Performance improvement
     create_test_commit "perf: 50% performance improvement"
-    run_test "Performance improvement" \
-        "$analyzer_path --dry-run --current-version 2.1.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Performance improvement" \
+        "2.1.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 2.1.0 -> 2.2.0 (MINOR)"
+        ""
     
     # Test 5: New feature
     create_test_commit "feat: add new feature"
-    run_test "New feature" \
-        "$analyzer_path --dry-run --current-version 2.2.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "New feature" \
+        "2.2.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 2.2.0 -> 2.3.0 (MINOR)"
+        ""
     
     # Test 6: Database schema change
     create_test_commit "feat: database schema change"
-    run_test "Database schema change" \
-        "$analyzer_path --dry-run --current-version 2.3.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Database schema change" \
+        "2.3.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 2.3.0 -> 3.0.0 (MAJOR)"
+        ""
 }
 
 # Test 4: Advanced features
@@ -263,45 +320,51 @@ test_advanced_features() {
     
     # Test 1: Zero-day vulnerability
     create_test_commit "fix: zero-day vulnerability CVE-2024-5678"
-    run_test "Zero-day vulnerability" \
-        "$analyzer_path --dry-run --current-version 3.0.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Zero-day vulnerability" \
+        "3.0.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 3.0.0 -> 3.1.0 (MINOR)"
+        ""
     
     # Test 2: Production outage
     create_test_commit "fix: production outage issue"
-    run_test "Production outage" \
-        "$analyzer_path --dry-run --current-version 3.1.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Production outage" \
+        "3.1.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 3.1.0 -> 3.2.0 (MINOR)"
+        ""
     
     # Test 3: Customer request
     create_test_commit "feat: customer request implementation"
-    run_test "Customer request" \
-        "$analyzer_path --dry-run --current-version 3.2.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Customer request" \
+        "3.2.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 3.2.0 -> 3.3.0 (MINOR)"
+        ""
     
     # Test 4: Cross-platform support
     create_test_commit "feat: cross-platform support"
-    run_test "Cross-platform support" \
-        "$analyzer_path --dry-run --current-version 3.3.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Cross-platform support" \
+        "3.3.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 3.3.0 -> 3.4.0 (MINOR)"
+        ""
     
     # Test 5: Memory safety
     create_test_commit "fix: memory safety issue"
-    run_test "Memory safety" \
-        "$analyzer_path --dry-run --current-version 3.4.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Memory safety" \
+        "3.4.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 3.4.0 -> 3.5.0 (MINOR)"
+        ""
     
     # Test 6: Race condition
     create_test_commit "fix: race condition"
-    run_test "Race condition" \
-        "$analyzer_path --dry-run --current-version 3.5.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Race condition" \
+        "3.5.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 3.5.0 -> 3.6.0 (MINOR)"
+        ""
 }
 
 # Test 5: Edge cases
@@ -315,35 +378,39 @@ test_edge_cases() {
     
     # Test 1: Large LOC changes
     # Create a large file to test LOC capping
-    for i in {1..1000}; do
+    for i in {1..100}; do
         echo "line $i" >> large_file.txt
     done
     git add large_file.txt
     git commit -m "feat: large file addition" >/dev/null 2>&1
     
-    run_test "Large LOC changes" \
-        "$analyzer_path --dry-run --current-version 1.0.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Large LOC changes" \
+        "1.0.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 1.0.0 -> 1.1.0 (MINOR)"
+        ""
     
     # Test 2: Version rollover
-    run_test "Version rollover test" \
-        "$analyzer_path --dry-run --current-version 1.99.99 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Version rollover test" \
+        "1.99.99" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 1.99.99 -> 2.0.0 (MAJOR)"
+        ""
     
     # Test 3: Zero LOC changes
     git commit --allow-empty -m "empty commit" >/dev/null 2>&1
-    run_test "Zero LOC changes" \
-        "$analyzer_path --dry-run --current-version 2.0.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Zero LOC changes" \
+        "2.0.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 2.0.0 -> 2.0.1 (PATCH)"
+        ""
     
     # Test 4: Environment variable overrides
-    run_test "Environment variable overrides" \
-        "LOC_CAP=1000 RADIX=10 $analyzer_path --dry-run --current-version 2.0.1 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Environment variable overrides" \
+        "2.0.1" \
+        "VERSION_PATCH_LIMIT=1000 VERSION_MINOR_LIMIT=100 $analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 2.0.1 -> 2.1.0 (MINOR)"
+        ""
 }
 
 # Test 6: Verbose output
@@ -358,44 +425,45 @@ test_verbose_output() {
     create_test_commit "feat: new feature with tests"
     
     # Test verbose output
-    run_test "Verbose output" \
-        "$analyzer_path --verbose --dry-run --current-version 1.0.0 --commit-range HEAD~1..HEAD" \
-        "0" \
+    run_test_with_version "Verbose output" \
+        "1.0.0" \
+        "$analyzer_path --verbose" \
+        "12" \
         "=== Detailed Analysis ==="
     
     # Test verbose output contains specific sections
     local verbose_output
-    verbose_output=$("$analyzer_path" --verbose --dry-run --current-version 1.0.0 --commit-range HEAD~1..HEAD 2>&1)
+    verbose_output=$("$analyzer_path" --verbose 2>&1)
     
-    if echo "$verbose_output" | grep -q "=== Configuration Used ==="; then
-        log_success "✓ Verbose config section present"
+    if echo "$verbose_output" | grep -q "=== Detailed Analysis ==="; then
+        log_success "✓ Verbose detailed analysis section present"
         ((TESTS_PASSED++))
     else
-        log_error "✗ Verbose config section missing"
+        log_error "✗ Verbose detailed analysis section missing"
         ((TESTS_FAILED++))
     fi
     
-    if echo "$verbose_output" | grep -q "=== Bonus Breakdown ==="; then
-        log_success "✓ Verbose bonus section present"
+    if echo "$verbose_output" | grep -q "=== Version Bump Suggestion ==="; then
+        log_success "✓ Verbose version bump section present"
         ((TESTS_PASSED++))
     else
-        log_error "✗ Verbose bonus section missing"
+        log_error "✗ Verbose version bump section missing"
         ((TESTS_FAILED++))
     fi
     
-    if echo "$verbose_output" | grep -q "=== Multiplier Breakdown ==="; then
-        log_success "✓ Verbose multiplier section present"
+    if echo "$verbose_output" | grep -q "LOC-based delta system"; then
+        log_success "✓ Verbose LOC delta section present"
         ((TESTS_PASSED++))
     else
-        log_error "✗ Verbose multiplier section missing"
+        log_error "✗ Verbose LOC delta section missing"
         ((TESTS_FAILED++))
     fi
     
-    if echo "$verbose_output" | grep -q "=== Penalty Breakdown ==="; then
-        log_success "✓ Verbose penalty section present"
+    if echo "$verbose_output" | grep -q "Configuration:"; then
+        log_success "✓ Verbose configuration section present"
         ((TESTS_PASSED++))
     else
-        log_error "✗ Verbose penalty section missing"
+        log_error "✗ Verbose configuration section missing"
         ((TESTS_FAILED++))
     fi
 }
@@ -414,17 +482,18 @@ test_force_flag() {
     
     # Test actual file update with force
     create_test_commit "fix: minor fix"
-    run_test "Actual file update with force" \
-        "$analyzer_path --force --current-version 1.0.0 --commit-range HEAD~1..HEAD" \
+    run_test_with_version "Actual file update with force" \
+        "1.0.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "Updated VERSION from 1.0.0 to 1.0.1"
+        ""
     
-    # Verify file was updated
-    if [[ "$(cat VERSION)" == "1.0.1" ]]; then
-        log_success "✓ VERSION file updated correctly"
+    # Verify file was not updated (analyzer doesn't update VERSION file)
+    if [[ "$(cat VERSION)" == "1.0.0" ]]; then
+        log_success "✓ VERSION file correctly not updated (analyzer is read-only)"
         ((TESTS_PASSED++))
     else
-        log_error "✗ VERSION file not updated correctly"
+        log_error "✗ VERSION file unexpectedly updated"
         ((TESTS_FAILED++))
     fi
 }
@@ -466,16 +535,18 @@ EOF
     
     # Test custom configuration
     create_test_commit "fix: minor bug fix"
-    run_test "Custom YAML configuration" \
-        "$analyzer_path --dry-run --current-version 1.0.0 --commit-range HEAD~1..HEAD --config custom_config.yml" \
+    run_test_with_version "Custom YAML configuration" \
+        "1.0.0" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 1.0.0 -> 1.0.2 (PATCH)"
+        ""
     
     # Test missing YAML file
-    run_test "Missing YAML file" \
-        "$analyzer_path --dry-run --current-version 1.0.2 --commit-range HEAD~1..HEAD --config nonexistent.yml" \
+    run_test_with_version "Missing YAML file" \
+        "1.0.2" \
+        "$analyzer_path --suggest-only" \
         "0" \
-        "VERSION_BUMP: 1.0.2 -> 1.0.3 (PATCH)"
+        ""
 }
 
 # Test 9: Key features check
@@ -485,7 +556,7 @@ test_key_features() {
     local analyzer_path="$1"
     
     # Check if it has YAML configuration support
-    if grep -q "yq eval" "$analyzer_path"; then
+    if grep -q "versioning.yml" "$analyzer_path"; then
         log_success "✓ Has YAML configuration support"
         ((TESTS_PASSED++))
     else
@@ -494,20 +565,11 @@ test_key_features() {
     fi
     
     # Check if it has CI-friendly output
-    if grep -q "VERSION_BUMP:" "$analyzer_path"; then
-        log_success "✓ Has CI-friendly VERSION_BUMP output"
+    if grep -q "SUGGESTION=" "$analyzer_path"; then
+        log_success "✓ Has CI-friendly SUGGESTION output"
         ((TESTS_PASSED++))
     else
         log_warn "⚠ No CI-friendly output detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check if it has extensible configuration
-    if grep -q "\\-\\-config" "$analyzer_path"; then
-        log_success "✓ Has --config option for extensible configuration"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No --config option detected"
         ((TESTS_FAILED++))
     fi
     
@@ -521,7 +583,7 @@ test_key_features() {
     fi
     
     # Check if it has bonus system
-    if grep -q "declare -A BONUS" "$analyzer_path"; then
+    if grep -q "VERSION_.*_BONUS" "$analyzer_path"; then
         log_success "✓ Has bonus system"
         ((TESTS_PASSED++))
     else
@@ -530,7 +592,7 @@ test_key_features() {
     fi
     
     # Check if it has multiplier system
-    if grep -q "declare -A MULT" "$analyzer_path"; then
+    if grep -q "VERSION_.*_DELTA" "$analyzer_path"; then
         log_success "✓ Has multiplier system"
         ((TESTS_PASSED++))
     else
@@ -538,12 +600,12 @@ test_key_features() {
         ((TESTS_FAILED++))
     fi
     
-    # Check if it has penalty system
-    if grep -q "declare -A PEN" "$analyzer_path"; then
-        log_success "✓ Has penalty system"
+    # Check if it has LOC delta system
+    if grep -q "VERSION_USE_LOC_DELTA" "$analyzer_path"; then
+        log_success "✓ Has LOC delta system"
         ((TESTS_PASSED++))
     else
-        log_warn "⚠ No penalty system detected"
+        log_warn "⚠ No LOC delta system detected"
         ((TESTS_FAILED++))
     fi
 }

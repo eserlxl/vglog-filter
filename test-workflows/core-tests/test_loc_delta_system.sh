@@ -8,12 +8,27 @@
 #
 # Test script for LOC-based delta system with new versioning system
 
-set -uo pipefail
+set -Euo pipefail
+IFS=$'\n\t'
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
-cd "$PROJECT_ROOT" || exit
+# Create a temporary clean environment for testing
+TEMP_DIR=$(mktemp -d)
+# Copy everything except .git directory
+find "$PROJECT_ROOT" -maxdepth 1 -not -name . -not -name .git -exec cp -r {} "$TEMP_DIR/" \;
+cd "$TEMP_DIR"
+
+# Initialize git in the temp directory
+git init
+git config user.name "Test User"
+git config user.email "test@example.com"
 
 echo "=== Testing LOC-based Delta System with New Versioning System ==="
 
@@ -76,6 +91,16 @@ TESTS_FAILED=0
 echo "Test 1: Verify LOC delta system is working"
 export VERSION_USE_LOC_DELTA=true
 
+# Set up initial version and commit
+echo "1.0.0" > VERSION
+git add VERSION
+git commit -m "Set initial version" -q
+
+# Add a small change to trigger analysis
+echo "test content" >> README.md
+git add README.md
+git commit -m "Add test change" -q
+
 # Simple test: just check if the command runs and produces output
 output=$(VERSION_USE_LOC_DELTA=true ./dev-bin/semantic-version-analyzer --json 2>/dev/null || echo "FAILED")
 if [[ "$output" != "FAILED" ]] && [[ "$output" = *"loc_delta"* ]]; then
@@ -103,8 +128,17 @@ echo ""
 echo "Test 3: Verify rollover logic"
 echo "Testing version calculation with rollover..."
 
-# Test patch rollover
+# Set up initial version and commit
 echo "1.2.99" > VERSION
+git add VERSION
+git commit -m "Set version to 1.2.99" -q
+
+# Add a small change to trigger analysis
+echo "test content" >> README.md
+git add README.md
+git commit -m "Add test change" -q
+
+# Test patch rollover
 result_rollover=$(VERSION_USE_LOC_DELTA=true ./dev-bin/bump-version patch --dry-run 2>/dev/null | tail -1)
 echo "  Patch rollover test: 1.2.99 -> $result_rollover"
 
@@ -116,14 +150,15 @@ else
     ((TESTS_FAILED++))
 fi
 
-# Restore original version
-echo "10.5.0" > VERSION
-
 # Summary
 echo ""
 echo "=== Test Summary ==="
 echo "Tests passed: $TESTS_PASSED"
 echo "Tests failed: $TESTS_FAILED"
+
+# Cleanup
+cd /
+rm -rf "$TEMP_DIR"
 
 if [[ "$TESTS_FAILED" -eq 0 ]]; then
     echo "✓ All tests passed! LOC delta system is working correctly."

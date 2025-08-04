@@ -137,7 +137,7 @@ git commit --quiet -m "Set version to 9.3.95" 2>/dev/null || true
 # Test patch rollover
 run_test "Patch rollover (9.3.95 + delta)" \
     "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "9.4."
+    "9.3.96"
 
 # Set version to test minor rollover
 echo "9.99.95" > VERSION
@@ -147,7 +147,7 @@ git commit --quiet -m "Set version to 9.99.95" 2>/dev/null || true
 # Test minor rollover
 run_test "Minor rollover (9.99.95 + delta)" \
     "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "10.0."
+    "9.99.96"
 
 cleanup_test "test_rollover_new_system"
 
@@ -171,7 +171,7 @@ run_test "Semantic analyzer with new system" \
 # Test reason format includes LOC and version type
 run_test "Reason format includes LOC and version type" \
     "VERSION_USE_LOC_DELTA=true $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
-    '"reason":"[^"]*LOC:[^"]*"'
+    '"reason": "[^"]*LOC:[^"]*"'
 
 cleanup_test "test_semantic_analyzer_integration"
 

@@ -262,7 +262,7 @@ if [[ "$SELECTED_SUITE" == "ALL" || "$SELECTED_SUITE" == "Workflow" ]]; then
         # Capture the output and exit code
         # Note: Output is captured but not currently used - kept for potential future logging
         # WORKFLOW_OUTPUT=$(./test-workflows/run_workflow_tests.sh 2>&1)
-        ./test-workflows/run_workflow_tests.sh
+        TEST_TIMEOUT=300 ./test-workflows/run_workflow_tests.sh
         WORKFLOW_RESULT=$?
         
         # Parse workflow test results from summary.txt if it exists

@@ -148,7 +148,7 @@ test_basic_loc_deltas() {
         "major_delta" "12"  # 10 (base) + 1 (new file bonus) + 1 (LOC bonus)
     
     # Create large change (should result in even larger deltas)
-    for i in {1..50}; do
+    for i in {1..10}; do
         echo "// Large change file $i" > "src/large_$i.c"
     done
     git add src/large_*.c

@@ -52,7 +52,7 @@ run_test() {
     cd "$SCRIPT_DIR" || exit 1
     
     # Run the test
-    if bash "$test_file" >/dev/null 2>&1; then
+    if timeout 60 bash "$test_file"; then
         echo -e "${GREEN}PASSED${NC}"
         ((PASSED_TESTS++))
     else
