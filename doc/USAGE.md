@@ -25,6 +25,8 @@ It covers installation, basic usage, command-line options, and practical example
   - [Using a Custom Marker](#using-a-custom-marker)
   - [Adjusting Deduplication Depth](#adjusting-deduplication-depth)
   - [Viewing Raw (Unscrubbed) Output](#viewing-raw-unscrubbed-output)
+  - [Combining Multiple Options](#combining-multiple-options)
+  - [Processing Multiple Files](#processing-multiple-files)
 - [Exit Codes](#exit-codes)
 - [Troubleshooting Common Usage Issues](#troubleshooting-common-usage-issues)
 
@@ -42,6 +44,29 @@ It covers installation, basic usage, command-line options, and practical example
 ## Installation
 
 To use `vglog-filter`, you need to build it from its source code. For detailed instructions, refer to the [Build Guide](BUILD.md).
+
+### Prerequisites
+
+Before building `vglog-filter`, ensure you have the following tools installed on your system:
+
+- **C++ Compiler**: GCC 10+ or Clang 12+ with C++20 support
+- **CMake**: Version 3.16 or higher
+- **Make**: GNU Make or Ninja build system
+- **Git**: For cloning the repository (optional, for development)
+
+On most Linux distributions, you can install these prerequisites with:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install build-essential cmake git
+
+# CentOS/RHEL/Fedora
+sudo dnf install gcc-c++ cmake make git
+
+# Arch Linux
+sudo pacman -S base-devel cmake git
+```
 
 ### Building from Source
 
@@ -71,6 +96,18 @@ Options/Modes:
 Environment overrides:
   BUILD_DIR=/path/to/build   Set build directory
   JOBS=N                     Set parallel build jobs
+```
+
+**Quick Start:**
+```bash
+# Clone the repository (if not already done)
+git clone https://github.com/your-username/vglog-filter.git
+cd vglog-filter
+
+# Build with performance optimizations
+./build.sh performance
+
+# The executable will be available at build/bin/vglog-filter
 ```
 
 [↑ Back to top](#usage-guide)
@@ -133,6 +170,7 @@ vglog-filter input.log | less
 
 -   `-k, --keep-debug-info`
     -   **Purpose**: Processes the entire log file from start to finish, ignoring the default or custom marker. By default, `vglog-filter` only processes content after the last occurrence of the marker `Successfully downloaded debug`.
+    -   **Use Case**: When you want to analyze the complete log, including setup and initialization information.
     -   **Example**: `vglog-filter -k full_log.log`
 
 -   `-d N, --depth N`
@@ -140,40 +178,51 @@ vglog-filter input.log | less
     -   **`N=0`**: Uses unlimited depth, meaning the entire error block is considered for the signature, providing the most precise deduplication.
     -   **Default**: If not specified, a default depth of 1 is used, which typically offers a good balance for common Valgrind outputs.
     -   **Range**: Valid values are 0 to 1000. Values outside this range will result in an error.
+    -   **Performance Impact**: Higher depth values may increase processing time but provide more accurate deduplication.
     -   **Example**: `vglog-filter -d 5 raw.log` (uses first 5 lines for signature)
 
 -   `-m S, --marker S`
     -   **Purpose**: Specifies a custom marker string (`S`) to delineate the relevant section of the log. Only log entries *after* the last occurrence of this custom marker will be processed (unless `-k` is used). This is useful for logs that contain preamble or postamble information you wish to ignore.
     -   **Default**: `Successfully downloaded debug`
     -   **Limit**: Maximum length of 1024 characters. Longer markers will result in an error.
+    -   **Use Case**: When your application uses a different marker or when you want to focus on a specific section of the log.
     -   **Example**: `vglog-filter -m "--- TEST START ---" my_log.log`
 
 -   `-v, --verbose`
     -   **Purpose**: Disables the scrubbing (normalization) of non-deterministic elements like memory addresses, process IDs, and `at:` line numbers. The output will be the raw Valgrind log, but still filtered and deduplicated based on other options. Use this if you need to inspect the exact memory addresses or other dynamic data.
+    -   **Use Case**: Debugging specific memory issues where exact addresses are needed, or when comparing logs from the same run.
     -   **Example**: `vglog-filter -v raw.log`
 
 ### Processing Mode Options
 
 -   `-s, --stream`
     -   **Purpose**: Forces `vglog-filter` to use memory-efficient stream processing mode, regardless of the input file size. By default, the tool automatically switches to stream mode for files larger than 5MB. This option is crucial for processing continuous streams or extremely large files where loading the entire content into memory is not feasible.
+    -   **Use Case**: Processing very large files, continuous data streams, or when memory is limited.
+    -   **Performance**: May be slightly slower than in-memory processing but uses significantly less memory.
     -   **Example**: `vglog-filter -s small_file.log`
 
 ### Monitoring and Information Options
 
 -   `-p, --progress`
     -   **Purpose**: Displays a real-time progress bar during processing. This is particularly useful for large log files to track the tool's progress and estimate completion time.
+    -   **Use Case**: Processing large files where you want to monitor progress and estimate remaining time.
+    -   **Output**: Shows percentage complete, processed size, and total size.
     -   **Example**: `vglog-filter -p large_log.log`
 
 -   `-M, --monitor-memory`
     -   **Purpose**: Monitors and reports peak memory usage at different stages of the processing. This helps in understanding the tool's resource consumption and identifying potential memory bottlenecks, especially with very large inputs.
+    -   **Use Case**: Performance analysis, debugging memory issues, or optimizing processing workflows.
+    -   **Output**: Reports peak memory usage in MB at the end of processing.
     -   **Example**: `vglog-filter -M my_log.log`
 
 -   `-V, --version`
     -   **Purpose**: Displays the current version of `vglog-filter`.
+    -   **Use Case**: Verifying the installed version or checking for updates.
     -   **Example**: `vglog-filter --version`
 
 -   `-h, --help`
     -   **Purpose**: Displays a brief help message with available command-line options and their usage.
+    -   **Use Case**: Quick reference for available options and syntax.
     -   **Example**: `vglog-filter --help`
 
 [↑ Back to top](#usage-guide)
@@ -262,6 +311,32 @@ If you need to see the Valgrind output with memory addresses and other dynamic d
 vglog-filter --verbose raw.log > unscrubbed_filtered.log
 ```
 
+### Combining Multiple Options
+
+You can combine multiple options for sophisticated processing:
+
+```bash
+# Process entire file with custom marker, high deduplication depth, and monitoring
+vglog-filter -k -m "TEST_START" -d 5 -p -M complex_log.log > processed.log
+
+# Stream processing with progress monitoring for very large files
+vglog-filter -s -p -M huge_log.log > filtered.log
+```
+
+### Processing Multiple Files
+
+To process multiple Valgrind log files:
+
+```bash
+# Process each file individually
+for logfile in logs/*.log; do
+    vglog-filter "$logfile" > "filtered_$(basename "$logfile")"
+done
+
+# Or concatenate and process together
+cat logs/*.log | vglog-filter > combined_filtered.log
+```
+
 [↑ Back to top](#usage-guide)
 
 ## Exit Codes
@@ -304,6 +379,10 @@ If you encounter problems while using `vglog-filter`, consider the following:
 
 6.  **Build Issues**:
     -   If you encounter problems during the build process, refer to the `build.sh` script's help message (`./build.sh --help`) and ensure all [Prerequisites](#prerequisites) are met.
+
+7.  **Deduplication Issues**:
+    -   **Too Much Deduplication**: If you're losing important information due to aggressive deduplication, try increasing the `--depth` parameter.
+    -   **Not Enough Deduplication**: If you're seeing too many duplicates, try decreasing the `--depth` parameter or use `--depth 0` for maximum precision.
 
 If you're still facing issues, refer to the [FAQ](FAQ.md) or [Developer Guide](DEVELOPER_GUIDE.md) for more in-depth troubleshooting and development information.
 
