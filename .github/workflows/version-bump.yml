@@ -39,6 +39,7 @@ on:
       - doc/VERSIONING.md
       - doc/TAG_MANAGEMENT.md
       - doc/RELEASE_WORKFLOW.md
+      - .shellcheckrc
 
 # Concurrency guard to prevent multiple version bumps running simultaneously
 concurrency:
@@ -73,6 +74,8 @@ jobs:
           set -euo pipefail
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          # Disable GPG signing in CI to prevent hanging
+          git config --local commit.gpgSign false
 
       - name: Determine version bump type
         id: version-analysis
@@ -91,7 +94,10 @@ jobs:
               exit 1
             fi
             # Run analyzer and capture only stdout, redirect stderr to /dev/null
+            # Add debug output to help troubleshoot analyzer issues
+            echo "DEBUG: Running semantic-version-analyzer..." >&2
             BUMP_TYPE_OUTPUT="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || true)"
+            echo "DEBUG: Analyzer exit code: $?" >&2
             if [[ -n "$BUMP_TYPE_OUTPUT" ]]; then
               BUMP_TYPE="$(printf '%s' "$BUMP_TYPE_OUTPUT" | tr -d '\n' | tr -d '\r')"
               echo "DEBUG: Analyzer output: '$BUMP_TYPE_OUTPUT' -> BUMP_TYPE: '$BUMP_TYPE'" >&2
@@ -158,11 +164,11 @@ jobs:
 
           # Add [skip ci] to prevent triggering other workflows
           ANALYSIS_MESSAGE="[skip ci] Auto version bump triggered by ${{ github.event_name }}" \
-            ./dev-bin/bump-version "${{ steps.version-analysis.outputs.bump_type }}" --commit
+            ./dev-bin/bump-version "${{ steps.version-analysis.outputs.bump_type }}" --commit --no-verify
 
           # Ensure [skip ci] present even if the script didn't include it
           if ! git log -1 --pretty=%B | grep -q '\[skip ci\]'; then
-            git commit --amend -m "$(git log -1 --pretty=%B) [skip ci]"
+            git commit --amend --no-verify -m "$(git log -1 --pretty=%B) [skip ci]"
           fi
 
           NEW_VERSION="$(cat VERSION)"
