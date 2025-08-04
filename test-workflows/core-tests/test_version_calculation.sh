@@ -16,13 +16,13 @@ echo "Testing Version Calculation Logic"
 echo "================================"
 
 # Go to project root
-cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.."
+cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." || exit 1
 
 # Create a temporary clean environment for testing
 TEMP_DIR=$(mktemp -d)
 # Copy everything except .git directory
 find . -maxdepth 1 -not -name . -not -name .git -exec cp -r {} "$TEMP_DIR/" \;
-cd "$TEMP_DIR"
+cd "$TEMP_DIR" || exit 1
 
 # Initialize git in the temp directory
 git init

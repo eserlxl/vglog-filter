@@ -11,11 +11,6 @@
 set -Euo pipefail
 IFS=$'\n\t'
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m' # No Color
-
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
@@ -23,7 +18,7 @@ PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 TEMP_DIR=$(mktemp -d)
 # Copy everything except .git directory
 find "$PROJECT_ROOT" -maxdepth 1 -not -name . -not -name .git -exec cp -r {} "$TEMP_DIR/" \;
-cd "$TEMP_DIR"
+cd "$TEMP_DIR" || exit 1
 
 # Initialize git in the temp directory
 git init
