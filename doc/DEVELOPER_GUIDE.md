@@ -74,7 +74,7 @@ The `build.sh` script simplifies the process of configuring and compiling `vglog
 
 ## Versioning System
 
-`vglog-filter` adheres to [Semantic Versioning (SemVer)](https://semver.org/) principles, with version management largely automated through GitHub Actions and Conventional Commits.
+`vglog-filter` uses an advanced LOC-based delta versioning system that always increases only the last identifier (patch) with calculated increments based on change magnitude. The system is configured through `dev-config/versioning.yml` and provides intelligent rollover logic. Version management is largely automated through GitHub Actions and the semantic version analyzer.
 
 ### Current Version Retrieval
 

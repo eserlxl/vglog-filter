@@ -31,6 +31,8 @@ This document details the versioning strategy employed by `vglog-filter`, which 
 -   `1.0.1` → `1.1.0`: A new feature was added, but existing functionality remains compatible.
 -   `1.1.0` → `2.0.0`: A breaking change was introduced, requiring users to update their integration.
 
+**Note**: The current versioning system (v10.5.0) uses an advanced LOC-based delta system that always increases only the last identifier (patch) with calculated increments based on change magnitude.
+
 [↑ Back to top](#versioning-strategy)
 
 ## New Versioning System

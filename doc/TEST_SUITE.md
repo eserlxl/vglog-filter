@@ -29,8 +29,9 @@ Key characteristics of our test suite:
 -   **Comprehensive Coverage**: Includes unit tests for individual components, integration tests for module interactions, and workflow tests for end-to-end scenarios.
 -   **Automated Execution**: All tests are integrated into the CI/CD pipeline and run automatically on every code change.
 -   **Cross-Platform**: Tests are executed across multiple Linux distributions to ensure broad compatibility.
--   **Performance and Memory Safety**: Dedicated tests and sanitizers are used to monitor performance and detect memory-related issues.
+-   **Performance and Memory Safety**: Dedicated tests and sanitizers (AddressSanitizer, MemorySanitizer) are used to monitor performance and detect memory-related issues.
 -   **Readability and Maintainability**: Tests are structured to be easy to understand, write, and maintain.
+-   **Advanced Versioning Tests**: Comprehensive testing of the LOC-based delta versioning system with rollover logic.
 
 [↑ Back to top](#test-suite-guide)
 

@@ -138,12 +138,14 @@ vglog-filter input.log | less
 -   `-d N, --depth N`
     -   **Purpose**: Controls the number of lines (`N`) used to generate the unique signature for deduplication. A higher depth considers more context, leading to more precise (but potentially fewer) deduplications. This parameter helps fine-tune the balance between aggressive deduplication and preserving distinct error patterns.
     -   **`N=0`**: Uses unlimited depth, meaning the entire error block is considered for the signature, providing the most precise deduplication.
-    -   **Default**: If not specified, a sensible default depth (e.g., 5 lines) is used, which typically offers a good balance for common Valgrind outputs.
+    -   **Default**: If not specified, a default depth of 1 is used, which typically offers a good balance for common Valgrind outputs.
+    -   **Range**: Valid values are 0 to 1000. Values outside this range will result in an error.
     -   **Example**: `vglog-filter -d 5 raw.log` (uses first 5 lines for signature)
 
 -   `-m S, --marker S`
     -   **Purpose**: Specifies a custom marker string (`S`) to delineate the relevant section of the log. Only log entries *after* the last occurrence of this custom marker will be processed (unless `-k` is used). This is useful for logs that contain preamble or postamble information you wish to ignore.
     -   **Default**: `Successfully downloaded debug`
+    -   **Limit**: Maximum length of 1024 characters. Longer markers will result in an error.
     -   **Example**: `vglog-filter -m "--- TEST START ---" my_log.log`
 
 -   `-v, --verbose`

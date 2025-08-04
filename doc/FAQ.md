@@ -14,7 +14,7 @@ This document provides answers to common questions about `vglog-filter`, coverin
 ## General Information
 
 ### What is `vglog-filter`?
-`vglog-filter` is a fast and flexible command-line tool designed to process and clean up Valgrind log files. Its primary purpose is to help developers analyze Valgrind output more efficiently by removing redundant information, deduplicating stack traces, and normalizing dynamic data (like memory addresses) for easier comparison.
+`vglog-filter` is a fast and flexible command-line tool designed to process and clean up Valgrind log files. Its primary purpose is to help developers analyze Valgrind output more efficiently by removing redundant information, deduplicating stack traces, and normalizing dynamic data (like memory addresses) for easier comparison. Currently at version 10.5.0, it features advanced LOC-based versioning and comprehensive testing.
 
 ### Why should I use `vglog-filter`?
 Valgrind logs can be very verbose, especially in large projects or during automated testing. `vglog-filter` addresses common pain points:
@@ -69,7 +69,7 @@ vglog-filter --marker "--- START OF TEST RUN ---" my_custom_log.log
 -   **Empty file**: If the input file is empty, the tool will display a warning message (e.g., "Warning: Input file is empty.") and exit successfully (status 0) without processing anything.
 
 ### What if I provide an invalid depth value?
-If you provide a non-numeric or negative value for the depth option (`-d`), `vglog-filter` will display a clear error message indicating the invalid value and the expected format (a non-negative integer).
+If you provide a non-numeric, negative value, or a value greater than 1000 for the depth option (`-d`), `vglog-filter` will display a clear error message indicating the invalid value and the expected format (a non-negative integer between 0 and 1000).
 
 [↑ Back to top](#frequently-asked-questions-faq)
 

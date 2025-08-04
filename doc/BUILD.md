@@ -20,7 +20,9 @@ Before you can build `vglog-filter`, ensure you have the following tools install
 -   **C++20 Compatible Compiler**: A compiler that supports the C++20 standard. Recommended compilers:
     -   GCC (GNU Compiler Collection) version 10 or newer.
     -   Clang (LLVM) version 12 or newer.
+    -   MSVC 2019 or newer (Windows).
 -   **CMake**: A cross-platform build system generator. Version 3.16 or higher is required.
+-   **Make or Ninja**: Build system for compilation.
 
 ### Installing Dependencies
 
