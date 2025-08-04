@@ -12,8 +12,13 @@ This guide provides comprehensive information about the Continuous Integration a
   - [Maintenance Workflows](#maintenance-workflows)
 - [Build Configurations](#build-configurations)
 - [Testing Procedures](#testing-procedures)
+  - [Unit Testing](#unit-testing)
+  - [Integration Testing](#integration-testing)
+  - [Workflow Testing](#workflow-testing)
+  - [Memory Safety Testing](#memory-safety-testing)
 - [Quality Assurance](#quality-assurance)
 - [Development Workflow](#development-workflow)
+- [Local Development Setup](#local-development-setup)
 - [Troubleshooting CI/CD Issues](#troubleshooting-cicd-issues)
 
 ## Overview
@@ -204,6 +209,86 @@ Each configuration involves specific compiler flags and CMake definitions:
 
 `vglog-filter` employs a multi-layered testing strategy, combining automated and manual testing to ensure reliability.
 
+### Unit Testing
+
+Unit tests are located in the `test/` directory and focus on testing individual components in isolation.
+
+**Key Test Files:**
+-   `test_basic.cpp`: Core functionality tests
+-   `test_canonicalization.cpp`: Path canonicalization logic
+-   `test_path_validation.cpp`: Path validation and security checks
+-   `test_cli_options.cpp`: Command-line interface testing
+-   `test_regex_patterns.cpp`: Regular expression pattern matching
+-   `test_edge_cases.cpp`: Boundary conditions and edge cases
+-   `test_edge_utf8_perm.cpp`: UTF-8 encoding and permission handling
+-   `test_memory_leaks.cpp`: Memory leak detection and prevention
+-   `test_comprehensive.cpp`: Comprehensive integration scenarios
+-   `test_integration.cpp`: Component integration testing
+
+**Running Unit Tests:**
+```sh
+# Run all unit tests
+./test/run_unit_tests.sh
+
+# Run specific test categories
+./test/run_unit_tests.sh --basic
+./test/run_unit_tests.sh --memory
+./test/run_unit_tests.sh --edge-cases
+```
+
+### Integration Testing
+
+Integration tests verify that multiple components work together correctly.
+
+**Key Features:**
+-   Tests component interactions and data flow
+-   Validates end-to-end functionality
+-   Ensures proper error handling across components
+-   Verifies performance characteristics under realistic conditions
+
+### Workflow Testing
+
+Workflow tests are located in the `test-workflows/` directory and test the complete development and deployment workflows.
+
+**Test Categories:**
+-   **Core Tests** (`core-tests/`): Fundamental workflow functionality
+-   **CLI Tests** (`cli-tests/`): Command-line interface workflows
+-   **Debug Tests** (`debug-tests/`): Debugging and development workflows
+-   **Edge Case Tests** (`edge-case-tests/`): Unusual scenarios and error conditions
+-   **ERE Tests** (`ere-tests/`): Extended Regular Expression handling
+-   **File Handling Tests** (`file-handling-tests/`): File system operations
+-   **Utility Tests** (`utility-tests/`): Helper functions and utilities
+
+**Running Workflow Tests:**
+```sh
+# Run all workflow tests
+./test-workflows/run_workflow_tests.sh
+
+# Run specific test categories
+./test-workflows/run_workflow_tests.sh --core
+./test-workflows/run_workflow_tests.sh --cli
+./test-workflows/run_workflow_tests.sh --debug
+```
+
+### Memory Safety Testing
+
+Memory safety is a critical concern for `vglog-filter`, and multiple testing approaches are employed:
+
+**Memory Sanitizer (MSan):**
+-   Detects uninitialized memory usage
+-   Identifies memory leaks and use-after-free errors
+-   Validates proper memory management patterns
+
+**Dedicated Memory Tests:**
+-   `test_memory_leaks.cpp`: Comprehensive memory leak detection
+-   `test-workflows/simple_msan_test.sh`: MSan integration testing
+-   `test-workflows/test_msan_fix.sh`: MSan issue resolution testing
+
+**MSan Suppressions:**
+-   `test-workflows/msan_suppressions.txt`: Known false positives and intentional suppressions
+
+[↑ Back to top](#ci/cd-and-testing-guide)
+
 ### Automated Testing
 
 Automated tests are integrated into the CI/CD pipeline and run on every code change.
@@ -230,6 +315,12 @@ gdb build/bin/vglog-filter # Then run your program within gdb
 # Example: Test performance builds and verify optimizations
 ./build.sh performance
 # Use tools like `objdump -d build/bin/vglog-filter | grep -i "-O3"` to verify optimizations
+
+# Example: Run smoke tests
+./test/smoke_test.sh
+
+# Example: Run comprehensive workflow tests
+./test-workflows/run_workflow_tests.sh --all
 ```
 
 ### Quality Checks
@@ -310,6 +401,130 @@ This section outlines the typical development workflow, emphasizing how CI/CD in
 
 [↑ Back to top](#ci/cd-and-testing-guide)
 
+## Local Development Setup
+
+Setting up a local development environment for `vglog-filter` involves several steps to ensure you can build, test, and contribute effectively.
+
+### Prerequisites
+
+**System Requirements:**
+-   Linux distribution (Arch Linux, Ubuntu, Fedora, or Debian recommended)
+-   GCC or Clang compiler (version 10 or later)
+-   CMake (version 3.16 or later)
+-   Git
+-   Basic development tools (make, pkg-config, etc.)
+
+**Arch Linux:**
+```sh
+sudo pacman -S base-devel cmake git
+```
+
+**Ubuntu/Debian:**
+```sh
+sudo apt update
+sudo apt install build-essential cmake git
+```
+
+**Fedora:**
+```sh
+sudo dnf groupinstall "Development Tools"
+sudo dnf install cmake git
+```
+
+### Repository Setup
+
+```sh
+# Clone the repository
+git clone https://github.com/eserlxl/vglog-filter.git
+cd vglog-filter
+
+# Configure git user (if not already set)
+git config user.name "Your Name"
+git config user.email "your.email@example.com"
+```
+
+### Build Environment
+
+**Basic Build:**
+```sh
+# Default build
+./build.sh
+
+# Debug build for development
+./build.sh debug
+
+# Performance build
+./build.sh performance
+
+# Build with warnings enabled
+./build.sh warnings
+
+# Build and run tests
+./build.sh debug tests
+```
+
+**Build Options:**
+-   `performance`: Enables `-O3` optimizations and LTO
+-   `debug`: Enables debug symbols and `-O0` optimization
+-   `warnings`: Enables extensive compiler warnings
+-   `tests`: Builds and runs the test suite
+-   `clean`: Removes build directory for clean rebuild
+-   `-j N`: Sets parallel build jobs (default: auto-detected)
+
+### Testing Setup
+
+**Unit Tests:**
+```sh
+# Run all unit tests
+./test/run_unit_tests.sh
+
+# Run specific test categories
+./test/run_unit_tests.sh --help
+```
+
+**Workflow Tests:**
+```sh
+# Run all workflow tests
+./test-workflows/run_workflow_tests.sh
+
+# Run specific test categories
+./test-workflows/run_workflow_tests.sh --help
+```
+
+**Memory Safety Testing:**
+```sh
+# Run MSan tests (requires Clang)
+./test-workflows/simple_msan_test.sh
+
+# Run memory leak tests
+./test/run_unit_tests.sh --memory
+```
+
+### Development Tools
+
+**Static Analysis:**
+```sh
+# Run Clang-Tidy locally (if available)
+clang-tidy src/*.cpp -- -Iinclude
+
+# Run ShellCheck on scripts
+shellcheck *.sh test/*.sh test-workflows/*.sh
+```
+
+**Debugging:**
+```sh
+# Build debug version
+./build.sh debug
+
+# Run with GDB
+gdb build/bin/vglog-filter
+
+# Run with Valgrind (if available)
+valgrind --leak-check=full build/bin/vglog-filter
+```
+
+[↑ Back to top](#ci/cd-and-testing-guide)
+
 ## Troubleshooting CI/CD Issues
 
 If you encounter issues with the CI/CD pipeline, here are some common troubleshooting steps:
@@ -325,6 +540,45 @@ If you encounter issues with the CI/CD pipeline, here are some common troublesho
 -   **Local Reproduction**: Attempt to reproduce the issue locally using the exact commands from the CI workflow. This helps isolate environment differences.
 -   **Environment Differences**: Be aware of potential differences between your local development environment and the CI environment (e.g., compiler versions, installed libraries).
 -   **Dependency Issues**: Verify that all required dependencies are correctly installed and at the expected versions in the CI environment.
+
+### Local Debugging
+
+**Build Issues:**
+```sh
+# Clean build to avoid cached issues
+./build.sh clean debug
+
+# Check compiler version
+gcc --version
+clang --version
+
+# Verify CMake configuration
+cmake --version
+```
+
+**Test Issues:**
+```sh
+# Run tests with verbose output
+./test/run_unit_tests.sh --verbose
+
+# Run specific failing test
+./test/run_unit_tests.sh --test-name "test_specific_function"
+
+# Check test environment
+./test/smoke_test.sh
+```
+
+**Memory Issues:**
+```sh
+# Run MSan tests locally
+./test-workflows/simple_msan_test.sh
+
+# Check for memory leaks
+valgrind --leak-check=full build/bin/vglog-filter
+
+# Run memory-specific tests
+./test/run_unit_tests.sh --memory
+```
 
 ### Seeking Support
 -   **Documentation**: Always refer to the relevant documentation (e.g., [Build Guide](BUILD.md), [Developer Guide](DEVELOPER_GUIDE.md)) first.
