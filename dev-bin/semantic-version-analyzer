@@ -70,14 +70,9 @@ Configuration:
   environment variables.
 
 Environment Variables (fallback):
-  MIN_MAJOR_DIFF_LINES     Minimum lines for major bump (default: 10000)
-  MIN_MINOR_DIFF_LINES     Minimum lines for minor bump (default: 50)
-  MIN_PATCH_DIFF_LINES     Minimum lines for patch bump (default: 500)
-  MIN_PATCH_FILES          Minimum files for patch bump (default: 10)
-  MIN_NEW_SOURCE_FILES     Minimum new source files for minor (default: 2)
-  MIN_NEW_TEST_FILES       Minimum new test files for minor (default: 3)
-  MIN_NEW_DOC_FILES        Minimum new doc files for minor (default: 2)
-  MAJOR_REQUIRE_BREAKING   Require breaking changes for major (default: true; accepts: true/1/yes)
+  # PURELY MATHEMATICAL VERSIONING SYSTEM
+  # All version bump decisions are based on bonus point calculations
+  # No minimum thresholds or extra rules - pure math logic only
   VERSION_USE_LOC_DELTA    Enable LOC-based delta system (default: true)
   VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
   VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
@@ -243,7 +238,7 @@ load_config() {
     BONUS_CRASH_FIX=$(safe_numeric '.bonuses.security_stability.crash_fix')
     BONUS_NEW_CLI_COMMAND=$(safe_numeric '.bonuses.features.new_cli_command')
     BONUS_NEW_CONFIG_OPTION=$(safe_numeric '.bonuses.features.new_config_option')
-    BONUS_NEW_SOURCE_FILE=$(safe_numeric '.bonuses.features.new_source_file')
+    BONUS_NEW_SOURCE_FILE=$(safe_numeric '.bonuses.code_quality.new_source_file')
     BONUS_NEW_TEST_FILE=$(safe_numeric '.bonuses.code_quality.new_test_suite')
     BONUS_NEW_DOC_FILE=$(safe_numeric '.bonuses.code_quality.doc_overhaul')
     
@@ -282,15 +277,9 @@ if ! load_config; then
     printf 'Using fallback configuration from environment variables\n' >&2
 fi
 
-# Configurable thresholds (can be overridden by environment)
-MIN_MAJOR_DIFF_LINES="${MIN_MAJOR_DIFF_LINES:-10000}"
-MIN_MINOR_DIFF_LINES="${MIN_MINOR_DIFF_LINES:-50}"
-MIN_PATCH_DIFF_LINES="${MIN_PATCH_DIFF_LINES:-500}"
-MIN_PATCH_FILES="${MIN_PATCH_FILES:-10}"
-MIN_NEW_SOURCE_FILES="${MIN_NEW_SOURCE_FILES:-2}"
-MIN_NEW_TEST_FILES="${MIN_NEW_TEST_FILES:-3}"
-MIN_NEW_DOC_FILES="${MIN_NEW_DOC_FILES:-2}"
-MAJOR_REQUIRE_BREAKING="${MAJOR_REQUIRE_BREAKING:-true}"
+# PURELY MATHEMATICAL VERSIONING SYSTEM
+# All version bump decisions are based on bonus point calculations
+# No minimum thresholds or extra rules - pure math logic only
 
 # LOC-based delta system configuration (use config values if available)
 VERSION_PATCH_LIMIT="${VERSION_PATCH_LIMIT:-${ROLLOVER:-100}}"
@@ -332,8 +321,8 @@ VERSION_SECURITY_BONUS="${VERSION_SECURITY_BONUS:-${BONUS_SECURITY_VULN:-2}}"
 EARLY_EXIT_BONUS_THRESHOLD="${EARLY_EXIT_BONUS_THRESHOLD:-8}"
 EARLY_EXIT_CHANGE_TYPE="${EARLY_EXIT_CHANGE_TYPE:-major}"
 
-# Normalize MAJOR_REQUIRE_BREAKING once for consistency
-REQ="${MAJOR_REQUIRE_BREAKING,,}"
+# PURELY MATHEMATICAL VERSIONING SYSTEM
+# All decisions based on bonus point calculations - no extra rules
 
 # Build a global PATH_ARGS array from --only-paths (applied to ALL diffs)
 PATH_ARGS=()
@@ -509,13 +498,13 @@ classify_path() {
 
     # Source files (including headers)
     if [[ "$path" =~ (^|/)src/ ]] || [[ "$path" =~ (^|/)source/ ]] || [[ "$path" =~ (^|/)app/ ]] || \
-       [[ "$path" =~ \\.(c|cc|cpp|cxx|h|hpp|hh)$ ]]; then
+       [[ "$path" =~ \.(c|cc|cpp|cxx|h|hpp|hh)$ ]]; then
         printf '30'
         return
     fi
 
     # Test files
-    if [[ "$path" =~ (^|/)(test|tests|unittests)/ ]] || [[ "$path" =~ \\.(test|spec)\\.(c|cpp|sh|py)$ ]]; then
+    if [[ "$path" =~ (^|/)(test|tests|unittests)/ ]] || [[ "$path" =~ \.(test|spec)\.(c|cpp|sh|py)$ ]]; then
         printf '10'
         return
     fi
@@ -523,7 +512,7 @@ classify_path() {
     # Documentation files (case-insensitive)
     if [[ "$path_lower" =~ (^|/)(doc|docs)/ ]] || \
        [[ "$path_lower" =~ (^|/)(readme|changelog|contributing|license|copying|authors|install|news|history) ]] || \
-       [[ "$path_lower" =~ \\.(md|rst|adoc|txt)$ ]]; then
+       [[ "$path_lower" =~ \.(md|rst|adoc|txt)$ ]]; then
         printf '20'
         return
     fi
@@ -1056,6 +1045,11 @@ calculate_loc_delta() {
         bonus=$((bonus + security_keywords * VERSION_SECURITY_BONUS))
     fi
     
+    # Ensure minimum base_delta of 1 to prevent zero deltas from tiny changes
+    if [[ "$base_delta" -lt 1 ]]; then
+        base_delta=1
+    fi
+    
     # Calculate final delta
     local final_delta=$((base_delta + bonus))
     
@@ -1171,7 +1165,7 @@ calculate_next_version() {
     esac
 }
 
-# Determine version bump suggestion based on improved rules
+# Determine version bump suggestion based on PURE MATHEMATICAL LOGIC
 suggest_version_bump() {
     # If --ignore-whitespace is set and there are no non-whitespace changes, return 'none'
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
@@ -1186,7 +1180,7 @@ suggest_version_bump() {
     local minor_bonus_threshold="${MINOR_BONUS_THRESHOLD:-4}"
     local patch_bonus_threshold="${PATCH_BONUS_THRESHOLD:-0}"
     
-    # Calculate total bonus from all sources
+    # Calculate total bonus from all sources - PURE MATHEMATICAL APPROACH
     local total_bonus=0
     
     # Breaking changes (high priority)
@@ -1246,23 +1240,13 @@ suggest_version_bump() {
         total_bonus=$((total_bonus + 1))  # Small change bonus
     fi
     
-    # If API breaking changes, ensure at least a major bump
-    if [[ "${R[api_breaking]:-false}" = "true" ]]; then
-        if [[ "$total_bonus" -lt "$major_bonus_threshold" ]]; then
-            total_bonus="$major_bonus_threshold"
-        fi
-    fi
-    # If manual CLI changes, ensure at least a minor bump unless a higher bump is triggered
-    if [[ "${R[manual_cli_changes]:-false}" = "true" ]]; then
-        if [[ "$total_bonus" -lt "$minor_bonus_threshold" ]]; then
-            total_bonus="$minor_bonus_threshold"
-        fi
-    fi
+    # PURE MATHEMATICAL DECISION TREE - NO EXTRA RULES
+    # Only bonus points determine the version bump type
     if [[ "$total_bonus" -ge "$major_bonus_threshold" ]]; then
         printf 'major'
     elif [[ "$total_bonus" -ge "$minor_bonus_threshold" ]]; then
         printf 'minor'
-    elif [[ "$total_bonus" -ge "$patch_bonus_threshold" ]] || [[ "${R[modified_files]:-0}" -gt 0 ]] || [[ "$diff_size" -gt 0 ]]; then
+    elif [[ "$total_bonus" -ge "$patch_bonus_threshold" ]]; then
         printf 'patch'
     else
         printf 'none'
@@ -1360,7 +1344,7 @@ get_bump_reason() {
     elif [[ "$total_bonus" -ge "$minor_bonus_threshold" ]]; then
         version_type="MINOR"
         base_reason="bonus_${total_bonus}_minor"
-    elif [[ "$total_bonus" -ge "$patch_bonus_threshold" ]] || [[ "${R[modified_files]:-0}" -gt 0 ]] || [[ "$loc" -gt 0 ]]; then
+    elif [[ "$total_bonus" -ge "$patch_bonus_threshold" ]]; then
         version_type="PATCH"
         base_reason="bonus_${total_bonus}_patch"
     else
@@ -1699,10 +1683,11 @@ main() {
             printf '  Rollover limit: %s\n' "$VERSION_PATCH_LIMIT"
             printf '  LOC divisors: major=%s, minor=%s, patch=%s\n' "${LOC_DIVISOR_MAJOR:-1000}" "${LOC_DIVISOR_MINOR:-500}" "${LOC_DIVISOR_PATCH:-250}"
             printf '\n'
-            printf 'Legacy thresholds (fallback):\n'
-            printf '  Major: Breaking CLI changes or diff > %s lines (MAJOR_REQUIRE_BREAKING=%s)\n' "$MIN_MAJOR_DIFF_LINES" "$MAJOR_REQUIRE_BREAKING"
-            printf '  Minor: CLI changes, new source files (≥%s), new test files (≥%s), new doc files (≥%s)\n' "$MIN_NEW_SOURCE_FILES" "$MIN_NEW_TEST_FILES" "$MIN_NEW_DOC_FILES"
-            printf '  Patch: Modified files (≥%s) + diff > %s lines\n' "$MIN_PATCH_FILES" "$MIN_PATCH_DIFF_LINES"
+            printf 'PURE MATHEMATICAL VERSIONING SYSTEM:\n'
+            printf '  Major: Total bonus >= %s points\n' "${MAJOR_BONUS_THRESHOLD:-8}"
+            printf '  Minor: Total bonus >= %s points\n' "${MINOR_BONUS_THRESHOLD:-4}"
+            printf '  Patch: Total bonus >= %s points (any change gets at least patch)\n' "${PATCH_BONUS_THRESHOLD:-0}"
+            printf '  No minimum thresholds or extra rules - pure math logic only\n'
             printf '\n'
             printf 'Recent commits:\n'
             if git -c color.ui=false rev-list "$base_ref".."$target_ref" >/dev/null 2>&1; then

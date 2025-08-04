@@ -166,14 +166,16 @@ If the `VERSION` file is not found or accessible in any of these locations, the 
 
 `vglog-filter` employs an automated system for version bumping, tightly integrated with [Conventional Commits](https://www.conventionalcommits.org/) and GitHub Actions. This system analyzes actual code changes and commit messages to determine the appropriate semantic version increment.
 
-### Automatic Release Detection Thresholds
+### Pure Mathematical Version Detection
 
-The automated release workflow (`version-bump.yml` in `.github/workflows/`) uses intelligent thresholds to ensure every meaningful change results in a version bump. The system is designed to be permissive rather than restrictive:
+The automated release workflow (`version-bump.yml` in `.github/workflows/`) uses a **pure mathematical approach** to determine version bumps. The system calculates bonus points from various change types and applies them to determine the version bump:
 
--   **MAJOR Release**: Triggered by breaking changes, API changes, or security issues. No size threshold applies as breaking changes are always significant.
--   **MINOR Release**: Triggered by new features, CLI additions, or significant new content (new source files, test files, documentation).
--   **PATCH Release**: Triggered by **any changes** that don't qualify for major or minor bumps. This ensures every change results in at least a patch version increment.
+-   **MAJOR Release**: Triggered when total bonus points ≥ 8. Includes breaking changes, API changes, security issues, and high-impact modifications.
+-   **MINOR Release**: Triggered when total bonus points ≥ 4. Includes new features, CLI additions, significant improvements, and medium-impact changes.
+-   **PATCH Release**: Triggered when total bonus points ≥ 0. **Any change gets at least a patch bump** - no minimum thresholds or extra rules.
 -   **No Release**: Only occurs when there are truly no changes to analyze (e.g., single-commit repositories).
+
+**No extra rules or minimum thresholds apply** - the system is purely mathematical based on bonus point calculations.
 
 The system uses a LOC-based delta system to calculate the actual version increment, ensuring that even small changes get appropriate version bumps while larger changes get proportionally larger increments.
 

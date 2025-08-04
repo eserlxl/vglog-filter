@@ -16,6 +16,7 @@ limits:
   rollover: 100  # Two-digit rollover feels right for most projects
 
 # Bonus system - 7 categories with point values
+# This is the ONLY mechanism for determining version bump types
 bonuses:
   # Breaking Changes (High Impact)
   breaking_changes:
@@ -62,6 +63,7 @@ bonuses:
     coverage_10_plus: 1
     static_analysis: 2
     new_test_suite: 1
+    new_source_file: 1   # New source files (code quality aspect)
     doc_overhaul: 1
     code_style: 1
   
@@ -106,12 +108,13 @@ penalties:
   missing_tests: -1
   perf_regression: -2
 
-# Decision tree thresholds
-# Add patch_bonus so the decision tree can be entirely data-driven
+# Decision tree thresholds - PURELY MATHEMATICAL
+# These thresholds determine version bump type based on total bonus points
+# No other rules or conditions apply - pure math logic only
 thresholds:
-  major_bonus: 8
-  minor_bonus: 4
-  patch_bonus: 0  # Default threshold for PATCH classification
+  major_bonus: 8    # Total bonus >= 8 = MAJOR
+  minor_bonus: 4    # Total bonus >= 4 = MINOR  
+  patch_bonus: 0    # Total bonus >= 0 = PATCH (any change gets at least patch)
 
 # LOC divisors for different change types
 # Guard against accidental zero (division by zero crash in bc) by validating at load time
