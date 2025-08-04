@@ -228,6 +228,10 @@ vcpkg_installed/
 # Bot directory
 bot/
 
+# Development files
+.last_prompt
+.clang-format
+
 # Version control
 .git/
 .svn/
