@@ -446,12 +446,12 @@ test_no_changes() {
     cleanup_temp_test_env "$test_dir"
 }
 
-# Test threshold configuration
-test_threshold_configuration() {
-    log_info "Testing threshold configuration..."
+# Test pure mathematical versioning configuration
+test_pure_mathematical_versioning() {
+    log_info "Testing pure mathematical versioning configuration..."
     
     local test_dir
-    test_dir=$(create_temp_test_env "threshold-configuration")
+    test_dir=$(create_temp_test_env "pure-math-versioning")
     cd "$test_dir" || exit 1
     
     # Create initial files
@@ -467,7 +467,7 @@ test_threshold_configuration() {
     # Create a tag so we can analyze changes since the tag
     git tag v0.0.0 >/dev/null 2>&1
     
-    # Create files to trigger different thresholds
+    # Create files to trigger bonus points
     for i in {1..5}; do
         echo "source code $i" > "src/file$i.cpp"
         echo "test code $i" > "test/test$i.cpp"
@@ -478,14 +478,29 @@ test_threshold_configuration() {
     git add . >/dev/null 2>&1
     git commit -m "Add multiple files" >/dev/null 2>&1
     
-    # Test with default thresholds
+    # Test pure mathematical versioning output
     local output
     output=$("$SCRIPT_PATH" --verbose --repo-root "$test_dir" 2>&1)
     
-    if [[ "$output" == *"New source files: 5"* ]]; then
-        log_success "Threshold configuration"
+    # Check for pure mathematical versioning indicators
+    if [[ "$output" == *"PURE MATHEMATICAL VERSIONING SYSTEM"* ]]; then
+        log_success "Pure mathematical versioning system detected"
     else
-        log_error "Threshold configuration"
+        log_error "Pure mathematical versioning system not detected"
+    fi
+    
+    # Check for bonus threshold information
+    if [[ "$output" == *"Major: Total bonus >="* ]] && [[ "$output" == *"Minor: Total bonus >="* ]] && [[ "$output" == *"Patch: Total bonus >="* ]]; then
+        log_success "Bonus threshold information displayed"
+    else
+        log_error "Bonus threshold information not displayed"
+    fi
+    
+    # Check for "No minimum thresholds or extra rules" message
+    if [[ "$output" == *"No minimum thresholds or extra rules"* ]]; then
+        log_success "No extra rules message displayed"
+    else
+        log_error "No extra rules message not displayed"
     fi
     
     # Cleanup
@@ -493,12 +508,12 @@ test_threshold_configuration() {
     cleanup_temp_test_env "$test_dir"
 }
 
-# Test universal patch detection (any change triggers patch bump)
-test_universal_patch_detection() {
-    log_info "Testing universal patch detection..."
+# Test pure mathematical patch detection (any change with bonus >= 0 triggers patch bump)
+test_pure_mathematical_patch_detection() {
+    log_info "Testing pure mathematical patch detection..."
     
     local test_dir
-    test_dir=$(create_temp_test_env "universal-patch-detection")
+    test_dir=$(create_temp_test_env "pure-math-patch-detection")
     cd "$test_dir" || exit 1
     
     # Create initial files
@@ -513,19 +528,29 @@ test_universal_patch_detection() {
     # Create a tag so we can analyze changes since the tag
     git tag v0.0.0 >/dev/null 2>&1
     
-    # Make a small change to a non-source file (should trigger patch bump)
+    # Make a small change to a non-source file (should trigger patch bump with bonus >= 0)
     echo "updated test code" > test/main_test.cpp
     git add test/main_test.cpp >/dev/null 2>&1
     git commit -m "Small update" >/dev/null 2>&1
     
-    # Test that small changes trigger patch bump
+    # Test that small changes trigger patch bump (bonus >= 0)
     local output
     output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
     
     if [[ "$output" == "patch" ]]; then
-        log_success "Universal patch detection - small changes trigger patch"
+        log_success "Pure mathematical patch detection - small changes trigger patch (bonus >= 0)"
     else
-        log_error "Universal patch detection - small changes should trigger patch, got: $output"
+        log_error "Pure mathematical patch detection - small changes should trigger patch, got: $output"
+    fi
+    
+    # Test verbose output shows pure mathematical logic
+    local verbose_output
+    verbose_output=$("$SCRIPT_PATH" --verbose --repo-root "$test_dir" 2>&1)
+    
+    if [[ "$verbose_output" == *"PURE MATHEMATICAL VERSIONING SYSTEM"* ]]; then
+        log_success "Pure mathematical versioning system detected in verbose output"
+    else
+        log_error "Pure mathematical versioning system not detected in verbose output"
     fi
     
     # Cleanup
@@ -674,8 +699,8 @@ main() {
     test_cli_change_detection
     test_breaking_cli_changes
     test_no_changes
-    test_threshold_configuration
-    test_universal_patch_detection
+    test_pure_mathematical_versioning
+    test_pure_mathematical_patch_detection
     test_error_handling
     test_json_output
     test_loc_delta_system

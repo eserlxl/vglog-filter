@@ -275,28 +275,28 @@ run_test "No tags fallback to HEAD~1" \
 cd "$PROJECT_ROOT"
 cleanup_temp_test_env "$TEMP_REPO"
 
-# Test 7: MAJOR_REQUIRE_BREAKING environment variable
-printf '%s=== Test 7: MAJOR_REQUIRE_BREAKING Environment Variable ===%s\n' "${YELLOW}" "${NC}"
+# Test 7: Pure mathematical versioning system
+printf '%s=== Test 7: Pure Mathematical Versioning System ===%s\n' "${YELLOW}" "${NC}"
 
-# Test with different truthy values
+# Test that the system uses pure mathematical logic
 # Get the commit hashes
 first_commit=$(git rev-parse HEAD~3)
 second_commit=$(git rev-parse HEAD)
 
-run_test "MAJOR_REQUIRE_BREAKING=true" \
-    "MAJOR_REQUIRE_BREAKING=true $PROJECT_ROOT/dev-bin/semantic-version-analyzer --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
-    10 \
-    ""
+run_test "Pure mathematical versioning verbose output" \
+    "$PROJECT_ROOT/dev-bin/semantic-version-analyzer --verbose --base '$first_commit' --target '$second_commit' --repo-root '$temp_dir'" \
+    0 \
+    "PURE MATHEMATICAL VERSIONING SYSTEM"
 
-run_test "MAJOR_REQUIRE_BREAKING=1" \
-    "MAJOR_REQUIRE_BREAKING=1 $PROJECT_ROOT/dev-bin/semantic-version-analyzer --since HEAD~3 --repo-root '$temp_dir'" \
-    10 \
-    ""
+run_test "Pure mathematical versioning bonus thresholds" \
+    "$PROJECT_ROOT/dev-bin/semantic-version-analyzer --verbose --since HEAD~3 --repo-root '$temp_dir'" \
+    0 \
+    "Total bonus >="
 
-run_test "MAJOR_REQUIRE_BREAKING=yes" \
-    "MAJOR_REQUIRE_BREAKING=yes $PROJECT_ROOT/dev-bin/semantic-version-analyzer --since HEAD~3 --repo-root '$temp_dir'" \
-    10 \
-    ""
+run_test "Pure mathematical versioning no extra rules" \
+    "$PROJECT_ROOT/dev-bin/semantic-version-analyzer --verbose --since HEAD~3 --repo-root '$temp_dir'" \
+    0 \
+    "No minimum thresholds or extra rules"
 
 # Test 8: JSON output includes manual fields
 printf '%s=== Test 8: JSON Output Fields ===%s\n' "${YELLOW}" "${NC}"
