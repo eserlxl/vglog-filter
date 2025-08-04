@@ -355,7 +355,6 @@ patterns:
 ### Environment Variables (Fallback)
 ```bash
 # Enable the new versioning system
-VERSION_USE_LOC_DELTA=true
 
 # Delta formulas
 VERSION_PATCH_DELTA="1*(1+LOC/250)"
@@ -384,7 +383,6 @@ VERSION_SECURITY_BONUS=2
 ```
 
 ### Default Values
-- `VERSION_USE_LOC_DELTA=true` (enabled by default)
 - `VERSION_PATCH_LIMIT=100`
 - `VERSION_MINOR_LIMIT=100`
 - `VERSION_PATCH_DELTA="1*(1+LOC/250)"`
@@ -410,10 +408,8 @@ VERSION_SECURITY_BONUS=2
 
 ## Usage
 
-### Enable the System
-```bash
-export VERSION_USE_LOC_DELTA=true
-```
+### System Status
+The LOC-based delta system is **always enabled** by default. No configuration is required.
 
 ### Normal Version Bumping
 ```bash
@@ -531,7 +527,6 @@ This demonstrates:
 ## Migration
 
 ### From Traditional Versioning
-1. Enable the system: `export VERSION_USE_LOC_DELTA=true`
 2. Continue using normal bump commands
 3. The system automatically calculates appropriate deltas
 4. All changes now increment only the patch version
@@ -594,7 +589,6 @@ bonuses:
 ### Common Issues
 
 #### Delta Not Calculating
-- Ensure `VERSION_USE_LOC_DELTA=true`
 - Check that semantic analyzer is executable
 - Verify LOC data is available
 - Check YAML configuration syntax

@@ -160,89 +160,79 @@ bump_version() {
 
     IFS='.' read -r current_major current_minor current_patch <<< "$CURRENT_VERSION"
 
-    # Check if LOC-based delta system is enabled
-    if [[ "${VERSION_USE_LOC_DELTA:-false}" = "true" ]]; then
-        # Use semantic analyzer to calculate LOC-based delta
-        local delta=1
-        # Try to find semantic analyzer in various locations
-        local analyzer_path=""
-        if [[ -x "./dev-bin/semantic-version-analyzer" ]]; then
-            analyzer_path="./dev-bin/semantic-version-analyzer"
-        elif [[ -x "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/semantic-version-analyzer" ]]; then
-            analyzer_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/semantic-version-analyzer"
-        fi
+    # Use semantic analyzer to calculate LOC-based delta
+    local delta=1
+    # Try to find semantic analyzer in various locations
+    local analyzer_path=""
+    if [[ -x "./dev-bin/semantic-version-analyzer" ]]; then
+        analyzer_path="./dev-bin/semantic-version-analyzer"
+    elif [[ -x "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/semantic-version-analyzer" ]]; then
+        analyzer_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/semantic-version-analyzer"
+    fi
+    
+    if [[ -n "$analyzer_path" ]]; then
+        # Get the delta from semantic analyzer
+        local analyzer_output
+        analyzer_output=$("$analyzer_path" --json 2>/dev/null || true)
         
-        if [[ -n "$analyzer_path" ]]; then
-            # Get the delta from semantic analyzer
-            local analyzer_output
-            analyzer_output=$(VERSION_USE_LOC_DELTA=true "$analyzer_path" --json 2>/dev/null || true)
-            
-            if [[ -n "$analyzer_output" ]]; then
-                # Extract delta from JSON output - look for nested fields under loc_delta
-                case "$bump_type" in
-                    patch)
-                        delta=$(printf '%s' "$analyzer_output" | grep -o '"patch_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "1")
-                        ;;
-                    minor)
-                        delta=$(printf '%s' "$analyzer_output" | grep -o '"minor_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "5")
-                        ;;
-                    major)
-                        delta=$(printf '%s' "$analyzer_output" | grep -o '"major_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "10")
-                        ;;
-                esac
-            fi
-        fi
-        
-        # Ensure delta is numeric
-        if [[ ! "$delta" =~ ^[0-9]+$ ]]; then
+        if [[ -n "$analyzer_output" ]]; then
+            # Extract delta from JSON output - look for nested fields under loc_delta
             case "$bump_type" in
-                patch) delta=1 ;;
-                minor) delta=5 ;;
-                major) delta=10 ;;
+                patch)
+                    delta=$(printf '%s' "$analyzer_output" | grep -o '"patch_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "1")
+                    ;;
+                minor)
+                    delta=$(printf '%s' "$analyzer_output" | grep -o '"minor_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "5")
+                    ;;
+                major)
+                    delta=$(printf '%s' "$analyzer_output" | grep -o '"major_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "10")
+                    ;;
             esac
         fi
-        
-        # Apply delta with rollover logic
+    fi
+    
+    # Ensure delta is numeric
+    if [[ ! "$delta" =~ ^[0-9]+$ ]]; then
         case "$bump_type" in
-            major|minor|patch)
-                local patch_limit="${VERSION_PATCH_LIMIT:-100}"
-                local minor_limit="${VERSION_MINOR_LIMIT:-100}"
-                
-                # Calculate new patch with modulo 100
-                local new_patch=$((current_patch + delta))
-                if [[ "$new_patch" -ge "$patch_limit" ]]; then
-                    # Calculate how many minor increments we need
-                    local minor_increments=$((new_patch / patch_limit))
-                    local remaining_patch=$((new_patch % patch_limit))
-                    
-                    # Calculate new minor version
-                    local new_minor=$((current_minor + minor_increments))
-                    
-                    if [[ "$new_minor" -ge "$minor_limit" ]]; then
-                        # Calculate how many major increments we need
-                        local major_increments=$((new_minor / minor_limit))
-                        new_major=$((current_major + major_increments))
-                        new_minor=$((new_minor % minor_limit))
-                        new_patch=$remaining_patch
-                    else
-                        new_major=$current_major
-                        new_patch=$remaining_patch
-                    fi
-                else
-                    new_major=$current_major
-                    new_minor=$current_minor
-                fi
-                ;;
-        esac
-    else
-        # Traditional fixed deltas
-        case "$bump_type" in
-            major) new_major=$((current_major + 1)); new_minor=0; new_patch=0 ;;
-            minor) new_major=$current_major;         new_minor=$((current_minor + 1)); new_patch=0 ;;
-            patch) new_major=$current_major;         new_minor=$current_minor;         new_patch=$((current_patch + 1)) ;;
-            *) printf '%s\n' "${RED}Error: Invalid bump type '$bump_type'${RESET}" >&2; exit 1 ;;
+            patch) delta=1 ;;
+            minor) delta=5 ;;
+            major) delta=10 ;;
         esac
     fi
+    
+    # Apply delta with rollover logic
+    case "$bump_type" in
+        major|minor|patch)
+            local patch_limit="${VERSION_PATCH_LIMIT:-100}"
+            local minor_limit="${VERSION_MINOR_LIMIT:-100}"
+            
+            # Calculate new patch with modulo 100
+            local new_patch=$((current_patch + delta))
+            if [[ "$new_patch" -ge "$patch_limit" ]]; then
+                # Calculate how many minor increments we need
+                local minor_increments=$((new_patch / patch_limit))
+                local remaining_patch=$((new_patch % patch_limit))
+                
+                # Calculate new minor version
+                local new_minor=$((current_minor + minor_increments))
+                
+                if [[ "$new_minor" -ge "$minor_limit" ]]; then
+                    # Calculate how many major increments we need
+                    local major_increments=$((new_minor / minor_limit))
+                    new_major=$((current_major + major_increments))
+                    new_minor=$((new_minor % minor_limit))
+                    new_patch=$remaining_patch
+                else
+                    new_major=$current_major
+                    new_patch=$remaining_patch
+                fi
+            else
+                new_major=$current_major
+                new_minor=$current_minor
+            fi
+            ;;
+        *) printf '%s\n' "${RED}Error: Invalid bump type '$bump_type'${RESET}" >&2; exit 1 ;;
+    esac
 
     NEW_VERSION="$new_major.$new_minor.$new_patch"
 }
@@ -544,7 +534,6 @@ Environment:
   ANALYSIS_MESSAGE         Extra paragraph appended to default commit message
   TAG_PREFIX               Default tag prefix (overridden by --tag-prefix)
   REMOTE                   Default remote for push operations (overridden by --remote)
-  VERSION_USE_LOC_DELTA    Enable LOC-based delta system (default: false)
   VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
   VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
   VERSION_PATCH_DELTA      Patch delta formula (default: 1*(1+LOC/250))

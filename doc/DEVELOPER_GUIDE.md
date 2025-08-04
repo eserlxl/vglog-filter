@@ -176,7 +176,6 @@ The versioning system supports both YAML configuration and environment variables
 
 **Environment Variables (Fallback)**:
 ```sh
-export VERSION_USE_LOC_DELTA=true
 export VERSION_PATCH_DELTA="1*(1+LOC/250)"
 export VERSION_MINOR_DELTA="5*(1+LOC/500)"
 export VERSION_MAJOR_DELTA="10*(1+LOC/1000)"

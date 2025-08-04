@@ -640,7 +640,7 @@ test_loc_delta_system() {
     
     # Test LOC delta system enabled
     local output
-    output=$(VERSION_USE_LOC_DELTA=true "$SCRIPT_PATH" --json --repo-root "$test_dir" 2>&1)
+    output=$("$SCRIPT_PATH" --json --repo-root "$test_dir" 2>&1)
     
     if [[ "$output" == *'"loc_delta"'* ]] && [[ "$output" == *'"enabled": true'* ]]; then
         log_success "LOC delta system enabled"
@@ -649,7 +649,7 @@ test_loc_delta_system() {
     fi
     
     # Test LOC delta system disabled
-    output=$(VERSION_USE_LOC_DELTA=false "$SCRIPT_PATH" --json --repo-root "$test_dir" 2>&1)
+    output=$("$SCRIPT_PATH" --json --repo-root "$test_dir" 2>&1)
     
     if [[ "$output" != *'"loc_delta"'* ]]; then
         log_success "LOC delta system disabled"
@@ -658,7 +658,7 @@ test_loc_delta_system() {
     fi
     
     # Test bonus system
-    output=$(VERSION_USE_LOC_DELTA=true "$SCRIPT_PATH" --json --repo-root "$test_dir" 2>&1)
+    output=$("$SCRIPT_PATH" --json --repo-root "$test_dir" 2>&1)
     
     if [[ "$output" == *'"bonuses"'* ]]; then
         log_success "Bonus system included in JSON"

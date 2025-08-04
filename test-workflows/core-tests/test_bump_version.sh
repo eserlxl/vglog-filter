@@ -99,23 +99,23 @@ printf '%s\n' "${CYAN}=== Test 3: New versioning system with LOC delta ===${RESE
 setup_test "test_loc_delta_system"
 
 # Enable LOC delta system
-export VERSION_USE_LOC_DELTA=true
+
 export VERSION_PATCH_LIMIT=100
 export VERSION_MINOR_LIMIT=100
 
 # Test patch bump with LOC delta
 run_test "Patch bump with LOC delta enabled" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.3.1"
 
 # Test minor bump with LOC delta
 run_test "Minor bump with LOC delta enabled" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
     "9.3.5"
 
 # Test major bump with LOC delta
 run_test "Major bump with LOC delta enabled" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT major --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT major --print --repo-root $(pwd)" \
     "9.3.10"
 
 cleanup_test "test_loc_delta_system"
@@ -131,7 +131,7 @@ git commit --quiet -m "Set version to 9.3.95" 2>/dev/null || true
 
 # Test patch rollover
 run_test "Patch rollover (9.3.95 + 6 = 9.3.96)" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.3.96"
 
 # Set version to test minor rollover
@@ -141,7 +141,7 @@ git commit --quiet -m "Set version to 9.99.95" 2>/dev/null || true
 
 # Test minor rollover
 run_test "Minor rollover (9.99.95 + 6 = 9.99.96)" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.99.96"
 
 cleanup_test "test_rollover_logic"

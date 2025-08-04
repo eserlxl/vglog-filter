@@ -30,7 +30,6 @@ Options:
   --help, -h               Show this help
 
 Environment Variables (fallback):
-  VERSION_USE_LOC_DELTA    Enable LOC-based delta system (default: true)
   VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
   VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
   VERSION_PATCH_DELTA      Patch delta formula (default: 1*(1+LOC/250))
@@ -207,7 +206,6 @@ fi
 # LOC-based delta system configuration (use config values if available)
 VERSION_PATCH_LIMIT="${VERSION_PATCH_LIMIT:-${ROLLOVER:-100}}"
 VERSION_MINOR_LIMIT="${VERSION_MINOR_LIMIT:-${ROLLOVER:-100}}"
-VERSION_USE_LOC_DELTA="${VERSION_USE_LOC_DELTA:-true}"
 
 # Use config divisors if available, otherwise fallback to hardcoded formulas
 if [[ -n "${LOC_DIVISOR_PATCH:-}" ]]; then
@@ -252,7 +250,6 @@ elif [[ "$JSON_OUTPUT" = "true" ]]; then
     printf '{\n'
     printf '  "config_file": "%s",\n' "$CONFIG_FILE"
     printf '  "loc_delta": {\n'
-    printf '    "enabled": %s,\n' "$VERSION_USE_LOC_DELTA"
     printf '    "patch_limit": %s,\n' "$VERSION_PATCH_LIMIT"
     printf '    "minor_limit": %s,\n' "$VERSION_MINOR_LIMIT"
     printf '    "patch_delta": "%s",\n' "$VERSION_PATCH_DELTA"
@@ -278,7 +275,6 @@ elif [[ "$JSON_OUTPUT" = "true" ]]; then
     printf '}\n'
 elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
     printf 'CONFIG_FILE=%s\n' "$CONFIG_FILE"
-    printf 'VERSION_USE_LOC_DELTA=%s\n' "$VERSION_USE_LOC_DELTA"
     printf 'VERSION_PATCH_LIMIT=%s\n' "$VERSION_PATCH_LIMIT"
     printf 'VERSION_MINOR_LIMIT=%s\n' "$VERSION_MINOR_LIMIT"
     printf 'VERSION_BREAKING_CLI_BONUS=%s\n' "$VERSION_BREAKING_CLI_BONUS"
@@ -289,7 +285,6 @@ else
     printf '=== Version Configuration ===\n'
     printf 'Config file: %s\n' "$CONFIG_FILE"
     printf '\nLOC Delta System:\n'
-    printf '  Enabled: %s\n' "$VERSION_USE_LOC_DELTA"
     printf '  Patch limit: %s\n' "$VERSION_PATCH_LIMIT"
     printf '  Minor limit: %s\n' "$VERSION_MINOR_LIMIT"
     printf '  Patch delta: %s\n' "$VERSION_PATCH_DELTA"

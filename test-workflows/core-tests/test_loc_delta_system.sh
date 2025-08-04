@@ -43,7 +43,7 @@ run_test() {
     
     # Run semantic analyzer
     local result
-    result=$(VERSION_USE_LOC_DELTA=true ./dev-bin/semantic-version-analyzer --json 2>/dev/null || echo "{}")
+    result=$(./dev-bin/semantic-version-analyzer --json 2>/dev/null || echo "{}")
     
     # Extract deltas
     local patch_delta
@@ -84,7 +84,6 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 echo "Test 1: Verify LOC delta system is working"
-export VERSION_USE_LOC_DELTA=true
 
 # Set up initial version and commit
 echo "1.0.0" > VERSION
@@ -97,7 +96,7 @@ git add README.md
 git commit -m "Add test change" -q
 
 # Simple test: just check if the command runs and produces output
-output=$(VERSION_USE_LOC_DELTA=true ./dev-bin/semantic-version-analyzer --json 2>/dev/null || echo "FAILED")
+output=$(./dev-bin/semantic-version-analyzer --json 2>/dev/null || echo "FAILED")
 if [[ "$output" != "FAILED" ]] && [[ "$output" = *"loc_delta"* ]]; then
     echo "✓ PASS: LOC delta system is working"
     ((TESTS_PASSED++))
@@ -134,7 +133,7 @@ git add README.md
 git commit -m "Add test change" -q
 
 # Test patch rollover
-result_rollover=$(VERSION_USE_LOC_DELTA=true ./dev-bin/bump-version patch --dry-run 2>/dev/null | tail -1)
+result_rollover=$(./dev-bin/bump-version patch --dry-run 2>/dev/null | tail -1)
 echo "  Patch rollover test: 1.2.99 -> $result_rollover"
 
 if [[ "$result_rollover" =~ ^1\.3\.[0-9]+$ ]]; then

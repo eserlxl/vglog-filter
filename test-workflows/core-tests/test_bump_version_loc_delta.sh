@@ -82,23 +82,22 @@ printf '%s\n' "${CYAN}=== Test 1: Basic new versioning system integration ===${R
 setup_test "test_basic_new_system"
 
 # Enable new versioning system
-export VERSION_USE_LOC_DELTA=true
 export VERSION_PATCH_LIMIT=100
 export VERSION_MINOR_LIMIT=100
 
 # Test patch bump with new system
 run_test "Patch bump with new versioning system" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.3.1"
 
 # Test minor bump with new system
 run_test "Minor bump with new versioning system" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
     "9.3.5"
 
 # Test major bump with new system
 run_test "Major bump with new versioning system" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT major --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT major --print --repo-root $(pwd)" \
     "9.3.10"
 
 cleanup_test "test_basic_new_system"
@@ -108,7 +107,6 @@ printf '%s\n' "${CYAN}=== Test 2: New versioning system with actual changes ===$
 setup_test "test_new_system_changes"
 
 # Enable new versioning system
-export VERSION_USE_LOC_DELTA=true
 
 # Add some changes to trigger LOC delta calculation
 echo "// New code for testing" > new_file.c
@@ -117,7 +115,7 @@ git commit --quiet -m "Add new file for testing" 2>/dev/null || true
 
 # Test patch bump with actual changes
 run_test "Patch bump with actual changes" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.3."
 
 cleanup_test "test_new_system_changes"
@@ -127,7 +125,6 @@ printf '%s\n' "${CYAN}=== Test 3: Rollover logic with new versioning system ===$
 setup_test "test_rollover_new_system"
 
 # Enable new versioning system
-export VERSION_USE_LOC_DELTA=true
 
 # Set version to test patch rollover
 echo "9.3.95" > VERSION
@@ -136,7 +133,7 @@ git commit --quiet -m "Set version to 9.3.95" 2>/dev/null || true
 
 # Test patch rollover
 run_test "Patch rollover (9.3.95 + delta)" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.3.96"
 
 # Set version to test minor rollover
@@ -146,7 +143,7 @@ git commit --quiet -m "Set version to 9.99.95" 2>/dev/null || true
 
 # Test minor rollover
 run_test "Minor rollover (9.99.95 + delta)" \
-    "VERSION_USE_LOC_DELTA=true $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.99.96"
 
 cleanup_test "test_rollover_new_system"
@@ -156,7 +153,6 @@ printf '%s\n' "${CYAN}=== Test 4: Semantic analyzer integration ===${RESET}"
 setup_test "test_semantic_analyzer_integration"
 
 # Enable new versioning system
-export VERSION_USE_LOC_DELTA=true
 
 # Add changes to trigger analysis
 echo "// Changes for semantic analysis" > changes.c
@@ -165,12 +161,12 @@ git commit --quiet -m "Add changes for analysis" 2>/dev/null || true
 
 # Test semantic analyzer output
 run_test "Semantic analyzer with new system" \
-    "VERSION_USE_LOC_DELTA=true $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
     '"loc_delta"'
 
 # Test reason format includes LOC and version type
 run_test "Reason format includes LOC and version type" \
-    "VERSION_USE_LOC_DELTA=true $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
     '"reason": "[^"]*LOC:[^"]*"'
 
 cleanup_test "test_semantic_analyzer_integration"
@@ -180,7 +176,6 @@ printf '%s\n' "${CYAN}=== Test 5: Delta formula verification ===${RESET}"
 setup_test "test_delta_formulas"
 
 # Enable new versioning system
-export VERSION_USE_LOC_DELTA=true
 
 # Add changes to trigger delta calculation
 echo "// Code for delta testing" > delta_test.c
@@ -189,15 +184,15 @@ git commit --quiet -m "Add code for delta testing" 2>/dev/null || true
 
 # Test that delta formulas are working
 run_test "Delta formulas are calculated" \
-    "VERSION_USE_LOC_DELTA=true $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
     '"patch_delta":[0-9]*'
 
 run_test "Minor delta is calculated" \
-    "VERSION_USE_LOC_DELTA=true $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
     '"minor_delta":[0-9]*'
 
 run_test "Major delta is calculated" \
-    "VERSION_USE_LOC_DELTA=true $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
     '"major_delta":[0-9]*'
 
 cleanup_test "test_delta_formulas"
@@ -208,12 +203,12 @@ setup_test "test_configuration_options"
 
 # Test custom patch limit
 run_test "Custom patch limit works" \
-    "VERSION_USE_LOC_DELTA=true VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
     "9.3.1"
 
 # Test custom minor limit
 run_test "Custom minor limit works" \
-    "VERSION_USE_LOC_DELTA=true VERSION_MINOR_LIMIT=50 $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
+    "VERSION_MINOR_LIMIT=50 $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
     "9.3.5"
 
 cleanup_test "test_configuration_options"
@@ -224,7 +219,7 @@ setup_test "test_error_handling"
 
 # Test invalid delta formula
 run_test "Invalid delta formula handling" \
-    "VERSION_USE_LOC_DELTA=true VERSION_PATCH_DELTA='invalid_formula' $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd) 2>&1 || true" \
+    "VERSION_PATCH_DELTA='invalid_formula' $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd) 2>&1 || true" \
     "9.3.1"
 
 cleanup_test "test_error_handling"
