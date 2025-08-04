@@ -76,6 +76,14 @@ jobs:
           git config --local user.name "GitHub Action"
           # Disable GPG signing in CI to prevent hanging
           git config --local commit.gpgSign false
+          git config --local commit.gpgsign false
+          # Also disable tag signing
+          git config --local tag.gpgSign false
+          git config --local tag.gpgsign false
+          
+          # Verify GPG signing is disabled
+          echo "DEBUG: Git config after setup:" >&2
+          git config --local --list | grep -E "(gpg|sign)" >&2 || true
 
       - name: Determine version bump type
         id: version-analysis
@@ -161,6 +169,11 @@ jobs:
           # Make sure we are up-to-date before bumping to reduce push races
           git fetch --prune --tags origin
           git pull --rebase origin "${TARGET_BRANCH}"
+
+          # Ensure GPG signing is disabled before version bump
+          git config --local commit.gpgSign false
+          git config --local commit.gpgsign false
+          echo "DEBUG: GPG signing disabled before version bump" >&2
 
           # Add [skip ci] to prevent triggering other workflows
           ANALYSIS_MESSAGE="[skip ci] Auto version bump triggered by ${{ github.event_name }}" \
