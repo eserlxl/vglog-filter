@@ -7,9 +7,12 @@
 
 cmake_minimum_required(VERSION 3.16)
 
+# Read version from file before project declaration
+file(READ "${CMAKE_SOURCE_DIR}/VERSION" VGLOG_FILTER_VERSION_STRING)
+string(STRIP "${VGLOG_FILTER_VERSION_STRING}" VGLOG_FILTER_VERSION_STRING)
+
 # ---- Project -----------------------------------------------------------------
-project(vglog-filter
-  VERSION 0.0.0
+project(vglog-filter VERSION ${VGLOG_FILTER_VERSION_STRING}
   DESCRIPTION "A minimal, fast log filter"
   LANGUAGES CXX)
 
@@ -44,10 +47,6 @@ if(DEBUG_MODE AND PERFORMANCE_BUILD)
 endif()
 
 # ---- Helper interface targets ------------------------------------------------
-# Read version from file to pass as a definition
-file(READ "${CMAKE_SOURCE_DIR}/VERSION" VGLOG_FILTER_VERSION_STRING)
-string(STRIP "${VGLOG_FILTER_VERSION_STRING}" VGLOG_FILTER_VERSION_STRING)
-
 # project_options: optimization/sanitizer/defines that apply to all targets
 add_library(project_options INTERFACE)
 target_include_directories(project_options INTERFACE

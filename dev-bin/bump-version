@@ -84,7 +84,9 @@ RED='' ; GREEN='' ; YELLOW='' ; CYAN='' ; RESET=''
 has_cmake_version_field() {
     local cmake="$PROJECT_ROOT/CMakeLists.txt"
     [[ -f "$cmake" ]] || return 1
-    if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
+    if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+\$\{[^}]+\}' "$cmake"; then
+        return 0
+    elif grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
         return 0
     elif grep -Eq '^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
         return 0
@@ -279,7 +281,12 @@ update_cmake_version() {
     local before after
     before="$(_hash_file "$cmake")"
 
-    if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
+    if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+\$\{[^}]+\}' "$cmake"; then
+        # Handle variable format like ${VGLOG_FILTER_VERSION_STRING}
+        # No update needed since CMakeLists.txt reads from VERSION file
+        printf '%s\n' "${GREEN}CMakeLists.txt uses VERSION file variable (no update needed)${RESET}" >&2
+        return 0
+    elif grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
         sed -E -i "s/(^[[:space:]]*project\([^)]*VERSION[[:space:]]+)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
     elif grep -Eq '^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+\"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
         sed -E -i "s/(^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+\"?)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
@@ -792,7 +799,9 @@ if [[ "$DRY_RUN" == "true" ]]; then
             printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists update (pre-release)${RESET}" >&2
         else
             if [[ -f "$PROJECT_ROOT/CMakeLists.txt" ]]; then
-                if has_cmake_version_field; then
+                if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+\$\{[^}]+\}' "$PROJECT_ROOT/CMakeLists.txt"; then
+                    printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (uses VERSION file variable)${RESET}" >&2
+                elif has_cmake_version_field; then
                     printf '%s\n' "${YELLOW}DRY RUN: Would update CMakeLists.txt to $NEW_VERSION${RESET}" >&2
                 else
                     printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (no recognizable version field)${RESET}" >&2
@@ -810,7 +819,10 @@ if [[ "$DRY_RUN" == "true" ]]; then
         effective_files=()
         [[ "$NEW_VERSION" != *-* ]] && effective_files+=("VERSION")
         if [[ "$UPDATE_CMAKE" == "true" && "$NEW_VERSION" != *-* ]]; then
-            if has_cmake_version_field; then
+            if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+\$\{[^}]+\}' "$PROJECT_ROOT/CMakeLists.txt"; then
+                # Skip CMakeLists.txt since it uses VERSION file variable
+                :
+            elif has_cmake_version_field; then
                 effective_files+=("CMakeLists.txt")
             fi
         fi
