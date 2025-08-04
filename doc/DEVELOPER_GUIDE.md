@@ -78,10 +78,11 @@ The `build.sh` script simplifies the process of configuring and compiling `vglog
 
 ### Current Version Retrieval
 
-The current version of `vglog-filter` is stored in the `VERSION` file at the project root. You can retrieve the version at runtime using the `--version` or `-V` command-line options:
+The current version of `vglog-filter` is **10.5.0**, stored in the `VERSION` file at the project root. You can retrieve the version at runtime using the `--version` or `-V` command-line options:
 
 ```sh
 vglog-filter --version
+# Expected output: vglog-filter version 10.5.0
 # or
 vglog-filter -V
 ```
@@ -94,16 +95,31 @@ vglog-filter -V
 
 If the `VERSION` file is not found or accessible in any of these locations, the version will be reported as "unknown".
 
+### LOC-Based Delta System
+
+The versioning system uses advanced algorithms to calculate version increments based on:
+
+- **Lines of Code (LOC) Changed**: Base delta calculation using formulas like `1 * (1 + LOC/250)` for patch increments
+- **Bonus Points**: Additional increments for specific change types:
+  - Breaking changes: +2 to +3 points
+  - CLI additions: +2 points
+  - Security fixes: +2 points per security keyword
+  - New files: +1 point each
+- **Rollover Logic**: Uses mod 100 for patch and minor version limits with automatic rollover
+- **Universal Patch Detection**: Every change results in at least a patch bump
+
+**Example**: A 500 LOC change with CLI additions might result in `10.5.0` → `10.5.6` (patch bump with calculated delta).
+
 ### Automated Version Bumping
 
-The project utilizes GitHub Actions to automatically bump the version based on the type of [Conventional Commits](https://www.conventionalcommits.org/) made to the `main` branch:
+The project utilizes GitHub Actions to automatically bump the version based on the type of [Conventional Commits](https://www.conventionalcommits.org/) made to the `main` branch and the LOC-based delta system:
 
--   Commits with `BREAKING CHANGE` in the footer will trigger a **major** version bump (e.g., `1.2.3` -> `2.0.0`).
--   Commits of type `feat` (features) will trigger a **minor** version bump (e.g., `1.2.3` -> `1.3.0`).
--   Commits of type `fix` (bug fixes) will trigger a **patch** version bump (e.g., `1.2.3` -> `1.2.4`).
--   Other commit types (e.g., `docs`, `style`, `refactor`, `perf`, `test`, `chore`) will **not** trigger a version bump.
+-   Commits with `BREAKING CHANGE` in the footer will trigger a **major** version bump with calculated delta.
+-   Commits of type `feat` (features) will trigger a **minor** version bump with calculated delta.
+-   Commits of type `fix` (bug fixes) will trigger a **patch** version bump with calculated delta.
+-   **All other changes** will trigger at least a **patch** version bump, ensuring no meaningful changes are missed.
 
-This automation ensures that the project's version accurately reflects the nature of changes introduced.
+This automation ensures that the project's version accurately reflects the nature and magnitude of changes introduced.
 
 ### Manual Version Management
 
@@ -113,6 +129,12 @@ While automated versioning is preferred, tools are available for manual inspecti
 # Analyze recent changes and suggest the next semantic version bump
 ./dev-bin/semantic-version-analyzer --verbose
 
+# Get machine-readable JSON output
+./dev-bin/semantic-version-analyzer --json
+
+# Analyze changes since a specific version
+./dev-bin/semantic-version-analyzer --since v10.4.0 --verbose
+
 # Manually bump the version (e.g., to major, minor, or patch)
 ./dev-bin/bump-version [major|minor|patch]
 
@@ -121,9 +143,31 @@ While automated versioning is preferred, tools are available for manual inspecti
 
 # Clean up old Git tags (e.g., keep only the last 'count' tags)
 ./dev-bin/tag-manager cleanup [count]
+
+# Get detailed information about a specific tag
+./dev-bin/tag-manager info v10.5.0
 ```
 
-For a more in-depth understanding of the versioning strategy and release process, refer to the [Versioning Guide](VERSIONING.md) and [Release Workflow Guide](RELEASE_WORKFLOW.md).
+### Configuration Management
+
+The versioning system supports both YAML configuration and environment variables:
+
+**YAML Configuration (Recommended)**:
+```sh
+# Loads from dev-config/versioning.yml
+./dev-bin/semantic-version-analyzer
+```
+
+**Environment Variables (Fallback)**:
+```sh
+export VERSION_USE_LOC_DELTA=true
+export VERSION_PATCH_DELTA="1*(1+LOC/250)"
+export VERSION_MINOR_DELTA="5*(1+LOC/500)"
+export VERSION_MAJOR_DELTA="10*(1+LOC/1000)"
+./dev-bin/semantic-version-analyzer
+```
+
+For a more in-depth understanding of the versioning strategy and release process, refer to the [Versioning Guide](VERSIONING.md), [LOC Delta System Documentation](LOC_DELTA_SYSTEM.md), and [Release Workflow Guide](RELEASE_WORKFLOW.md).
 
 [↑ Back to top](#developer-guide)
 

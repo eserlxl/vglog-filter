@@ -25,8 +25,9 @@ This guide outlines the automated and manual processes for creating new releases
 `vglog-filter` employs a release process primarily driven by [Semantic Versioning (SemVer)](https://semver.org/) and [Conventional Commits](https://www.conventionalcommits.org/). New releases are typically automated via GitHub Actions based on the type of changes merged into the `main` branch. This ensures that version bumps (MAJOR, MINOR, PATCH) accurately reflect the nature of the changes, and release notes are automatically generated.
 
 Key components of the release process include:
--   **`semantic-version-analyzer`**: A utility script (`./dev-bin/semantic-version-analyzer`) that analyzes commit history to suggest the next semantic version bump.
+-   **`semantic-version-analyzer`**: A utility script (`./dev-bin/semantic-version-analyzer`) that analyzes commit history to suggest the next semantic version bump using the advanced LOC-based delta system.
 -   **GitHub Actions Workflow (`version-bump.yml`)**: This workflow automates the version bumping, tag creation, and GitHub Release generation based on detected changes.
+-   **LOC-Based Delta System**: Advanced versioning that always increases only the patch version with calculated increments based on change magnitude.
 
 [↑ Back to top](#release-workflow-guide)
 
@@ -42,17 +43,25 @@ Before initiating a release, it's good practice to analyze the changes since the
 # Analyze changes since the last official release
 ./dev-bin/semantic-version-analyzer --verbose
 
-# Alternatively, analyze changes since a specific Git tag (e.g., v1.1.0)
-./dev-bin/semantic-version-analyzer --since v1.1.0 --verbose
+# Alternatively, analyze changes since a specific Git tag (e.g., v10.4.0)
+./dev-bin/semantic-version-analyzer --since v10.4.0 --verbose
+
+# Get machine-readable JSON output for automation
+./dev-bin/semantic-version-analyzer --json
+
+# Restrict analysis to specific paths
+./dev-bin/semantic-version-analyzer --only-paths "src/**,include/**" --verbose
 ```
 
 ### 2. Review Suggested Version Bump
 
-The analyzer will output a suggested version bump based on Conventional Commits in the history:
--   **MAJOR**: Indicates breaking changes (`BREAKING CHANGE` in commit footers).
--   **MINOR**: Indicates new features (`feat:` commit type).
--   **PATCH**: Indicates bug fixes (`fix:` commit type).
+The analyzer will output a suggested version bump based on Conventional Commits in the history and the LOC-based delta system:
+-   **MAJOR**: Indicates breaking changes (`BREAKING CHANGE` in commit footers) or large-scale changes with high bonus values.
+-   **MINOR**: Indicates new features (`feat:` commit type) or medium-scale changes.
+-   **PATCH**: Indicates bug fixes (`fix:` commit type) or any other changes that don't qualify for major/minor.
 -   **NONE**: No significant changes warranting a version bump.
+
+**Note**: With the LOC-based delta system, all changes result in at least a patch bump, with the actual increment calculated based on the magnitude of changes.
 
 ### 3. Triggering a Release
 
@@ -77,7 +86,7 @@ If you need to manually trigger a release (e.g., for a hotfix, a specific prerel
 5.  Fill in the form:
     -   **Bump type**: Choose `auto` for automatic detection, or explicitly select `major`, `minor`, or `patch`.
     -   **Release notes**: Optionally add custom release notes that will be prepended to the automatically generated notes.
-    -   **Prerelease**: Check this box if you are creating a prerelease (e.g., `v1.2.3-beta.1`).
+    -   **Prerelease**: Check this box if you are creating a prerelease (e.g., `v10.5.1-beta.1`).
 6.  Click **"Run workflow"** to start the release process.
 
 [↑ Back to top](#release-workflow-guide)
@@ -98,140 +107,282 @@ git pull origin main
 # Check for any uncommitted changes
 git status
 
-# If there are uncommitted changes, commit them with a Conventional Commit message
-git add .
-git commit -m "feat: implement new filtering algorithm"
-
-# Push all finalized changes to the main branch
-git push origin main
+# Verify the current version
+cat VERSION
+# Expected output: 10.5.0
 ```
 
 ### Step 2: Analyze Changes for Versioning
 
-Understanding the impact of your changes on the version number is crucial. The `semantic-version-analyzer` tool helps with this by parsing your Git commit history.
+Use the semantic version analyzer to understand the impact of your changes:
 
 ```bash
-# Perform a basic analysis to get the suggested bump type
+# Basic analysis
 ./dev-bin/semantic-version-analyzer
 
-# Get a detailed analysis, including file changes and commit messages
+# Detailed analysis with file changes
 ./dev-bin/semantic-version-analyzer --verbose
 
-# Analyze changes since a specific date (e.g., all changes since January 1, 2025)
-./dev-bin/semantic-version-analyzer --since-date 2025-01-01
+# Machine-readable output for automation
+./dev-bin/semantic-version-analyzer --json | jq '.suggestion'
 
-# Analyze changes since a specific commit SHA
-./dev-bin/semantic-version-analyzer --since-commit <commit-sha>
+# Analyze specific time period
+./dev-bin/semantic-version-analyzer --since-date 2025-01-01 --verbose
 ```
 
-The analyzer's output will include:
--   **File Changes**: A list of added, modified, and deleted files.
--   **Change Indicators**: Identification of `BREAKING CHANGE`s, `feat:` (features), and `fix:` (bug fixes).
--   **Diff Size**: The total number of lines changed, providing a quantitative measure of the impact.
--   **Recent Commits**: A list of relevant commit messages since the last release.
--   **Version Suggestion**: The recommended semantic version bump (MAJOR, MINOR, PATCH, or NONE).
+The analyzer will provide:
+- Suggested version bump type (major/minor/patch/none)
+- LOC-based delta calculations
+- Detailed change analysis
+- Bonus point calculations
+- Rollover warnings if applicable
 
 ### Step 3: Understanding Automatic Release Thresholds
 
-The `version-bump.yml` GitHub Actions workflow uses predefined thresholds to determine if an automatic release should be triggered when changes are pushed to `main`:
+The automated release workflow uses intelligent thresholds to ensure every meaningful change results in a version bump:
 
--   **MAJOR Release**: Triggered if any `BREAKING CHANGE` is detected in the commit history (no size threshold).
--   **MINOR Release**: Triggered if new features (`feat:`) are detected AND the total diff size (lines changed) is greater than 50 lines.
--   **PATCH Release**: Triggered if bug fixes (`fix:`) are detected AND the total diff size is greater than 20 lines.
--   **NO RELEASE**: If changes fall below these thresholds or no significant indicators (breaking, feat, fix) are found, no automatic release will be created.
+-   **MAJOR Release**: Triggered by breaking changes, API changes, security issues, or large-scale changes with high bonus values. No size threshold applies as breaking changes are always significant.
+-   **MINOR Release**: Triggered by new features, CLI additions, or significant new content (new source files, test files, documentation).
+-   **PATCH Release**: Triggered by **any changes** that don't qualify for major or minor bumps. This ensures every change results in at least a patch version increment.
+-   **No Release**: Only occurs when there are truly no changes to analyze (e.g., single-commit repositories).
 
-These thresholds are designed to prevent excessive minor/patch releases for very small changes, while ensuring all significant updates are released promptly.
+The system uses the LOC-based delta system to calculate the actual version increment, ensuring that even small changes get appropriate version bumps while larger changes get proportionally larger increments.
 
 ### Step 4: Executing the Release
 
-As described in the [Quick Start](#3-triggering-a-release) section, you can either rely on the automatic release mechanism by pushing to `main` or manually trigger the GitHub Actions workflow for more control.
+#### Automatic Release Process
 
-**Important**: Avoid manually bumping the `VERSION` file or creating Git tags directly on `main` if you are using the automated GitHub Actions workflow, as this can lead to conflicts or incorrect versioning.
+1. **Push to Main**: Push your changes to the `main` branch
+2. **Workflow Trigger**: The `version-bump.yml` workflow automatically triggers
+3. **Analysis**: The workflow runs `semantic-version-analyzer` to determine the appropriate version bump
+4. **Version Update**: If a bump is warranted, the `VERSION` file is updated
+5. **Tag Creation**: A new Git tag is created with the new version
+6. **Release Generation**: A GitHub Release is created with automatically compiled release notes
+7. **CI/CD Verification**: Comprehensive tests run on the new tag
+
+#### Manual Release Process
+
+1. **Trigger Workflow**: Use the GitHub Actions interface to manually trigger the release workflow
+2. **Configure Parameters**: Set the bump type, release notes, and prerelease status
+3. **Execute**: The workflow follows the same process as automatic releases
+4. **Monitor**: Watch the workflow logs for any issues
 
 ### Step 5: Verifying the Release
 
-After a release workflow has completed, it's essential to verify its success:
+After a release is created, verify that everything is working correctly:
 
-1.  **GitHub Actions Status**: Check the GitHub Actions tab to ensure the "Auto Version Bump with Semantic Release Notes" workflow run completed successfully (green checkmark).
-2.  **New Git Tag**: Verify that a new Git tag (e.g., `v1.2.3`) corresponding to the new version has been created in your repository.
-3.  **GitHub Releases Page**: Navigate to the "Releases" section of your GitHub repository. Confirm that a new release entry exists with the correct version number and automatically generated release notes.
-4.  **Artifacts (if any)**: If your release process includes building and attaching artifacts (e.g., compiled binaries), verify that these are present and downloadable.
+```bash
+# Check the new version
+cat VERSION
+
+# Verify the tag was created
+git tag --sort=-version:refname | head -5
+
+# Check the release on GitHub
+# Visit: https://github.com/eserlxl/vglog-filter/releases
+
+# Test the new version locally
+./build.sh
+./build/bin/vglog-filter --version
+```
 
 ### Step 6: Post-Release Cleanup (Optional)
 
-Periodically, you might want to clean up old Git tags to keep your repository tidy. This can be done manually or via a GitHub Actions workflow.
+For maintenance releases, you may want to clean up old tags:
 
 ```bash
-# List all current tags
+# List all tags
 ./dev-bin/tag-manager list
 
-# Clean up old tags, keeping only the 10 most recent ones
+# Clean up old tags (interactive)
+./dev-bin/tag-manager cleanup
+
+# Or keep only the 10 most recent tags
 ./dev-bin/tag-manager cleanup 10
 ```
-
-Alternatively, you can trigger the **"Tag Cleanup"** GitHub Actions workflow from the Actions tab to automate this process.
 
 [↑ Back to top](#release-workflow-guide)
 
 ## Examples of Release Scenarios
 
-Here are practical examples illustrating how different types of changes lead to specific release outcomes.
+### Scenario 1: Bug Fix Release
 
-### Example 1: Bug Fix Release (PATCH)
+**Changes**: Fixed a memory leak in the log processing module (50 LOC changed)
 
-Suppose you fix a minor bug and commit with `fix: resolve issue with empty input files`.
+**Analysis**:
+```bash
+./dev-bin/semantic-version-analyzer --verbose
+# Output: SUGGESTION=patch
+# LOC: 50, Base PATCH: 1, Final PATCH: 1
+```
 
-1.  **Analyze changes**: `./dev-bin/semantic-version-analyzer --verbose` might suggest `PATCH`.
-2.  **Trigger release**: Push to `main` or manually trigger the workflow with `patch` bump type.
-3.  **Result**: A new patch version (e.g., `v1.0.1` -> `v1.0.2`) is released with notes reflecting the fix.
+**Result**: `10.5.0` → `10.5.1` (patch bump)
 
-### Example 2: New Feature Release (MINOR)
+### Scenario 2: Feature Addition
 
-You implement a new feature, committing with `feat: add support for custom log formats`.
+**Changes**: Added new `--depth` option for controlling recursion depth (200 LOC changed, new CLI option)
 
-1.  **Analyze changes**: `./dev-bin/semantic-version-analyzer --verbose` might suggest `MINOR`.
-2.  **Trigger release**: Push to `main` or manually trigger the workflow with `minor` bump type.
-3.  **Result**: A new minor version (e.g., `v1.0.2` -> `v1.1.0`) is released, including the new feature in the notes.
+**Analysis**:
+```bash
+./dev-bin/semantic-version-analyzer --verbose
+# Output: SUGGESTION=minor
+# LOC: 200, Base MINOR: 5, Bonus: CLI changes (+2), Final MINOR: 7
+```
 
-### Example 3: Breaking Change Release (MAJOR)
+**Result**: `10.5.0` → `10.5.7` (patch bump with minor-level delta)
 
-You refactor a core API, introducing a breaking change, and your commit message includes `BREAKING CHANGE: Changed API interface for X module` in its footer.
+### Scenario 3: Breaking Change
 
-1.  **Analyze changes**: `./dev-bin/semantic-version-analyzer --verbose` will suggest `MAJOR`.
-2.  **Trigger release**: Push to `main` or manually trigger the workflow with `major` bump type. You might also consider checking the `Prerelease` box for initial testing.
-3.  **Result**: A new major version (e.g., `v1.1.0` -> `v2.0.0`) is released, prominently highlighting the breaking change in the release notes.
+**Changes**: Removed deprecated `--old-format` option (100 LOC changed, breaking CLI change)
+
+**Analysis**:
+```bash
+./dev-bin/semantic-version-analyzer --verbose
+# Output: SUGGESTION=major
+# LOC: 100, Base MAJOR: 10, Bonus: Breaking CLI (+2), Final MAJOR: 12
+```
+
+**Result**: `10.5.0` → `10.5.12` (patch bump with major-level delta)
+
+### Scenario 4: Security Fix
+
+**Changes**: Fixed buffer overflow vulnerability (150 LOC changed, security keywords detected)
+
+**Analysis**:
+```bash
+./dev-bin/semantic-version-analyzer --verbose
+# Output: SUGGESTION=patch
+# LOC: 150, Base PATCH: 1, Bonus: Security keywords (3×+2), Final PATCH: 7
+```
+
+**Result**: `10.5.0` → `10.5.7` (patch bump)
+
+### Scenario 5: Large Refactoring
+
+**Changes**: Major refactoring of the core processing engine (2000 LOC changed)
+
+**Analysis**:
+```bash
+./dev-bin/semantic-version-analyzer --verbose
+# Output: SUGGESTION=major
+# LOC: 2000, Base MAJOR: 30, Final MAJOR: 30
+```
+
+**Result**: `10.5.0` → `10.5.30` (patch bump with major-level delta)
 
 [↑ Back to top](#release-workflow-guide)
 
 ## Troubleshooting Release Issues
 
-If you encounter problems during the release process, consult these common issues and solutions.
+### Common Issues and Solutions
 
-### Common Issues
+#### Issue: Release Not Triggered
+**Symptoms**: Changes pushed to main but no release workflow runs
+**Solutions**:
+- Check if changes meet the automatic release thresholds
+- Verify commit messages follow Conventional Commits format
+- Review GitHub Actions workflow configuration
+- Check workflow logs for errors
 
-1.  **Analyzer shows no changes or incorrect suggestion**: Ensure your commit messages follow [Conventional Commits](https://www.conventionalcommits.org/). Verify the `--since` or `--since-date` parameters if you're analyzing a specific range. Sometimes, a `git pull` is needed to get the latest history.
-2.  **GitHub Actions workflow fails**: Check the detailed workflow logs in the GitHub Actions tab. Common causes include permission issues (ensure the GitHub Token has write access to releases and tags), network problems, or unexpected script errors.
-3.  **Wrong version bump suggested/applied**: Manually review the output of `semantic-version-analyzer --verbose`. If the automation is incorrect, you can manually trigger the workflow and override the bump type.
-4.  **Tag cleanup issues**: If `tag-manager cleanup` doesn't work as expected, try running it with a dry-run option (if available) or manually inspect tags with `git tag -l`. Ensure you have the necessary permissions to delete remote tags.
+#### Issue: Incorrect Version Bump
+**Symptoms**: Version bump doesn't match expected change type
+**Solutions**:
+- Run `./dev-bin/semantic-version-analyzer --verbose` to understand the analysis
+- Check LOC calculations and bonus point assignments
+- Review the LOC-based delta system configuration
+- Consider manual release with specific bump type
 
-### Getting Help
+#### Issue: Tag Conflicts
+**Symptoms**: Workflow fails due to existing tag
+**Solutions**:
+- Check for existing tags with the same version
+- Use `./dev-bin/tag-manager list` to see all tags
+- Clean up conflicting tags if necessary
+- Ensure no manual tags conflict with automated releases
 
--   **GitHub Actions Logs**: Always start by examining the detailed logs of the failing workflow run. They provide the most direct clues.
--   **`semantic-version-analyzer` Output**: Review the verbose output of the analyzer to understand why a particular version bump was suggested.
--   **Project Documentation**: Consult the [Versioning Guide](VERSIONING.md) and [CI/CD Guide](CI_CD_GUIDE.md) for more context on how these systems work.
--   **GitHub Issues**: If you suspect a bug in the release tooling or the workflow itself, please [open an issue](https://github.com/eserlxl/vglog-filter/issues).
+#### Issue: Release Notes Issues
+**Symptoms**: Generated release notes are incomplete or incorrect
+**Solutions**:
+- Verify commit messages are properly formatted
+- Check for conventional commit types (feat:, fix:, BREAKING CHANGE:)
+- Review the release notes generation logic
+- Consider adding custom release notes
+
+### Debugging Commands
+
+```bash
+# Check current version and recent tags
+cat VERSION
+git tag --sort=-version:refname | head -5
+
+# Analyze changes in detail
+./dev-bin/semantic-version-analyzer --verbose --json | jq '.'
+
+# Check workflow configuration
+cat .github/workflows/version-bump.yml
+
+# Validate configuration
+./dev-bin/semantic-version-analyzer --print-base
+
+# Test rollover logic
+./test-workflows/core-tests/test_rollover_logic.sh
+```
 
 [↑ Back to top](#release-workflow-guide)
 
 ## Best Practices for Releases
 
-Adhering to these best practices will ensure a smooth and reliable release process.
+### Commit Message Guidelines
 
-1.  **Regular Analysis**: Run `semantic-version-analyzer` frequently during development and always before a planned release to stay informed about the next version.
-2.  **Meaningful Commits**: Consistently write clear, concise, and Conventional Commit-compliant messages. This is the foundation for accurate automated versioning and release notes.
-3.  **Review Changes**: Always review the changes that will be included in a release, either by inspecting the `semantic-version-analyzer` output or by reviewing the Git history.
-4.  **Test Releases**: For major or complex releases, consider creating a prerelease (e.g., `vX.Y.Z-beta.1`) and thoroughly testing it before promoting to a stable release.
-5.  **Post-Release Cleanup**: Periodically clean up old Git tags to maintain a tidy repository and avoid clutter.
-6.  **Documentation**: Ensure that any significant changes to the release process or versioning strategy are reflected in this guide and other relevant documentation.
+Follow [Conventional Commits](https://www.conventionalcommits.org/) for consistent version detection:
+
+```bash
+# Feature addition
+feat: add new --depth option for recursion control
+
+# Bug fix
+fix: resolve memory leak in log processing
+
+# Breaking change
+feat!: remove deprecated --old-format option
+
+BREAKING CHANGE: The --old-format option has been removed.
+Use --new-format instead.
+
+# Documentation update
+docs: update installation instructions
+
+# Performance improvement
+perf: optimize log parsing algorithm
+```
+
+### Release Planning
+
+1. **Feature Freeze**: Stop adding new features before a major release
+2. **Testing**: Ensure comprehensive testing before release
+3. **Documentation**: Update documentation to reflect changes
+4. **Release Notes**: Review automatically generated release notes
+5. **Prereleases**: Use prereleases for major changes (e.g., `v11.0.0-beta.1`)
+
+### Version Management
+
+1. **Avoid Manual Version Changes**: Let the automated system handle version bumps
+2. **Monitor LOC-Based Deltas**: Understand how the delta system affects version increments
+3. **Use Configuration**: Leverage the YAML configuration system for consistent behavior
+4. **Regular Cleanup**: Periodically clean up old tags to maintain repository health
+
+### Quality Assurance
+
+1. **Pre-Release Testing**: Run the full test suite before release
+2. **Integration Testing**: Test the release in a staging environment
+3. **Documentation Review**: Ensure documentation is up-to-date
+4. **Release Verification**: Verify the release works as expected
+
+### Communication
+
+1. **Release Announcements**: Use GitHub Releases for announcements
+2. **Breaking Changes**: Clearly communicate breaking changes
+3. **Migration Guides**: Provide migration guides for major releases
+4. **Support**: Be prepared to support users during the release
 
 [↑ Back to top](#release-workflow-guide)

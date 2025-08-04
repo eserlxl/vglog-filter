@@ -38,6 +38,7 @@ MAJOR: 10 * (1 + LOC/1000) # Large changes get large increments
 2. **LOC-Based Delta Calculation**: The increment amount is calculated based on Lines of Code (LOC) changed plus bonus additions
 3. **Rollover Logic**: Uses mod 100 for patch and minor version limits with automatic rollover
 4. **Enhanced Reason Format**: Includes LOC value and version type in analysis output
+5. **Universal Patch Detection**: Every change results in at least a patch bump
 
 ### Bonus System
 The system automatically detects and applies bonuses for:
@@ -70,8 +71,8 @@ The system implements intelligent rollover logic:
 
 - **Patch rollover**: When patch + delta >= 100, apply mod 100 and increment minor
 - **Minor rollover**: When minor + 1 >= 100, apply mod 100 and increment major
-- **Example**: 9.3.95 + 6 = 9.4.1 (patch rollover)
-- **Example**: 9.99.95 + 6 = 10.0.1 (minor rollover)
+- **Example**: 10.5.95 + 6 = 10.6.1 (patch rollover)
+- **Example**: 10.99.95 + 6 = 11.0.1 (minor rollover)
 
 ### Enhanced Reason Format
 The system now provides enhanced analysis output that includes:
@@ -87,7 +88,7 @@ PATCH: 1 * (1 + 50/250) = 1.2 → 1
 MINOR: 5 * (1 + 50/500) = 5.5 → 5
 MAJOR: 10 * (1 + 50/1000) = 10.5 → 10
 
-Result: 9.3.0 → 9.3.1 (patch)
+Result: 10.5.0 → 10.5.1 (patch)
 ```
 
 #### Medium Change (500 LOC) with CLI Additions
@@ -96,7 +97,7 @@ Base PATCH: 1 * (1 + 500/250) = 3
 Bonus: CLI changes (+2) + Added options (+1) = +3
 Final PATCH: 3 + 3 = 6
 
-Result: 9.3.0 → 9.3.6 (patch)
+Result: 10.5.0 → 10.5.6 (patch)
 ```
 
 #### Large Change (2000 LOC) with Breaking Changes
@@ -105,7 +106,7 @@ Base MAJOR: 10 * (1 + 2000/1000) = 30
 Bonus: Breaking CLI (+2) + API breaking (+3) + Removed options (+2) = +7
 Final MAJOR: 30 + 7 = 37
 
-Result: 9.3.0 → 9.3.37 (major)
+Result: 10.5.0 → 10.5.37 (patch with major-level delta)
 ```
 
 #### Security Fix (100 LOC) with Security Keywords
@@ -114,24 +115,62 @@ Base PATCH: 1 * (1 + 100/250) = 1.4 → 1
 Bonus: Security keywords (3 × +2) = +6
 Final PATCH: 1 + 6 = 7
 
-Result: 9.3.0 → 9.3.7 (patch)
+Result: 10.5.0 → 10.5.7 (patch)
 ```
 
 #### Rollover Examples
 ```bash
 # Patch rollover
-9.3.95 + 6 = 9.4.1
+10.5.95 + 6 = 10.6.1
 
 # Minor rollover  
-9.99.95 + 6 = 10.0.1
+10.99.95 + 6 = 11.0.1
 
 # Double rollover
-9.99.99 + 1 = 10.0.0
+10.99.99 + 1 = 11.0.0
 ```
 
 ## Configuration
 
-### Environment Variables
+### YAML Configuration (Recommended)
+
+The system uses `dev-config/versioning.yml` for configuration:
+
+```yaml
+# Base deltas for different change types
+base_deltas:
+  patch: "1"
+  minor: "5"
+  major: "10"
+
+# LOC cap and rollover configuration
+limits:
+  loc_cap: 10000
+  rollover: 100  # Two-digit rollover feels right for most projects
+
+# LOC divisors for different change types
+loc_divisors:
+  major: 1000
+  minor: 500
+  patch: 250
+
+# Bonus system - 7 categories with point values
+bonuses:
+  breaking_changes:
+    api_breaking: 3
+    cli_breaking: 2
+    removed_features: 2
+  security_stability:
+    security_vuln: 5
+    cve: 2
+    memory_safety: 4
+  features:
+    new_cli_command: 2
+    new_config_option: 1
+    new_source_file: 1
+```
+
+### Environment Variables (Fallback)
 ```bash
 # Enable the new versioning system
 VERSION_USE_LOC_DELTA=true
@@ -227,6 +266,12 @@ When enabled, the analyzer provides:
 - JSON output with delta information
 - Enhanced reason format with LOC and version type
 
+### Early Exit Optimization
+The system includes performance optimizations:
+- If bonus threshold is met, skips expensive LOC calculation
+- Configuration validation prevents division by zero errors
+- Efficient parsing with deterministic git diff commands
+
 ## Benefits
 
 ### For Rapid Iteration
@@ -248,13 +293,13 @@ Run the comprehensive test suite to see the system in action:
 
 ```bash
 # Test the new versioning system
-./test-workflows/core-tests/test_new_version_system.sh
+./test-workflows/core-tests/test_loc_delta_system.sh
 
 # Test rollover logic
 ./test-workflows/core-tests/test_rollover_logic.sh
 
 # Test LOC delta system
-./test-workflows/core-tests/test_loc_delta_system.sh
+./test-workflows/core-tests/test_loc_delta_system_comprehensive.sh
 
 # Test bump-version integration
 ./test-workflows/core-tests/test_bump_version_loc_delta.sh
@@ -305,6 +350,30 @@ VERSION_TEST_WEIGHT=0.5      # Test changes
 VERSION_DOC_WEIGHT=0.3       # Documentation changes
 ```
 
+### YAML Configuration Examples
+```yaml
+# Conservative versioning for stable projects
+base_deltas:
+  patch: "0.5"
+  minor: "2"
+  major: "5"
+
+# Aggressive versioning for rapid development
+base_deltas:
+  patch: "2"
+  minor: "10"
+  major: "20"
+
+# Custom bonus values for specific project needs
+bonuses:
+  breaking_changes:
+    api_breaking: 5  # Higher penalty for API breaks
+    cli_breaking: 3
+  security_stability:
+    security_vuln: 10  # Critical security issues
+    cve: 5
+```
+
 ## Troubleshooting
 
 ### Common Issues
@@ -313,6 +382,7 @@ VERSION_DOC_WEIGHT=0.3       # Documentation changes
 - Ensure `VERSION_USE_LOC_DELTA=true`
 - Check that semantic analyzer is executable
 - Verify LOC data is available
+- Check YAML configuration syntax
 
 #### Unexpected Rollovers
 - Check current version numbers
@@ -324,6 +394,7 @@ VERSION_DOC_WEIGHT=0.3       # Documentation changes
 - Ensure formulas use valid syntax
 - Check for division by zero
 - Validate numeric inputs
+- Verify YAML configuration
 
 ### Debug Mode
 ```bash
@@ -335,7 +406,17 @@ VERSION_DOC_WEIGHT=0.3       # Documentation changes
 
 # Test rollover logic directly
 ./test-workflows/core-tests/test_rollover_logic.sh
+
+# Validate configuration
+./dev-bin/semantic-version-analyzer --print-base
 ```
+
+### Configuration Validation
+The system validates configuration at load time:
+- LOC divisors must be > 0
+- Multipliers must be numeric
+- YAML syntax must be valid
+- Required fields must be present
 
 ## Future Enhancements
 
@@ -345,6 +426,13 @@ VERSION_DOC_WEIGHT=0.3       # Documentation changes
 - **Complexity metrics**: Beyond just LOC
 - **Project-specific tuning**: Automatic configuration based on project size
 - **Enhanced rollover visualization**: Better display of rollover scenarios
+- **Machine learning integration**: Learn from historical versioning decisions
 
 ### Contributing
-The system is designed to be extensible. New delta formulas and detection methods can be easily added. The new versioning system maintains backward compatibility while providing enhanced functionality. 
+The system is designed to be extensible. New delta formulas and detection methods can be easily added. The new versioning system maintains backward compatibility while providing enhanced functionality.
+
+### Performance Considerations
+- Early exit optimization reduces computation time
+- Caching of LOC calculations for repeated analysis
+- Efficient git diff parsing with minimal memory usage
+- Parallel processing for large repositories 

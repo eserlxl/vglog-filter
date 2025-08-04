@@ -24,6 +24,7 @@ This is achieved through:
 -   **Automated Release Workflow**: New release tags are automatically created by GitHub Actions as part of the [Release Workflow](RELEASE_WORKFLOW.md).
 -   **Automated Tag Cleanup**: A dedicated GitHub Actions workflow periodically cleans up old tags.
 -   **`tag-manager` Script**: A command-line utility for local and manual tag operations.
+-   **LOC-Based Delta System**: Advanced versioning that ensures consistent tag progression.
 
 [↑ Back to top](#git-tag-management-guide)
 
@@ -35,11 +36,11 @@ Our tagging strategy is tightly integrated with our [Semantic Versioning](VERSIO
 
 Tags are created exclusively for official releases. They are **not** created for every commit. A new tag is generated when:
 
--   A **MAJOR** release occurs (e.g., `v1.0.0` to `v2.0.0`): Signifies breaking changes.
--   A **MINOR** release occurs (e.g., `v1.1.0` to `v1.2.0`): Signifies new backward-compatible features.
--   A **PATCH** release occurs (e.g., `v1.1.1` to `v1.1.2`): Signifies backward-compatible bug fixes or minor improvements.
+-   A **MAJOR** release occurs (e.g., `v10.0.0` to `v11.0.0`): Signifies breaking changes or large-scale refactoring.
+-   A **MINOR** release occurs (e.g., `v10.5.0` to `v10.6.0`): Signifies new backward-compatible features.
+-   A **PATCH** release occurs (e.g., `v10.5.0` to `v10.5.1`): Signifies backward-compatible bug fixes or minor improvements.
 
-These version bumps are primarily determined by the [Conventional Commits](https://www.conventionalcommits.org/) in the Git history and automated by the `version-bump.yml` GitHub Actions workflow.
+These version bumps are primarily determined by the [Conventional Commits](https://www.conventionalcommits.org/) in the Git history and automated by the `version-bump.yml` GitHub Actions workflow, using the advanced LOC-based delta system.
 
 ### Tag Naming Convention
 
@@ -49,9 +50,17 @@ All release tags must follow the `vX.Y.Z` format, where:
 -   `Y`: The minor version number.
 -   `Z`: The patch version number.
 
-**Examples:** `v1.0.0`, `v1.2.3`, `v2.0.0-beta.1` (for prereleases).
+**Examples:** `v10.5.0`, `v10.5.1`, `v10.6.0`, `v11.0.0-beta.1` (for prereleases).
 
 This consistent format ensures easy parsing and sorting of tags.
+
+### Current Version Context
+
+The project is currently at version `10.5.0`, using the LOC-based delta system. This means:
+- All version changes increment only the patch version (the last number)
+- The increment amount is calculated based on Lines of Code (LOC) changed plus bonus additions
+- Rollover logic uses mod 100 for patch and minor version limits
+- Example progression: `10.5.0` → `10.5.1` → `10.5.2` → ... → `10.6.0` (patch rollover)
 
 [↑ Back to top](#git-tag-management-guide)
 
@@ -80,6 +89,14 @@ A dedicated GitHub Actions workflow is responsible for periodically cleaning up 
 6.  Click **"Run workflow"**.
 7.  Review the workflow logs to see which tags would be deleted. If satisfied, run again with `dry_run` set to `false`.
 
+### Tag Cleanup Strategy
+
+The cleanup strategy prioritizes:
+1. **Recent Releases**: Always keep the most recent tags
+2. **Major Versions**: Preserve tags representing major version milestones
+3. **Stability**: Maintain a clean, manageable tag history
+4. **Automation**: Reduce manual maintenance overhead
+
 [↑ Back to top](#git-tag-management-guide)
 
 ## Manual Tag Management with `tag-manager`
@@ -91,6 +108,12 @@ The `dev-bin/tag-manager` script provides command-line utilities for local and m
 -   **`./dev-bin/tag-manager list`**: Lists all Git tags in the repository, sorted by version (newest first).
     ```bash
     ./dev-bin/tag-manager list
+    # Example output:
+    # v10.5.0
+    # v10.4.0
+    # v10.3.0
+    # v10.2.0
+    # v10.1.0
     ```
 
 -   **`./dev-bin/tag-manager cleanup [count]`**: Interactively cleans up old tags. If `count` is provided, it will keep only the specified number of most recent tags. Otherwise, it will prompt for confirmation for each tag.
@@ -98,64 +121,157 @@ The `dev-bin/tag-manager` script provides command-line utilities for local and m
     # Interactively clean up tags
     ./dev-bin/tag-manager cleanup
 
-    # Keep only the 5 most recent tags and delete older ones
+    # Keep only the 5 most recent tags
     ./dev-bin/tag-manager cleanup 5
     ```
 
--   **`./dev-bin/tag-manager create <version>`**: Creates a new annotated Git tag with the specified version (e.g., `1.2.0`). This should generally be avoided in favor of the automated release workflow unless you have a specific reason.
+-   **`./dev-bin/tag-manager create <version>`**: Creates a new tag with the specified version. Use with caution, as this bypasses the automated release workflow.
     ```bash
-    # Create a new tag v1.2.0 (use with caution, prefer automated releases)
-    ./dev-bin/tag-manager create 1.2.0
+    # Create a tag for version 10.5.1 (use with caution)
+    ./dev-bin/tag-manager create v10.5.1
     ```
 
--   **`./dev-bin/tag-manager info <tag>`**: Displays detailed information about a specific tag.
+-   **`./dev-bin/tag-manager info <tag>`**: Shows detailed information about a specific tag, including commit hash, author, date, and message.
     ```bash
-    # Show information about tag v1.1.2
-    ./dev-bin/tag-manager info v1.1.2
+    # Get information about a specific tag
+    ./dev-bin/tag-manager info v10.5.0
     ```
+
+### Advanced Usage
+
+#### Batch Operations
+```bash
+# List tags matching a pattern
+git tag --list "v10.*" | sort -V
+
+# Delete multiple tags locally
+git tag -d v10.1.0 v10.2.0 v10.3.0
+
+# Push tag deletions to remote
+git push origin --delete v10.1.0 v10.2.0 v10.3.0
+```
+
+#### Tag Analysis
+```bash
+# Show tag history with commit information
+git log --tags --oneline --decorate --max-count=10
+
+# Compare two tags
+git diff v10.4.0..v10.5.0 --stat
+
+# Show files changed between tags
+git diff v10.4.0..v10.5.0 --name-only
+```
 
 [↑ Back to top](#git-tag-management-guide)
 
 ## Troubleshooting Tag Issues
 
-If you encounter problems with Git tags, consider the following troubleshooting steps:
+### Common Issues and Solutions
 
-### Common Issues
+#### Issue: Tag Conflicts
+**Symptoms**: Workflow fails with "tag already exists" error
+**Solutions**:
+- Check for existing tags: `git tag --list "v*"`
+- Delete conflicting tag locally: `git tag -d v10.5.1`
+- Delete conflicting tag remotely: `git push origin --delete v10.5.1`
+- Re-run the release workflow
 
-1.  **Too Many Tags**: If your repository has an excessive number of tags, run the automated tag cleanup workflow or use `./dev-bin/tag-manager cleanup`.
-2.  **Inconsistent Tag Formats**: Manually identify and delete inconsistently named tags. Ensure all new tags adhere to the `vX.Y.Z` convention.
-3.  **Accidental Tags**: If you accidentally create a tag, you can delete it locally and remotely:
-    ```bash
-    git tag -d <tag_name>             # Delete local tag
-    git push origin :refs/tags/<tag_name> # Delete remote tag
-    ```
-4.  **Automated Workflow Failures**: If the `tag-cleanup.yml` or `version-bump.yml` workflows fail, check the GitHub Actions logs for specific error messages. Common causes include insufficient permissions for the GitHub Token or network issues.
+#### Issue: Missing Tags
+**Symptoms**: Expected tags not present in repository
+**Solutions**:
+- Check if tags were pushed: `git ls-remote --tags origin`
+- Verify local tags: `git tag --list`
+- Pull latest tags: `git fetch --tags`
+- Check workflow logs for tag creation failures
 
-### Useful Git Commands for Tags
+#### Issue: Tag Ordering Problems
+**Symptoms**: Tags not sorted correctly by version
+**Solutions**:
+- Use version-aware sorting: `git tag --sort=-version:refname`
+- Check tag format consistency
+- Ensure all tags follow `vX.Y.Z` format
+- Use `./dev-bin/tag-manager list` for proper sorting
 
--   **List all tags (sorted by version, newest first)**:
-    ```bash
-    git tag --sort=-version:refname
-    ```
--   **Show details of a tag (commit, author, message)**:
-    ```bash
-    git show <tag_name>
-    ```
--   **Compare changes between two tags**:
-    ```bash
-    git log <old_tag>..<new_tag> --oneline
-    ```
+#### Issue: Cleanup Not Working
+**Symptoms**: Tag cleanup workflow fails or doesn't work as expected
+**Solutions**:
+- Check workflow permissions
+- Verify `keep_count` parameter
+- Review workflow logs for errors
+- Use dry run mode first
+- Check for protected tags
+
+### Debugging Commands
+
+```bash
+# Check current tags
+git tag --list | sort -V
+
+# Verify tag format
+git tag --list | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$"
+
+# Check remote tags
+git ls-remote --tags origin
+
+# Show tag details
+git show v10.5.0 --stat
+
+# Compare tag dates
+git for-each-ref --format='%(refname:short) %(creatordate)' refs/tags | sort -k2
+```
+
+### Getting Help
+
+-   **GitHub Actions Logs**: Check the detailed logs of the tag cleanup workflow for specific error messages.
+-   **`tag-manager` Output**: Use the verbose output of the tag manager script to understand tag operations.
+-   **Git Documentation**: Refer to the [Git Tag Documentation](https://git-scm.com/docs/git-tag) for advanced tag operations.
+-   **Project Documentation**: Consult the [Versioning Guide](VERSIONING.md) and [Release Workflow Guide](RELEASE_WORKFLOW.md) for context.
 
 [↑ Back to top](#git-tag-management-guide)
 
 ## Best Practices for Tagging
 
-Adhering to these best practices will ensure effective and maintainable tag management.
+### Automated Tagging
 
-1.  **Automate Tagging**: Whenever possible, rely on the automated release workflow to create tags. This ensures consistency and reduces manual errors.
-2.  **Follow Naming Conventions**: Always use the `vX.Y.Z` format for release tags. Consistency is key for tooling and human readability.
-3.  **Regular Cleanup**: Utilize the automated tag cleanup workflow to keep your repository tidy. A smaller number of relevant tags is more useful than a large number of irrelevant ones.
-4.  **Document Releases**: Ensure that each release tag is accompanied by clear and comprehensive release notes, detailing the changes included. Our automated release workflow handles this.
-5.  **Avoid Manual Tag Creation on `main`**: Unless absolutely necessary (e.g., for a hotfix outside the normal release cycle), avoid manually creating tags directly on the `main` branch to prevent conflicts with automation.
+1.  **Rely on Automation**: Let the GitHub Actions workflow handle tag creation for releases. Avoid manually creating tags for official releases.
+2.  **Conventional Commits**: Use proper commit message formats to ensure accurate version detection and tag creation.
+3.  **Review Before Release**: Always review the suggested version bump before triggering a release.
+4.  **Test Prereleases**: Use prerelease tags (e.g., `v11.0.0-beta.1`) for major changes to allow testing before stable release.
+
+### Manual Tagging (When Necessary)
+
+1.  **Use `tag-manager`**: Prefer the `tag-manager` script over direct Git commands for consistency.
+2.  **Follow Naming Convention**: Always use the `vX.Y.Z` format for release tags.
+3.  **Document Purpose**: Include meaningful commit messages when creating tags manually.
+4.  **Coordinate with Team**: Ensure team members are aware of manual tag operations.
+
+### Tag Maintenance
+
+1.  **Regular Cleanup**: Periodically clean up old tags to maintain repository health.
+2.  **Monitor Tag Count**: Keep the number of tags manageable (recommended: 10-20 recent tags).
+3.  **Preserve Important Tags**: Ensure major version tags are preserved during cleanup.
+4.  **Backup Strategy**: Consider backing up important tags before cleanup operations.
+
+### Integration with LOC-Based Delta System
+
+1.  **Understand Delta Calculations**: Be aware of how the LOC-based delta system affects version increments.
+2.  **Monitor Rollovers**: Watch for patch and minor version rollovers in the versioning system.
+3.  **Configuration Management**: Use the YAML configuration system for consistent versioning behavior.
+4.  **Predictable Progression**: The system ensures predictable tag progression with calculated increments.
+
+### Quality Assurance
+
+1.  **Tag Verification**: Always verify that tags are created correctly after release workflows.
+2.  **Release Notes**: Ensure release notes are generated and attached to tags.
+3.  **Testing**: Test releases locally before pushing tags to remote.
+4.  **Documentation**: Keep tag management documentation up-to-date.
+
+### Security Considerations
+
+1.  **Protected Tags**: Consider protecting important tags from accidental deletion.
+2.  **Access Control**: Limit tag creation and deletion permissions to authorized users.
+3.  **Audit Trail**: Maintain logs of tag operations for security auditing.
+4.  **Backup Strategy**: Implement backup strategies for critical tags.
 
 [↑ Back to top](#git-tag-management-guide)

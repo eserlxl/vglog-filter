@@ -45,6 +45,7 @@ This document details the versioning strategy employed by `vglog-filter`, which 
 2. **LOC-Based Delta Calculation**: The increment amount is calculated based on Lines of Code (LOC) changed plus bonus additions
 3. **Rollover Logic**: Uses mod 100 for patch and minor version limits with automatic rollover
 4. **Enhanced Reason Format**: Includes LOC value and version type in analysis output
+5. **Universal Patch Detection**: Every change results in at least a patch bump
 
 ### Delta Formulas
 
@@ -76,13 +77,22 @@ The new system implements intelligent rollover logic:
 
 ### Examples
 
+#### Small Change (50 LOC) - No Bonuses
+```bash
+Base PATCH: 1 * (1 + 50/250) = 1.2 → 1
+Base MINOR: 5 * (1 + 50/500) = 5.5 → 5
+Base MAJOR: 10 * (1 + 50/1000) = 10.5 → 10
+
+Result: 10.5.0 → 10.5.1 (patch)
+```
+
 #### Medium Change (500 LOC) with CLI Additions
 ```bash
 Base PATCH: 1 * (1 + 500/250) = 3
 Bonus: CLI changes (+2) + Added options (+1) = +3
 Final PATCH: 3 + 3 = 6
 
-Result: 9.3.0 → 9.3.6 (patch)
+Result: 10.5.0 → 10.5.6 (patch)
 ```
 
 #### Large Change (2000 LOC) with Breaking Changes
@@ -91,7 +101,7 @@ Base MAJOR: 10 * (1 + 2000/1000) = 30
 Bonus: Breaking CLI (+2) + API breaking (+3) + Removed options (+2) = +7
 Final MAJOR: 30 + 7 = 37
 
-Result: 9.3.0 → 9.3.37 (major)
+Result: 10.5.0 → 10.5.37 (patch with major-level delta)
 ```
 
 #### Security Fix (100 LOC) with Security Keywords
@@ -100,19 +110,19 @@ Base PATCH: 1 * (1 + 100/250) = 1.4 → 1
 Bonus: Security keywords (3 × +2) = +6
 Final PATCH: 1 + 6 = 7
 
-Result: 9.3.0 → 9.3.7 (patch)
+Result: 10.5.0 → 10.5.7 (patch)
 ```
 
 #### Rollover Examples
 ```bash
 # Patch rollover
-9.3.95 + 6 = 9.4.1
+10.5.95 + 6 = 10.6.1
 
 # Minor rollover  
-9.99.95 + 6 = 10.0.1
+10.99.95 + 6 = 11.0.1
 
 # Double rollover
-9.99.99 + 1 = 10.0.0
+10.99.99 + 1 = 11.0.0
 ```
 
 ### Enhanced Reason Format
@@ -136,7 +146,7 @@ Users can retrieve the current version of the `vglog-filter` executable at runti
 
 ```bash
 vglog-filter --version
-# Expected Output: vglog-filter version X.Y.Z
+# Expected Output: vglog-filter version 10.5.0
 ```
 
 ### Version Resolution Order
@@ -175,14 +185,20 @@ A dedicated script, `dev-bin/semantic-version-analyzer`, is used to analyze the 
 # Analyze changes since the last Git tag (default behavior)
 ./dev-bin/semantic-version-analyzer
 
-# Analyze changes since a specific Git tag (e.g., v1.1.0)
-./dev-bin/semantic-version-analyzer --since v1.1.0
+# Analyze changes since a specific Git tag (e.g., v10.4.0)
+./dev-bin/semantic-version-analyzer --since v10.4.0
 
 # Show a detailed analysis, including file changes and commit messages
 ./dev-bin/semantic-version-analyzer --verbose
 
 # Analyze changes since a specific date (e.g., all changes since January 1, 2025)
 ./dev-bin/semantic-version-analyzer --since-date 2025-01-01
+
+# Get machine-readable JSON output
+./dev-bin/semantic-version-analyzer --json
+
+# Restrict analysis to specific paths
+./dev-bin/semantic-version-analyzer --only-paths "src/**,include/**"
 ```
 
 #### What the Analyzer Checks
@@ -198,6 +214,25 @@ The `semantic-version-analyzer` performs a deep inspection of the codebase and G
 4.  **Documentation Updates**: Notes new or significantly updated documentation files, which can sometimes correlate with new features.
 5.  **Change Magnitude**: Quantifies the size of changes (e.g., lines added/deleted) to calculate LOC-based delta increments.
 6.  **Universal Patch Detection**: **Any change** that doesn't qualify for major or minor bumps automatically triggers a patch bump, ensuring no changes are missed.
+
+#### Configuration System
+
+The analyzer supports both YAML configuration and environment variables:
+
+**YAML Configuration (Recommended)**:
+```bash
+# Loads from dev-config/versioning.yml
+./dev-bin/semantic-version-analyzer
+```
+
+**Environment Variables (Fallback)**:
+```bash
+export VERSION_USE_LOC_DELTA=true
+export VERSION_PATCH_DELTA="1*(1+LOC/250)"
+export VERSION_MINOR_DELTA="5*(1+LOC/500)"
+export VERSION_MAJOR_DELTA="10*(1+LOC/1000)"
+./dev-bin/semantic-version-analyzer
+```
 
 [↑ Back to top](#versioning-strategy)
 
@@ -216,7 +251,7 @@ This is useful for hotfixes, specific prereleases, or when you need to override 
 5.  In the form, you can:
     -   Choose the `Bump type` (e.g., `major`, `minor`, `patch`) or select `auto` to let the system detect it.
     -   Add `Custom release notes` that will be prepended to the automatically generated notes.
-    -   Check `Prerelease` if you are creating a pre-release version (e.g., `v1.2.3-beta.1`).
+    -   Check `Prerelease` if you are creating a pre-release version (e.g., `v10.5.1-beta.1`).
 6.  Click **"Run workflow"** to initiate the manual release process.
 
 [↑ Back to top](#versioning-strategy)
@@ -308,7 +343,8 @@ The project has evolved through several major versions, each marking significant
 -   **v1.x**: Initial development, establishing core filtering and deduplication functionalities.
 -   **v2.x**: Focused on performance improvements, introducing support for large files and stream processing.
 -   **v3.x**: Expanded with advanced features, enhanced filtering capabilities, and a more comprehensive test suite.
--   **v4.x**: The current major version, characterized by the implementation of robust semantic versioning, automated release workflows, and extensive CI/CD improvements.
+-   **v4.x**: Implementation of robust semantic versioning, automated release workflows, and extensive CI/CD improvements.
+-   **v10.x**: Current major version featuring the advanced LOC-based delta system with intelligent rollover logic and enhanced configuration management.
 
 [↑ Back to top](#versioning-strategy)
 
@@ -320,7 +356,9 @@ Adhering to these best practices ensures a smooth and accurate versioning proces
 2.  **Understand Bump Types**: Be aware of what constitutes a MAJOR, MINOR, or PATCH change. This helps in writing appropriate commit messages and understanding the impact of your contributions.
 3.  **Rely on Automation**: For most cases, let the automated GitHub Actions workflow handle version bumping and tagging. Avoid manually modifying the `VERSION` file or creating tags directly on `main`.
 4.  **Review Release Notes**: Before a major release, review the automatically generated release notes to ensure they accurately capture all significant changes.
-5.  **Prereleases for Major Changes**: For significant or breaking changes, consider creating prereleases (e.g., `v2.0.0-beta.1`) to allow for broader testing before a stable release.
+5.  **Prereleases for Major Changes**: For significant or breaking changes, consider creating prereleases (e.g., `v11.0.0-beta.1`) to allow for broader testing before a stable release.
+6.  **Monitor LOC-Based Deltas**: Understand how the LOC-based delta system affects version increments and use the `--verbose` flag to see detailed calculations.
+7.  **Configuration Management**: Use the YAML configuration system for consistent versioning behavior across different environments.
 
 [↑ Back to top](#versioning-strategy)
 
@@ -334,6 +372,8 @@ If you encounter problems related to versioning, consider the following troubles
 2.  **Automatic release not triggered**: Check if your commit messages adhere to [Conventional Commits](https://www.conventionalcommits.org/) and if the changes meet the [automatic release detection thresholds](#automatic-release-detection-thresholds). Review the GitHub Actions workflow logs for any errors.
 3.  **Incorrect version bump suggested/applied**: Manually run `semantic-version-analyzer --verbose` to understand why a particular bump was suggested. If you believe it's incorrect, you can manually trigger the workflow and override the bump type.
 4.  **Tag conflicts or messy tag history**: Use the `tag-manager` script to list and clean up old or conflicting tags. Ensure you are not manually creating tags that conflict with the automated process.
+5.  **LOC-based delta calculation issues**: Check the configuration in `dev-config/versioning.yml` or environment variables. Ensure LOC divisors are greater than 0 to avoid division by zero errors.
+6.  **Unexpected rollovers**: Review the current version numbers and LOC calculations. The system uses mod 100 rollover logic, so version 10.5.99 + 1 = 10.6.0.
 
 ### Getting Help
 

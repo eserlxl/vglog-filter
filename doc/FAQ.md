@@ -185,15 +185,75 @@ For a complete overview, see the [CI/CD Guide](CI_CD_GUIDE.md).
 ## Versioning and Releases
 
 ### What version is currently available?
-The current stable version of `vglog-filter` is dynamically managed. You can check the exact version by running `vglog-filter --version`.
+The current stable version of `vglog-filter` is **10.5.0**. You can check the exact version by running `vglog-filter --version`.
 
 ### How does the versioning system work?
-`vglog-filter` follows [Semantic Versioning (SemVer)](https://semver.org/). Version bumps (MAJOR.MINOR.PATCH) are largely automated based on [Conventional Commits](https://www.conventionalcommits.org/) in the Git history:
--   **MAJOR**: Triggered by `BREAKING CHANGE` in commit footers.
--   **MINOR**: Triggered by `feat:` (new features).
--   **PATCH**: Triggered by `fix:` (bug fixes).
+`vglog-filter` follows [Semantic Versioning (SemVer)](https://semver.org/) with an advanced LOC-based delta system. Version bumps are automated based on [Conventional Commits](https://www.conventionalcommits.org/) and the magnitude of code changes:
 
-Other commit types (e.g., `docs:`, `chore:`) do not trigger version bumps. This system ensures that the version number accurately reflects the nature of changes. For more details, see the [Versioning Guide](VERSIONING.md).
+-   **MAJOR**: Triggered by `BREAKING CHANGE` in commit footers, API changes, or large-scale changes with high bonus values.
+-   **MINOR**: Triggered by `feat:` (new features), CLI additions, or medium-scale changes.
+-   **PATCH**: Triggered by `fix:` (bug fixes) or any other changes that don't qualify for major/minor.
+
+**Key Features of the LOC-Based Delta System**:
+- Always increases only the patch version (the last number)
+- Calculates increment amount based on Lines of Code (LOC) changed plus bonus additions
+- Uses intelligent rollover logic (mod 100) for patch and minor versions
+- Every change results in at least a patch bump
+
+**Example**: A 500 LOC change with CLI additions might result in `10.5.0` → `10.5.6` (patch bump with calculated delta).
+
+For more details, see the [Versioning Guide](VERSIONING.md) and [LOC Delta System Documentation](LOC_DELTA_SYSTEM.md).
+
+### How are releases created?
+Releases are primarily automated through GitHub Actions:
+
+1. **Automatic Releases**: Push changes to `main` branch → GitHub Actions workflow analyzes changes → automatically creates release if warranted
+2. **Manual Releases**: Use GitHub Actions interface to manually trigger releases with specific parameters
+3. **Prereleases**: Create beta/alpha releases for major changes (e.g., `v11.0.0-beta.1`)
+
+The system uses the `semantic-version-analyzer` tool to determine appropriate version bumps based on:
+- Conventional commit messages
+- Lines of code changed
+- Type of changes (breaking, features, fixes)
+- Bonus calculations for specific impact types
+
+For detailed release workflow information, see the [Release Workflow Guide](RELEASE_WORKFLOW.md).
+
+### How do I check what changes are in a release?
+You can examine release changes in several ways:
+
+```bash
+# Check the current version
+vglog-filter --version
+
+# List recent tags
+git tag --sort=-version:refname | head -5
+
+# Compare two versions
+git diff v10.4.0..v10.5.0 --stat
+
+# Analyze changes since a specific version
+./dev-bin/semantic-version-analyzer --since v10.4.0 --verbose
+```
+
+GitHub Releases also provide automatically generated release notes with detailed change information.
+
+### What's the difference between the old and new versioning system?
+The project has evolved from traditional semantic versioning to an advanced LOC-based delta system:
+
+**Traditional System**:
+- Fixed increments (1.0.0 → 1.0.1 → 1.1.0)
+- Restrictive thresholds that could miss meaningful changes
+- Version number inflation over time
+
+**Current LOC-Based Delta System**:
+- Always increases only the patch version with calculated deltas
+- Universal patch detection (every change gets a bump)
+- Proportional versioning based on change magnitude
+- Intelligent rollover logic (mod 100)
+- Enhanced configuration through YAML files
+
+This system prevents version number inflation while maintaining semantic meaning and ensuring no meaningful changes are missed.
 
 [↑ Back to top](#frequently-asked-questions-faq)
 
