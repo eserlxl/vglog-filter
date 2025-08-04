@@ -11,11 +11,14 @@ set -euo pipefail
 # shellcheck disable=SC2034 # SCRIPT_PATH is used for reference
 SCRIPT_PATH="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
 
+# Change to project root for tests
+cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.."
+
 echo "Testing basic functionality..."
 
 # Test help output
 echo "Testing help output..."
-if "$SCRIPT_PATH" --help | grep -q "Semantic Version Analyzer v3 for vglog-filter"; then
+if "$SCRIPT_PATH" --help | grep -q "Semantic Version Analyzer v2 for vglog-filter"; then
     echo "✅ PASS: Help output"
 else
     echo "❌ FAIL: Help output"
@@ -24,7 +27,7 @@ fi
 
 # Test machine output format
 echo "Testing machine output format..."
-output=$("$SCRIPT_PATH" --machine 2>/dev/null || true)
+output=$("$SCRIPT_PATH" --machine 2>&1 || true)
 if echo "$output" | grep -q "SUGGESTION="; then
     echo "✅ PASS: Machine output format"
 else

@@ -352,7 +352,12 @@ main() {
         fi
         printf '  "total_bonus": %s,\n' "$total_bonus"
         printf '  "base_ref": "%s",\n' "$BASE_REF"
-        printf '  "target_ref": "%s"\n' "$TARGET_REF"
+        printf '  "target_ref": "%s",\n' "$TARGET_REF"
+        printf '  "loc_delta": {\n'
+        printf '    "patch_delta": %s,\n' "$(./dev-bin/version-calculator --current-version "$current_version" --bump-type patch --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$total_bonus" --json 2>/dev/null | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "1")"
+        printf '    "minor_delta": %s,\n' "$(./dev-bin/version-calculator --current-version "$current_version" --bump-type minor --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$total_bonus" --json 2>/dev/null | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "5")"
+        printf '    "major_delta": %s\n' "$(./dev-bin/version-calculator --current-version "$current_version" --bump-type major --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$total_bonus" --json 2>/dev/null | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "10")"
+        printf '  }\n'
         printf '}\n'
     elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
         printf 'SUGGESTION=%s\n' "$suggestion"

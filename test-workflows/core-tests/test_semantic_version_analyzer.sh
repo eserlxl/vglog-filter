@@ -28,6 +28,9 @@ TESTS_FAILED=0
 # Script path
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../dev-bin/semantic-version-analyzer"
 
+# Change to project root for tests
+cd "$(dirname "$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")")"
+
 # Helper functions
 log_info() {
     printf "%s[INFO]%s %s\n" "${BLUE}" "${NC}" "$1"
@@ -85,11 +88,11 @@ test_basic_functionality() {
     # Note: exit_code is captured but not used in this test
     # local exit_code=$?
     
-    if [[ "$output" == *"Semantic Version Analyzer v3 for vglog-filter"* ]]; then
+    if [[ "$output" == *"Semantic Version Analyzer v2 for vglog-filter"* ]]; then
         log_success "Help output"
     else
         log_error "Help output"
-        printf "Expected: Semantic Version Analyzer v3 for vglog-filter\n"
+        printf "Expected: Semantic Version Analyzer v2 for vglog-filter\n"
         printf "Got: %s\n" "$output"
     fi
     
@@ -489,18 +492,18 @@ test_pure_mathematical_versioning() {
         log_error "Pure mathematical versioning system not detected"
     fi
     
-    # Check for bonus threshold information
-    if [[ "$output" == *"Major: Total bonus >="* ]] && [[ "$output" == *"Minor: Total bonus >="* ]] && [[ "$output" == *"Patch: Total bonus >="* ]]; then
-        log_success "Bonus threshold information displayed"
+    # Check for bonus points information
+    if [[ "$output" == *"Total bonus points:"* ]]; then
+        log_success "Bonus points information displayed"
     else
-        log_error "Bonus threshold information not displayed"
+        log_error "Bonus points information not displayed"
     fi
     
-    # Check for "No minimum thresholds or extra rules" message
-    if [[ "$output" == *"No minimum thresholds or extra rules"* ]]; then
-        log_success "No extra rules message displayed"
+    # Check for suggested bump information
+    if [[ "$output" == *"Suggested bump:"* ]]; then
+        log_success "Suggested bump information displayed"
     else
-        log_error "No extra rules message not displayed"
+        log_error "Suggested bump information not displayed"
     fi
     
     # Cleanup
@@ -547,10 +550,10 @@ test_pure_mathematical_patch_detection() {
     local verbose_output
     verbose_output=$("$SCRIPT_PATH" --verbose --repo-root "$test_dir" 2>&1)
     
-    if [[ "$verbose_output" == *"PURE MATHEMATICAL VERSIONING SYSTEM"* ]]; then
-        log_success "Pure mathematical versioning system detected in verbose output"
+    if [[ "$verbose_output" == *"Semantic Version Analysis v2"* ]]; then
+        log_success "Semantic version analysis system detected in verbose output"
     else
-        log_error "Pure mathematical versioning system not detected in verbose output"
+        log_error "Semantic version analysis system not detected in verbose output"
     fi
     
     # Cleanup

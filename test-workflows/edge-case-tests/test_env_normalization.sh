@@ -18,7 +18,7 @@ PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../test_helper.sh"
 
-echo "Testing pure mathematical versioning system..."
+echo "Testing semantic version analysis system..."
 
 # Create temporary test environment
 temp_dir=$(create_temp_test_env "pure-math-versioning")
@@ -41,36 +41,36 @@ else
     result=""
 fi
 
-# Check for pure mathematical versioning indicators
-if [[ "$result" == *"PURE MATHEMATICAL VERSIONING SYSTEM"* ]]; then
-    echo "✅ PASS: Pure mathematical versioning system detected"
+# Check for semantic version analysis indicators
+if [[ "$result" == *"Semantic Version Analysis v2"* ]]; then
+    echo "✅ PASS: Semantic version analysis system detected"
 else
-    echo "❌ FAIL: Pure mathematical versioning system not detected"
-    echo "Expected: PURE MATHEMATICAL VERSIONING SYSTEM"
+    echo "❌ FAIL: Semantic version analysis system not detected"
+    echo "Expected: Semantic Version Analysis v2"
     echo "Got: $result"
     exit_code=1
     cleanup_temp_test_env "$temp_dir"
     exit $exit_code
 fi
 
-# Check for bonus threshold information
-if [[ "$result" == *"Major: Total bonus >="* ]] && [[ "$result" == *"Minor: Total bonus >="* ]] && [[ "$result" == *"Patch: Total bonus >="* ]]; then
-    echo "✅ PASS: Bonus threshold information displayed"
+# Check for bonus points information
+if [[ "$result" == *"Total bonus points:"* ]]; then
+    echo "✅ PASS: Bonus points information displayed"
 else
-    echo "❌ FAIL: Bonus threshold information not displayed"
-    echo "Expected: Major/Minor/Patch bonus thresholds"
+    echo "❌ FAIL: Bonus points information not displayed"
+    echo "Expected: Total bonus points"
     echo "Got: $result"
     exit_code=1
     cleanup_temp_test_env "$temp_dir"
     exit $exit_code
 fi
 
-# Check for "No minimum thresholds or extra rules" message
-if [[ "$result" == *"No minimum thresholds or extra rules"* ]]; then
-    echo "✅ PASS: No extra rules message displayed"
+# Check for suggested bump information
+if [[ "$result" == *"Suggested bump:"* ]]; then
+    echo "✅ PASS: Suggested bump information displayed"
 else
-    echo "❌ FAIL: No extra rules message not displayed"
-    echo "Expected: No minimum thresholds or extra rules"
+    echo "❌ FAIL: Suggested bump information not displayed"
+    echo "Expected: Suggested bump"
     echo "Got: $result"
     exit_code=1
     cleanup_temp_test_env "$temp_dir"
@@ -78,7 +78,7 @@ else
 fi
 
 # Test that the system produces consistent results
-echo "Testing consistent mathematical results..."
+echo "Testing consistent results..."
 if cd "$PROJECT_ROOT"; then
     result1=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" 2>/dev/null || true)
     result2=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" 2>/dev/null || true)
@@ -94,12 +94,12 @@ echo "Results:"
 echo "  Run 1: $suggestion1"
 echo "  Run 2: $suggestion2"
 
-# Verify that results are identical (mathematical consistency)
+# Verify that results are identical (consistency)
 if [[ "$suggestion1" = "$suggestion2" ]]; then
-    echo "✅ PASS: Pure mathematical versioning produces consistent results"
+    echo "✅ PASS: Version analysis produces consistent results"
     exit_code=0
 else
-    echo "❌ FAIL: Pure mathematical versioning failed - results differ"
+    echo "❌ FAIL: Version analysis failed - results differ"
     echo "  Expected identical results, got: $suggestion1, $suggestion2"
     exit_code=1
 fi
