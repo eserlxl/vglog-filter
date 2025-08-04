@@ -1,79 +1,80 @@
+# shellcheck disable=all
 # Semantic Version Analyzer - Modular Architecture
 
 This directory contains the refactored semantic version analyzer split into focused, modular components.
 
 ## Overview
 
-The original monolithic `semantic-version-analyzer` (1782 lines) has been refactored into smaller, focused binaries that each handle a specific aspect of version analysis.
+The original monolithic semantic-version-analyzer \(1782 lines\) has been refactored into smaller, focused binaries that each handle a specific aspect of version analysis.
 
 ## Components
 
 ### Core Components
 
-#### 1. `ref-resolver`
+#### 1. ref-resolver
 - **Purpose**: Resolves git references and determines base references for comparison
 - **Key Features**:
-  - Handles `--since`, `--since-tag`, `--since-commit`, `--since-date` options
-  - Auto-detects base references (last tag, parent commit, etc.)
+  - Handles --since, --since-tag, --since-commit, --since-date options
+  - Auto-detects base references \(last tag, parent commit, etc.\)
   - Manages merge-base detection for disjoint branches
   - Validates git references
-- **Usage**: `./dev-bin/ref-resolver --since v1.0.0 --target HEAD`
+- **Usage**: ./dev-bin/ref-resolver --since v1.0.0 --target HEAD
 
-#### 2. `version-config-loader`
+#### 2. version-config-loader
 - **Purpose**: Loads and validates versioning configuration from YAML files and environment variables
 - **Key Features**:
-  - Loads configuration from `dev-config/versioning.yml`
+  - Loads configuration from dev-config/versioning.yml
   - Falls back to environment variables
   - Validates configuration values
-  - Supports multiple output formats (JSON, machine-readable)
-- **Usage**: `./dev-bin/version-config-loader --validate-only`
+  - Supports multiple output formats \(JSON, machine-readable\)
+- **Usage**: ./dev-bin/version-config-loader --validate-only
 
-#### 3. `file-change-analyzer`
+#### 3. file-change-analyzer
 - **Purpose**: Analyzes file changes and classifies them by type
 - **Key Features**:
   - Tracks added, modified, deleted files
   - Classifies files as source, test, documentation
   - Calculates diff size
   - Handles rename/copy detection
-- **Usage**: `./dev-bin/file-change-analyzer --base v1.0.0 --target HEAD`
+- **Usage**: ./dev-bin/file-change-analyzer --base v1.0.0 --target HEAD
 
-#### 4. `cli-options-analyzer`
+#### 4. cli-options-analyzer
 - **Purpose**: Detects and analyzes CLI option changes in C/C++ source files
 - **Key Features**:
   - Extracts getopt/getopt_long options
   - Detects breaking CLI changes
   - Identifies API breaking changes
   - Manual CLI pattern detection
-- **Usage**: `./dev-bin/cli-options-analyzer --base v1.0.0 --target HEAD`
+- **Usage**: ./dev-bin/cli-options-analyzer --base v1.0.0 --target HEAD
 
-#### 5. `security-keyword-analyzer`
+#### 5. security-keyword-analyzer
 - **Purpose**: Detects security-related keywords in commit messages and code changes
 - **Key Features**:
   - Scans commit messages for security keywords
   - Detects CVE references
   - Identifies memory safety issues
   - Counts crash fixes
-- **Usage**: `./dev-bin/security-keyword-analyzer --base v1.0.0 --target HEAD`
+- **Usage**: ./dev-bin/security-keyword-analyzer --base v1.0.0 --target HEAD
 
-#### 6. `version-calculator`
+#### 6. version-calculator
 - **Purpose**: Calculates next version based on LOC-based delta system and bonus points
 - **Key Features**:
   - Implements LOC-based delta formulas
   - Handles version rollover logic
   - Applies bonus points to version increments
   - Supports custom delta formulas
-- **Usage**: `./dev-bin/version-calculator --current-version 1.2.3 --bump-type minor --loc 500`
+- **Usage**: ./dev-bin/version-calculator --current-version 1.2.3 --bump-type minor --loc 500
 
 ### Orchestrator
 
-#### 7. `semantic-version-analyzer-v2`
+#### 7. semantic-version-analyzer-v2
 - **Purpose**: Orchestrates all modular components for complete version analysis
 - **Key Features**:
   - Coordinates all analysis components
   - Calculates total bonus points
   - Determines version bump suggestions
   - Maintains compatibility with original interface
-- **Usage**: `./dev-bin/semantic-version-analyzer-v2 --since v1.0.0`
+- **Usage**: ./dev-bin/semantic-version-analyzer-v2 --since v1.0.0
 
 ## Benefits of Modular Architecture
 
@@ -106,9 +107,9 @@ The original monolithic `semantic-version-analyzer` (1782 lines) has been refact
 
 ### From Original to v2
 
-The original `semantic-version-analyzer` is still available for backward compatibility. To migrate to the new modular version:
+The original semantic-version-analyzer is still available for backward compatibility. To migrate to the new modular version:
 
-1. **Direct Replacement**: Use `semantic-version-analyzer-v2` as a drop-in replacement
+1. **Direct Replacement**: Use semantic-version-analyzer-v2 as a drop-in replacement
 2. **Component Usage**: Use individual components for specific analysis needs
 3. **Custom Integration**: Combine components for custom workflows
 
@@ -127,7 +128,7 @@ The original `semantic-version-analyzer` is still available for backward compati
 **Component-based**:
 ```bash
 # Get base reference
-BASE_REF=$(./dev-bin/ref-resolver --since v1.0.0 --print-base)
+BASE_REF="$(./dev-bin/ref-resolver --since v1.0.0 --print-base)"
 
 # Analyze file changes
 ./dev-bin/file-change-analyzer --base "$BASE_REF" --target HEAD --json
@@ -143,7 +144,7 @@ BASE_REF=$(./dev-bin/ref-resolver --since v1.0.0 --print-base)
 
 All components support the same configuration system:
 
-1. **YAML Configuration**: `dev-config/versioning.yml`
+1. **YAML Configuration**: dev-config/versioning.yml
 2. **Environment Variables**: Fallback configuration
 3. **Command Line Options**: Override specific values
 
