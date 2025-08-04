@@ -54,7 +54,7 @@ jobs:
           clang-tidy --version
 
       - name: Cache clang-tidy build directory
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: build-clang-tidy
           key: ${{ runner.os }}-clang-tidy-${{ hashFiles('**/CMakeLists.txt', 'src/**', 'include/**') }}
