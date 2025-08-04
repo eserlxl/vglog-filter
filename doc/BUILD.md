@@ -10,6 +10,7 @@ This guide provides comprehensive instructions for building `vglog-filter` from 
   - [Debug Build](#debug-build)
   - [Release Build](#release-build)
   - [Sanitized Builds](#sanitized-builds)
+- [Advanced Build Options](#advanced-build-options)
 - [Cross-Compilation](#cross-compilation)
 - [Troubleshooting Build Issues](#troubleshooting-build-issues)
 
@@ -47,7 +48,7 @@ brew install cmake gcc
 
 **For Windows (using MSYS2 or WSL):**
 
-It is recommended to use Windows Subsystem for Linux (WSL) or MSYS2 to build `vglog-filter` on Windows, as the build process is designed for a Unix-like environment. Follow the Linux instructions within your WSL environment or install `mingw-w4c-x86_64-toolchain` and `cmake` in MSYS2.
+It is recommended to use Windows Subsystem for Linux (WSL) or MSYS2 to build `vglog-filter` on Windows, as the build process is designed for a Unix-like environment. Follow the Linux instructions within your WSL environment or install `mingw-w64-x86_64-toolchain` and `cmake` in MSYS2.
 
 [↑ Back to top](#build-guide)
 
@@ -79,6 +80,22 @@ The `build.sh` script accepts several arguments to customize the build process:
 -   `--build-dir <dir>`: Specifies a custom build directory.
 -   `-j <N>`: Sets the number of parallel jobs for compilation.
 
+**Examples:**
+
+```sh
+# Performance build with tests
+./build.sh performance tests
+
+# Debug build with extra warnings
+./build.sh debug warnings
+
+# Clean build with custom directory
+./build.sh clean --build-dir my-build
+
+# Parallel build with 8 jobs
+./build.sh -j 8
+```
+
 For more details, run `./build.sh --help`.
 
 [↑ Back to top](#build-guide)
@@ -97,7 +114,14 @@ To create a debug build:
 ./build.sh debug
 ```
 
-The executable will be located at `build-debug/bin/vglog-filter`.
+The executable will be located at `build/bin/vglog-filter`.
+
+**Debug Build Features:**
+- Compiler optimizations disabled (`-O0`)
+- Debug symbols enabled (`-g`)
+- Frame pointer preserved for better stack traces
+- `DEBUG` macro defined
+- Optional sanitizer support when `ENABLE_SANITIZERS=ON`
 
 [↑ Back to top](#build-guide)
 
@@ -115,39 +139,104 @@ To explicitly create a release build:
 
 The executable will be located at `build/bin/vglog-filter`.
 
+**Release Build Features:**
+- Maximum optimization (`-O3`)
+- Link-time optimization (LTO) when supported
+- `NDEBUG` macro defined
+- `_FORTIFY_SOURCE=2` for additional security checks
+- Optional native CPU optimization with `ENABLE_NATIVE_OPTIMIZATION`
+
 [↑ Back to top](#build-guide)
 
 ### Sanitized Builds
 
-`vglog-filter` supports various sanitizers (e.g., AddressSanitizer, MemorySanitizer, UndefinedBehaviorSanitizer) to help detect runtime errors. These are crucial for ensuring code quality and stability.
+`vglog-filter` supports various sanitizers to help detect runtime errors. These are crucial for ensuring code quality and stability.
 
-To enable a sanitizer, pass the appropriate CMake option:
+#### Using build.sh with Sanitizers
+
+The build script supports sanitizers through the `ENABLE_SANITIZERS` CMake option:
+
+```sh
+# Debug build with sanitizers
+ENABLE_SANITIZERS=ON ./build.sh debug
+
+# Or set the environment variable
+export ENABLE_SANITIZERS=ON
+./build.sh debug
+```
+
+#### Manual Sanitizer Builds
+
+For more control, you can create sanitized builds manually:
 
 -   **AddressSanitizer (ASan)**: Detects memory errors like use-after-free, double-free, and out-of-bounds access.
     ```sh
     mkdir -p build-asan
     cd build-asan
-    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON
-    cmake --build .
+    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON
+    cmake --build . -j$(nproc)
     ```
 
 -   **MemorySanitizer (MSan)**: Detects uses of uninitialized memory. Requires Clang.
     ```sh
     mkdir -p build-msan
     cd build-msan
-    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_MSAN=ON
-    cmake --build .
+    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON -DCMAKE_CXX_COMPILER=clang++
+    cmake --build . -j$(nproc)
     ```
 
 -   **UndefinedBehaviorSanitizer (UBSan)**: Detects various kinds of undefined behavior.
     ```sh
     mkdir -p build-ubsan
     cd build-ubsan
-    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_UBSAN=ON
-    cmake --build .
+    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON
+    cmake --build . -j$(nproc)
     ```
 
 **Note**: Sanitized builds should typically be `Debug` builds to ensure all checks are active and debugging symbols are available. Running tests with sanitized builds is highly recommended to catch issues early. The CI/CD pipeline includes dedicated jobs for sanitized builds.
+
+[↑ Back to top](#build-guide)
+
+## Advanced Build Options
+
+### CMake Configuration Options
+
+The build system supports several advanced configuration options:
+
+-   `ENABLE_NATIVE_OPTIMIZATION`: Use `-march=native` and `-mtune=native` for CPU-specific optimizations
+-   `ENABLE_SANITIZERS`: Enable AddressSanitizer and UndefinedBehaviorSanitizer in debug builds
+-   `BUILD_TESTING`: Enable test suite compilation (default: ON)
+-   `WARNING_MODE`: Enable extra compiler warnings (default: ON)
+
+**Example with advanced options:**
+
+```sh
+mkdir -p build-advanced
+cd build-advanced
+cmake .. \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DPERFORMANCE_BUILD=ON \
+  -DENABLE_NATIVE_OPTIMIZATION=ON \
+  -DWARNING_MODE=ON
+cmake --build . -j$(nproc)
+```
+
+### Environment Variables
+
+You can control the build process using environment variables:
+
+-   `BUILD_DIR`: Set the build directory (default: `build`)
+-   `JOBS`: Set the number of parallel build jobs (default: auto-detected)
+-   `CMAKE_GENERATOR`: Specify the CMake generator (e.g., `Ninja`, `Unix Makefiles`)
+
+**Example:**
+
+```sh
+export BUILD_DIR=my-custom-build
+export JOBS=16
+export CMAKE_GENERATOR=Ninja
+./build.sh performance
+```
 
 [↑ Back to top](#build-guide)
 
@@ -201,6 +290,13 @@ If you encounter problems during the build process, consider the following:
     ```sh
     ./build.sh clean
     ```
+
+-   **Parallel Build Issues**: If you encounter issues with parallel builds, try reducing the number of jobs:
+    ```sh
+    ./build.sh -j 1
+    ```
+
+-   **Sanitizer Issues**: If sanitizers cause build failures, ensure you're using a compatible compiler version and that the sanitizer libraries are properly installed.
 
 -   **Error Messages**: Read the error messages carefully. They often provide clues about what went wrong (e.g., missing headers, undefined references).
 
