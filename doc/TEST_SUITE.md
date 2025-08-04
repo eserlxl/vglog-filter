@@ -32,6 +32,7 @@ Key characteristics of our test suite:
 -   **Performance and Memory Safety**: Dedicated tests and sanitizers (AddressSanitizer, MemorySanitizer) are used to monitor performance and detect memory-related issues.
 -   **Readability and Maintainability**: Tests are structured to be easy to understand, write, and maintain.
 -   **Advanced Versioning Tests**: Comprehensive testing of the LOC-based delta versioning system with rollover logic.
+-   **Memory Safety Testing**: Dedicated MemorySanitizer tests and suppressions for detecting undefined behavior.
 
 [↑ Back to top](#test-suite-guide)
 
@@ -57,6 +58,8 @@ If you only want to run the C++ unit and integration tests, use their dedicated 
 ./test/run_unit_tests.sh
 ```
 
+This script uses CMake and CTest to build and run all C++ tests with sanitizers enabled by default.
+
 ### Running Workflow Tests Only
 
 To execute only the shell-based workflow tests, use their dedicated runner script:
@@ -65,17 +68,22 @@ To execute only the shell-based workflow tests, use their dedicated runner scrip
 ./test-workflows/run_workflow_tests.sh
 ```
 
+This script executes all workflow tests with timeout protection and detailed logging.
+
 ### Running Individual Tests
 
 For focused debugging or development, you can run individual test executables or scripts:
 
--   **Individual C++ Test Executable**: After building the project, the C++ test executables are located in the `build/bin/` (or `build-debug/bin/`, etc.) directory. You can run them directly:
+-   **Individual C++ Test Executable**: After building the project, the C++ test executables are located in the `build-test/bin/` directory. You can run them directly:
     ```bash
     # Example: Run the basic C++ tests
-    ./build/bin/test_basic
+    ./build-test/bin/test_basic
 
     # Example: Run the CLI options tests
-    ./build/bin/test_cli_options
+    ./build-test/bin/test_cli_options
+
+    # Example: Run canonicalization tests
+    ./build-test/bin/test_canonicalization
     ```
 
 -   **Individual Workflow Test Script**: Navigate to the `test-workflows/` directory and execute the specific shell script:
@@ -85,6 +93,9 @@ For focused debugging or development, you can run individual test executables or
 
     # Example: Run a specific core test
     ./test-workflows/core-tests/test_bump_version.sh
+
+    # Example: Run MemorySanitizer tests
+    ./test-workflows/test_msan_fix.sh
     ```
 
 ### Building with Tests
@@ -113,7 +124,9 @@ vglog-filter/
 ├── test/
 │   ├── README.md
 │   ├── run_unit_tests.sh
+│   ├── smoke_test.sh
 │   ├── test_basic.cpp
+│   ├── test_canonicalization.cpp
 │   ├── test_cli_options.cpp
 │   ├── test_comprehensive.cpp
 │   ├── test_edge_cases.cpp
@@ -126,7 +139,14 @@ vglog-filter/
 └── test-workflows/
     ├── README.md
     ├── run_workflow_tests.sh
+    ├── run_loc_delta_tests.sh
     ├── test_helper.sh
+    ├── test_semantic_version_analyzer_comprehensive.sh
+    ├── test_msan_fix.sh
+    ├── test_msan_simulation.sh
+    ├── simple_msan_test.sh
+    ├── msan_suppressions.txt
+    ├── test-msan-fix.txt
     ├── cli-tests/
     │   └── ...
     ├── core-tests/
@@ -152,6 +172,7 @@ vglog-filter/
 This directory contains C++ source files for unit and integration tests. These tests are compiled into separate executables and use a lightweight testing framework (often custom or a simple assertion-based one).
 
 -   **`test_basic.cpp`**: Covers fundamental functionalities and core logic of `vglog-filter`.
+-   **`test_canonicalization.cpp`**: Tests path canonicalization and normalization logic, ensuring proper handling of relative paths, symbolic links, and path resolution.
 -   **`test_cli_options.cpp`**: Validates the parsing and correct behavior of all command-line arguments.
 -   **`test_comprehensive.cpp`**: Provides extensive feature testing, covering various scenarios and combinations of inputs.
 -   **`test_edge_cases.cpp`**: Focuses on boundary conditions, invalid inputs, and other tricky scenarios to ensure robustness.
@@ -161,6 +182,7 @@ This directory contains C++ source files for unit and integration tests. These t
 -   **`test_memory_leaks.cpp`**: Designed to detect memory leaks and other memory-related issues, often run with Valgrind or sanitizers.
 -   **`test_path_validation.cpp`**: Ensures the security and correctness of file path handling and validation logic.
 -   **`test_regex_patterns.cpp`**: Tests the accuracy and performance of regular expression matching and replacement operations.
+-   **`smoke_test.sh`**: Quick smoke test script for basic functionality verification.
 
 ### Workflow Tests (`test-workflows/`)
 
@@ -173,6 +195,12 @@ This directory contains shell scripts that perform end-to-end testing of the `vg
 -   **`ere-tests/`**: Tests related to extended regular expression (ERE) functionality.
 -   **`file-handling-tests/`**: Tests how `vglog-filter` interacts with files, including reading, writing, and handling different file properties.
 -   **`utility-tests/`**: Tests various utility scripts and helper functions used within the project.
+-   **`test_semantic_version_analyzer_comprehensive.sh`**: Comprehensive testing of the semantic versioning system.
+-   **`test_msan_fix.sh`**: MemorySanitizer-specific tests for detecting undefined behavior.
+-   **`test_msan_simulation.sh`**: Simulates MemorySanitizer conditions for testing.
+-   **`simple_msan_test.sh`**: Basic MemorySanitizer test setup and execution.
+-   **`run_loc_delta_tests.sh`**: Tests for the LOC-based delta versioning system.
+-   **`msan_suppressions.txt`**: MemorySanitizer suppressions for known false positives.
 
 ### Test Fixtures (`test-workflows/fixture-tests/`, `test-workflows/source-fixtures/`)
 
@@ -303,8 +331,10 @@ If your tests fail, follow these steps to diagnose and resolve the issue:
     ./build.sh tests
     ```
 
-7.  **Consult Documentation**: Review the [Developer Guide](DEVELOPER_GUIDE.md) and [CI/CD Guide](CI_CD_GUIDE.md) for more context on build configurations and CI processes.
+7.  **MemorySanitizer Issues**: If MemorySanitizer tests fail, check the `msan_suppressions.txt` file and consider adding new suppressions for known false positives.
 
-8.  **Open an Issue**: If you're unable to resolve the issue, please [open an issue](https://github.com/eserlxl/vglog-filter/issues) on GitHub, providing detailed information about the failure, steps to reproduce, and your environment.
+8.  **Consult Documentation**: Review the [Developer Guide](DEVELOPER_GUIDE.md) and [CI/CD Guide](CI_CD_GUIDE.md) for more context on build configurations and CI processes.
+
+9.  **Open an Issue**: If you're unable to resolve the issue, please [open an issue](https://github.com/eserlxl/vglog-filter/issues) on GitHub, providing detailed information about the failure, steps to reproduce, and your environment.
 
 [↑ Back to top](#test-suite-guide)
