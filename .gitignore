@@ -206,10 +206,12 @@ vcpkg_installed/
 *.lock
 *.lock.*
 
-# Backup files
+# Backup files and directories
 *.bak
 *.backup
 *.backup.*
+Backups/
+backups/
 
 # Archive files
 *.tar
@@ -227,9 +229,6 @@ vcpkg_installed/
 
 # Bot directory
 bot/
-
-# Backup files and directories
-Backups/
 
 # Development files
 .last_prompt
