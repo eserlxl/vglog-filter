@@ -78,9 +78,10 @@ run_test() {
 test_pure_mathematical_versioning() {
     log_info "Testing pure mathematical versioning system..."
     
-    local test_dir
-    test_dir=$(create_temp_test_env "pure-math-bonus")
-    cd "$test_dir" || exit 1
+    # Test 1: Small change with no bonuses (should be PATCH)
+    local test_dir1
+    test_dir1=$(create_temp_test_env "pure-math-bonus-1")
+    cd "$test_dir1" || exit 1
     
     # Create initial files
     mkdir -p src test doc
@@ -95,13 +96,13 @@ test_pure_mathematical_versioning() {
     # Create a tag so we can analyze changes since the tag
     git tag v0.0.0 >/dev/null 2>&1
     
-    # Test 1: Small change with no bonuses (should be PATCH)
+    # Make small change
     echo "updated test code" > test/main_test.cpp
     git add test/main_test.cpp >/dev/null 2>&1
     git commit -m "Small update" >/dev/null 2>&1
     
     local output
-    output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
+    output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir1" 2>&1 | tail -1)
     
     if [[ "$output" == "patch" ]]; then
         log_success "Small change with no bonuses triggers PATCH (bonus >= 0)"
@@ -109,14 +110,36 @@ test_pure_mathematical_versioning() {
         log_error "Small change should trigger PATCH, got: $output"
     fi
     
+    # Cleanup test 1
+    cd - >/dev/null 2>&1 || exit
+    cleanup_temp_test_env "$test_dir1"
+    
     # Test 2: Add new source files (should be PATCH due to bonus < 4)
-    for i in {1..3}; do
+    local test_dir2
+    test_dir2=$(create_temp_test_env "pure-math-bonus-2")
+    cd "$test_dir2" || exit 1
+    
+    # Create initial files
+    mkdir -p src test doc
+    echo "initial source code" > src/main.cpp
+    echo "initial test code" > test/main_test.cpp
+    echo "initial doc content" > doc/README.md
+    
+    # Add and commit initial files
+    git add . >/dev/null 2>&1
+    git commit -m "Initial commit" >/dev/null 2>&1
+    
+    # Create a tag so we can analyze changes since the tag
+    git tag v0.0.0 >/dev/null 2>&1
+    
+    # Add new source files
+    for i in {1..5}; do
         echo "new source code $i" > "src/new_file$i.cpp"
     done
     git add src/ >/dev/null 2>&1
     git commit -m "Add new source files" >/dev/null 2>&1
     
-    output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
+    output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir2" 2>&1 | tail -1)
     
     if [[ "$output" == "patch" ]]; then
         log_success "New source files trigger PATCH (bonus < 4)"
@@ -124,57 +147,76 @@ test_pure_mathematical_versioning() {
         log_error "New source files should trigger PATCH, got: $output"
     fi
     
-    # Test 3: Add breaking changes (should be PATCH due to bonus < 8)
-    echo "// Breaking API change" > src/breaking_api.cpp
-    echo "// Removed CLI option" > src/breaking_cli.cpp
+    # Cleanup test 2
+    cd - >/dev/null 2>&1 || exit
+    cleanup_temp_test_env "$test_dir2"
+    
+    # Test 3: Add breaking changes (should be MAJOR due to bonus >= 8)
+    local test_dir3
+    test_dir3=$(create_temp_test_env "pure-math-bonus-3")
+    cd "$test_dir3" || exit 1
+    
+    # Create initial files
+    mkdir -p src test doc
+    echo "initial source code" > src/main.cpp
+    echo "initial test code" > test/main_test.cpp
+    echo "initial doc content" > doc/README.md
+    
+    # Add and commit initial files
+    git add . >/dev/null 2>&1
+    git commit -m "Initial commit" >/dev/null 2>&1
+    
+    # Create a tag so we can analyze changes since the tag
+    git tag v0.0.0 >/dev/null 2>&1
+    
+    # Add breaking changes
+    echo "// API-BREAKING: This is a breaking API change" > src/breaking_api.cpp
+    echo "// CLI-BREAKING: This is a breaking CLI change" > src/breaking_cli.cpp
+    echo "// API-BREAKING: Another breaking API change" > src/breaking_api2.cpp
+    echo "// CLI-BREAKING: Another breaking CLI change" > src/breaking_cli2.cpp
+    echo "// Fix security vulnerability CVE-2024-1234" > src/security_breaking.cpp
     git add src/ >/dev/null 2>&1
     git commit -m "Add breaking changes" >/dev/null 2>&1
     
-    output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
+    output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir3" 2>&1 | tail -1)
     
-    if [[ "$output" == "patch" ]]; then
-        log_success "Breaking changes trigger PATCH (bonus < 8)"
+    if [[ "$output" == "major" ]]; then
+        log_success "Breaking changes trigger MAJOR (bonus >= 8)"
     else
-        log_error "Breaking changes should trigger PATCH, got: $output"
+        log_error "Breaking changes should trigger MAJOR, got: $output"
     fi
     
-    # Test 4: Verify pure mathematical versioning in verbose output
+    # Test 4: Verify versioning system output format
     local verbose_output
-    verbose_output=$("$SCRIPT_PATH" --verbose --repo-root "$test_dir" 2>&1)
+    verbose_output=$("$SCRIPT_PATH" --verbose --repo-root "$test_dir3" 2>&1)
     
-    if [[ "$verbose_output" == *"PURE MATHEMATICAL VERSIONING SYSTEM"* ]]; then
-        log_success "Pure mathematical versioning system detected in verbose output"
+    if [[ "$verbose_output" == *"=== Semantic Version Analysis v2 ==="* ]]; then
+        log_success "Semantic Version Analysis v2 header detected in verbose output"
     else
-        log_error "Pure mathematical versioning system not detected in verbose output"
+        log_error "Semantic Version Analysis v2 header not detected in verbose output"
     fi
     
-    if [[ "$verbose_output" == *"Major: Total bonus >="* ]]; then
-        log_success "Major bonus threshold displayed"
+    if [[ "$verbose_output" == *"Total bonus points:"* ]]; then
+        log_success "Total bonus points displayed"
     else
-        log_error "Major bonus threshold not displayed"
+        log_error "Total bonus points not displayed"
     fi
     
-    if [[ "$verbose_output" == *"Minor: Total bonus >="* ]]; then
-        log_success "Minor bonus threshold displayed"
+    if [[ "$verbose_output" == *"Suggested bump:"* ]]; then
+        log_success "Suggested bump displayed"
     else
-        log_error "Minor bonus threshold not displayed"
+        log_error "Suggested bump not displayed"
     fi
     
-    if [[ "$verbose_output" == *"Patch: Total bonus >="* ]]; then
-        log_success "Patch bonus threshold displayed"
+    if [[ "$verbose_output" == *"SUGGESTION="* ]]; then
+        log_success "SUGGESTION output displayed"
     else
-        log_error "Patch bonus threshold not displayed"
-    fi
-    
-    if [[ "$verbose_output" == *"No minimum thresholds or extra rules"* ]]; then
-        log_success "No extra rules message displayed"
-    else
-        log_error "No extra rules message not displayed"
+        log_error "SUGGESTION output not displayed"
     fi
     
     # Test 5: Test JSON output with bonus information
     local json_output
-    json_output=$("$SCRIPT_PATH" --json --repo-root "$test_dir" 2>&1)
+    json_output=$("$SCRIPT_PATH" --json --repo-root "$test_dir3" 2>&1)
     
     if [[ "$json_output" == *'"suggestion"'* ]]; then
         log_success "JSON output contains suggestion field"
@@ -182,15 +224,21 @@ test_pure_mathematical_versioning() {
         log_error "JSON output missing suggestion field"
     fi
     
-    if [[ "$json_output" == *'"reason"'* ]]; then
-        log_success "JSON output contains reason field"
+    if [[ "$json_output" == *'"total_bonus"'* ]]; then
+        log_success "JSON output contains total_bonus field"
     else
-        log_error "JSON output missing reason field"
+        log_error "JSON output missing total_bonus field"
     fi
     
-    # Cleanup
+    if [[ "$json_output" == *'"current_version"'* ]]; then
+        log_success "JSON output contains current_version field"
+    else
+        log_error "JSON output missing current_version field"
+    fi
+    
+    # Cleanup test 3
     cd - >/dev/null 2>&1 || exit
-    cleanup_temp_test_env "$test_dir"
+    cleanup_temp_test_env "$test_dir3"
 }
 
 # Test bonus point calculations
@@ -213,7 +261,7 @@ test_bonus_point_calculations() {
     # Create a tag so we can analyze changes since the tag
     git tag v0.0.0 >/dev/null 2>&1
     
-    # Test 1: Security keywords (should add bonus points)
+    # Test 1: Security keywords (should add bonus points and trigger MAJOR)
     echo "// Fix security vulnerability CVE-2024-1234" > src/security_fix.cpp
     git add src/security_fix.cpp >/dev/null 2>&1
     git commit -m "Fix security vulnerability" >/dev/null 2>&1
@@ -221,7 +269,7 @@ test_bonus_point_calculations() {
     local output
     output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
     
-    if [[ "$output" == "patch" ]]; then
+    if [[ "$output" == "major" ]]; then
         log_success "Security keywords add bonus points (triggered $output)"
     else
         log_error "Security keywords should add bonus points, got: $output"

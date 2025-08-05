@@ -123,7 +123,7 @@ analyze_security_keywords() {
     # Quick security keyword detection (fast path) - include commit bodies for CVEs
     local security_keywords
     security_keywords=$(git -c color.ui=false log --format="%s %b" "$base_ref".."$target_ref" 2>/dev/null | \
-        grep -ci -E '(security|vulnerability|cve|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)' || printf '0')
+        grep -ci -E '\b(security|vulnerability|cve|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)\b' || printf '0')
     
     # Ensure it's a valid integer
     security_keywords=$(printf '%s' "$security_keywords" | tr -cd '0-9' || printf '0')
@@ -144,7 +144,7 @@ analyze_security_keywords() {
     
     # Count specific security patterns
     if [[ -n "$diff_content" ]]; then
-        security_patterns=$(printf '%s' "$diff_content" | grep -ci -E '(security|vulnerability|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)' || printf '0')
+        security_patterns=$(printf '%s' "$diff_content" | grep -ci -E '\b(security|vulnerability|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)\b' || printf '0')
         cve_patterns=$(printf '%s' "$diff_content" | grep -ci -E 'CVE-[0-9]{4}-[0-9]+' || printf '0')
         memory_safety_issues=$(printf '%s' "$diff_content" | grep -ci -E '(buffer.*overflow|use.*after.*free|double.*free|null.*pointer|dereference|memory.*leak|stack.*overflow|heap.*overflow|format.*string|integer.*overflow)' || printf '0')
         crash_fixes=$(printf '%s' "$diff_content" | grep -ci -E '(crash|segfault|segmentation.*fault|abort|assert|panic|fatal|error.*handling|exception.*handling)' || printf '0')
@@ -191,7 +191,7 @@ analyze_security_keywords() {
         if [[ "$total_security_score" -gt 0 ]]; then
             printf '\nSecurity Keywords Detected:\n'
             git -c color.ui=false log --format="%s" "$base_ref".."$target_ref" 2>/dev/null | \
-                grep -i -E '(security|vulnerability|cve|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)' | \
+                grep -i -E '\b(security|vulnerability|cve|exploit|hack|breach|attack|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|dos|overflow|injection|xss|csrf|sqli|rce|privilege|escalation|bypass|circumvent|mitigation|patch|fix|hotfix)\b' | \
                 head -10 || printf '  None found in commit messages\n'
         fi
     fi

@@ -285,8 +285,9 @@ main() {
     
     # Security keywords (combine both sources)
     local security_keywords="${security_result[SECURITY_KEYWORDS]:-0}"
+    local security_score="${security_result[TOTAL_SECURITY_SCORE]:-0}"
     local keyword_security="${keyword_result[TOTAL_SECURITY]:-0}"
-    local total_security=$((security_keywords + keyword_security))
+    local total_security=$((security_keywords + security_score + keyword_security))
     if [[ "$total_security" -gt 0 ]]; then
         TOTAL_BONUS=$((TOTAL_BONUS + total_security * ${config_data[VERSION_SECURITY_BONUS]:-2}))
     fi
