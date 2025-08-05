@@ -22,7 +22,7 @@ export LC_ALL=C
 # -------------------- appearance / logging --------------------
 is_tty=0; [[ -t 1 ]] && is_tty=1
 RED=$([[ $is_tty -eq 1 ]] && printf '\033[0;31m' || printf '')
-GRN=$([[ $is_tty -eq 1 ]] && printf '\033[0;32m' || printf '')
+# GRN=$([[ $is_tty -eq 1 ]] && printf '\033[0;32m' || printf '')
 YEL=$([[ $is_tty -eq 1 ]] && printf '\033[1;33m' || printf '')
 BLU=$([[ $is_tty -eq 1 ]] && printf '\033[0;34m' || printf '')
 NC=$([[ $is_tty -eq 1 ]] && printf '\033[0m' || printf '')

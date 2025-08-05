@@ -94,6 +94,7 @@ done
 
 # ---------------------- temp workspace ----------------------
 TMPDIR="$(mktemp -d -t semver-tests.XXXXXX)"
+# shellcheck disable=SC2317
 cleanup() { rm -rf "$TMPDIR"; }
 trap cleanup EXIT
 

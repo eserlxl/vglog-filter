@@ -17,7 +17,7 @@ set -Eeuo pipefail
 # ---------- appearance & helpers ----------
 is_tty=0; [[ -t 1 ]] && is_tty=1
 c_red=$'\033[0;31m'; c_grn=$'\033[0;32m'; c_ylw=$'\033[1;33m'; c_cyn=$'\033[0;36m'; c_rst=$'\033[0m'
-colorize() { (( is_tty )) && printf '%s' "${1}" || true; }
+colorize() { if (( is_tty )); then printf '%s' "${1}"; fi; }
 say()  { colorize "${c_cyn}";  printf '[*] %s\n' "$*"; colorize "${c_rst}"; }
 ok()   { colorize "${c_grn}";  printf '[✓] %s\n' "$*"; colorize "${c_rst}"; }
 warn() { colorize "${c_ylw}";  printf '[!] %s\n' "$*"; colorize "${c_rst}"; }
