@@ -12,9 +12,12 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
+# Avoid pagers and unnecessary repo locks for speed.
+export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
+# ----------------------------- help / ui --------------------------------------
 show_help() {
-    cat << EOF
+    cat << 'EOF'
 Semantic Version Analyzer v2 for vglog-filter
 
 Usage: $(basename "$0") [options]
@@ -26,11 +29,11 @@ Options:
   --since-date <date>      Analyze changes since specific date (YYYY-MM-DD)
   --base <ref>             Set base reference for comparison (default: auto-detected)
   --target <ref>           Set target reference for comparison (default: HEAD)
-  --repo-root <path>       Set repository root directory
+  --repo-root <path>       Set repository root directory for analysis
   --no-merge-base          Disable automatic merge-base detection for disjoint branches
   --only-paths <globs>     Restrict analysis to comma-separated path globs
   --ignore-whitespace      Ignore whitespace changes in diff analysis
-  --verbose                Show detailed analysis
+  --verbose                Show detailed progress and debug lines on stderr
   --machine                Output machine-readable key=value format (SUGGESTION only)
   --json                   Output machine-readable JSON
   --suggest-only           Output only the suggestion (major/minor/patch/none)
@@ -55,7 +58,7 @@ Exit codes:
 EOF
 }
 
-# Parse arguments
+# ----------------------------- args -------------------------------------------
 SINCE_TAG=""
 SINCE_COMMIT=""
 SINCE_DATE=""
@@ -70,9 +73,6 @@ MACHINE_OUTPUT=false
 JSON_OUTPUT=false
 SUGGEST_ONLY=false
 STRICT_STATUS=false
-
-# Global variables for bonus calculation
-TOTAL_BONUS=0
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -112,321 +112,281 @@ done
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
-# Check if required binaries exist
+# ----------------------------- helpers ----------------------------------------
+log()   { printf '%s\n' "$*" >&2; }
+debug() { [[ "$VERBOSE" == "true" ]] && printf 'Debug: %s\n' "$*" >&2; }
+
 check_binary() {
-    local binary="$1"
-    if [[ ! -x "$binary" ]]; then
-        printf 'Error: Required binary not found: %s\n' "$binary" >&2
-        exit 1
-    fi
+    local path="$1"
+    if [[ -x "$path" ]]; then return 0; fi
+    # Fallback to PATH by basename to be forgiving
+    local base; base="$(basename -- "$path")"
+    if command -v -- "$base" >/dev/null 2>&1; then return 0; fi
+    printf 'Error: Required binary not found: %s\n' "$path" >&2
+    exit 1
 }
 
+# nameref-based key=value parser into associative array
+# usage: parse_kv_into assoc_name <<< "$output"
+parse_kv_into() {
+    local -n __dst="$1"
+    local k v
+    while IFS='=' read -r k v; do
+        [[ -z "${k// }" ]] && continue
+        __dst["$k"]="$v"
+    done
+}
+
+# Integer coercion with default
+int_or_default() {
+    local v="${1:-}"; local def="${2:-0}"
+    if [[ "$v" =~ ^-?[0-9]+$ ]]; then printf '%s' "$v"; else printf '%s' "$def"; fi
+}
+
+# Minimal JSON string escaper (for refs/versions; conservative)
+json_escape() {
+    local s=${1:-}
+    s=${s//\\/\\\\}; s=${s//\"/\\\"}; s=${s//$'\n'/\\n}
+    printf '%s' "$s"
+}
+
+# Build common argv for analyzers (array via nameref)
+build_common_argv() {
+    local -n _out="$1"; _out=()
+    [[ -n "$BASE_REF" ]]     && _out+=(--base "$BASE_REF")
+    [[ -n "$TARGET_REF" ]]   && _out+=(--target "$TARGET_REF")
+    [[ -n "$REPO_ROOT" ]]    && _out+=(--repo-root "$REPO_ROOT")
+    [[ -n "$ONLY_PATHS" ]]   && _out+=(--only-paths "$ONLY_PATHS")
+    [[ "$IGNORE_WHITESPACE" == "true" ]] && _out+=(--ignore-whitespace)
+    _out+=(--machine) # force machine for internal components
+}
+
+# Build ref-resolver argv (array via nameref)
+build_ref_argv() {
+    local -n _out="$1"; _out=()
+    [[ -n "$SINCE_TAG"    ]] && _out+=(--since "$SINCE_TAG")
+    [[ -n "$SINCE_COMMIT" ]] && _out+=(--since-commit "$SINCE_COMMIT")
+    [[ -n "$SINCE_DATE"   ]] && _out+=(--since-date "$SINCE_DATE")
+    [[ -n "$BASE_REF"     ]] && _out+=(--base "$BASE_REF")
+    [[ -n "$TARGET_REF"   ]] && _out+=(--target "$TARGET_REF")
+    [[ -n "$REPO_ROOT"    ]] && _out+=(--repo-root "$REPO_ROOT")
+    [[ "$NO_MERGE_BASE" == "true" ]] && _out+=(--no-merge-base)
+    _out+=(--machine) # always machine for parsing
+}
+
+# Run a component and capture stdout in a variable name (nameref)
+run_cmd_capture() {
+    local -n _dst="$1"; shift
+    local out
+    if ! out="$("$@")"; then
+        printf 'Error: Command failed: %s\n' "$*" >&2
+        exit 1
+    fi
+    _dst="$out"
+}
+
+# ----------------------------- binary checks ----------------------------------
 check_binary "$SCRIPT_DIR/ref-resolver"
 check_binary "$SCRIPT_DIR/version-config-loader"
 check_binary "$SCRIPT_DIR/file-change-analyzer"
 check_binary "$SCRIPT_DIR/cli-options-analyzer"
 check_binary "$SCRIPT_DIR/security-keyword-analyzer"
+check_binary "$SCRIPT_DIR/keyword-analyzer"
 check_binary "$SCRIPT_DIR/version-calculator"
 
-# Build common arguments for all components
-build_common_args() {
-    local args=""
-    [[ -n "$BASE_REF" ]] && args="$args --base '$BASE_REF'"
-    [[ -n "$TARGET_REF" ]] && args="$args --target '$TARGET_REF'"
-    [[ -n "$REPO_ROOT" ]] && args="$args --repo-root '$REPO_ROOT'"
-    [[ -n "$ONLY_PATHS" ]] && args="$args --only-paths '$ONLY_PATHS'"
-    [[ "$IGNORE_WHITESPACE" = "true" ]] && args="$args --ignore-whitespace"
-    # Only pass --machine for internal component calls, not --json
-    [[ "$MACHINE_OUTPUT" = "true" ]] && args="$args --machine"
-    printf '%s' "$args"
-}
-
-# Build ref resolver arguments
-build_ref_args() {
-    local args=""
-    [[ -n "$SINCE_TAG" ]] && args="$args --since '$SINCE_TAG'"
-    [[ -n "$SINCE_COMMIT" ]] && args="$args --since-commit '$SINCE_COMMIT'"
-    [[ -n "$SINCE_DATE" ]] && args="$args --since-date '$SINCE_DATE'"
-    [[ -n "$BASE_REF" ]] && args="$args --base '$BASE_REF'"
-    [[ -n "$TARGET_REF" ]] && args="$args --target '$TARGET_REF'"
-    [[ -n "$REPO_ROOT" ]] && args="$args --repo-root '$REPO_ROOT'"
-    [[ "$NO_MERGE_BASE" = "true" ]] && args="$args --no-merge-base"
-    [[ "$MACHINE_OUTPUT" = "true" ]] && args="$args --machine"
-    [[ "$JSON_OUTPUT" = "true" ]] && args="$args --json"
-    printf '%s' "$args"
-}
-
-# Parse machine output into associative array
-parse_machine_output() {
-    local output="$1"
-    local -A result
-    while IFS='=' read -r key value; do
-        [[ -n "$key" ]] && result["$key"]="$value"
-    done <<< "$output"
-    printf '%s' "$(declare -p result)"
-}
-
-# Main analysis function
+# ----------------------------- main -------------------------------------------
 main() {
-    # Step 1: Resolve references
-    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Resolving git references...\n' >&2
-    local ref_args
-    ref_args=$(build_ref_args)
-    local ref_output
-    ref_output=$(eval "$SCRIPT_DIR/ref-resolver $ref_args")
-    
-    if [[ "$MACHINE_OUTPUT" = "true" ]]; then
-        # Parse machine output
-        local ref_data
-        ref_data=$(parse_machine_output "$ref_output")
-        eval "$ref_data"
-        
-        # Check if single commit repo
-        if [[ "${result[SINGLE_COMMIT_REPO]:-false}" = "true" ]]; then
-            printf 'SUGGESTION=none\n'
-            exit 20
-        fi
-        
-        # Check if no commits
-        if [[ "${result[HAS_COMMITS]:-false}" = "false" ]]; then
-            printf 'SUGGESTION=none\n'
-            exit 20
-        fi
-        
-        BASE_REF="${result[BASE_REF]}"
-        TARGET_REF="${result[TARGET_REF]}"
-    else
-        # For non-machine output, extract base and target from JSON or parse output
-        # This is a simplified version - in practice you'd parse JSON properly
-        BASE_REF=$(printf '%s' "$ref_output" | grep -o '"base_ref":"[^"]*"' | cut -d'"' -f4 || echo "HEAD~1")
-        TARGET_REF=$(printf '%s' "$ref_output" | grep -o '"target_ref":"[^"]*"' | cut -d'"' -f4 || echo "HEAD")
+    # If a repo root is specified, temporarily cd there to keep relative file reads consistent.
+    local did_pushd=false
+    if [[ -n "$REPO_ROOT" ]]; then
+        pushd "$REPO_ROOT" >/dev/null
+        did_pushd=true
+        trap '[[ "$did_pushd" == "true" ]] && popd >/dev/null || true' EXIT
     fi
-    
-    # Step 2: Load configuration
-    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Loading version configuration...\n' >&2
-    local config_output
-    config_output=$("$SCRIPT_DIR/version-config-loader" --machine)
-    
-    # Parse configuration output manually
-    declare -A config_data
-    while IFS='=' read -r key value; do
-        [[ -n "$key" ]] && config_data["$key"]="$value"
-    done <<< "$config_output"
-    
-    # Step 3: Analyze file changes
-    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing file changes...\n' >&2
-    local common_args
-    common_args=$(build_common_args)
-    # Force machine output for internal component calls
-    local file_output
-    file_output=$(eval "$SCRIPT_DIR/file-change-analyzer $common_args --machine")
-    
-    # Step 4: Analyze CLI options
-    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing CLI options...\n' >&2
-    local cli_output
-    cli_output=$(eval "$SCRIPT_DIR/cli-options-analyzer $common_args --machine")
-    
-    # Step 5: Analyze security keywords
-    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing security keywords...\n' >&2
-    local security_output
-    security_output=$(eval "$SCRIPT_DIR/security-keyword-analyzer $common_args --machine")
-    
-    # Step 6: Analyze keywords for breaking changes and bonuses
-    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing keywords...\n' >&2
-    local keyword_output
-    keyword_output=$(eval "$SCRIPT_DIR/keyword-analyzer $common_args --machine")
-    
-    # Initialize result arrays with defaults
-    declare -A file_result cli_result security_result keyword_result
-    
-    # Parse file analysis results directly
-    while IFS='=' read -r key value; do
-        [[ -n "$key" ]] && file_result["$key"]="$value"
-    done <<< "$file_output"
-    
-    # Parse CLI analysis results directly
-    while IFS='=' read -r key value; do
-        [[ -n "$key" ]] && cli_result["$key"]="$value"
-    done <<< "$cli_output"
-    
-    # Parse security analysis results directly
-    while IFS='=' read -r key value; do
-        [[ -n "$key" ]] && security_result["$key"]="$value"
-    done <<< "$security_output"
-    
-    # Parse keyword analysis results directly
-    while IFS='=' read -r key value; do
-        [[ -n "$key" ]] && keyword_result["$key"]="$value"
-    done <<< "$keyword_output"
-    
-    # Step 7: Calculate bonus points
-    TOTAL_BONUS=0
-    
-    # Debug: Print keyword results
-    if [[ "$VERBOSE" = "true" ]]; then
-        printf 'Debug: Keyword results:\n' >&2
-        printf '  HAS_CLI_BREAKING: %s\n' "${keyword_result[HAS_CLI_BREAKING]:-false}" >&2
-        printf '  HAS_API_BREAKING: %s\n' "${keyword_result[HAS_API_BREAKING]:-false}" >&2
-        printf '  TOTAL_SECURITY: %s\n' "${keyword_result[TOTAL_SECURITY]:-0}" >&2
+
+    # 1) Resolve references
+    debug "Resolving git references..."
+    local ref_argv=(); build_ref_argv ref_argv
+    local ref_raw; run_cmd_capture ref_raw "$SCRIPT_DIR/ref-resolver" "${ref_argv[@]}"
+    declare -A REF=(); parse_kv_into REF <<<"$ref_raw"
+
+    # Early-outs on trivial repos
+    if [[ "${REF[SINGLE_COMMIT_REPO]:-false}" == "true" || "${REF[HAS_COMMITS]:-true}" == "false" ]]; then
+        if [[ "$SUGGEST_ONLY" == "true" ]]; then
+            printf 'none\n'
+            exit 0
+        fi
+        if [[ "$JSON_OUTPUT" == "true" ]]; then
+            printf '{ "suggestion": "none" }\n'
+        elif [[ "$MACHINE_OUTPUT" == "true" ]]; then
+            printf 'SUGGESTION=none\n'
+        else
+            printf '=== Semantic Version Analysis v2 ===\nNo meaningful history; suggestion: NONE\n'
+        fi
+        exit 20
     fi
-    
+
+    BASE_REF="${REF[BASE_REF]:-$BASE_REF}"
+    TARGET_REF="${REF[TARGET_REF]:-${TARGET_REF:-HEAD}}"
+
+    # 2) Load configuration
+    debug "Loading version configuration..."
+    local cfg_raw; run_cmd_capture cfg_raw "$SCRIPT_DIR/version-config-loader" --machine
+    declare -A CFG=(); parse_kv_into CFG <<<"$cfg_raw"
+
+    # 3) Analyze file changes
+    debug "Analyzing file changes..."
+    local common_argv=(); build_common_argv common_argv
+    local file_raw; run_cmd_capture file_raw "$SCRIPT_DIR/file-change-analyzer" "${common_argv[@]}"
+    declare -A FILE=(); parse_kv_into FILE <<<"$file_raw"
+
+    # 4) Analyze CLI options
+    debug "Analyzing CLI options..."
+    local cli_raw; run_cmd_capture cli_raw "$SCRIPT_DIR/cli-options-analyzer" "${common_argv[@]}"
+    declare -A CLI=(); parse_kv_into CLI <<<"$cli_raw"
+
+    # 5) Analyze security keywords
+    debug "Analyzing security keywords..."
+    local sec_raw; run_cmd_capture sec_raw "$SCRIPT_DIR/security-keyword-analyzer" "${common_argv[@]}"
+    declare -A SEC=(); parse_kv_into SEC <<<"$sec_raw"
+
+    # 6) Analyze keywords for breaking changes and bonuses
+    debug "Analyzing breaking-change keywords..."
+    local kw_raw; run_cmd_capture kw_raw "$SCRIPT_DIR/keyword-analyzer" "${common_argv[@]}"
+    declare -A KW=(); parse_kv_into KW <<<"$kw_raw"
+
+    # 7) Bonus calculation -------------------------------------------------------
+    local TOTAL_BONUS=0
+
+    debug "Keyword flags: HAS_CLI_BREAKING=${KW[HAS_CLI_BREAKING]:-false}, HAS_API_BREAKING=${KW[HAS_API_BREAKING]:-false}, TOTAL_SECURITY=${KW[TOTAL_SECURITY]:-0}"
+
     # Breaking changes from keyword analysis (takes precedence over CLI analysis)
-    if [[ "${keyword_result[HAS_CLI_BREAKING]:-false}" = "true" ]]; then
-        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_BREAKING_CLI_BONUS]:-2}))
-    elif [[ "${cli_result[BREAKING_CLI_CHANGES]:-false}" = "true" ]]; then
-        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_BREAKING_CLI_BONUS]:-2}))
+    if [[ "${KW[HAS_CLI_BREAKING]:-false}" == "true" || "${CLI[BREAKING_CLI_CHANGES]:-false}" == "true" ]]; then
+        TOTAL_BONUS=$(( TOTAL_BONUS + $(int_or_default "${CFG[VERSION_BREAKING_CLI_BONUS]}" 2) ))
     fi
-    
-    if [[ "${keyword_result[HAS_API_BREAKING]:-false}" = "true" ]]; then
-        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_API_BREAKING_BONUS]:-3}))
-    elif [[ "${cli_result[API_BREAKING]:-false}" = "true" ]]; then
-        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_API_BREAKING_BONUS]:-3}))
+
+    if [[ "${KW[HAS_API_BREAKING]:-false}" == "true" || "${CLI[API_BREAKING]:-false}" == "true" ]]; then
+        TOTAL_BONUS=$(( TOTAL_BONUS + $(int_or_default "${CFG[VERSION_API_BREAKING_BONUS]}" 3) ))
     fi
-    
+
     # Security keywords (combine both sources)
-    local security_keywords="${security_result[SECURITY_KEYWORDS]:-0}"
-    local keyword_security="${keyword_result[TOTAL_SECURITY]:-0}"
-    local total_security=$((security_keywords + keyword_security))
-    if [[ "$total_security" -gt 0 ]]; then
-        TOTAL_BONUS=$((TOTAL_BONUS + total_security * ${config_data[VERSION_SECURITY_BONUS]:-2}))
+    local security_keywords=$(int_or_default "${SEC[SECURITY_KEYWORDS]}" 0)
+    local keyword_security=$(int_or_default "${KW[TOTAL_SECURITY]}" 0)
+    local total_security=$(( security_keywords + keyword_security ))
+    if (( total_security > 0 )); then
+        TOTAL_BONUS=$(( TOTAL_BONUS + total_security * $(int_or_default "${CFG[VERSION_SECURITY_BONUS]}" 2) ))
     fi
-    
+
     # Feature additions
-    if [[ "${cli_result[CLI_CHANGES]:-false}" = "true" ]]; then
-        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_CLI_CHANGES_BONUS]:-2}))
+    if [[ "${CLI[CLI_CHANGES]:-false}" == "true" ]]; then
+        TOTAL_BONUS=$(( TOTAL_BONUS + $(int_or_default "${CFG[VERSION_CLI_CHANGES_BONUS]}" 2) ))
     fi
-    if [[ "${cli_result[MANUAL_CLI_CHANGES]:-false}" = "true" ]]; then
-        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_MANUAL_CLI_BONUS]:-1}))
+    if [[ "${CLI[MANUAL_CLI_CHANGES]:-false}" == "true" ]]; then
+        TOTAL_BONUS=$(( TOTAL_BONUS + $(int_or_default "${CFG[VERSION_MANUAL_CLI_BONUS]}" 1) ))
     fi
-    if [[ "${file_result[NEW_SOURCE_FILES]:-0}" -gt 0 ]]; then
-        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_NEW_SOURCE_BONUS]:-1}))
+    if (( $(int_or_default "${FILE[NEW_SOURCE_FILES]}" 0) > 0 )); then
+        TOTAL_BONUS=$(( TOTAL_BONUS + $(int_or_default "${CFG[VERSION_NEW_SOURCE_BONUS]}" 1) ))
     fi
-    if [[ "${file_result[NEW_TEST_FILES]:-0}" -gt 0 ]]; then
-        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_NEW_TEST_BONUS]:-1}))
+    if (( $(int_or_default "${FILE[NEW_TEST_FILES]}" 0) > 0 )); then
+        TOTAL_BONUS=$(( TOTAL_BONUS + $(int_or_default "${CFG[VERSION_NEW_TEST_BONUS]}" 1) ))
     fi
-    if [[ "${file_result[NEW_DOC_FILES]:-0}" -gt 0 ]]; then
-        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_NEW_DOC_BONUS]:-1}))
+    if (( $(int_or_default "${FILE[NEW_DOC_FILES]}" 0) > 0 )); then
+        TOTAL_BONUS=$(( TOTAL_BONUS + $(int_or_default "${CFG[VERSION_NEW_DOC_BONUS]}" 1) ))
     fi
-    
+
     # Removed features (combine both sources)
-    local cli_removed=$(( ${cli_result[REMOVED_SHORT_COUNT]:-0} + ${cli_result[REMOVED_LONG_COUNT]:-0} ))
-    local keyword_removed="${keyword_result[REMOVED_OPTIONS_KEYWORDS]:-0}"
-    local total_removed=$((cli_removed + keyword_removed))
-    if [[ "$total_removed" -gt 0 ]]; then
-        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_REMOVED_OPTION_BONUS]:-1}))
+    local cli_removed=$(( $(int_or_default "${CLI[REMOVED_SHORT_COUNT]}" 0) + $(int_or_default "${CLI[REMOVED_LONG_COUNT]}" 0) ))
+    local kw_removed=$(int_or_default "${KW[REMOVED_OPTIONS_KEYWORDS]}" 0)
+    local total_removed=$(( cli_removed + kw_removed ))
+    if (( total_removed > 0 )); then
+        TOTAL_BONUS=$(( TOTAL_BONUS + $(int_or_default "${CFG[VERSION_REMOVED_OPTION_BONUS]}" 1) ))
     fi
-    
-    # Debug: Print final bonus calculation
-    if [[ "$VERBOSE" = "true" ]]; then
-        printf 'Debug: Final TOTAL_BONUS: %s\n' "$TOTAL_BONUS" >&2
-    fi
-    
-    # Step 8: Determine suggestion based on bonus thresholds
-    local major_threshold="${config_data[MAJOR_BONUS_THRESHOLD]:-8}"
-    local minor_threshold="${config_data[MINOR_BONUS_THRESHOLD]:-4}"
-    local patch_threshold="${config_data[PATCH_BONUS_THRESHOLD]:-0}"
-    
-    # Use default values if not available from config
-    major_threshold="${major_threshold:-8}"
-    minor_threshold="${minor_threshold:-4}"
-    patch_threshold="${patch_threshold:-0}"
-    
+
+    debug "Final TOTAL_BONUS=$TOTAL_BONUS"
+
+    # 8) Determine suggestion based on bonus thresholds
+    local major_threshold=$(int_or_default "${CFG[MAJOR_BONUS_THRESHOLD]}" 8)
+    local minor_threshold=$(int_or_default "${CFG[MINOR_BONUS_THRESHOLD]}" 4)
+    local patch_threshold=$(int_or_default "${CFG[PATCH_BONUS_THRESHOLD]}" 0)
+
     local suggestion="none"
-    if [[ "$TOTAL_BONUS" -ge "$major_threshold" ]]; then
-        suggestion="major"
-    elif [[ "$TOTAL_BONUS" -ge "$minor_threshold" ]]; then
-        suggestion="minor"
-    elif [[ "$TOTAL_BONUS" -ge "$patch_threshold" ]]; then
-        suggestion="patch"
+    if   (( TOTAL_BONUS >= major_threshold )); then suggestion="major"
+    elif (( TOTAL_BONUS >= minor_threshold )); then suggestion="minor"
+    elif (( TOTAL_BONUS >= patch_threshold )); then suggestion="patch"
     fi
-    
-    # Step 9: Get current version
+
+    # 9) Get current version
     local current_version="0.0.0"
     if [[ -f "VERSION" ]]; then
-        current_version=$(tr -d '[:space:]' < "VERSION" 2>/dev/null || printf '0.0.0')
-        [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || current_version=0.0.0
+        current_version="$(tr -d '[:space:]' < VERSION 2>/dev/null || true)"
+        [[ "$current_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || current_version="0.0.0"
     fi
-    
-    # Step 10: Calculate next version if needed
+
+    # 10) Calculate next version if needed
     local next_version=""
     if [[ "$suggestion" != "none" ]]; then
-        local calc_args="--current-version '$current_version' --bump-type '$suggestion' --loc '${file_result[DIFF_SIZE]:-0}' --bonus '$TOTAL_BONUS'"
-        [[ "$MACHINE_OUTPUT" = "true" ]] && calc_args="$calc_args --machine"
-        [[ "$JSON_OUTPUT" = "true" ]] && calc_args="$calc_args --json"
-        
-        local calc_output
-        calc_output=$(eval "$SCRIPT_DIR/version-calculator $calc_args")
-        
-        if [[ "$MACHINE_OUTPUT" = "true" ]]; then
-            local calc_data
-            calc_data=$(parse_machine_output "$calc_output")
-            eval "$calc_data"
-            next_version="${result[NEXT_VERSION]}"
-        else
-            next_version=$(printf '%s' "$calc_output" | grep -o '"next_version":"[^"]*"' | cut -d'"' -f4 || echo "")
-        fi
+        local vc_argv=( --current-version "$current_version" --bump-type "$suggestion"
+                        --loc "$(int_or_default "${FILE[DIFF_SIZE]}" 0)"
+                        --bonus "$TOTAL_BONUS" --machine )
+        local vc_raw; run_cmd_capture vc_raw "$SCRIPT_DIR/version-calculator" "${vc_argv[@]}"
+        declare -A VC=(); parse_kv_into VC <<<"$vc_raw"
+        next_version="${VC[NEXT_VERSION]:-}"
     fi
-    
-    # Step 11: Output results
-    if [[ "$SUGGEST_ONLY" = "true" ]]; then
+
+    # 11) Output formats ---------------------------------------------------------
+    if [[ "$SUGGEST_ONLY" == "true" ]]; then
         printf '%s\n' "$suggestion"
-    elif [[ "$JSON_OUTPUT" = "true" ]]; then
+    elif [[ "$JSON_OUTPUT" == "true" ]]; then
+        # Ask calculator for deltas (patch/minor/major) with machine, convert totals
+        local loc="$(int_or_default "${FILE[DIFF_SIZE]}" 0)"
+
+        local pd_raw; run_cmd_capture pd_raw "$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type patch --loc "$loc" --bonus "$TOTAL_BONUS" --machine
+        declare -A PD=(); parse_kv_into PD <<<"$pd_raw"
+        local md_raw; run_cmd_capture md_raw "$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type minor --loc "$loc" --bonus "$TOTAL_BONUS" --machine
+        declare -A MD=(); parse_kv_into MD <<<"$md_raw"
+        local jd_raw; run_cmd_capture jd_raw "$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type major --loc "$loc" --bonus "$TOTAL_BONUS" --machine
+        declare -A JD=(); parse_kv_into JD <<<"$jd_raw"
+
         printf '{\n'
-        printf '  "suggestion": "%s",\n' "$suggestion"
-        printf '  "current_version": "%s",\n' "$current_version"
+        printf '  "suggestion": "%s",\n' "$(json_escape "$suggestion")"
+        printf '  "current_version": "%s",\n' "$(json_escape "$current_version")"
         if [[ -n "$next_version" ]]; then
-            printf '  "next_version": "%s",\n' "$next_version"
+            printf '  "next_version": "%s",\n' "$(json_escape "$next_version")"
         fi
         printf '  "total_bonus": %s,\n' "$TOTAL_BONUS"
-        printf '  "base_ref": "%s",\n' "$BASE_REF"
-        printf '  "target_ref": "%s",\n' "$TARGET_REF"
-        # Calculate LOC deltas with bonus points
-        local patch_delta_json
-        patch_delta_json=$("$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type patch --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 1}')
-        local minor_delta_json
-        minor_delta_json=$("$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type minor --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 5}')
-        local major_delta_json
-        major_delta_json=$("$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type major --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 10}')
-        
-        local patch_delta
-        patch_delta=$(printf '%s' "$patch_delta_json" | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "1")
-        local minor_delta
-        minor_delta=$(printf '%s' "$minor_delta_json" | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "5")
-        local major_delta
-        major_delta=$(printf '%s' "$major_delta_json" | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "10")
-        
+        printf '  "base_ref": "%s",\n' "$(json_escape "$BASE_REF")"
+        printf '  "target_ref": "%s",\n' "$(json_escape "$TARGET_REF")"
         printf '  "loc_delta": {\n'
-        printf '    "patch_delta": %s,\n' "$patch_delta"
-        printf '    "minor_delta": %s,\n' "$minor_delta"
-        printf '    "major_delta": %s\n' "$major_delta"
+        printf '    "patch_delta": %s,\n' "$(int_or_default "${PD[total_delta]}" 1)"
+        printf '    "minor_delta": %s,\n' "$(int_or_default "${MD[total_delta]}" 5)"
+        printf '    "major_delta": %s\n'   "$(int_or_default "${JD[total_delta]}" 10)"
         printf '  }\n'
         printf '}\n'
-    elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
+    elif [[ "$MACHINE_OUTPUT" == "true" ]]; then
         printf 'SUGGESTION=%s\n' "$suggestion"
     else
         printf '=== Semantic Version Analysis v2 ===\n'
         printf 'Analyzing changes: %s -> %s\n' "$BASE_REF" "$TARGET_REF"
         printf '\nCurrent version: %s\n' "$current_version"
         printf 'Total bonus points: %s\n' "$TOTAL_BONUS"
-        printf '\nSuggested bump: %s\n' "$(printf '%s' "$suggestion" | tr '[:lower:]' '[:upper:]')"
+        printf '\nSuggested bump: %s\n' "$(tr '[:lower:]' '[:upper:]' <<<"$suggestion")"
         if [[ -n "$next_version" ]]; then
             printf 'Next version: %s\n' "$next_version"
         fi
         printf '\nSUGGESTION=%s\n' "$suggestion"
     fi
-    
-    # Set exit code
-    if [[ "$SUGGEST_ONLY" = "true" ]] && [[ "$STRICT_STATUS" != "true" ]]; then
+
+    # 12) Exit code policy -------------------------------------------------------
+    if [[ "$SUGGEST_ONLY" == "true" && "$STRICT_STATUS" != "true" ]]; then
         exit 0
-    else
-        case "$suggestion" in
-            major) exit 10 ;;
-            minor) exit 11 ;;
-            patch) exit 12 ;;
-            none) exit 20 ;;
-            *) exit 0 ;;
-        esac
     fi
+    case "$suggestion" in
+        major) exit 10 ;;
+        minor) exit 11 ;;
+        patch) exit 12 ;;
+        none)  exit 20 ;;
+        *)     exit 0 ;;
+    esac
 }
 
 # Run main function
