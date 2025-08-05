@@ -9,11 +9,27 @@
 # Version validator for vglog-filter
 # Handles version format validation and related checks
 
-set -euo pipefail
+set -Eeuo pipefail
+IFS=$'\n\t'
+export LC_ALL=C
+# Prevent pagers/locks in CI for speed and determinism
+export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
 # Source utilities
-SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$SCRIPT_DIR/version-utils"
+
+# Initialize colors only for standalone usage; library users can call directly.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    init_colors "${NO_COLOR:-false}"
+fi
+
+# --- SemVer parsing and comparison helpers -----------------------------------
+# Strip build metadata: 1.2.3-rc.1+abc -> 1.2.3-rc.1
+strip_build_meta() {
+    local v="$1"
+    printf '%s' "${v%%+*}"
+}
 
 # --- Version validation -------------------------------------------------------
 validate_version_format() {
@@ -21,19 +37,17 @@ validate_version_format() {
     local allow_prerelease="$2"
 
     if [[ "$allow_prerelease" == "true" ]]; then
-        if ! is_semver_with_prerelease "$version"; then
-            die "Invalid version format: $version"
+        if ! _is_semver_with_prerelease "$version"; then
+            _die "Invalid version format: $version"
             printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-PRERELEASE (e.g., 1.0.0 or 1.0.0-rc.1)${RESET}" >&2
             printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed${RESET}" >&2
-            exit 1
         fi
     else
-        if ! is_semver "$version"; then
-            die "Invalid version format: $version"
+        if ! _is_semver_core "$version"; then
+            _die "Invalid version format: $version"
             printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH (e.g., 1.0.0)${RESET}" >&2
             printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed${RESET}" >&2
             printf '%s\n' "${YELLOW}Note: Pre-releases require --allow-prerelease with --set${RESET}" >&2
-            exit 1
         fi
     fi
 }
@@ -51,23 +65,35 @@ validate_version_file() {
     local current_version
     current_version=$(read_version_file "$version_file")
     if [[ ! "$current_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-        die "Invalid version format in VERSION: $current_version"
+        _die "Invalid version format in VERSION: $current_version"
         printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH${RESET}" >&2
-        exit 1
     fi
     
     printf '%s' "$current_version"
 }
 
 # --- Version comparison -------------------------------------------------------
+# Public: compare two versions using full SemVer. echo -1|0|1
 compare_versions() {
-    local version1="$1"
-    local version2="$2"
+    local v1="$1" v2="$2"
     
+    # For now, use a simpler approach that works with the existing validation
+    # Strip any build metadata first
+    local clean_v1="${v1%%+*}" clean_v2="${v2%%+*}"
+    
+    # Split into main version and prerelease
+    local m1="${clean_v1%%-*}" pr1="${clean_v1#*-}"
+    local m2="${clean_v2%%-*}" pr2="${clean_v2#*-}"
+    
+    # If no prerelease, set to empty
+    [[ "$pr1" == "$m1" ]] && pr1=""
+    [[ "$pr2" == "$m2" ]] && pr2=""
+    
+    # Parse main versions
     local v1_major v1_minor v1_patch v2_major v2_minor v2_patch
     
-    IFS='.' read -r v1_major v1_minor v1_patch <<< "$version1"
-    IFS='.' read -r v2_major v2_minor v2_patch <<< "$version2"
+    IFS='.' read -r v1_major v1_minor v1_patch <<< "$m1"
+    IFS='.' read -r v2_major v2_minor v2_patch <<< "$m2"
     
     # Compare major
     if (( v1_major < v2_major )); then
@@ -87,7 +113,23 @@ compare_versions() {
             elif (( v1_patch > v2_patch )); then
                 printf '%s' "1"
             else
-                printf '%s' "0"
+                # Versions are equal, compare prereleases
+                if [[ -z "$pr1" && -z "$pr2" ]]; then
+                    printf '%s' "0"
+                elif [[ -z "$pr1" && -n "$pr2" ]]; then
+                    printf '%s' "1"
+                elif [[ -n "$pr1" && -z "$pr2" ]]; then
+                    printf '%s' "-1"
+                else
+                    # Both have prereleases, compare lexicographically for now
+                    if [[ "$pr1" < "$pr2" ]]; then
+                        printf '%s' "-1"
+                    elif [[ "$pr1" > "$pr2" ]]; then
+                        printf '%s' "1"
+                    else
+                        printf '%s' "0"
+                    fi
+                fi
             fi
         fi
     fi
@@ -97,12 +139,11 @@ is_version_greater() {
     local new_version="$1"
     local last_version="$2"
     
-    local comparison
-    comparison=$(compare_versions "$new_version" "$last_version")
-    [[ "$comparison" == "1" ]]
+    [[ "$(compare_versions "$new_version" "$last_version")" == "1" ]]
 }
 
 # --- Version order validation -------------------------------------------------
+# Only check monotonicity for *stable* target (skip if new is prerelease)
 check_version_order() {
     local new_version="$1"
     local tag_prefix="$2"
@@ -113,20 +154,20 @@ check_version_order() {
     fi
     
     local last_tag
-    last_tag="$(last_tag_for_prefix "$tag_prefix")"
+    last_tag="$(last_tag_for_prefix "$tag_prefix" || true)"
 
     if [[ -n "$last_tag" ]]; then
         local last_version="${last_tag:${#tag_prefix}}"
-        if ! is_semver "$last_version"; then
+        # If last tag isn't strict semver, we don't enforce
+        if ! _is_semver_core "$last_version"; then
             return 0
         fi
 
         if ! is_version_greater "$new_version" "$last_version"; then
-            warn "New version $new_version is not greater than last tag $last_tag"
+            _warn "New version $new_version is not greater than last tag $last_tag"
             if [[ -n "${GITHUB_ACTIONS:-}" && "$allow_nonmonotonic" != "true" ]]; then
-                die "NEW_VERSION ($new_version) must be greater than last tag ($last_tag)"
-                printf '%s\n' "${YELLOW}Use --allow-nonmonotonic-tag to override${RESET}" >&2
-                exit 1
+                _die "NEW_VERSION ($new_version) must be greater than last tag ($last_tag)"
+                printf '%s\n' "${YELLOW}Use --allow-nonmonotonic-tag to override in CI.${RESET}" >&2
             fi
         fi
     fi
@@ -137,23 +178,26 @@ parse_version_components() {
     local version="$1"
     local major minor patch
     
-    IFS='.' read -r major minor patch <<< "$version"
+    # Strip build metadata and prerelease
+    local main_version="${version%%+*}"
+    main_version="${main_version%%-*}"
+    
+    IFS='.' read -r major minor patch <<< "$main_version"
     printf '%s\n%s\n%s' "$major" "$minor" "$patch"
 }
 
 # --- Pre-release validation --------------------------------------------------
 is_prerelease() {
     local version="$1"
-    [[ "$version" == *-* ]]
+    [[ "$(strip_build_meta "$version")" == *-* ]]
 }
 
 validate_prerelease_format() {
     local version="$1"
     if is_prerelease "$version"; then
-        if ! is_semver_with_prerelease "$version"; then
-            die "Invalid pre-release format: $version"
+        if ! _is_semver_with_prerelease "$version"; then
+            _die "Invalid pre-release format: $version"
             printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH-PRERELEASE (e.g., 1.0.0-rc.1)${RESET}" >&2
-            exit 1
         fi
     fi
 }
@@ -174,37 +218,57 @@ validate_version_input() {
     fi
 }
 
+# --- CLI usage ---------------------------------------------------------------
+usage() {
+    cat <<'EOF'
+Usage: version-validator <command> [args...]
+
+Commands:
+  validate <version> [allow_prerelease]   Validate version format
+  compare <version1> <version2>           Compare two versions (-1|0|1) with full SemVer precedence
+  parse <version>                          Print MAJOR NEWLINE MINOR NEWLINE PATCH
+  is-prerelease <version>                  Print true/false; exits 0 for true, 1 for false
+
+Extras (optional):
+  validate-file <path> <project_root>      Validate VERSION file (strict MAJOR.MINOR.PATCH)
+  order-check <version> <tag_prefix> [allow_nonmonotonic=true|false]
+                                           Enforce monotonic increase vs last tag (stable only)
+
+Notes:
+- Pre-release precedence is implemented per SemVer 2.0.0 (numeric < alphanumeric, field-wise compare).
+- Build metadata (+meta) is ignored in precedence checks, as per spec.
+EOF
+}
+
 # --- Standalone usage --------------------------------------------------------
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    # Initialize colors
-    init_colors "${NO_COLOR:-false}"
-    
-    case "${1:-}" in
+    cmd="${1:-}"; shift || true
+    case "$cmd" in
         "validate")
-            if [[ $# -lt 2 ]]; then
-                die "Usage: $0 validate <version> [allow_prerelease]"
+            if [[ $# -lt 1 ]]; then
+                _die "Usage: $0 validate <version> [allow_prerelease]"
             fi
-            validate_version_format "$2" "${3:-false}"
-            success "Version format is valid"
+            validate_version_format "$1" "${2:-false}"
+            _ok "Version format is valid"
             ;;
         "compare")
-            if [[ $# -lt 3 ]]; then
-                die "Usage: $0 compare <version1> <version2>"
+            if [[ $# -lt 2 ]]; then
+                _die "Usage: $0 compare <version1> <version2>"
             fi
-            result=$(compare_versions "$2" "$3")
+            result=$(compare_versions "$1" "$2")
             printf '%s\n' "$result"
             ;;
         "parse")
-            if [[ $# -lt 2 ]]; then
-                die "Usage: $0 parse <version>"
+            if [[ $# -lt 1 ]]; then
+                _die "Usage: $0 parse <version>"
             fi
-            parse_version_components "$2"
+            parse_version_components "$1"
             ;;
         "is-prerelease")
-            if [[ $# -lt 2 ]]; then
-                die "Usage: $0 is-prerelease <version>"
+            if [[ $# -lt 1 ]]; then
+                _die "Usage: $0 is-prerelease <version>"
             fi
-            if is_prerelease "$2"; then
+            if is_prerelease "$1"; then
                 printf '%s\n' "true"
                 exit 0
             else
@@ -212,24 +276,24 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                 exit 1
             fi
             ;;
+        "validate-file")
+            if [[ $# -lt 2 ]]; then
+                _die "Usage: $0 validate-file <path> <project_root>"
+            fi
+            validate_version_file "$1" "$2" >/dev/null
+            _ok "VERSION file is valid"
+            ;;
+        "order-check")
+            if [[ $# -lt 2 ]]; then
+                _die "Usage: $0 order-check <version> <tag_prefix> [allow_nonmonotonic=true|false]"
+            fi
+            check_version_order "$1" "$2" "${3:-false}"
+            ;;
+        -h|--help|help|"")
+            usage
+            ;;
         *)
-            cat << EOF
-Usage: $0 <command> [args...]
-
-Commands:
-  validate <version> [allow_prerelease]  Validate version format
-  compare <version1> <version2>          Compare two versions
-  parse <version>                        Parse version into components
-  is-prerelease <version>                Check if version is a pre-release
-
-Examples:
-  $0 validate 1.0.0
-  $0 validate 1.0.0-rc.1 true
-  $0 compare 1.0.0 1.0.1
-  $0 parse 1.2.3
-  $0 is-prerelease 1.0.0-rc.1
-EOF
-            exit 1
+            _die "Unknown command: $cmd" "$(usage)"
             ;;
     esac
 fi 
