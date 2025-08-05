@@ -1,0 +1,270 @@
+#!/bin/bash
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
+# Keyword Analyzer
+# Detects breaking change keywords and other bonus indicators in code comments and commit messages
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+export LC_ALL=C
+# Prevent any pager and avoid unnecessary repo locks for better performance.
+export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
+
+show_help() {
+    cat << EOF
+Keyword Analyzer
+
+Usage: $(basename "$0") [options]
+
+Options:
+  --base <ref>             Base reference for comparison
+  --target <ref>           Target reference for comparison (default: HEAD)
+  --repo-root <path>       Set repository root directory
+  --only-paths <globs>     Restrict analysis to comma-separated path globs
+  --ignore-whitespace      Ignore whitespace changes in diff analysis
+  --machine                Output machine-readable key=value format
+  --json                   Output machine-readable JSON
+  --help, -h               Show this help
+
+Examples:
+  $(basename "$0") --base v1.0.0 --target HEAD
+  $(basename "$0") --base HEAD~5 --target HEAD --machine
+  $(basename "$0") --base v1.0.0 --target v1.1.0 --json
+EOF
+}
+
+# Parse arguments
+BASE_REF=""
+TARGET_REF="HEAD"
+REPO_ROOT=""
+ONLY_PATHS=""
+IGNORE_WHITESPACE=false
+MACHINE_OUTPUT=false
+JSON_OUTPUT=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --base)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --base requires a value\n' >&2; exit 1; }
+            BASE_REF="$2"; shift 2;;
+        --target)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --target requires a value\n' >&2; exit 1; }
+            TARGET_REF="$2"; shift 2;;
+        --repo-root)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --repo-root requires a value\n' >&2; exit 1; }
+            REPO_ROOT="$2"; shift 2;;
+        --only-paths)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --only-paths requires a comma-separated globs list\n' >&2; exit 1; }
+            ONLY_PATHS="$2"; shift 2;;
+        --ignore-whitespace) IGNORE_WHITESPACE=true; shift;;
+        --machine) MACHINE_OUTPUT=true; shift;;
+        --json) JSON_OUTPUT=true; shift;;
+        --help|-h) show_help; exit 0;;
+        *) printf 'Error: Unknown option: %s\n' "$1" >&2; show_help; exit 1;;
+    esac
+done
+
+# Validate required arguments
+if [[ -z "$BASE_REF" ]]; then
+    printf 'Error: --base is required\n' >&2
+    exit 1
+fi
+
+# Check git command
+if ! command -v git >/dev/null 2>&1; then
+    printf 'Error: git command not found\n' >&2
+    exit 1
+fi
+
+# Change to repo root if specified
+if [[ -n "$REPO_ROOT" ]]; then
+    cd "$REPO_ROOT"
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+        printf 'Error: Not in a git repository at %s\n' "$REPO_ROOT" >&2
+        exit 1
+    }
+fi
+
+# Build PATH_ARGS array from --only-paths
+PATH_ARGS=()
+if [[ -n "$ONLY_PATHS" ]]; then
+    IFS=',' read -r -a tmp <<< "$ONLY_PATHS"
+    PATH_ARGS+=(--)
+    for g in "${tmp[@]}"; do
+        # Trim surrounding spaces
+        g="${g##+([[:space:]])}"
+        g="${g%%+([[:space:]])}"
+        [[ -n "$g" ]] && PATH_ARGS+=("$g")
+    done
+fi
+
+# Analyze keywords in code changes and commit messages
+analyze_keywords() {
+    local base_ref="$1"
+    local target_ref="$2"
+    
+    # Get diff content for keyword analysis
+    local diff_content
+    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
+        diff_content=$(git -c color.ui=false diff -M -C -w --unified=0 "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null || true)
+    else
+        diff_content=$(git -c color.ui=false diff -M -C --unified=0 "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null || true)
+    fi
+    
+    # Get commit messages for keyword analysis
+    local commit_messages
+    commit_messages=$(git -c color.ui=false log --format="%s %b" "$base_ref".."$target_ref" 2>/dev/null || true)
+    
+    # Detect breaking change keywords in code comments
+    local cli_breaking_keywords
+    cli_breaking_keywords=$(printf '%s' "$diff_content" | grep -ci -E '(//[[:space:]]*CLI-BREAKING|/\*[[:space:]]*CLI-BREAKING|#[[:space:]]*CLI-BREAKING)' 2>/dev/null || printf '0')
+    cli_breaking_keywords=$(printf '%s' "$cli_breaking_keywords" | tr -cd '0-9' || printf '0')
+    
+    local api_breaking_keywords
+    api_breaking_keywords=$(printf '%s' "$diff_content" | grep -ci -E '(//[[:space:]]*API-BREAKING|/\*[[:space:]]*API-BREAKING|#[[:space:]]*API-BREAKING)' 2>/dev/null || printf '0')
+    api_breaking_keywords=$(printf '%s' "$api_breaking_keywords" | tr -cd '0-9' || printf '0')
+    
+    # Detect breaking change keywords in commit messages
+    local commit_cli_breaking
+    commit_cli_breaking=$(printf '%s' "$commit_messages" | grep -ci -E '(CLI-BREAKING|BREAKING.*CLI)' 2>/dev/null || printf '0')
+    commit_cli_breaking=$(printf '%s' "$commit_cli_breaking" | tr -cd '0-9' || printf '0')
+    
+    local commit_api_breaking
+    commit_api_breaking=$(printf '%s' "$commit_messages" | grep -ci -E '(API-BREAKING|BREAKING.*API)' 2>/dev/null || printf '0')
+    commit_api_breaking=$(printf '%s' "$commit_api_breaking" | tr -cd '0-9' || printf '0')
+    
+    # Detect feature addition keywords
+    local new_feature_keywords
+    new_feature_keywords=$(printf '%s' "$diff_content" | grep -ci -E '(//[[:space:]]*NEW-FEATURE|/\*[[:space:]]*NEW-FEATURE|#[[:space:]]*NEW-FEATURE)' 2>/dev/null || printf '0')
+    new_feature_keywords=$(printf '%s' "$new_feature_keywords" | tr -cd '0-9' || printf '0')
+    
+    local commit_new_feature
+    commit_new_feature=$(printf '%s' "$commit_messages" | grep -ci -E '(NEW-FEATURE|FEATURE.*ADD)' 2>/dev/null || printf '0')
+    commit_new_feature=$(printf '%s' "$commit_new_feature" | tr -cd '0-9' || printf '0')
+    
+    # Detect security keywords
+    local security_keywords
+    security_keywords=$(printf '%s' "$diff_content" | grep -ci -E '(//[[:space:]]*SECURITY|/\*[[:space:]]*SECURITY|#[[:space:]]*SECURITY)' 2>/dev/null || printf '0')
+    security_keywords=$(printf '%s' "$security_keywords" | tr -cd '0-9' || printf '0')
+    
+    local commit_security
+    commit_security=$(printf '%s' "$commit_messages" | grep -ci -E '(SECURITY|VULNERABILITY|CVE)' 2>/dev/null || printf '0')
+    commit_security=$(printf '%s' "$commit_security" | tr -cd '0-9' || printf '0')
+    
+    # Detect removed options keywords
+    local removed_options_keywords
+    removed_options_keywords=$(printf '%s' "$diff_content" | grep -ci -E '(//[[:space:]]*REMOVED.*OPTION|/\*[[:space:]]*REMOVED.*OPTION|#[[:space:]]*REMOVED.*OPTION)' 2>/dev/null || printf '0')
+    removed_options_keywords=$(printf '%s' "$removed_options_keywords" | tr -cd '0-9' || printf '0')
+    
+    # Detect added options keywords
+    local added_options_keywords
+    added_options_keywords=$(printf '%s' "$diff_content" | grep -ci -E '(//[[:space:]]*ADDED.*OPTION|/\*[[:space:]]*ADDED.*OPTION|#[[:space:]]*ADDED.*OPTION)' 2>/dev/null || printf '0')
+    added_options_keywords=$(printf '%s' "$added_options_keywords" | tr -cd '0-9' || printf '0')
+    
+    # Calculate totals
+    local total_cli_breaking=$((cli_breaking_keywords + commit_cli_breaking))
+    local total_api_breaking=$((api_breaking_keywords + commit_api_breaking))
+    local total_new_features=$((new_feature_keywords + commit_new_feature))
+    local total_security=$((security_keywords + commit_security))
+    
+    # Determine boolean flags
+    local has_cli_breaking=false
+    [[ "$total_cli_breaking" -gt 0 ]] && has_cli_breaking=true
+    
+    local has_api_breaking=false
+    [[ "$total_api_breaking" -gt 0 ]] && has_api_breaking=true
+    
+    local has_new_features=false
+    [[ "$total_new_features" -gt 0 ]] && has_new_features=true
+    
+    local has_security=false
+    [[ "$total_security" -gt 0 ]] && has_security=true
+    
+    local has_removed_options=false
+    [[ "$removed_options_keywords" -gt 0 ]] && has_removed_options=true
+    
+    local has_added_options=false
+    [[ "$added_options_keywords" -gt 0 ]] && has_added_options=true
+    
+    # Output results
+    if [[ "$JSON_OUTPUT" = "true" ]]; then
+        printf '{\n'
+        printf '  "cli_breaking_keywords": %s,\n' "$cli_breaking_keywords"
+        printf '  "api_breaking_keywords": %s,\n' "$api_breaking_keywords"
+        printf '  "commit_cli_breaking": %s,\n' "$commit_cli_breaking"
+        printf '  "commit_api_breaking": %s,\n' "$commit_api_breaking"
+        printf '  "total_cli_breaking": %s,\n' "$total_cli_breaking"
+        printf '  "total_api_breaking": %s,\n' "$total_api_breaking"
+        printf '  "new_feature_keywords": %s,\n' "$new_feature_keywords"
+        printf '  "commit_new_feature": %s,\n' "$commit_new_feature"
+        printf '  "total_new_features": %s,\n' "$total_new_features"
+        printf '  "security_keywords": %s,\n' "$security_keywords"
+        printf '  "commit_security": %s,\n' "$commit_security"
+        printf '  "total_security": %s,\n' "$total_security"
+        printf '  "removed_options_keywords": %s,\n' "$removed_options_keywords"
+        printf '  "added_options_keywords": %s,\n' "$added_options_keywords"
+        printf '  "has_cli_breaking": %s,\n' "$has_cli_breaking"
+        printf '  "has_api_breaking": %s,\n' "$has_api_breaking"
+        printf '  "has_new_features": %s,\n' "$has_new_features"
+        printf '  "has_security": %s,\n' "$has_security"
+        printf '  "has_removed_options": %s,\n' "$has_removed_options"
+        printf '  "has_added_options": %s\n' "$has_added_options"
+        printf '}\n'
+    elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
+        printf 'CLI_BREAKING_KEYWORDS=%s\n' "$cli_breaking_keywords"
+        printf 'API_BREAKING_KEYWORDS=%s\n' "$api_breaking_keywords"
+        printf 'COMMIT_CLI_BREAKING=%s\n' "$commit_cli_breaking"
+        printf 'COMMIT_API_BREAKING=%s\n' "$commit_api_breaking"
+        printf 'TOTAL_CLI_BREAKING=%s\n' "$total_cli_breaking"
+        printf 'TOTAL_API_BREAKING=%s\n' "$total_api_breaking"
+        printf 'NEW_FEATURE_KEYWORDS=%s\n' "$new_feature_keywords"
+        printf 'COMMIT_NEW_FEATURE=%s\n' "$commit_new_feature"
+        printf 'TOTAL_NEW_FEATURES=%s\n' "$total_new_features"
+        printf 'SECURITY_KEYWORDS=%s\n' "$security_keywords"
+        printf 'COMMIT_SECURITY=%s\n' "$commit_security"
+        printf 'TOTAL_SECURITY=%s\n' "$total_security"
+        printf 'REMOVED_OPTIONS_KEYWORDS=%s\n' "$removed_options_keywords"
+        printf 'ADDED_OPTIONS_KEYWORDS=%s\n' "$added_options_keywords"
+        printf 'HAS_CLI_BREAKING=%s\n' "$has_cli_breaking"
+        printf 'HAS_API_BREAKING=%s\n' "$has_api_breaking"
+        printf 'HAS_NEW_FEATURES=%s\n' "$has_new_features"
+        printf 'HAS_SECURITY=%s\n' "$has_security"
+        printf 'HAS_REMOVED_OPTIONS=%s\n' "$has_removed_options"
+        printf 'HAS_ADDED_OPTIONS=%s\n' "$has_added_options"
+    else
+        printf '=== Keyword Analysis ===\n'
+        printf '\nBreaking Change Keywords:\n'
+        printf '  CLI-BREAKING in code: %s\n' "$cli_breaking_keywords"
+        printf '  API-BREAKING in code: %s\n' "$api_breaking_keywords"
+        printf '  CLI-BREAKING in commits: %s\n' "$commit_cli_breaking"
+        printf '  API-BREAKING in commits: %s\n' "$commit_api_breaking"
+        printf '  Total CLI breaking: %s\n' "$total_cli_breaking"
+        printf '  Total API breaking: %s\n' "$total_api_breaking"
+        printf '\nFeature Keywords:\n'
+        printf '  NEW-FEATURE in code: %s\n' "$new_feature_keywords"
+        printf '  NEW-FEATURE in commits: %s\n' "$commit_new_feature"
+        printf '  Total new features: %s\n' "$total_new_features"
+        printf '\nSecurity Keywords:\n'
+        printf '  SECURITY in code: %s\n' "$security_keywords"
+        printf '  SECURITY in commits: %s\n' "$commit_security"
+        printf '  Total security: %s\n' "$total_security"
+        printf '\nOption Keywords:\n'
+        printf '  Removed options: %s\n' "$removed_options_keywords"
+        printf '  Added options: %s\n' "$added_options_keywords"
+        printf '\nSummary:\n'
+        printf '  Has CLI breaking: %s\n' "$has_cli_breaking"
+        printf '  Has API breaking: %s\n' "$has_api_breaking"
+        printf '  Has new features: %s\n' "$has_new_features"
+        printf '  Has security: %s\n' "$has_security"
+        printf '  Has removed options: %s\n' "$has_removed_options"
+        printf '  Has added options: %s\n' "$has_added_options"
+    fi
+}
+
+# Main execution
+analyze_keywords "$BASE_REF" "$TARGET_REF" 
