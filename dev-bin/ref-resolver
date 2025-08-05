@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
@@ -16,10 +16,10 @@ export LC_ALL=C
 export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
 show_help() {
-    cat << EOF
+    cat << 'EOF'
 Reference Resolver
 
-Usage: $(basename "$0") [options]
+Usage: reference-resolver [options]
 
 Options:
   --since <tag>            Analyze changes since specific tag (default: last tag)
@@ -29,21 +29,21 @@ Options:
   --base <ref>             Set base reference for comparison (default: auto-detected)
   --target <ref>           Set target reference for comparison (default: HEAD)
   --repo-root <path>       Set repository root directory
-  --no-merge-base          Disable automatic merge-base detection for disjoint branches
-  --print-base             Output the chosen base reference SHA on a single line
+  --no-merge-base          Disable automatic merge-base adjustment for disjoint branches
+  --print-base             Output the chosen base reference SHA only
   --machine                Output machine-readable key=value format
   --json                   Output machine-readable JSON
   --help, -h               Show this help
 
 Examples:
-  $(basename "$0") --since v1.1.0
-  $(basename "$0") --since-date 2025-01-01
-  $(basename "$0") --base HEAD~5 --target HEAD
-  $(basename "$0") --base v1.0.0 --target v1.1.0 --print-base
+  reference-resolver --since v1.1.0
+  reference-resolver --since-date 2025-01-01
+  reference-resolver --base HEAD~5 --target HEAD
+  reference-resolver --base v1.0.0 --target v1.1.0 --print-base
 EOF
 }
 
-# Parse arguments
+# --- args ---
 SINCE_TAG=""
 SINCE_COMMIT=""
 SINCE_DATE=""
@@ -59,27 +59,27 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --since|--since-tag)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --since requires a value\n' >&2; exit 1; }
-            SINCE_TAG="$2"; shift 2;;
+            SINCE_TAG=$2; shift 2;;
         --since-commit)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --since-commit requires a value\n' >&2; exit 1; }
-            SINCE_COMMIT="$2"; shift 2;;
+            SINCE_COMMIT=$2; shift 2;;
         --since-date)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --since-date requires a value\n' >&2; exit 1; }
             # Validate date format (YYYY-MM-DD)
             [[ "$2" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { printf 'Error: --since-date requires YYYY-MM-DD format\n' >&2; exit 1; }
-            IFS='-' read -r _ month day <<< "$2"
-            ((month>=1 && month<=12)) || { printf 'Error: Invalid month in date %s (must be 01-12)\n' "$2" >&2; exit 1; }
-            ((day>=1 && day<=31)) ||  { printf 'Error: Invalid day in date %s (must be 01-31)\n' "$2" >&2; exit 1; }
-            SINCE_DATE="$2"; shift 2;;
+            IFS='-' read -r _ m d <<< "$2"
+            ((m>=1 && m<=12)) || { printf 'Error: Invalid month in date %s (01-12)\n' "$2" >&2; exit 1; }
+            ((d>=1 && d<=31)) ||  { printf 'Error: Invalid day in date %s (01-31)\n' "$2" >&2; exit 1; }
+            SINCE_DATE=$2; shift 2;;
         --base)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --base requires a value\n' >&2; exit 1; }
-            BASE_REF="$2"; shift 2;;
+            BASE_REF=$2; shift 2;;
         --target)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --target requires a value\n' >&2; exit 1; }
-            TARGET_REF="$2"; shift 2;;
+            TARGET_REF=$2; shift 2;;
         --repo-root)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --repo-root requires a value\n' >&2; exit 1; }
-            REPO_ROOT="$2"; shift 2;;
+            REPO_ROOT=$2; shift 2;;
         --no-merge-base) NO_MERGE_BASE=true; shift;;
         --print-base) PRINT_BASE=true; shift;;
         --machine) MACHINE_OUTPUT=true; shift;;
@@ -219,7 +219,7 @@ main() {
             fi
             exit 0
         else
-            printf 'Error: No common ancestor found between %s and %s. Exiting.\n' "$base_ref" "$target_ref" >&2
+            printf 'Error: No common ancestor found between %s and %s. Exiting.\n' "$base_ref" "$TARGET_REF" >&2
             exit 1
         fi
     fi
