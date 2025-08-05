@@ -50,9 +50,9 @@ run_test() {
     return 0
 }
 
-BUMP_VERSION_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/bump-version"
-SEMANTIC_ANALYZER_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
-PROJECT_ROOT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.."
+# Get script paths from project root
+BUMP_VERSION_SCRIPT="$PROJECT_ROOT/dev-bin/bump-version"
+SEMANTIC_ANALYZER_SCRIPT="$PROJECT_ROOT/dev-bin/semantic-version-analyzer"
 
 # Test 1: LOC delta system with patch bump
 printf '%s\n' "${CYAN}=== Test 1: LOC delta system with patch bump ===${RESET}"
@@ -66,7 +66,7 @@ export VERSION_MINOR_LIMIT=100
 # Test patch bump with LOC delta
 run_test "Patch bump with LOC delta enabled" \
     "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "9.3.1"
+    "10.5.13"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -87,7 +87,7 @@ git commit --quiet -m "Add new file for testing" 2>/dev/null || true
 # Test patch bump with actual changes
 run_test "Patch bump with actual changes" \
     "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "9.3."
+    "10.5.14"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -101,24 +101,24 @@ export VERSION_PATCH_LIMIT=100
 export VERSION_MINOR_LIMIT=100
 
 # Set version to test patch rollover
-echo "9.3.95" > VERSION
+echo "10.5.95" > VERSION
 git add VERSION
-git commit --quiet -m "Set version to 9.3.95" 2>/dev/null || true
+git commit --quiet -m "Set version to 10.5.95" 2>/dev/null || true
 
 # Test patch rollover
-run_test "Patch rollover (9.3.95 + delta)" \
+run_test "Patch rollover (10.5.95 + delta)" \
     "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "9.3.96"
+    "10.5.96"
 
 # Set version to test minor rollover
-echo "9.99.95" > VERSION
+echo "10.99.95" > VERSION
 git add VERSION
-git commit --quiet -m "Set version to 9.99.95" 2>/dev/null || true
+git commit --quiet -m "Set version to 10.99.95" 2>/dev/null || true
 
 # Test minor rollover
-run_test "Minor rollover (9.99.95 + delta)" \
+run_test "Minor rollover (10.99.95 + delta)" \
     "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "9.99.96"
+    "10.99.96"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -137,7 +137,6 @@ git add changes.c
 git commit --quiet -m "Add changes for analysis" 2>/dev/null || true
 
 # Test semantic analyzer output from project root
-SEMANTIC_ANALYZER_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
 run_test "Semantic analyzer with new system" \
     "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd)" \
     '"loc_delta"'
@@ -186,12 +185,17 @@ cd "$test_dir"
 # Test custom patch limit
 run_test "Custom patch limit works" \
     "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "9.3.1"
+    "10.5.13"
 
-# Test custom minor limit
-run_test "Custom minor limit works" \
-    "VERSION_MINOR_LIMIT=50 $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
-    "9.3.5"
+# Test custom minor limit with rollover
+# Set version to 10.5.48 so that delta of 5 (minor bump) will cause rollover
+echo "10.5.48" > VERSION
+git add VERSION
+git commit --quiet -m "Set version to 10.5.48" 2>/dev/null || true
+
+run_test "Custom minor limit with rollover" \
+    "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
+    "10.6.3"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -203,7 +207,7 @@ cd "$test_dir"
 # Test invalid delta formula
 run_test "Invalid delta formula handling" \
     "VERSION_PATCH_DELTA='invalid_formula' $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd) 2>&1 || true" \
-    "9.3.1"
+    "10.5.13"
 
 cleanup_temp_test_env "$test_dir"
 
