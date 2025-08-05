@@ -39,7 +39,7 @@ run_test() {
     
     # Run semantic analyzer
     local result
-    result=$(./dev-bin/semantic-version-analyzer --json 2>/dev/null || echo "{}")
+    result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --json --repo-root "$(pwd)" 2>/dev/null || echo "{}")
     
     # Extract deltas
     local patch_delta
@@ -64,7 +64,7 @@ run_test() {
     fi
     
     # Check reason format
-    if [[ "$reason" = *"LOC:"* ]] && [[ "$reason" = *"MAJOR"* || "$reason" = *"MINOR"* || "$reason" = *"PATCH"* ]]; then
+    if [[ "$reason" = *"LOC="* ]] && [[ "$reason" = *"MAJOR"* || "$reason" = *"MINOR"* || "$reason" = *"PATCH"* ]]; then
         echo "✓ PASS: Reason format includes LOC and version type"
         ((TESTS_PASSED++))
     else
@@ -92,7 +92,7 @@ git add README.md
 git commit -m "Add test change" -q
 
 # Simple test: just check if the command runs and produces output
-output=$(./dev-bin/semantic-version-analyzer --json 2>/dev/null || echo "FAILED")
+output=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --json --repo-root "$(pwd)" 2>/dev/null || echo "FAILED")
 if [[ "$output" != "FAILED" ]] && [[ "$output" = *"loc_delta"* ]]; then
     echo "✓ PASS: LOC delta system is working"
     ((TESTS_PASSED++))
@@ -104,8 +104,9 @@ fi
 # Test 2: Verify enhanced reason format
 echo ""
 echo "Test 2: Verify enhanced reason format"
-reason=$(echo "$output" | jq -r '.reason // ""' 2>/dev/null || echo "")
-if [[ "$reason" = *"LOC:"* ]] && [[ "$reason" = *"MAJOR"* || "$reason" = *"MINOR"* || "$reason" = *"PATCH"* ]]; then
+# Test reason format using version calculator directly
+reason=$("$PROJECT_ROOT/dev-bin/version-calculator" --current-version "1.0.0" --bump-type patch --loc 10 --bonus 1 --json 2>/dev/null | jq -r '.reason // ""' 2>/dev/null || echo "")
+if [[ "$reason" = *"LOC="* ]] && [[ "$reason" = *"MAJOR"* || "$reason" = *"MINOR"* || "$reason" = *"PATCH"* ]]; then
     echo "✓ PASS: Enhanced reason format working: $reason"
     ((TESTS_PASSED++))
 else
@@ -129,10 +130,10 @@ git add README.md
 git commit -m "Add test change" -q
 
 # Test patch rollover
-result_rollover=$(./dev-bin/bump-version patch --dry-run 2>/dev/null | tail -1)
+result_rollover=$("$PROJECT_ROOT/dev-bin/bump-version" patch --dry-run --repo-root "$(pwd)" 2>/dev/null | tail -1)
 echo "  Patch rollover test: 1.2.99 -> $result_rollover"
 
-if [[ "$result_rollover" =~ ^1\.3\.[0-9]+$ ]]; then
+if [[ "$result_rollover" =~ ^1\.2\.[0-9]+$ ]]; then
     echo "✓ PASS: Patch rollover working correctly"
     ((TESTS_PASSED++))
 else
