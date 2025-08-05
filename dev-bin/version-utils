@@ -36,19 +36,26 @@ resolve_script_paths() {
     local script_path="$1"
     local repo_root="${2:-}"
     
-    SCRIPT_DIR="$(dirname "$(realpath "$script_path")")"
-    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-    VERSION_FILE="$PROJECT_ROOT/VERSION"
+    # Use local variables to avoid conflicts with readonly variables
+    local script_dir project_root version_file
+    
+    script_dir="$(dirname "$(realpath "$script_path")")"
+    project_root="$(dirname "$script_dir")"
+    version_file="$project_root/VERSION"
     
     if [[ -n "$repo_root" ]]; then
         [[ -d "$repo_root" ]] || { printf '%s\n' "${RED}Error: Repository root '$repo_root' does not exist${RESET}" >&2; exit 1; }
-        PROJECT_ROOT="$repo_root"
-        VERSION_FILE="$PROJECT_ROOT/VERSION"
-        cd "$PROJECT_ROOT"
-        printf '%s\n' "${CYAN}Using repository root: $PROJECT_ROOT${RESET}" >&2
+        project_root="$repo_root"
+        version_file="$project_root/VERSION"
+        cd "$project_root"
+        printf '%s\n' "${CYAN}Using repository root: $project_root${RESET}" >&2
     else
-        cd "$PROJECT_ROOT"
+        cd "$project_root"
     fi
+    
+    # Export the variables (SCRIPT_DIR is already set by the calling script)
+    export PROJECT_ROOT="$project_root"
+    export VERSION_FILE="$version_file"
 }
 
 # --- Dependency helpers -------------------------------------------------------
@@ -261,4 +268,26 @@ is_semver() {
 
 is_semver_with_prerelease() {
     [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]
+}
+
+validate_version_format() {
+    local version="$1"
+    local allow_prerelease="$2"
+
+    if [[ "$allow_prerelease" == "true" ]]; then
+        if ! is_semver_with_prerelease "$version"; then
+            die "Invalid version format: $version"
+            printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-PRERELEASE (e.g., 1.0.0 or 1.0.0-rc.1)${RESET}" >&2
+            printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed${RESET}" >&2
+            exit 1
+        fi
+    else
+        if ! is_semver "$version"; then
+            die "Invalid version format: $version"
+            printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH (e.g., 1.0.0)${RESET}" >&2
+            printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed${RESET}" >&2
+            printf '%s\n' "${YELLOW}Note: Pre-releases require --allow-prerelease with --set${RESET}" >&2
+            exit 1
+        fi
+    fi
 } 

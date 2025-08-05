@@ -10,30 +10,80 @@
 # Modular version of the original bump-version script
 
 set -euo pipefail
+shopt -s lastpipe
+IFS=$'\n\t'
+export LC_ALL=C
 
-# Source utilities
-SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-source "$SCRIPT_DIR/version-utils"
+# ------------------------------ bootstrap ------------------------------------
 
-# --- Initialize and setup ----------------------------------------------------
-setup_environment() {
-    # Initialize colors
-    init_colors "${NO_COLOR:-false}"
-    
-    # Resolve paths
-    resolve_script_paths "$0" "${REPO_ROOT:-}"
-    
-    # Store original project root for semantic analyzer
-    ORIGINAL_PROJECT_ROOT="$PROJECT_ROOT"
-    
-    # Setup cleanup
-    setup_cleanup "TMP_FILE"
-    
-    # Check dependencies
-    require_cmd
+readonly PROG=${0##*/}
+
+# realpath is required before SCRIPT_DIR is known; fall back to python if needed
+if ! command -v realpath >/dev/null 2>&1; then
+  echo "[$PROG] Error: realpath not found." >&2
+  exit 127
+fi
+
+SCRIPT_DIR="$(dirname -- "$(realpath -- "$0")")"
+
+# Helper to die consistently (before version-utils is sourced)
+_die_boot() { printf '[%s] %s\n' "$PROG" "$*" >&2; exit 1; }
+
+# Require Bash ≥ 4 (associative arrays & modern features used in utilities)
+if (( BASH_VERSINFO[0] < 4 )); then
+  _die_boot "Bash ≥ 4 is required; current: ${BASH_VERSION}"
+fi
+
+# Validate helper scripts exist early (fail fast & clear)
+_need_exec() {
+  local p="$1" name="${2:-$1}"
+  [[ -x "$p" ]] || _die_boot "Required helper '$name' not executable at: $p"
 }
 
-# --- Version file operations -------------------------------------------------
+# version-utils is a sourced library (must exist and be readable)
+[[ -r "$SCRIPT_DIR/version-utils" ]] || _die_boot "Missing: $SCRIPT_DIR/version-utils"
+# Other helpers are called as executables
+_need_exec "$SCRIPT_DIR/cli-parser"         "cli-parser"
+_need_exec "$SCRIPT_DIR/cmake-updater"      "cmake-updater"
+_need_exec "$SCRIPT_DIR/version-calculator-loc" "version-calculator-loc"
+_need_exec "$SCRIPT_DIR/git-operations"     "git-operations"
+_need_exec "$SCRIPT_DIR/version-validator"  "version-validator"
+
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/version-utils"
+
+# ------------------------------ traps/cleanup --------------------------------
+
+# Ensure cleanup hook exists even if utilities change later
+setup_cleanup "TMP_FILE"
+
+trap '{
+  st=$?
+  if (( st != 0 )); then
+    warn "Aborted with status $st at line ${BASH_LINENO[0]} executing: ${BASH_COMMAND}"
+  fi
+  # cleanup function is provided by version-utils via setup_cleanup
+}' EXIT
+
+# ------------------------------ environment ----------------------------------
+
+setup_environment() {
+    # Initialize colors (NO_COLOR=true disables)
+    init_colors "${NO_COLOR:-false}"
+    
+    # Resolve and export common paths (provided by version-utils)
+    resolve_script_paths "$0" "${REPO_ROOT:-}"
+    
+    # Keep the *original* root for analyzers that need unmodified context
+    ORIGINAL_PROJECT_ROOT="$PROJECT_ROOT"
+    
+    # Check external commands we rely on; version-utils should implement require_cmd
+    # Keep the list minimal & explicit for this orchestrator.
+    require_cmd git grep sed awk tr realpath
+}
+
+# --------------------------- version file ops --------------------------------
+
 handle_version_file() {
     local version_exists="false"
     local current_version="none"
@@ -41,25 +91,27 @@ handle_version_file() {
     if [[ -f "$VERSION_FILE" ]]; then
         version_exists="true"
         validate_version_file_path "$VERSION_FILE" "$PROJECT_ROOT"
-        current_version=$(read_version_file "$VERSION_FILE")
+        current_version="$(read_version_file "$VERSION_FILE")"
         
         if ! is_semver "$current_version"; then
-            die "Invalid version format in VERSION: $current_version"
-            printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH${RESET}" >&2
+            die "Invalid format in VERSION ($VERSION_FILE): '$current_version'"
+            printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH (optionally with prerelease/build when allowed)${RESET}" >&2
             exit 1
         fi
     elif [[ -n "${SET_VERSION:-}" ]]; then
-        printf '%s\n' "${YELLOW}Note: VERSION not found; will create with $SET_VERSION${RESET}" >&2
+        printf '%s\n' "${YELLOW}Note: VERSION not found; will create with ${SET_VERSION}${RESET}" >&2
     else
-        die "VERSION file not found at $VERSION_FILE"
-        printf '%s\n' "${YELLOW}Use --set VERSION to create it${RESET}" >&2
+        die "VERSION file not found at: $VERSION_FILE"
+        printf '%s\n' "${YELLOW}Provide --set VERSION to create it, or add a VERSION file${RESET}" >&2
         exit 1
     fi
     
+    # Two-line output for simple capture
     printf '%s\n%s' "$version_exists" "$current_version"
 }
 
-# --- Version calculation ----------------------------------------------------
+# -------------------------- version calculation ------------------------------
+
 calculate_new_version() {
     local current_version="$1"
     local bump_type="${BUMP_TYPE:-}"
@@ -68,67 +120,65 @@ calculate_new_version() {
     if [[ -n "$set_version" ]]; then
         validate_version_format "$set_version" "${ALLOW_PRERELEASE:-false}"
         printf '%s' "$set_version"
-    else
-        [[ -z "$bump_type" ]] && die "No bump type specified"
-        printf '%s\n' "${CYAN}Bumping version from $current_version...${RESET}" >&2
-        
-        # Use the LOC-based calculator
-        local new_version
-        local calculator_args=(
-            --current-version "$current_version"
-            --bump-type "$bump_type"
-            --original-project-root "$ORIGINAL_PROJECT_ROOT"
-        )
-        if [[ -n "${REPO_ROOT:-}" ]]; then
-            calculator_args+=(--repo-root "${REPO_ROOT}")
-        fi
-        
-        new_version=$("$SCRIPT_DIR/version-calculator-loc" "${calculator_args[@]}")
-        
-        printf '%s' "$new_version"
+        return 0
     fi
+    
+    [[ -n "$bump_type" ]] || die "No bump type specified (expected one of: major|minor|patch)."
+    
+    printf '%s\n' "${CYAN}Bumping version from $current_version...${RESET}" >&2
+    
+    local -a calculator_args=(
+        --current-version "$current_version"
+        --bump-type "$bump_type"
+        --original-project-root "$ORIGINAL_PROJECT_ROOT"
+    )
+    if [[ -n "${REPO_ROOT:-}" ]]; then
+        calculator_args+=(--repo-root "${REPO_ROOT}")
+    fi
+    
+    local new_version
+    new_version="$("$SCRIPT_DIR/version-calculator-loc" "${calculator_args[@]}")"
+    printf '%s' "$new_version"
 }
 
-# --- File updates -----------------------------------------------------------
+# ------------------------------ file updates ---------------------------------
+
 update_files() {
     local new_version="$1"
     local current_version="$2"
     
-    # Update VERSION file
+    # Guard: do not persist prereleases into VERSION
     if [[ "$new_version" != *-* ]]; then
         safe_write_file "$VERSION_FILE" "$new_version"
-        TMP_FILE_VAR="TMP_FILE"
-        
         if [[ "$current_version" == "none" ]]; then
-            success "Created VERSION file: $new_version"
+            success "Created VERSION: $new_version"
         else
-            success "Updated VERSION file: $current_version → $new_version"
+            success "Updated VERSION: $current_version → $new_version"
         fi
     else
-        warn "Pre-release $new_version - not writing to VERSION file"
-        printf '%s\n' "${CYAN}Pre-release versions should not be stored in VERSION file${RESET}" >&2
+        warn "Pre-release $new_version — skipping write to VERSION"
+        printf '%s\n' "${CYAN}Note: Pre-release identifiers are not stored in VERSION.${RESET}" >&2
     fi
     
-    # Update CMakeLists.txt
+    # CMakeLists.txt update (skip when disabled)
     if [[ "${UPDATE_CMAKE:-true}" == "true" ]]; then
         if [[ "${DRY_RUN:-false}" == "true" ]]; then
-            "$SCRIPT_DIR/cmake-updater" simulate \
-                "$PROJECT_ROOT/CMakeLists.txt" \
-                "$new_version"
+            "$SCRIPT_DIR/cmake-updater" simulate "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
         else
-            "$SCRIPT_DIR/cmake-updater" update \
-                "$PROJECT_ROOT/CMakeLists.txt" \
-                "$new_version"
+            "$SCRIPT_DIR/cmake-updater" update   "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
         fi
     fi
 }
 
-# --- Git operations ---------------------------------------------------------
+# ------------------------------ git ops --------------------------------------
+
 perform_git_operations() {
     local new_version="$1"
     local current_version="$2"
     
-    if [[ "${DO_COMMIT:-false}" == "true" || "${DO_TAG:-false}" == "true" || "${DO_PUSH:-false}" == "true" || "${PUSH_TAGS:-false}" == "true" ]]; then
+    if [[ "${DO_COMMIT:-false}" == "true" || "${DO_TAG:-false}" == "true" || \
+          "${DO_PUSH:-false}"   == "true" || "${PUSH_TAGS:-false}" == "true" ]]; then
+        
         "$SCRIPT_DIR/git-operations" perform_git_operations \
             "$VERSION_FILE" \
             "${UPDATE_CMAKE:-true}" \
@@ -152,7 +202,8 @@ perform_git_operations() {
     fi
 }
 
-# --- Dry run simulation -----------------------------------------------------
+# ------------------------------ dry run --------------------------------------
+
 simulate_dry_run() {
     local new_version="$1"
     local current_version="$2"
@@ -160,40 +211,39 @@ simulate_dry_run() {
     
     if [[ "$current_version" == "none" ]]; then
         if [[ "$new_version" == *-* ]]; then
-            printf '%s\n' "${YELLOW}DRY RUN: Would print pre-release $new_version (not write VERSION)${RESET}" >&2
+            printf '%s\n' "${YELLOW}DRY RUN: Would print pre-release $new_version (no VERSION write)${RESET}" >&2
         else
             printf '%s\n' "${YELLOW}DRY RUN: Would create VERSION with $new_version${RESET}" >&2
         fi
     else
         if [[ "$new_version" == *-* ]]; then
-            printf '%s\n' "${YELLOW}DRY RUN: Would print pre-release $new_version (not update VERSION)${RESET}" >&2
+            printf '%s\n' "${YELLOW}DRY RUN: Would print pre-release $new_version (no VERSION update)${RESET}" >&2
         else
             printf '%s\n' "${YELLOW}DRY RUN: Would update VERSION to $new_version${RESET}" >&2
         fi
     fi
     
-    # Simulate CMake update
-    "$SCRIPT_DIR/cmake-updater" simulate \
-        "$PROJECT_ROOT/CMakeLists.txt" \
-        "$new_version"
+    # Simulate CMake update once (detect format only once)
+    local detect_out
+    detect_out="$("$SCRIPT_DIR/cmake-updater" detect_cmake_version_format "$PROJECT_ROOT/CMakeLists.txt" || true)"
+    "$SCRIPT_DIR/cmake-updater" simulate "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
     
     # Simulate git operations
     if [[ "${DO_COMMIT:-false}" == "true" ]]; then
         printf '%s\n' "${YELLOW}DRY RUN: Would create commit: chore(release): ${TAG_PREFIX:-v}${new_version}${RESET}" >&2
-        local effective_files=()
+        local -a effective_files=()
         [[ "$new_version" != *-* ]] && effective_files+=("VERSION")
         if [[ "${UPDATE_CMAKE:-true}" == "true" && "$new_version" != *-* ]]; then
-            if "$SCRIPT_DIR/cmake-updater" detect_cmake_version_format "$PROJECT_ROOT/CMakeLists.txt" | grep -q "variable"; then
-                # Skip CMakeLists.txt since it uses VERSION file variable
-                :
-            elif "$SCRIPT_DIR/cmake-updater" detect_cmake_version_format "$PROJECT_ROOT/CMakeLists.txt" | grep -q -E "(inline|set)"; then
+            if grep -q "variable" <<<"$detect_out"; then
+                : # uses VERSION variable; no inline update
+            elif grep -Eq "(^|[^a-z])(inline|set)([^a-z]|$)" <<<"$detect_out"; then
                 effective_files+=("CMakeLists.txt")
             fi
         fi
         if ((${#effective_files[@]} > 0)); then
             printf '%s\n' "${YELLOW}DRY RUN: Would commit files: ${effective_files[*]}${RESET}" >&2
         else
-            printf '%s\n' "${YELLOW}DRY RUN: Would skip commit (no files to commit)${RESET}" >&2
+            printf '%s\n' "${YELLOW}DRY RUN: Would skip commit (no file changes)${RESET}" >&2
         fi
     fi
     
@@ -204,17 +254,16 @@ simulate_dry_run() {
             printf '%s\n' "${YELLOW}DRY RUN: Would create tag: ${TAG_PREFIX:-v}${new_version}${RESET}" >&2
         fi
         local last_tag
-        last_tag=$("$SCRIPT_DIR/version-utils" last-tag "${TAG_PREFIX:-v}")
-        if [[ -n "$last_tag" ]]; then
-            printf '%s\n' "${YELLOW}DRY RUN: Last tag for comparison: $last_tag${RESET}" >&2
-        fi
+        last_tag="$("$SCRIPT_DIR/version-utils" last-tag "${TAG_PREFIX:-v}" || true)"
+        [[ -n "$last_tag" ]] && printf '%s\n' "${YELLOW}DRY RUN: Last tag for comparison: $last_tag${RESET}" >&2
     fi
     
-    # Print the computed version to stdout for pipelines
+    # Always print computed version to stdout for pipelines
     printf '%s\n' "$new_version"
 }
 
-# --- Print only mode --------------------------------------------------------
+# ----------------------------- print-only mode -------------------------------
+
 handle_print_only() {
     local set_version="${SET_VERSION:-}"
     local bump_type="${BUMP_TYPE:-}"
@@ -225,10 +274,9 @@ handle_print_only() {
         exit 0
     elif [[ -n "$bump_type" && -f "$VERSION_FILE" ]]; then
         local current_version
-        current_version=$(read_version_file "$VERSION_FILE")
+        current_version="$(read_version_file "$VERSION_FILE")"
         if is_semver "$current_version"; then
-            local new_version
-            local calculator_args=(
+            local -a calculator_args=(
                 --current-version "$current_version"
                 --bump-type "$bump_type"
                 --original-project-root "$ORIGINAL_PROJECT_ROOT"
@@ -236,44 +284,43 @@ handle_print_only() {
             if [[ -n "${REPO_ROOT:-}" ]]; then
                 calculator_args+=(--repo-root "${REPO_ROOT}")
             fi
-            
-            new_version=$("$SCRIPT_DIR/version-calculator-loc" "${calculator_args[@]}")
-            printf '%s\n' "$new_version"
+            "$SCRIPT_DIR/version-calculator-loc" "${calculator_args[@]}"
             exit 0
         fi
     fi
     
-    die "Cannot compute version for --print. Provide --set VERSION or a bump type with existing VERSION file."
+    die "Cannot compute version for --print. Provide --set VERSION or a bump type with an existing VERSION file."
 }
 
-# --- Main orchestration function --------------------------------------------
+# ---------------------------------- main -------------------------------------
+
 main() {
-    # Handle help case early
-    if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    # Fast help path
+    if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
         "$SCRIPT_DIR/cli-parser" help
         exit 0
     fi
     
-    # Parse CLI arguments and source variables
+    # Parse CLI -> exports variables used below
+    # We eval only the output of our trusted parser to set env vars/flags.
     eval "$("$SCRIPT_DIR/cli-parser" parse "$@")"
     
-    # Setup environment
     setup_environment
     
-    # Handle print-only mode early
+    # Print-only early exit
     if [[ "${PRINT_ONLY:-false}" == "true" ]]; then
         handle_print_only
     fi
     
-    # Handle version file
-    local version_info
-    version_info=$(handle_version_file)
-    local version_exists="${version_info%$'\n'*}"
-    local current_version="${version_info#*$'\n'}"
+    # VERSION file handling
+    local version_info version_exists current_version
+    version_info="$(handle_version_file)"
+    version_exists="${version_info%$'\n'*}"
+    current_version="${version_info#*$'\n'}"
     
-    # Calculate new version
+    # Compute new version
     local new_version
-    new_version=$(calculate_new_version "$current_version")
+    new_version="$(calculate_new_version "$current_version")"
     
     # No-op guard
     if [[ "$current_version" == "$new_version" ]]; then
@@ -282,24 +329,24 @@ main() {
         exit 0
     fi
     
-    # Handle dry run
+    # Dry-run path
     if [[ "${DRY_RUN:-false}" == "true" ]]; then
         simulate_dry_run "$new_version" "$current_version" "$version_exists"
         exit 0
     fi
     
-    # Update files
+    # Apply updates
     update_files "$new_version" "$current_version"
     
-    # Perform git operations
+    # Git actions
     perform_git_operations "$new_version" "$current_version"
     
-    # Warn about order for --set when not tagging
+    # Sanity warning for --set without tagging (helps ordering in release flows)
     if [[ -n "${SET_VERSION:-}" && "${DO_TAG:-false}" != "true" && "$new_version" != *-* ]]; then
-        local last_tag
-        last_tag=$("$SCRIPT_DIR/version-utils" last-tag "${TAG_PREFIX:-v}")
+        local last_tag last_version
+        last_tag="$("$SCRIPT_DIR/version-utils" last-tag "${TAG_PREFIX:-v}" || true)"
         if [[ -n "$last_tag" ]]; then
-            local last_version="${last_tag:${#TAG_PREFIX:-v}}"
+            last_version="${last_tag:${#TAG_PREFIX:-v}}"
             if is_semver "$last_version"; then
                 if ! "$SCRIPT_DIR/version-validator" is_version_greater "$new_version" "$last_version"; then
                     warn "--set version $new_version is not greater than last tag $last_tag"
@@ -308,14 +355,13 @@ main() {
         fi
     fi
     
-    # Success message
+    # Success & next steps
     if [[ "$current_version" == "none" ]]; then
         success "Version bump completed: created $new_version"
     else
         success "Version bump completed: $current_version → $new_version"
     fi
     
-    # Next steps
     if [[ "${DO_TAG:-false}" == "true" ]]; then
         printf '%s\n' "${YELLOW}Next steps:${RESET}" >&2
         local current_branch
@@ -324,11 +370,12 @@ main() {
         printf '%s\n' "  git push ${REMOTE:-origin} ${TAG_PREFIX:-v}${new_version}" >&2
     fi
     
-    # Print the new version on stdout for scripting
+    # Stdout only: computed version (for pipelines)
     printf '%s\n' "$new_version"
 }
 
-# --- Script execution -------------------------------------------------------
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+# --------------------------------- entry -------------------------------------
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     main "$@"
 fi 
