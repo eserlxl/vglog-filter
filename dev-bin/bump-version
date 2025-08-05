@@ -201,36 +201,31 @@ bump_version() {
         esac
     fi
     
-    # Apply delta with rollover logic
+    # Apply delta with rollover logic using mod 1000
     case "$bump_type" in
         major|minor|patch)
-            local patch_limit="${VERSION_PATCH_LIMIT:-100}"
-            local minor_limit="${VERSION_MINOR_LIMIT:-100}"
+            local main_version_mod="${VERSION_PATCH_LIMIT:-1000}"
             
-            # Calculate new patch with modulo 100
-            local new_patch=$((current_patch + delta))
-            if [[ "$new_patch" -ge "$patch_limit" ]]; then
-                # Calculate how many minor increments we need
-                local minor_increments=$((new_patch / patch_limit))
-                local remaining_patch=$((new_patch % patch_limit))
-                
-                # Calculate new minor version
-                local new_minor=$((current_minor + minor_increments))
-                
-                if [[ "$new_minor" -ge "$minor_limit" ]]; then
-                    # Calculate how many major increments we need
-                    local major_increments=$((new_minor / minor_limit))
-                    new_major=$((current_major + major_increments))
-                    new_minor=$((new_minor % minor_limit))
-                    new_patch=$remaining_patch
-                else
-                    new_major=$current_major
-                    new_patch=$remaining_patch
-                fi
-            else
-                new_major=$current_major
-                new_minor=$current_minor
-            fi
+            # Apply mathematical rollover system:
+            # z_new = (z + delta_z) % MAIN_VERSION_MOD
+            # delta_y = ((z + delta_z) - (z + delta_z) % MAIN_VERSION_MOD) / MAIN_VERSION_MOD
+            # y_new = (y + delta_y) % MAIN_VERSION_MOD
+            # delta_x = ((y + delta_y) - (y + delta_y) % MAIN_VERSION_MOD) / MAIN_VERSION_MOD
+            # x_new = x + delta_x
+            
+            local new_z=$((current_patch + delta))
+            local delta_y=$(((new_z - (new_z % main_version_mod)) / main_version_mod))
+            local final_z=$((new_z % main_version_mod))
+            
+            local new_y=$((current_minor + delta_y))
+            local delta_x=$(((new_y - (new_y % main_version_mod)) / main_version_mod))
+            local final_y=$((new_y % main_version_mod))
+            
+            local final_x=$((current_major + delta_x))
+            
+            new_major=$final_x
+            new_minor=$final_y
+            new_patch=$final_z
             ;;
         *) printf '%s\n' "${RED}Error: Invalid bump type '$bump_type'${RESET}" >&2; exit 1 ;;
     esac
@@ -535,8 +530,7 @@ Environment:
   ANALYSIS_MESSAGE         Extra paragraph appended to default commit message
   TAG_PREFIX               Default tag prefix (overridden by --tag-prefix)
   REMOTE                   Default remote for push operations (overridden by --remote)
-  VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
-  VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
+  VERSION_PATCH_LIMIT      Main version modulus for rollover (default: 1000)
   VERSION_PATCH_DELTA      Patch delta formula (default: 1*(1+LOC/250))
   VERSION_MINOR_DELTA      Minor delta formula (default: 5*(1+LOC/500))
   VERSION_MAJOR_DELTA      Major delta formula (default: 10*(1+LOC/1000))

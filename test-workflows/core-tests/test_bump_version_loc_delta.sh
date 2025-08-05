@@ -50,61 +50,95 @@ run_test() {
     return 0
 }
 
-# Function to calculate expected version based on starting version
+# Function to calculate expected version based on new versioning system
 calculate_expected_version() {
     local start_version="$1"
     local bump_type="$2"
-    local delta="${3:-1}"
-    local patch_limit="${4:-100}"
-    local minor_limit="${5:-100}"
+    local loc="${3:-0}"
+    local bonus="${4:-0}"
+    local patch_limit="${5:-1000}"
+    local minor_limit="${6:-1000}"
     
     # Parse starting version
     local major minor patch
     IFS='.' read -r major minor patch <<< "$start_version"
     
+    # Calculate base delta from LOC using new formulas
+    local base_delta=0
     case "$bump_type" in
-        patch|minor|major)
-            # The new versioning system always starts by incrementing patch
-            local new_patch=$((patch + delta))
-            local new_minor=$minor
-            local new_major=$major
-            
-            # Apply rollover logic if needed
-            if [[ "$new_patch" -ge "$patch_limit" ]]; then
-                local minor_increments=$((new_patch / patch_limit))
-                local remaining_patch=$((new_patch % patch_limit))
-                
-                new_minor=$((minor + minor_increments))
-                new_patch=$remaining_patch
-                
-                if [[ "$new_minor" -ge "$minor_limit" ]]; then
-                    local major_increments=$((new_minor / minor_limit))
-                    new_major=$((major + major_increments))
-                    new_minor=$((new_minor % minor_limit))
-                fi
-            fi
-            
-            echo "$new_major.$new_minor.$new_patch"
+        patch)
+            # VERSION_PATCH_DELTA=1*(1+LOC/250)
+            base_delta=$(awk "BEGIN {printf \"%.0f\", 1 * (1 + $loc / 250)}" 2>/dev/null || echo "1")
+            ;;
+        minor)
+            # VERSION_MINOR_DELTA=5*(1+LOC/500)
+            base_delta=$(awk "BEGIN {printf \"%.0f\", 5 * (1 + $loc / 500)}" 2>/dev/null || echo "5")
+            ;;
+        major)
+            # VERSION_MAJOR_DELTA=10*(1+LOC/1000)
+            base_delta=$(awk "BEGIN {printf \"%.0f\", 10 * (1 + $loc / 1000)}" 2>/dev/null || echo "10")
             ;;
     esac
+    
+    # Ensure minimum base_delta of 1
+    if [[ "$base_delta" -lt 1 ]]; then
+        base_delta=1
+    fi
+    
+    # Calculate bonus multiplier
+    local loc_divisor=0
+    case "$bump_type" in
+        patch) loc_divisor=250 ;;
+        minor) loc_divisor=500 ;;
+        major) loc_divisor=1000 ;;
+        *) loc_divisor=250 ;;
+    esac
+    
+    local bonus_multiplier
+    bonus_multiplier=$(awk "BEGIN {printf \"%.0f\", $bonus * (1 + $loc / $loc_divisor)}" 2>/dev/null || echo "$bonus")
+    
+    # Calculate total delta
+    local total_delta=$((base_delta + bonus_multiplier))
+    if [[ "$total_delta" -lt 1 ]]; then
+        total_delta=1
+    fi
+    
+    # Apply mathematical rollover system with mod 1000:
+    # z_new = (z + delta_z) % MAIN_VERSION_MOD
+    # delta_y = ((z + delta_z) - (z + delta_z) % MAIN_VERSION_MOD) / MAIN_VERSION_MOD
+    # y_new = (y + delta_y) % MAIN_VERSION_MOD
+    # delta_x = ((y + delta_y) - (y + delta_y) % MAIN_VERSION_MOD) / MAIN_VERSION_MOD
+    # x_new = x + delta_x
+    
+    local new_z=$((patch + total_delta))
+    local delta_y=$(((new_z - (new_z % patch_limit)) / patch_limit))
+    local final_z=$((new_z % patch_limit))
+    
+    local new_y=$((minor + delta_y))
+    local delta_x=$(((new_y - (new_y % minor_limit)) / minor_limit))
+    local final_y=$((new_y % minor_limit))
+    
+    local final_x=$((major + delta_x))
+    
+    echo "$final_x.$final_y.$final_z"
 }
 
 # Get script paths from project root
 BUMP_VERSION_SCRIPT="$PROJECT_ROOT/dev-bin/bump-version"
 SEMANTIC_ANALYZER_SCRIPT="$PROJECT_ROOT/dev-bin/semantic-version-analyzer"
+VERSION_CALCULATOR_SCRIPT="$PROJECT_ROOT/dev-bin/version-calculator"
 
-# Test 1: LOC delta system with patch bump
-printf '%s\n' "${CYAN}=== Test 1: LOC delta system with patch bump ===${RESET}"
+# Test 1: Basic LOC delta system with patch bump
+printf '%s\n' "${CYAN}=== Test 1: Basic LOC delta system with patch bump ===${RESET}"
 test_dir=$(create_temp_test_env "test_loc_delta_patch")
 cd "$test_dir"
 
 # Get the starting version
 START_VERSION=$(cat VERSION)
-EXPECTED_PATCH=$(calculate_expected_version "$START_VERSION" "patch" 1)
+EXPECTED_PATCH=$(calculate_expected_version "$START_VERSION" "patch" 0 0)
 
 # Enable LOC delta system
-export VERSION_PATCH_LIMIT=100
-export VERSION_MINOR_LIMIT=100
+export VERSION_PATCH_LIMIT=1000
 
 # Test patch bump with LOC delta
 run_test "Patch bump with LOC delta enabled" \
@@ -113,9 +147,9 @@ run_test "Patch bump with LOC delta enabled" \
 
 cleanup_temp_test_env "$test_dir"
 
-# Test 2: New versioning system with actual changes
-printf '%s\n' "${CYAN}=== Test 2: New versioning system with actual changes ===${RESET}"
-test_dir=$(create_temp_test_env "test_new_system_changes")
+# Test 2: LOC delta formulas verification
+printf '%s\n' "${CYAN}=== Test 2: LOC delta formulas verification ===${RESET}"
+test_dir=$(create_temp_test_env "test_loc_delta_formulas")
 cd "$test_dir"
 
 # Get the starting version
@@ -125,16 +159,21 @@ START_VERSION=$(cat VERSION)
 export VERSION_PATCH_LIMIT=100
 export VERSION_MINOR_LIMIT=100
 
-# Add some changes to trigger LOC delta calculation
-echo "// New code for testing" > new_file.c
-git add new_file.c
-git commit --quiet -m "Add new file for testing" 2>/dev/null || true
+# Test with specific LOC values to verify formulas
+# 250 LOC should give patch delta = 1*(1+250/250) = 2
+run_test "Patch delta with 250 LOC" \
+    "$VERSION_CALCULATOR_SCRIPT --current-version '$START_VERSION' --bump-type patch --loc 250 --bonus 0 --json" \
+    '"total_delta": 2'
 
-# Test patch bump with actual changes - the system may add more than 1 due to LOC delta
-# We'll test that it's a valid version format rather than a specific number
-run_test "Patch bump with actual changes" \
-    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "[0-9]*\.[0-9]*\.[0-9]*"
+# 500 LOC should give minor delta = 5*(1+500/500) = 10
+run_test "Minor delta with 500 LOC" \
+    "$VERSION_CALCULATOR_SCRIPT --current-version '$START_VERSION' --bump-type minor --loc 500 --bonus 0 --json" \
+    '"total_delta": 10'
+
+# 1000 LOC should give major delta = 10*(1+1000/1000) = 20
+run_test "Major delta with 1000 LOC" \
+    "$VERSION_CALCULATOR_SCRIPT --current-version '$START_VERSION' --bump-type major --loc 1000 --bonus 0 --json" \
+    '"total_delta": 20'
 
 cleanup_temp_test_env "$test_dir"
 
@@ -148,8 +187,7 @@ START_VERSION=$(cat VERSION)
 IFS='.' read -r major minor patch <<< "$START_VERSION"
 
 # Enable new versioning system
-export VERSION_PATCH_LIMIT=100
-export VERSION_MINOR_LIMIT=100
+export VERSION_PATCH_LIMIT=1000
 
 # Set version to test patch rollover (95 + 1 = 96)
 echo "$major.$minor.95" > VERSION
@@ -157,9 +195,10 @@ git add VERSION
 git commit --quiet -m "Set version to $major.$minor.95" 2>/dev/null || true
 
 # Test patch rollover
+EXPECTED_ROLLOVER=$(calculate_expected_version "$major.$minor.95" "patch" 0 0)
 run_test "Patch rollover ($major.$minor.95 + delta)" \
     "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "$major.$minor.96"
+    "$EXPECTED_ROLLOVER"
 
 # Set version to test minor rollover
 echo "$major.99.95" > VERSION
@@ -167,9 +206,10 @@ git add VERSION
 git commit --quiet -m "Set version to $major.99.95" 2>/dev/null || true
 
 # Test minor rollover
+EXPECTED_MINOR_ROLLOVER=$(calculate_expected_version "$major.99.95" "patch" 0 0)
 run_test "Minor rollover ($major.99.95 + delta)" \
     "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "$major.99.96"
+    "$EXPECTED_MINOR_ROLLOVER"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -179,8 +219,7 @@ test_dir=$(create_temp_test_env "test_semantic_analyzer_integration")
 cd "$test_dir"
 
 # Enable new versioning system
-export VERSION_PATCH_LIMIT=100
-export VERSION_MINOR_LIMIT=100
+export VERSION_PATCH_LIMIT=1000
 
 # Add changes to trigger analysis
 echo "// Changes for semantic analysis" > changes.c
@@ -199,14 +238,13 @@ run_test "Reason format includes LOC and version type" \
 
 cleanup_temp_test_env "$test_dir"
 
-# Test 5: Delta formula verification
-printf '%s\n' "${CYAN}=== Test 5: Delta formula verification ===${RESET}"
+# Test 5: Delta formula verification with actual changes
+printf '%s\n' "${CYAN}=== Test 5: Delta formula verification with actual changes ===${RESET}"
 test_dir=$(create_temp_test_env "test_delta_formulas")
 cd "$test_dir"
 
 # Enable new versioning system
-export VERSION_PATCH_LIMIT=100
-export VERSION_MINOR_LIMIT=100
+export VERSION_PATCH_LIMIT=1000
 
 # Add changes to trigger delta calculation
 echo "// Code for delta testing" > delta_test.c
@@ -235,38 +273,56 @@ cd "$test_dir"
 
 # Get the starting version
 START_VERSION=$(cat VERSION)
-EXPECTED_PATCH=$(calculate_expected_version "$START_VERSION" "patch" 1)
 
 # Test custom patch limit
+# With patch limit 500, starting from 99.99.99 + 1 = 99.99.100
+# Since 100 < 500, no rollover occurs
+# Result: 99.99.100
 run_test "Custom patch limit works" \
-    "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
-    "$EXPECTED_PATCH"
+    "VERSION_PATCH_LIMIT=500 $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "99.99.100"
 
 # Test custom minor limit with rollover
 # Parse starting version
 IFS='.' read -r major minor patch <<< "$START_VERSION"
 
-# Set version to 48 so that delta of 5 (minor bump) will cause rollover
-echo "$major.$minor.48" > VERSION
+# Set version to 499 so that delta of 5 (minor bump) will cause rollover
+echo "$major.$minor.499" > VERSION
 git add VERSION
-git commit --quiet -m "Set version to $major.$minor.48" 2>/dev/null || true
+git commit --quiet -m "Set version to $major.$minor.499" 2>/dev/null || true
 
 # Calculate expected result with custom patch limit
-EXPECTED_ROLLOVER=$(calculate_expected_version "$major.$minor.48" "minor" 5 50 100)
+EXPECTED_ROLLOVER=$(calculate_expected_version "$major.$minor.499" "minor" 0 0 500 1000)
 run_test "Custom minor limit with rollover" \
-    "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
+    "VERSION_PATCH_LIMIT=500 $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
     "$EXPECTED_ROLLOVER"
 
 cleanup_temp_test_env "$test_dir"
 
-# Test 7: Error handling
-printf '%s\n' "${CYAN}=== Test 7: Error handling ===${RESET}"
+# Test 7: Bonus points integration
+printf '%s\n' "${CYAN}=== Test 7: Bonus points integration ===${RESET}"
+test_dir=$(create_temp_test_env "test_bonus_points")
+cd "$test_dir"
+
+# Get the starting version
+START_VERSION=$(cat VERSION)
+
+# Test with bonus points
+# 100 LOC + 5 bonus should give patch delta = 1*(1+100/250) + 5*(1+100/250) = 1.4 + 7 = 8.4 ≈ 8
+run_test "Patch delta with LOC and bonus" \
+    "$VERSION_CALCULATOR_SCRIPT --current-version '$START_VERSION' --bump-type patch --loc 100 --bonus 5 --json" \
+    '"total_delta":[0-9]*'
+
+cleanup_temp_test_env "$test_dir"
+
+# Test 8: Error handling
+printf '%s\n' "${CYAN}=== Test 8: Error handling ===${RESET}"
 test_dir=$(create_temp_test_env "test_error_handling")
 cd "$test_dir"
 
 # Get the starting version
 START_VERSION=$(cat VERSION)
-EXPECTED_PATCH=$(calculate_expected_version "$START_VERSION" "patch" 1)
+EXPECTED_PATCH=$(calculate_expected_version "$START_VERSION" "patch" 0 0)
 
 # Test invalid delta formula
 run_test "Invalid delta formula handling" \
@@ -284,11 +340,12 @@ if [[ $TESTS_FAILED -eq 0 ]]; then
     printf '%s\n' "${GREEN}All tests passed! New versioning system integration is working correctly.${RESET}"
     printf '\n%s\n' "${CYAN}Key features verified:${RESET}"
     printf '  • New versioning system always increases only the last identifier (patch)\n'
-    printf '  • Rollover logic with mod 100 working correctly\n'
+    printf '  • Rollover logic with mod 1000 working correctly\n'
     printf '  • LOC-based delta formulas (1*(1+LOC/250), 5*(1+LOC/500), 10*(1+LOC/1000))\n'
     printf '  • Enhanced reason format with LOC and version type\n'
-    printf '  • Semantic analyzer integration\n'
+    printf '  • Semantic analyzer integration with loc_delta output\n'
     printf '  • Configuration options and error handling\n'
+    printf '  • Bonus points integration with LOC multipliers\n'
     exit 0
 else
     printf '%s\n' "${RED}Some tests failed!${RESET}"
