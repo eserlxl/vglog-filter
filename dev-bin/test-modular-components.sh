@@ -10,135 +10,254 @@
 
 set -Eeuo pipefail
 IFS=$'\n\t'
+export LC_ALL=C
+# Keep Git fast and quiet inside tests
+export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=1
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# ---------------------- appearance & output ----------------------
+is_tty=0; [[ -t 1 ]] && is_tty=1
+USE_COLOR=1
+QUIET=0
+VERBOSE=0
+KEEP_OUTPUT=0
+TIMEOUT=""
+TIMEOUT_BIN="$(command -v timeout || true)"
+
+color() { 
+    ((USE_COLOR && is_tty)) || { printf '%s' "$2"; return; }
+    case "$1" in
+        red) printf '\033[0;31m%s\033[0m' "$2" ;;
+        grn) printf '\033[0;32m%s\033[0m' "$2" ;;
+        yel) printf '\033[1;33m%s\033[0m' "$2" ;;
+        blu) printf '\033[0;34m%s\033[0m' "$2" ;;
+        dim) printf '\033[2m%s\033[0m' "$2" ;;
+        *)  printf '%s' "$2" ;;
+    esac
+}
+say() { ((QUIET)) || printf '%s\n' "$*"; }
+sayc() { ((QUIET)) || { color "$1" "$2"; printf '\n'; } }
+die() { sayc red "Error: $*"; exit 1; }
+
+# ---------------------- args ----------------------
+DEV_BIN="./dev-bin"
+BASE_REF=""
+TARGET_REF=""
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [options]
+
+Options:
+  --dev-bin <dir>     Path to executables directory (default: ./dev-bin)
+  --base <ref>        Base ref for analyzers (default: auto)
+  --target <ref>      Target ref for analyzers (default: HEAD)
+  --quiet             Only print summary
+  --verbose           Print command outputs on failure and more details
+  --keep-output       Also show command outputs on success
+  --timeout <sec>     Per-test timeout in seconds (requires coreutils 'timeout')
+  --no-color          Disable colored output
+  -h, --help          Show this help
+EOF
+}
+
+while (($#)); do
+    case "$1" in
+        --dev-bin) DEV_BIN="${2:-}"; shift 2;;
+        --base) BASE_REF="${2:-}"; shift 2;;
+        --target) TARGET_REF="${2:-}"; shift 2;;
+        --quiet) QUIET=1; shift;;
+        --verbose) VERBOSE=1; shift;;
+        --keep-output) KEEP_OUTPUT=1; shift;;
+        --timeout) TIMEOUT="${2:-}"; shift 2;;
+        --no-color) USE_COLOR=0; shift;;
+        -h|--help) usage; exit 0;;
+        *) sayc red "Unknown option: $1"; usage; exit 2;;
+    esac
+done
+
+# ---------------------- temp workspace ----------------------
+TMPDIR="$(mktemp -d -t semver-tests.XXXXXX)"
+cleanup() { rm -rf "$TMPDIR"; }
+trap cleanup EXIT
+
+# ---------------------- helpers ----------------------
+require_git_repo() {
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
+        die "Not in a git repository. Run this inside a repository."
+}
+
+resolve_ref() {
+    # echo resolved SHA and return 0; return 1 if not resolvable
+    local ref="$1" out
+    out="$(git rev-parse --verify --quiet "$ref" 2>/dev/null)" || return 1
+    printf '%s\n' "$out"
+}
+
+ensure_dev_bin() {
+    [[ -d "$DEV_BIN" ]] || die "--dev-bin not found: $DEV_BIN"
+}
+
+maybe_warn_timeout() {
+    if [[ -n "$TIMEOUT" && -z "$TIMEOUT_BIN" ]]; then
+        sayc yel "Warning: --timeout requested but 'timeout' not found; ignoring timeouts."
+        TIMEOUT=""
+    fi
+}
+
+run_cmd_capture() {
+    # args: command_string output_file
+    local cmd="$1" outfile="$2" ec=0
+    : >"$outfile"
+    if [[ -n "$TIMEOUT" ]]; then
+        # Use bash -lc to keep parsing consistent and avoid eval
+        "$TIMEOUT_BIN" "$TIMEOUT" bash -lc "$cmd" >"$outfile" 2>&1 || ec=$?
+    else
+        bash -lc "$cmd" >"$outfile" 2>&1 || ec=$?
+    fi
+    printf '%s\n' "$ec"
+}
 
 # Test counter
 TESTS_PASSED=0
 TESTS_FAILED=0
+TEST_IDX=0
 
-# Test function
+# Test function with improved output handling
 run_test() {
     local test_name="$1"
     local command="$2"
     local expected_exit="$3"
     
-    printf '%bRunning test: %s%b\n' "$BLUE" "$test_name" "$NC"
-    printf 'Command: %s\n' "$command"
+    ((TEST_IDX++))
+    local tag="$(printf 'T%03d' "$TEST_IDX")"
+    local outfile="$TMPDIR/$tag.out"
     
-    if eval "$command" >/dev/null 2>&1; then
-        local exit_code=$?
-        if [[ "$exit_code" -eq "$expected_exit" ]]; then
-            printf '%b✓ PASS%b\n' "$GREEN" "$NC"
-            ((TESTS_PASSED++))
-        else
-            printf '%b✗ FAIL - Expected exit %d, got %d%b\n' "$RED" "$expected_exit" "$exit_code" "$NC"
-            ((TESTS_FAILED++))
+    sayc blu "Running: $test_name"
+    ((VERBOSE)) && say "Command: $command"
+    
+    local exit_code
+    exit_code="$(run_cmd_capture "$command" "$outfile")"
+    
+    if [[ "$exit_code" -eq "$expected_exit" ]]; then
+        sayc grn "✓ PASS"
+        ((TESTS_PASSED++))
+        if ((KEEP_OUTPUT)); then
+            say "$(color dim "Output:")"
+            sed 's/^/  /' "$outfile"
         fi
     else
-        local exit_code=$?
-        if [[ "$exit_code" -eq "$expected_exit" ]]; then
-            printf '%b✓ PASS%b\n' "$GREEN" "$NC"
-            ((TESTS_PASSED++))
-        else
-            printf '%b✗ FAIL - Expected exit %d, got %d%b\n' "$RED" "$expected_exit" "$exit_code" "$NC"
-            ((TESTS_FAILED++))
+        sayc red "✗ FAIL - Expected exit $expected_exit, got $exit_code"
+        ((TESTS_FAILED++))
+        if ((VERBOSE)) || [[ "$expected_exit" -eq 0 ]]; then
+            say "$(color dim "Output:")"
+            sed 's/^/  /' "$outfile"
         fi
     fi
-    printf '\n'
+    say ""
 }
 
-# Check if we're in a git repository
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    printf '%bError: Not in a git repository. Please run this script from a git repository.%b\n' "$RED" "$NC"
-    exit 1
+# ---------------------- init ----------------------
+require_git_repo
+ensure_dev_bin
+maybe_warn_timeout
+
+# Default refs
+TARGET_REF="${TARGET_REF:-HEAD}"
+
+if [[ -z "${BASE_REF:-}" ]]; then
+    # Prefer parent of HEAD, but handle single-commit repos gracefully
+    if resolve_ref "HEAD~1" >/dev/null; then
+        BASE_REF="HEAD~1"
+    else
+        # Single commit: use HEAD for base (zero diff). Analyzers should handle this.
+        BASE_REF="HEAD"
+        sayc yel "Single-commit repository detected; using --base HEAD for smoke tests (no diffs)."
+    fi
 fi
 
-# Get the last commit for testing
-LAST_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "HEAD")
-PARENT_COMMIT=$(git rev-parse HEAD~1 2>/dev/null || echo "$LAST_COMMIT")
+LAST_COMMIT_SHA="$(resolve_ref "$TARGET_REF" || true)"
+BASE_COMMIT_SHA="$(resolve_ref "$BASE_REF" || true)"
+[[ -n "$LAST_COMMIT_SHA" ]] || die "Cannot resolve target ref: $TARGET_REF"
+[[ -n "$BASE_COMMIT_SHA" ]] || die "Cannot resolve base ref: $BASE_REF"
 
-printf '%bTesting Modular Semantic Version Analyzer Components%b\n' "$YELLOW" "$NC"
-printf 'Last commit: %s\n' "$LAST_COMMIT"
-printf 'Parent commit: %s\n' "$PARENT_COMMIT"
-printf '\n'
+sayc yel "Testing Modular Semantic Version Analyzer Components"
+say "Base ref:    $BASE_REF ($BASE_COMMIT_SHA)"
+say "Target ref:  $TARGET_REF ($LAST_COMMIT_SHA)"
+say "Executables: $DEV_BIN"
+say ""
 
 # Test 1: Check if all required binaries exist
-printf '%b=== Testing Binary Availability ===%b\n' "$BLUE" "$NC"
-run_test "ref-resolver exists" "test -x ./dev-bin/ref-resolver" 0
-run_test "version-config-loader exists" "test -x ./dev-bin/version-config-loader" 0
-run_test "file-change-analyzer exists" "test -x ./dev-bin/file-change-analyzer" 0
-run_test "cli-options-analyzer exists" "test -x ./dev-bin/cli-options-analyzer" 0
-run_test "security-keyword-analyzer exists" "test -x ./dev-bin/security-keyword-analyzer" 0
-run_test "version-calculator exists" "test -x ./dev-bin/version-calculator" 0
-run_test "semantic-version-analyzer-v2 exists" "test -x ./dev-bin/semantic-version-analyzer-v2" 0
+sayc blu "=== Binary Availability ==="
+tools=(
+    ref-resolver
+    version-config-loader
+    file-change-analyzer
+    cli-options-analyzer
+    security-keyword-analyzer
+    version-calculator
+    semantic-version-analyzer
+)
+for t in "${tools[@]}"; do
+    run_test "$t exists" "test -x \"$DEV_BIN/$t\"" 0
+done
 
 # Test 2: Test help functionality
-printf '%b=== Testing Help Functionality ===%b\n' "$BLUE" "$NC"
-run_test "ref-resolver help" "./dev-bin/ref-resolver --help" 0
-run_test "version-config-loader help" "./dev-bin/version-config-loader --help" 0
-run_test "file-change-analyzer help" "./dev-bin/file-change-analyzer --help" 0
-run_test "cli-options-analyzer help" "./dev-bin/cli-options-analyzer --help" 0
-run_test "security-keyword-analyzer help" "./dev-bin/security-keyword-analyzer --help" 0
-run_test "version-calculator help" "./dev-bin/version-calculator --help" 0
-run_test "semantic-version-analyzer-v2 help" "./dev-bin/semantic-version-analyzer-v2 --help" 0
+sayc blu "=== Help Output ==="
+for t in "${tools[@]}"; do
+    run_test "$t --help" "\"$DEV_BIN/$t\" --help" 0
+done
 
 # Test 3: Test configuration loading
-printf '%b=== Testing Configuration Loading ===%b\n' "$BLUE" "$NC"
-run_test "version-config-loader validate" "./dev-bin/version-config-loader --validate-only" 0
-run_test "version-config-loader machine output" "./dev-bin/version-config-loader --machine" 0
+sayc blu "=== Configuration Loading ==="
+run_test "version-config-loader --validate-only" "\"$DEV_BIN/version-config-loader\" --validate-only" 0
+run_test "version-config-loader --machine" "\"$DEV_BIN/version-config-loader\" --machine" 0
 
 # Test 4: Test reference resolution
-printf '%b=== Testing Reference Resolution ===%b\n' "$BLUE" "$NC"
-run_test "ref-resolver print base" "./dev-bin/ref-resolver --base HEAD~1 --target HEAD --print-base" 0
-run_test "ref-resolver machine output" "./dev-bin/ref-resolver --base HEAD~1 --target HEAD --machine" 0
+sayc blu "=== Reference Resolution ==="
+run_test "ref-resolver --print-base" "\"$DEV_BIN/ref-resolver\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --print-base" 0
+run_test "ref-resolver --machine" "\"$DEV_BIN/ref-resolver\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" 0
 
 # Test 5: Test file change analysis
-printf '%b=== Testing File Change Analysis ===%b\n' "$BLUE" "$NC"
-run_test "file-change-analyzer basic" "./dev-bin/file-change-analyzer --base HEAD~1 --target HEAD" 0
-run_test "file-change-analyzer machine output" "./dev-bin/file-change-analyzer --base HEAD~1 --target HEAD --machine" 0
+sayc blu "=== File Change Analysis ==="
+run_test "file-change-analyzer basic" "\"$DEV_BIN/file-change-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" 0
+run_test "file-change-analyzer machine" "\"$DEV_BIN/file-change-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" 0
 
 # Test 6: Test CLI options analysis
-printf '%b=== Testing CLI Options Analysis ===%b\n' "$BLUE" "$NC"
-run_test "cli-options-analyzer basic" "./dev-bin/cli-options-analyzer --base HEAD~1 --target HEAD" 0
-run_test "cli-options-analyzer machine output" "./dev-bin/cli-options-analyzer --base HEAD~1 --target HEAD --machine" 0
+sayc blu "=== CLI Options Analysis ==="
+run_test "cli-options-analyzer basic" "\"$DEV_BIN/cli-options-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" 0
+run_test "cli-options-analyzer machine" "\"$DEV_BIN/cli-options-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" 0
 
 # Test 7: Test security keyword analysis
-printf '%b=== Testing Security Keyword Analysis ===%b\n' "$BLUE" "$NC"
-run_test "security-keyword-analyzer basic" "./dev-bin/security-keyword-analyzer --base HEAD~1 --target HEAD" 0
-run_test "security-keyword-analyzer machine output" "./dev-bin/security-keyword-analyzer --base HEAD~1 --target HEAD --machine" 0
+sayc blu "=== Security Keyword Analysis ==="
+run_test "security-keyword-analyzer basic" "\"$DEV_BIN/security-keyword-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" 0
+run_test "security-keyword-analyzer machine" "\"$DEV_BIN/security-keyword-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" 0
 
 # Test 8: Test version calculation
-printf '%b=== Testing Version Calculation ===%b\n' "$BLUE" "$NC"
-run_test "version-calculator basic" "./dev-bin/version-calculator --current-version 1.2.3 --bump-type minor --loc 500" 0
-run_test "version-calculator machine output" "./dev-bin/version-calculator --current-version 1.2.3 --bump-type minor --loc 500 --machine" 0
+sayc blu "=== Version Calculation ==="
+run_test "version-calculator basic" "\"$DEV_BIN/version-calculator\" --current-version 1.2.3 --bump-type minor --loc 500" 0
+run_test "version-calculator machine" "\"$DEV_BIN/version-calculator\" --current-version 1.2.3 --bump-type minor --loc 500 --machine" 0
 
 # Test 9: Test orchestrator
-printf '%b=== Testing Orchestrator ===%b\n' "$BLUE" "$NC"
-run_test "semantic-version-analyzer-v2 basic" "./dev-bin/semantic-version-analyzer-v2 --base HEAD~1 --target HEAD" 0
-run_test "semantic-version-analyzer-v2 suggest-only" "./dev-bin/semantic-version-analyzer-v2 --base HEAD~1 --target HEAD --suggest-only" 0
+sayc blu "=== Orchestrator ==="
+run_test "semantic-version-analyzer basic" "\"$DEV_BIN/semantic-version-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" 0
+run_test "semantic-version-analyzer --suggest-only" "\"$DEV_BIN/semantic-version-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --suggest-only" 0
 
 # Test 10: Test error handling
-printf '%b=== Testing Error Handling ===%b\n' "$BLUE" "$NC"
-run_test "invalid base reference" "./dev-bin/ref-resolver --base INVALID_REF --target HEAD" 1
-run_test "missing required argument" "./dev-bin/file-change-analyzer" 1
-run_test "invalid bump type" "./dev-bin/version-calculator --current-version 1.2.3 --bump-type invalid" 1
+sayc blu "=== Error Handling ==="
+run_test "invalid base reference" "\"$DEV_BIN/ref-resolver\" --base INVALID_REF --target \"$TARGET_REF\"" 1
+run_test "missing required argument" "\"$DEV_BIN/file-change-analyzer\"" 1
+run_test "invalid bump type" "\"$DEV_BIN/version-calculator\" --current-version 1.2.3 --bump-type invalid" 1
 
 # Summary
-printf '%b=== Test Summary ===%b\n' "$YELLOW" "$NC"
-printf 'Tests passed: %b%d%b\n' "$GREEN" "$TESTS_PASSED" "$NC"
-printf 'Tests failed: %b%d%b\n' "$RED" "$TESTS_FAILED" "$NC"
-printf 'Total tests: %d\n' $((TESTS_PASSED + TESTS_FAILED))
+sayc yel "=== Test Summary ==="
+say "Tests passed: $(color grn "$TESTS_PASSED")"
+say "Tests failed: $(color red "$TESTS_FAILED")"
+say "Total tests: $((TESTS_PASSED + TESTS_FAILED))"
 
 if [[ "$TESTS_FAILED" -eq 0 ]]; then
-    printf '%bAll tests passed! Modular components are working correctly.%b\n' "$GREEN" "$NC"
+    sayc grn "All tests passed! Modular components look healthy."
     exit 0
 else
-    printf '%bSome tests failed. Please check the output above.%b\n' "$RED" "$NC"
+    sayc red "Some tests failed. See outputs above for details."
     exit 1
 fi 
