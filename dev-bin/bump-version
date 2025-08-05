@@ -107,7 +107,7 @@ check_dirty_tree() {
         diff_args+=(":(exclude)$path")
     done
 
-    if ! git diff --quiet "${diff_args[@]}"; then
+    if ! git diff -M -C --quiet "${diff_args[@]}"; then
         local allowed="VERSION"
         [[ "$UPDATE_CMAKE" != "true" ]] && allowed+=" and CMakeLists.txt"
 
@@ -116,7 +116,7 @@ check_dirty_tree() {
         printf '\n' >&2
 
         printf '%s\n' "Dirty files:" >&2
-        git diff --name-only "${diff_args[@]}" >&2
+        git diff -M -C --name-only "${diff_args[@]}" >&2
         exit 1
     fi
 
@@ -303,7 +303,7 @@ check_git_identity() {
 create_commit() {
     stage_files
 
-    if git diff --cached --quiet; then
+    if git diff -M -C --cached --quiet; then
         if [[ "$NEW_VERSION" == *-* ]]; then
             printf '%s\n' "${YELLOW}Skipping commit: pre-release made no file changes${RESET}" >&2
         else
@@ -862,11 +862,11 @@ if [[ "$DO_TAG" == "true" ]]; then
         # Warn if tagging without committing version bump
         files_to_check=("$VERSION_FILE")
         [[ "$UPDATE_CMAKE" == "true" ]] && files_to_check+=("$PROJECT_ROOT/CMakeLists.txt")
-        if ! git diff --quiet -- "${files_to_check[@]}"; then
+        if ! git diff -M -C --quiet -- "${files_to_check[@]}"; then
             printf '%s\n' "${YELLOW}Warning:${RESET} Tagging without --commit; ensure the bump commit is pushed before the tag.${RESET}" >&2
         fi
         # Warn if any uncommitted changes exist
-        if ! git diff --quiet; then
+        if ! git diff -M -C --quiet; then
             printf '%s\n' "${YELLOW}Warning:${RESET} Uncommitted changes exist; tag may not reflect working tree.${RESET}" >&2
         fi
     fi

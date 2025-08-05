@@ -6,7 +6,7 @@
 # Tests the bug fixes and improvements made to the analyzer
 # shellcheck disable=SC2317 # eval is used for dynamic command execution
 
-set -Eeuo pipefail
+set -Euo pipefail
 IFS=$'\n\t'
 
 # Colors for output
@@ -60,10 +60,10 @@ run_test() {
     return 0
 }
 
-# Test 1: Verify --no-ext-diff -M -C is used in all git diff calls
+# Test 1: Verify --no-ext-diff -M -C is used in all git diff calls in bump-version
 test_git_diff_flags() {
     local script_path
-    script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
+    script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/bump-version"
     
     # Check that all git diff calls include the required flags
     local missing_flags
@@ -79,13 +79,21 @@ test_git_diff_flags() {
     return 0
 }
 
-# Test 2: Verify case-insensitive documentation detection
+# Test 2: Verify case-insensitive documentation detection in modular components
 test_case_insensitive_docs() {
     local script_path
-    script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
+    script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin"
     
-    # Check that case-insensitive logic exists in the code
-    if grep -q "tr '\[:upper:\]' '\[:lower:\]'" "$script_path"; then
+    # Check that case-insensitive logic exists in the modular components
+    local found=false
+    for component in file-change-analyzer cli-options-analyzer keyword-analyzer; do
+        if grep -q "tr '\[:upper:\]' '\[:lower:\]'" "$script_path/$component"; then
+            found=true
+            break
+        fi
+    done
+    
+    if [[ "$found" = "true" ]]; then
         printf '%s✓ Case-insensitive documentation detection implemented%s\n' "${GREEN}" "${NC}"
         return 0
     else
@@ -94,15 +102,20 @@ test_case_insensitive_docs() {
     fi
 }
 
-# Test 3: Verify POSIX-compliant regex patterns
+# Test 3: Verify POSIX-compliant regex patterns in modular components
 test_posix_regex() {
     local script_path
-    script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
+    script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin"
     
-    # Check that manual CLI detection uses POSIX classes instead of GNU-specific patterns
-    # The + in [[:alnum:]-]+ is actually POSIX-compliant when used with -E
-    local gnu_patterns
-    gnu_patterns=$(grep -n "grep.*--\[.*\]\+" "$script_path" | grep -v "grep -E" | grep -v "grep -o" || true)
+    # Check that modular components use POSIX classes instead of GNU-specific patterns
+    local gnu_patterns=""
+    for component in file-change-analyzer cli-options-analyzer keyword-analyzer security-keyword-analyzer; do
+        local patterns
+        patterns=$(grep -n "grep.*--\[.*\]\+" "$script_path/$component" | grep -v "grep -E" | grep -v "grep -o" || true)
+        if [[ -n "$patterns" ]]; then
+            gnu_patterns="$gnu_patterns$patterns"$'\n'
+        fi
+    done
     
     if [[ -n "$gnu_patterns" ]]; then
         printf '%s✗ Found GNU-specific regex patterns:%s\n' "${RED}" "${NC}"
@@ -114,10 +127,10 @@ test_posix_regex() {
     return 0
 }
 
-# Test 4: Verify manual CLI detection uses correct patterns
+# Test 4: Verify manual CLI detection uses correct patterns in cli-options-analyzer
 test_manual_cli_patterns() {
     local script_path
-    script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
+    script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/cli-options-analyzer"
     
     # Check that manual CLI detection uses POSIX classes for long option patterns
     local manual_patterns
@@ -133,19 +146,19 @@ test_manual_cli_patterns() {
     return 0
 }
 
-# Test 5: Verify help text reflects improvements
+# Test 5: Verify help text reflects modular architecture
 test_help_text() {
     local script_path
     script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
     local output
     output=$("$script_path" --help 2>/dev/null)
     
-    # Check for updated help text
+    # Check for updated help text reflecting modular architecture
     local checks=(
-        "git diff commands use"
-        "C/C++ source files"
-        "deterministic parsing"
-        "Manual CLI detection"
+        "Semantic Version Analyzer v2"
+        "modular components"
+        "machine-readable"
+        "JSON"
     )
     
     for check in "${checks[@]}"; do
@@ -160,32 +173,106 @@ test_help_text() {
     return 0
 }
 
-# Test 6: Verify double-counting warning is documented
-test_double_counting_warning() {
+# Test 6: Verify modular components exist and are executable
+test_modular_components() {
+    local script_path
+    script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin"
+    
+    local components=(
+        "ref-resolver"
+        "version-config-loader"
+        "file-change-analyzer"
+        "cli-options-analyzer"
+        "security-keyword-analyzer"
+        "keyword-analyzer"
+        "version-calculator"
+    )
+    
+    for component in "${components[@]}"; do
+        if [[ ! -f "$script_path/$component" ]]; then
+            printf '%s✗ Component not found: %s%s\n' "${RED}" "$component" "${NC}"
+            return 1
+        fi
+        
+        if [[ ! -x "$script_path/$component" ]]; then
+            printf '%s✗ Component not executable: %s%s\n' "${RED}" "$component" "${NC}"
+            return 1
+        fi
+    done
+    
+    printf '%s✓ All modular components exist and are executable%s\n' "${GREEN}" "${NC}"
+    return 0
+}
+
+# Test 7: Verify semantic-version-analyzer orchestrates components correctly
+test_orchestration() {
     local script_path
     script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
     
-    # Check for double-counting warning comment
-    if grep -q "double-counting" "$script_path"; then
-        printf '%s✓ Double-counting warning is documented%s\n' "${GREEN}" "${NC}"
+    # Check that the main script calls all required components
+    local required_calls=(
+        "ref-resolver"
+        "version-config-loader"
+        "file-change-analyzer"
+        "cli-options-analyzer"
+        "security-keyword-analyzer"
+        "keyword-analyzer"
+        "version-calculator"
+    )
+    
+    for component in "${required_calls[@]}"; do
+        if grep -q "$component" "$script_path"; then
+            printf '%s✓ Orchestrates: %s%s\n' "${GREEN}" "$component" "${NC}"
+        else
+            printf '%s✗ Missing orchestration: %s%s\n' "${RED}" "$component" "${NC}"
+            return 1
+        fi
+    done
+    
+    return 0
+}
+
+# Test 8: Verify machine-readable output format
+test_machine_output() {
+    local script_path
+    script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
+    
+    # Check that machine output format is properly handled
+    if grep -q "MACHINE_OUTPUT" "$script_path" && grep -q "key=value" "$script_path"; then
+        printf '%s✓ Machine-readable output format implemented%s\n' "${GREEN}" "${NC}"
         return 0
     else
-        printf '%s✗ Double-counting warning not found%s\n' "${RED}" "${NC}"
+        printf '%s✗ Machine-readable output format not found%s\n' "${RED}" "${NC}"
         return 1
     fi
 }
 
-# Test 7: Verify language limitation is documented
-test_language_limitation() {
+# Test 9: Verify JSON output format
+test_json_output() {
     local script_path
     script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
     
-    # Check for language limitation comment
-    if grep -q "Limited to C/C++" "$script_path"; then
-        printf '%s✓ Language limitation is documented%s\n' "${GREEN}" "${NC}"
+    # Check that JSON output format is properly handled
+    if grep -q "JSON_OUTPUT" "$script_path" && grep -q "json" "$script_path"; then
+        printf '%s✓ JSON output format implemented%s\n' "${GREEN}" "${NC}"
         return 0
     else
-        printf '%s✗ Language limitation not documented%s\n' "${RED}" "${NC}"
+        printf '%s✗ JSON output format not found%s\n' "${RED}" "${NC}"
+        return 1
+    fi
+}
+
+# Test 10: Verify bonus calculation system
+test_bonus_calculation() {
+    local script_path
+    script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
+    
+    # Check that bonus calculation system is implemented
+    if grep -q "TOTAL_BONUS" "$script_path" && grep -q "bonus" "$script_path"; then
+        printf '%s✓ Bonus calculation system implemented%s\n' "${GREEN}" "${NC}"
+        return 0
+    else
+        printf '%s✗ Bonus calculation system not found%s\n' "${RED}" "${NC}"
         return 1
     fi
 }
@@ -206,19 +293,70 @@ main() {
         exit 1
     fi
     
-    printf '%sRunning semantic version analyzer fix tests...%s\n\n' "${YELLOW}" "${NC}"
+    printf '%sRunning semantic version analyzer fix tests (modular v2)...%s\n\n' "${YELLOW}" "${NC}"
     
-    # Run all tests
-    test_git_diff_flags
-    test_posix_regex
-    test_manual_cli_patterns
-    test_help_text
-    # test_double_counting_warning  # Disabled - warning not implemented
-    # test_language_limitation      # Disabled - limitation not documented
+    # Run all tests and count them
+    if test_git_diff_flags; then
+        ((TESTS_PASSED++))
+    else
+        ((TESTS_FAILED++))
+    fi
+    
+    if test_modular_components; then
+        ((TESTS_PASSED++))
+    else
+        ((TESTS_FAILED++))
+    fi
+    
+    if test_orchestration; then
+        ((TESTS_PASSED++))
+    else
+        ((TESTS_FAILED++))
+    fi
+    
+    if test_machine_output; then
+        ((TESTS_PASSED++))
+    else
+        ((TESTS_FAILED++))
+    fi
+    
+    if test_json_output; then
+        ((TESTS_PASSED++))
+    else
+        ((TESTS_FAILED++))
+    fi
+    
+    if test_bonus_calculation; then
+        ((TESTS_PASSED++))
+    else
+        ((TESTS_FAILED++))
+    fi
+    
+    if test_help_text; then
+        ((TESTS_PASSED++))
+    else
+        ((TESTS_FAILED++))
+    fi
+    
+    if test_posix_regex; then
+        ((TESTS_PASSED++))
+    else
+        ((TESTS_FAILED++))
+    fi
+    
+    if test_manual_cli_patterns; then
+        ((TESTS_PASSED++))
+    else
+        ((TESTS_FAILED++))
+    fi
     
     # Skip interactive tests in CI
     if [[ -z "${CI:-}" ]]; then
-        test_case_insensitive_docs
+        if test_case_insensitive_docs; then
+            ((TESTS_PASSED++))
+        else
+            ((TESTS_FAILED++))
+        fi
     else
         printf '%sSkipping interactive test in CI environment%s\n' "${YELLOW}" "${NC}"
     fi

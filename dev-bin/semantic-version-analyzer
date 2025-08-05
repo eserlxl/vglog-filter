@@ -17,6 +17,15 @@ show_help() {
     cat << EOF
 Semantic Version Analyzer v2 for vglog-filter
 
+This tool orchestrates modular components for comprehensive version analysis:
+- ref-resolver: Resolves git references and handles edge cases
+- version-config-loader: Loads versioning configuration and rules
+- file-change-analyzer: Analyzes file changes and classifies them
+- cli-options-analyzer: Detects CLI breaking changes and additions
+- security-keyword-analyzer: Identifies security-related changes
+- keyword-analyzer: Analyzes keywords for breaking changes and bonuses
+- version-calculator: Calculates next version with LOC-based deltas
+
 Usage: $(basename "$0") [options]
 
 Options:
