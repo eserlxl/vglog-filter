@@ -336,4 +336,4 @@ analyze_security_keywords() {
 }
 
 # Main execution
-analyze_security_keywords "$BASE_REF" "$TARGET_REF" 
+analyze_security_keywords "$BASE_REF" "$TARGET_REF"
