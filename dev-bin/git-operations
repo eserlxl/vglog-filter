@@ -9,18 +9,48 @@
 # Git operations for vglog-filter
 # Handles git commits, tags, and push operations
 
-set -euo pipefail
+set -Eeuo pipefail
+IFS=$'\n\t'
+export LC_ALL=C
+# Avoid pagers or extra locking in CI/automation contexts.
+export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
 # Source utilities
-SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$SCRIPT_DIR/version-utils"
+
+# --- Helper functions --------------------------------------------------------
+is_true() {
+    # Accepts: true/false, 1/0, yes/no (case-insensitive)
+    [[ "${1:-}" =~ ^([Tt]rue|1|[Yy](es)?)$ ]]
+}
+
+is_false() {
+    [[ "${1:-}" =~ ^([Ff]alse|0|[Nn]o?)$ ]]
+}
+
+git_in_repo() {
+    git rev-parse --git-dir >/dev/null 2>&1
+}
+
+is_detached_head() {
+    ! git symbolic-ref -q HEAD >/dev/null
+}
+
+has_commit_history() {
+    git rev-parse --verify -q HEAD >/dev/null 2>&1
+}
+
+current_branch_name() {
+    git rev-parse --abbrev-ref HEAD
+}
 
 # --- Git state checks --------------------------------------------------------
 check_dirty_tree() {
     local exclude_paths=()
     # Always exclude VERSION from dirty check since we'll be updating it
     exclude_paths+=("VERSION")
-    if [[ "${UPDATE_CMAKE:-true}" != "true" ]]; then
+    if ! is_true "${UPDATE_CMAKE:-true}"; then
         exclude_paths+=("CMakeLists.txt")
     fi
 
@@ -31,13 +61,11 @@ check_dirty_tree() {
 
     if ! git diff --quiet "${diff_args[@]}"; then
         local allowed="VERSION"
-        [[ "${UPDATE_CMAKE:-true}" != "true" ]] && allowed+=" and CMakeLists.txt"
+        ! is_true "${UPDATE_CMAKE:-true}" && allowed+=" and CMakeLists.txt"
 
         printf '%s' "${RED}Error:${RESET} working tree has disallowed changes. Use --allow-dirty to override." >&2
         [[ -n "$allowed" ]] && printf ' Allowed: %s.' "$allowed" >&2
-        printf '\n' >&2
-
-        printf '%s\n' "Dirty files:" >&2
+        printf '\nDirty files:\n' >&2
         git diff --name-only "${diff_args[@]}" >&2
         exit 1
     fi
@@ -54,49 +82,49 @@ check_git_prerequisites() {
     local push_tags="$4"
     
     # Check if we're in a git repository
-    if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        die "Not in a git repository"
-    fi
+    git_in_repo || die "Not in a git repository"
     
-    # Check for detached HEAD if committing/tagging
-    if [[ "$do_commit" == "true" || "$do_tag" == "true" ]]; then
-        if ! git symbolic-ref -q HEAD >/dev/null; then
-            die "Detached HEAD; checkout a branch before committing/tagging"
+    # Check for detached HEAD if committing/tagging/pushing
+    if is_true "$do_commit" || is_true "$do_tag" || is_true "$do_push" || is_true "$push_tags"; then
+        if is_detached_head; then
+            die "Detached HEAD; checkout a branch before continuing"
         fi
     fi
     
-    # Check for detached HEAD if pushing
-    if [[ "$do_push" == "true" || "$push_tags" == "true" ]]; then
-        if ! git symbolic-ref -q HEAD >/dev/null; then
-            die "Detached HEAD; checkout a branch before pushing"
-        fi
+    # Tagging/pushing requires at least one commit present
+    if is_true "$do_tag" || is_true "$do_push" || is_true "$push_tags"; then
+        has_commit_history || die "Repository has no commits yet"
     fi
 }
 
 check_signing_prerequisites() {
     local signed_tag="$1"
     local commit_sign="$2"
+    local have_key=0
+    git config --get user.signingkey >/dev/null 2>&1 && have_key=1
     
-    if [[ "$signed_tag" == "true" ]] && ! git config --get user.signingkey >/dev/null; then
+    if is_true "$signed_tag" && (( ! have_key )); then
         warn "--signed-tag requested but no user.signingkey configured"
         if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
             die "--signed-tag requested in CI but no signing key configured"
         fi
     fi
     
-    if [[ "$commit_sign" == "true" ]] && ! git config --get user.signingkey >/dev/null; then
+    if is_true "$commit_sign" && (( ! have_key )); then
         warn "--sign-commit requested but no user.signingkey configured"
         if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
             die "--sign-commit requested in CI but no signing key configured"
         fi
     fi
     
-    if [[ "$signed_tag" == "true" || "$commit_sign" == "true" ]]; then
-        [[ -t 1 && -z "${GPG_TTY:-}" ]] && printf '%s\n' "${YELLOW}Hint:${RESET} export GPG_TTY=\$(tty) may be required for pinentry.${RESET}" >&2
+    if is_true "$signed_tag" || is_true "$commit_sign"; then
+        [[ -t 1 && -z "${GPG_TTY:-}" ]] && printf '%s\n' "${YELLOW}Hint:${RESET} export GPG_TTY=\$(tty) may be required for pinentry." >&2
+        command -v gpg >/dev/null 2>&1 || warn "gpg not found; signing may fail"
     fi
     
-    if [[ "$commit_sign" != "true" ]] && git config --get commit.gpgSign >/dev/null; then
-        printf '%s\n' "${YELLOW}Note:${RESET} commit.gpgSign=true is configured; Git may sign commits anyway.${RESET}" >&2
+    # If user has commit.gpgSign=true globally but we don't want signing, warn
+    if is_false "$commit_sign" && git config --get commit.gpgSign >/dev/null 2>&1; then
+        printf '%s\n' "${YELLOW}Note:${RESET} commit.gpgSign=true is configured; Git may sign commits anyway. Forcing --no-gpg-sign." >&2
     fi
 }
 
@@ -108,13 +136,18 @@ stage_files() {
     local project_root="$4"
     
     # Only stage VERSION if it's not a pre-release
-    if [[ "$new_version" != *-* ]]; then
+    if [[ "$new_version" != *-* && -f "$version_file" ]]; then
         git add -- "$version_file"
     fi
     
     # Handle CMakeLists.txt staging
-    if [[ "$update_cmake" != "true" && "${ALLOW_DIRTY:-false}" != "true" ]]; then
-        git reset -- "$project_root/CMakeLists.txt" 2>/dev/null || true
+    if is_true "$update_cmake"; then
+        [[ -f "$project_root/CMakeLists.txt" ]] && git add -- "$project_root/CMakeLists.txt"
+    else
+        # Ensure it's not accidentally staged unless ALLOW_DIRTY is true
+        if ! is_true "${ALLOW_DIRTY:-false}"; then
+            git reset -- "$project_root/CMakeLists.txt" 2>/dev/null || true
+        fi
     fi
 }
 
@@ -144,19 +177,20 @@ create_commit() {
     
     check_git_identity
     
-    local staged_files=()
-    if [[ "$new_version" != *-* && -f "$version_file" ]]; then
-        staged_files+=("$version_file")
-    fi
-    if [[ "$update_cmake" == "true" && -f "$project_root/CMakeLists.txt" ]]; then
-        staged_files+=("$project_root/CMakeLists.txt")
+    local commit_args=()
+    is_true "$no_verify" && commit_args+=(--no-verify)
+    
+    if is_true "$commit_sign"; then
+        commit_args+=(-S)
+    else
+        # If user has commit.gpgSign=true globally, force disable if we don't want it
+        commit_args+=(--no-gpg-sign)
     fi
     
     if [[ -z "$commit_msg" ]]; then
-        local commit_args=()
-        [[ "$no_verify" == "true" ]] && commit_args+=(--no-verify)
-        [[ "$commit_sign" == "true" ]] && commit_args+=(-S)
-        commit_args+=(-m "chore(release): ${tag_prefix}${new_version}${GITHUB_ACTIONS:+ [skip ci]}")
+        # Auto message
+        local title="chore(release): ${tag_prefix}${new_version}${GITHUB_ACTIONS:+ [skip ci]}"
+        commit_args+=(-m "$title")
         
         if [[ "$current_version" == "none" ]]; then
             commit_args+=(-m "bump: initial version ${new_version}")
@@ -177,7 +211,7 @@ create_commit() {
             if [[ -n "$analyzer_output" ]]; then
                 # Extract reason from verbose output
                 local reason_line
-                reason_line="$(printf '%s\n' "$analyzer_output" | grep -E '^Reason:' | head -1)"
+                reason_line="$(printf '%s\n' "$analyzer_output" | grep -E '^Reason:' | head -1 || true)"
                 if [[ -n "$reason_line" ]]; then
                     explanation="${reason_line#Reason: }"
                 fi
@@ -197,23 +231,21 @@ create_commit() {
                 commit_args+=(-m "Reason: $explanation")
             fi
         fi
-        
-        if ((${#staged_files[@]} > 0)); then
-            git commit "${commit_args[@]}" -- "${staged_files[@]}"
-        else
-            git commit "${commit_args[@]}"
-        fi
     else
-        if ((${#staged_files[@]} > 0)); then
-            git commit ${no_verify:+--no-verify} ${commit_sign:+-S} -m "$commit_msg" -- "${staged_files[@]}"
-        else
-            git commit ${no_verify:+--no-verify} ${commit_sign:+-S} -m "$commit_msg"
-        fi
+        # Use provided message as-is
+        :
+    fi
+    
+    # Limit commit to staged files if we know them; otherwise commit everything staged
+    if [[ -z "$commit_msg" ]]; then
+        git commit "${commit_args[@]}"
+    else
+        git commit "${commit_args[@]}" -m "$commit_msg"
     fi
     
     success "Created commit"
     local commit_sha
-    commit_sha=$(git rev-parse --short HEAD)
+    commit_sha="$(git rev-parse --short HEAD)"
     info "Commit SHA: $commit_sha"
 }
 
@@ -227,9 +259,8 @@ create_tag() {
     local tag_name="${tag_prefix}${new_version}"
     
     if [[ "$new_version" == *-* ]]; then
-        die "Cannot create tag for pre-release version"
         printf '%s\n' "${YELLOW}Pre-release versions should not be tagged${RESET}" >&2
-        exit 1
+        die "Cannot create tag for pre-release version"
     fi
     
     if git rev-parse -q --verify "$tag_name" >/dev/null; then
@@ -240,10 +271,10 @@ create_tag() {
         return 0
     fi
     
-    if [[ "$signed_tag" == "true" ]]; then
+    if is_true "$signed_tag"; then
         git tag -s "$tag_name" -m "Release ${tag_prefix}${new_version}"
         success "Created signed tag: $tag_name"
-    elif [[ "$annotated_tag" == "true" ]]; then
+    elif is_true "$annotated_tag"; then
         git tag -a "$tag_name" -m "Release ${tag_prefix}${new_version}"
         success "Created annotated tag: $tag_name"
     else
@@ -252,7 +283,7 @@ create_tag() {
     fi
     
     local tag_sha
-    tag_sha=$(git rev-parse --short "$tag_name")
+    tag_sha="$(git rev-parse --short "$tag_name")"
     info "Tag SHA: $tag_sha"
 }
 
@@ -262,20 +293,26 @@ push_changes() {
     local do_tag="$2"
     local new_version="$3"
     local tag_prefix="$4"
+    local tag_name="${tag_prefix}${new_version}"
     
     # Check remote exists
-    if ! git remote get-url "$remote" >/dev/null 2>&1; then
-        die "No remote '$remote' configured"
+    git remote get-url "$remote" >/dev/null 2>&1 || die "No remote '$remote' configured"
+    
+    local branch
+    branch="$(current_branch_name)"
+    info "Pushing changes to '$remote'..."
+    
+    # Add -u if upstream not set yet
+    local push_args=("$remote" "$branch")
+    if ! git rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
+        push_args=("$remote" "-u" "$branch")
     fi
     
-    local current_branch
-    current_branch="$(git rev-parse --abbrev-ref HEAD)"
-    info "Pushing changes..."
-    
-    git push "$remote" "$current_branch" || die "Failed to push branch $current_branch"
-    
-    if [[ "$do_tag" == "true" ]]; then
-        git push "$remote" "${tag_prefix}${new_version}" || die "Failed to push tag ${tag_prefix}${new_version}"
+    if is_true "$do_tag"; then
+        # Atomic push ensures both branch and tag are updated together or not at all
+        git push --atomic "$remote" "$branch" "$tag_name" || die "Failed to push branch and tag atomically"
+    else
+        git push "${push_args[@]}" || die "Failed to push branch $branch"
     fi
     
     success "Push completed"
@@ -285,9 +322,7 @@ push_all_tags() {
     local remote="$1"
     
     # Check remote exists
-    if ! git remote get-url "$remote" >/dev/null 2>&1; then
-        die "No remote '$remote' configured"
-    fi
+    git remote get-url "$remote" >/dev/null 2>&1 || die "No remote '$remote' configured"
     
     info "Pushing all tags..."
     git push "$remote" --tags || die "Failed to push tags"
@@ -304,22 +339,18 @@ check_version_order() {
         return 0
     fi
     
-    local last_tag
-    last_tag="$("$SCRIPT_DIR/version-utils" last-tag "$tag_prefix")"
+    local last_tag last_version
+    last_tag="$("$SCRIPT_DIR/version-utils" last-tag "$tag_prefix" 2>/dev/null || true)"
+    [[ -z "$last_tag" ]] && return 0
+    
+    last_version="${last_tag:${#tag_prefix}}"
+    is_semver "$last_version" || return 0
 
-    if [[ -n "$last_tag" ]]; then
-        local last_version="${last_tag:${#tag_prefix}}"
-        if ! is_semver "$last_version"; then
-            return 0
-        fi
-
-        if ! "$SCRIPT_DIR/version-validator" is_version_greater "$new_version" "$last_version"; then
-            warn "New version $new_version is not greater than last tag $last_tag"
-            if [[ -n "${GITHUB_ACTIONS:-}" && "$allow_nonmonotonic" != "true" ]]; then
-                die "NEW_VERSION ($new_version) must be greater than last tag ($last_tag)"
-                printf '%s\n' "${YELLOW}Use --allow-nonmonotonic-tag to override${RESET}" >&2
-                exit 1
-            fi
+    if ! "$SCRIPT_DIR/version-validator" is_version_greater "$new_version" "$last_version"; then
+        warn "New version $new_version is not greater than last tag $last_tag"
+        if [[ -n "${GITHUB_ACTIONS:-}" && ! $(is_true "$allow_nonmonotonic") ]]; then
+            printf '%s\n' "${YELLOW}Use --allow-nonmonotonic-tag to override${RESET}" >&2
+            die "NEW_VERSION ($new_version) must be greater than last tag ($last_tag)"
         fi
     fi
 }
@@ -332,28 +363,30 @@ generate_summary() {
     local push_tags="$4"
     local new_version="$5"
     local tag_prefix="$6"
+    local remote="${7:-}"
     
-    if [[ "$do_commit" == "true" || "$do_tag" == "true" || "$do_push" == "true" || "$push_tags" == "true" ]]; then
+    if is_true "$do_commit" || is_true "$do_tag" || is_true "$do_push" || is_true "$push_tags"; then
         info "Summary:"
-        if [[ "$do_commit" == "true" ]]; then
-            local commit_sha
-            commit_sha=$(git rev-parse --short HEAD)
-            local current_branch
-            current_branch=$(git rev-parse --abbrev-ref HEAD)
-            printf '%s\n' "  Branch: $current_branch" >&2
-            printf '%s\n' "  Commit: $commit_sha" >&2
+        if is_true "$do_commit"; then
+            local sha branch
+            sha="$(git rev-parse --short HEAD)"
+            branch="$(current_branch_name)"
+            printf '  Branch: %s\n' "$branch" >&2
+            printf '  Commit: %s\n' "$sha" >&2
         fi
-        if [[ "$do_tag" == "true" ]]; then
+        if is_true "$do_tag"; then
             local tag_sha
-            tag_sha=$(git rev-parse --short "${tag_prefix}${new_version}")
-            printf '%s\n' "  Tag: ${tag_prefix}${new_version}/$tag_sha" >&2
+            tag_sha="$(git rev-parse --short "${tag_prefix}${new_version}")"
+            printf '  Tag: %s/%s\n' "${tag_prefix}${new_version}" "$tag_sha" >&2
         fi
-        if [[ "$do_push" == "true" ]]; then
-            printf '%s\n' "  Pushed: yes (branch${do_tag:+ + tag})" >&2
-        elif [[ "$push_tags" == "true" ]]; then
-            printf '%s\n' "  Tags pushed: yes" >&2
+        if is_true "$do_push"; then
+            printf '  Remote: %s\n' "${remote:-<none>}" >&2
+            printf '  Pushed: yes (branch%s)\n' "$(is_true "$do_tag" && printf ' + tag')" >&2
+        elif is_true "$push_tags"; then
+            printf '  Remote: %s\n' "${remote:-<none>}" >&2
+            printf '  Tags pushed: yes\n' >&2
         else
-            printf '%s\n' "  Pushed: no" >&2
+            printf '  Pushed: no\n' >&2
         fi
     fi
 }
@@ -377,34 +410,34 @@ perform_git_operations() {
     local allow_dirty="${15}"
     local project_root="${16}"
     local original_project_root="${17}"
-    local remote="${18}"
-    local allow_nonmonotonic="${19}"
+    local remote="${18:-origin}"
+    local allow_nonmonotonic="${19:-false}"
     
     # Check prerequisites
     check_git_prerequisites "$do_commit" "$do_tag" "$do_push" "$push_tags"
     check_signing_prerequisites "$signed_tag" "$commit_sign"
     
     # Check dirty tree if needed
-    if { [[ "$do_commit" == "true" ]] || [[ "$do_tag" == "true" ]]; } && [[ "$allow_dirty" != "true" ]]; then
+    if { is_true "$do_commit" || is_true "$do_tag"; } && ! is_true "$allow_dirty"; then
         check_dirty_tree
     fi
     
     # Refresh index before operations
-    if [[ "$do_commit" == "true" || "$do_tag" == "true" ]]; then
+    if is_true "$do_commit" || is_true "$do_tag"; then
         git update-index -q --refresh || true
     fi
     
     # Perform operations
-    if [[ "$do_commit" == "true" ]]; then
+    if is_true "$do_commit"; then
         create_commit "$version_file" "$update_cmake" "$new_version" "$current_version" \
                      "$commit_msg" "$no_verify" "$commit_sign" "$tag_prefix" "$project_root" "$original_project_root"
     fi
     
-    if [[ "$do_tag" == "true" ]]; then
-        if [[ "$do_commit" != "true" ]]; then
+    if is_true "$do_tag"; then
+        if ! is_true "$do_commit"; then
             # Warn if tagging without committing version bump
             local files_to_check=("$version_file")
-            [[ "$update_cmake" == "true" ]] && files_to_check+=("$project_root/CMakeLists.txt")
+            is_true "$update_cmake" && files_to_check+=("$project_root/CMakeLists.txt")
             if ! git diff --quiet -- "${files_to_check[@]}"; then
                 warn "Tagging without --commit; ensure the bump commit is pushed before the tag"
             fi
@@ -418,16 +451,16 @@ perform_git_operations() {
     fi
     
     # Push operations
-    if [[ "$do_push" == "true" ]]; then
+    if is_true "$do_push"; then
         push_changes "$remote" "$do_tag" "$new_version" "$tag_prefix"
     fi
     
-    if [[ "$push_tags" == "true" ]]; then
+    if is_true "$push_tags"; then
         push_all_tags "$remote"
     fi
     
     # Generate summary
-    generate_summary "$do_commit" "$do_tag" "$do_push" "$push_tags" "$new_version" "$tag_prefix"
+    generate_summary "$do_commit" "$do_tag" "$do_push" "$push_tags" "$new_version" "$tag_prefix" "$remote"
 }
 
 # --- Standalone usage --------------------------------------------------------
@@ -441,37 +474,45 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             ;;
         "create-commit")
             if [[ $# -lt 9 ]]; then
-                die "Usage: $0 create-commit <version_file> <update_cmake> <new_version> <current_version> <commit_msg> <no_verify> <commit_sign> <tag_prefix> [project_root] [original_project_root]"
+                die "Usage: $0 create-commit <version_file> <update_cmake:true|false> <new_version> <current_version> <commit_msg|''> <no_verify:true|false> <commit_sign:true|false> <tag_prefix> [project_root] [original_project_root]"
             fi
             create_commit "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10:-}" "${11:-}"
             ;;
         "create-tag")
             if [[ $# -lt 5 ]]; then
-                die "Usage: $0 create-tag <new_version> <tag_prefix> <annotated_tag> <signed_tag>"
+                die "Usage: $0 create-tag <new_version> <tag_prefix> <annotated_tag:true|false> <signed_tag:true|false>"
             fi
             create_tag "$2" "$3" "$4" "$5"
             ;;
         "push-changes")
             if [[ $# -lt 5 ]]; then
-                die "Usage: $0 push-changes <remote> <do_tag> <new_version> <tag_prefix>"
+                die "Usage: $0 push-changes <remote> <do_tag:true|false> <new_version> <tag_prefix>"
             fi
             push_changes "$2" "$3" "$4" "$5"
             ;;
+        "push-tags")
+            if [[ $# -lt 2 ]]; then
+                die "Usage: $0 push-tags <remote>"
+            fi
+            push_all_tags "$2"
+            ;;
         *)
-            cat << EOF
+            cat <<'EOF'
 Usage: $0 <command> [args...]
 
 Commands:
-  check-dirty                                    Check if working tree is dirty
+  check-dirty                                    Check if working tree is dirty (excluding VERSION and optionally CMakeLists.txt)
   create-commit <args...>                        Create a commit with version bump
-  create-tag <args...>                           Create a tag for the new version
-  push-changes <args...>                         Push changes to remote
+  create-tag <args...>                           Create a tag for the new version (pre-releases are rejected)
+  push-changes <args...>                         Push current branch; if do_tag=true, performs an --atomic push of branch+tag
+  push-tags <remote>                             Push all tags
 
 Examples:
   $0 check-dirty
   $0 create-commit VERSION true 1.0.1 1.0.0 "" false false v /path/to/project
   $0 create-tag 1.0.1 v true false
   $0 push-changes origin true 1.0.1 v
+  $0 push-tags origin
 EOF
             exit 1
             ;;
