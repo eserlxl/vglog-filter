@@ -71,6 +71,9 @@ JSON_OUTPUT=false
 SUGGEST_ONLY=false
 STRICT_STATUS=false
 
+# Global variables for bonus calculation
+TOTAL_BONUS=0
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         --since|--since-tag)
@@ -130,8 +133,8 @@ build_common_args() {
     [[ -n "$REPO_ROOT" ]] && args="$args --repo-root '$REPO_ROOT'"
     [[ -n "$ONLY_PATHS" ]] && args="$args --only-paths '$ONLY_PATHS'"
     [[ "$IGNORE_WHITESPACE" = "true" ]] && args="$args --ignore-whitespace"
+    # Only pass --machine for internal component calls, not --json
     [[ "$MACHINE_OUTPUT" = "true" ]] && args="$args --machine"
-    [[ "$JSON_OUTPUT" = "true" ]] && args="$args --json"
     printf '%s' "$args"
 }
 
@@ -211,95 +214,111 @@ main() {
     [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing file changes...\n' >&2
     local common_args
     common_args=$(build_common_args)
+    # Force machine output for internal component calls
     local file_output
-    file_output=$(eval "./dev-bin/file-change-analyzer $common_args")
+    file_output=$(eval "./dev-bin/file-change-analyzer $common_args --machine")
     
     # Step 4: Analyze CLI options
     [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing CLI options...\n' >&2
     local cli_output
-    cli_output=$(eval "./dev-bin/cli-options-analyzer $common_args")
+    cli_output=$(eval "./dev-bin/cli-options-analyzer $common_args --machine")
     
     # Step 5: Analyze security keywords
     [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing security keywords...\n' >&2
     local security_output
-    security_output=$(eval "./dev-bin/security-keyword-analyzer $common_args")
+    security_output=$(eval "./dev-bin/security-keyword-analyzer $common_args --machine")
     
-    # Parse all outputs
-    local file_data cli_data security_data
-    file_data=$(parse_machine_output "$file_output")
-    cli_data=$(parse_machine_output "$cli_output")
-    security_data=$(parse_machine_output "$security_output")
+    # Step 6: Analyze keywords for breaking changes and bonuses
+    [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing keywords...\n' >&2
+    local keyword_output
+    keyword_output=$(eval "./dev-bin/keyword-analyzer $common_args --machine")
     
     # Initialize result arrays with defaults
-    declare -A file_result cli_result security_result
+    declare -A file_result cli_result security_result keyword_result
     
-    # Parse file analysis results
-    if [[ -n "$file_data" ]]; then
-        eval "$file_data"
-        # Copy to file_result array
-        for key in "${!result[@]}"; do
-            file_result["$key"]="${result[$key]}"
-        done
+    # Parse file analysis results directly
+    while IFS='=' read -r key value; do
+        [[ -n "$key" ]] && file_result["$key"]="$value"
+    done <<< "$file_output"
+    
+    # Parse CLI analysis results directly
+    while IFS='=' read -r key value; do
+        [[ -n "$key" ]] && cli_result["$key"]="$value"
+    done <<< "$cli_output"
+    
+    # Parse security analysis results directly
+    while IFS='=' read -r key value; do
+        [[ -n "$key" ]] && security_result["$key"]="$value"
+    done <<< "$security_output"
+    
+    # Parse keyword analysis results directly
+    while IFS='=' read -r key value; do
+        [[ -n "$key" ]] && keyword_result["$key"]="$value"
+    done <<< "$keyword_output"
+    
+    # Step 7: Calculate bonus points
+    TOTAL_BONUS=0
+    
+    # Debug: Print keyword results
+    if [[ "$VERBOSE" = "true" ]]; then
+        printf 'Debug: Keyword results:\n' >&2
+        printf '  HAS_CLI_BREAKING: %s\n' "${keyword_result[HAS_CLI_BREAKING]:-false}" >&2
+        printf '  HAS_API_BREAKING: %s\n' "${keyword_result[HAS_API_BREAKING]:-false}" >&2
+        printf '  TOTAL_SECURITY: %s\n' "${keyword_result[TOTAL_SECURITY]:-0}" >&2
     fi
     
-    # Parse CLI analysis results
-    if [[ -n "$cli_data" ]]; then
-        eval "$cli_data"
-        # Copy to cli_result array
-        for key in "${!result[@]}"; do
-            cli_result["$key"]="${result[$key]}"
-        done
+    # Breaking changes from keyword analysis (takes precedence over CLI analysis)
+    if [[ "${keyword_result[HAS_CLI_BREAKING]:-false}" = "true" ]]; then
+        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_BREAKING_CLI_BONUS]:-2}))
+    elif [[ "${cli_result[BREAKING_CLI_CHANGES]:-false}" = "true" ]]; then
+        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_BREAKING_CLI_BONUS]:-2}))
     fi
     
-    # Parse security analysis results
-    if [[ -n "$security_data" ]]; then
-        eval "$security_data"
-        # Copy to security_result array
-        for key in "${!result[@]}"; do
-            security_result["$key"]="${result[$key]}"
-        done
+    if [[ "${keyword_result[HAS_API_BREAKING]:-false}" = "true" ]]; then
+        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_API_BREAKING_BONUS]:-3}))
+    elif [[ "${cli_result[API_BREAKING]:-false}" = "true" ]]; then
+        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_API_BREAKING_BONUS]:-3}))
     fi
     
-    # Step 6: Calculate bonus points
-    local total_bonus=0
-    
-    # Breaking changes
-    if [[ "${cli_result[BREAKING_CLI_CHANGES]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + ${config_data[VERSION_BREAKING_CLI_BONUS]:-2}))
-    fi
-    if [[ "${cli_result[API_BREAKING]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + ${config_data[VERSION_API_BREAKING_BONUS]:-3}))
-    fi
-    
-    # Security keywords
+    # Security keywords (combine both sources)
     local security_keywords="${security_result[SECURITY_KEYWORDS]:-0}"
-    if [[ "$security_keywords" -gt 0 ]]; then
-        total_bonus=$((total_bonus + security_keywords * ${config_data[VERSION_SECURITY_BONUS]:-2}))
+    local keyword_security="${keyword_result[TOTAL_SECURITY]:-0}"
+    local total_security=$((security_keywords + keyword_security))
+    if [[ "$total_security" -gt 0 ]]; then
+        TOTAL_BONUS=$((TOTAL_BONUS + total_security * ${config_data[VERSION_SECURITY_BONUS]:-2}))
     fi
     
     # Feature additions
     if [[ "${cli_result[CLI_CHANGES]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + ${config_data[VERSION_CLI_CHANGES_BONUS]:-2}))
+        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_CLI_CHANGES_BONUS]:-2}))
     fi
     if [[ "${cli_result[MANUAL_CLI_CHANGES]:-false}" = "true" ]]; then
-        total_bonus=$((total_bonus + ${config_data[VERSION_MANUAL_CLI_BONUS]:-1}))
+        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_MANUAL_CLI_BONUS]:-1}))
     fi
     if [[ "${file_result[NEW_SOURCE_FILES]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + ${config_data[VERSION_NEW_SOURCE_BONUS]:-1}))
+        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_NEW_SOURCE_BONUS]:-1}))
     fi
     if [[ "${file_result[NEW_TEST_FILES]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + ${config_data[VERSION_NEW_TEST_BONUS]:-1}))
+        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_NEW_TEST_BONUS]:-1}))
     fi
     if [[ "${file_result[NEW_DOC_FILES]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + ${config_data[VERSION_NEW_DOC_BONUS]:-1}))
+        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_NEW_DOC_BONUS]:-1}))
     fi
     
-    # Removed features
-    if [[ "${cli_result[REMOVED_SHORT_COUNT]:-0}" -gt 0 ]] || [[ "${cli_result[REMOVED_LONG_COUNT]:-0}" -gt 0 ]]; then
-        total_bonus=$((total_bonus + ${config_data[VERSION_REMOVED_OPTION_BONUS]:-1}))
+    # Removed features (combine both sources)
+    local cli_removed=$(( ${cli_result[REMOVED_SHORT_COUNT]:-0} + ${cli_result[REMOVED_LONG_COUNT]:-0} ))
+    local keyword_removed="${keyword_result[REMOVED_OPTIONS_KEYWORDS]:-0}"
+    local total_removed=$((cli_removed + keyword_removed))
+    if [[ "$total_removed" -gt 0 ]]; then
+        TOTAL_BONUS=$((TOTAL_BONUS + ${config_data[VERSION_REMOVED_OPTION_BONUS]:-1}))
     fi
     
-    # Step 7: Determine suggestion based on bonus thresholds
+    # Debug: Print final bonus calculation
+    if [[ "$VERBOSE" = "true" ]]; then
+        printf 'Debug: Final TOTAL_BONUS: %s\n' "$TOTAL_BONUS" >&2
+    fi
+    
+    # Step 8: Determine suggestion based on bonus thresholds
     local major_threshold="${config_data[MAJOR_BONUS_THRESHOLD]:-8}"
     local minor_threshold="${config_data[MINOR_BONUS_THRESHOLD]:-4}"
     local patch_threshold="${config_data[PATCH_BONUS_THRESHOLD]:-0}"
@@ -310,25 +329,25 @@ main() {
     patch_threshold="${patch_threshold:-0}"
     
     local suggestion="none"
-    if [[ "$total_bonus" -ge "$major_threshold" ]]; then
+    if [[ "$TOTAL_BONUS" -ge "$major_threshold" ]]; then
         suggestion="major"
-    elif [[ "$total_bonus" -ge "$minor_threshold" ]]; then
+    elif [[ "$TOTAL_BONUS" -ge "$minor_threshold" ]]; then
         suggestion="minor"
-    elif [[ "$total_bonus" -ge "$patch_threshold" ]]; then
+    elif [[ "$TOTAL_BONUS" -ge "$patch_threshold" ]]; then
         suggestion="patch"
     fi
     
-    # Step 8: Get current version
+    # Step 9: Get current version
     local current_version="0.0.0"
     if [[ -f "VERSION" ]]; then
         current_version=$(tr -d '[:space:]' < "VERSION" 2>/dev/null || printf '0.0.0')
         [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || current_version=0.0.0
     fi
     
-    # Step 9: Calculate next version if needed
+    # Step 10: Calculate next version if needed
     local next_version=""
     if [[ "$suggestion" != "none" ]]; then
-        local calc_args="--current-version '$current_version' --bump-type '$suggestion' --loc '${file_result[DIFF_SIZE]:-0}' --bonus '$total_bonus'"
+        local calc_args="--current-version '$current_version' --bump-type '$suggestion' --loc '${file_result[DIFF_SIZE]:-0}' --bonus '$TOTAL_BONUS'"
         [[ "$MACHINE_OUTPUT" = "true" ]] && calc_args="$calc_args --machine"
         [[ "$JSON_OUTPUT" = "true" ]] && calc_args="$calc_args --json"
         
@@ -345,7 +364,7 @@ main() {
         fi
     fi
     
-    # Step 10: Output results
+    # Step 11: Output results
     if [[ "$SUGGEST_ONLY" = "true" ]]; then
         printf '%s\n' "$suggestion"
     elif [[ "$JSON_OUTPUT" = "true" ]]; then
@@ -355,13 +374,28 @@ main() {
         if [[ -n "$next_version" ]]; then
             printf '  "next_version": "%s",\n' "$next_version"
         fi
-        printf '  "total_bonus": %s,\n' "$total_bonus"
+        printf '  "total_bonus": %s,\n' "$TOTAL_BONUS"
         printf '  "base_ref": "%s",\n' "$BASE_REF"
         printf '  "target_ref": "%s",\n' "$TARGET_REF"
+        # Calculate LOC deltas with bonus points
+        local patch_delta_json
+        patch_delta_json=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type patch --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 1}')
+        local minor_delta_json
+        minor_delta_json=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type minor --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 5}')
+        local major_delta_json
+        major_delta_json=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type major --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 10}')
+        
+        local patch_delta
+        patch_delta=$(printf '%s' "$patch_delta_json" | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "1")
+        local minor_delta
+        minor_delta=$(printf '%s' "$minor_delta_json" | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "5")
+        local major_delta
+        major_delta=$(printf '%s' "$major_delta_json" | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "10")
+        
         printf '  "loc_delta": {\n'
-        printf '    "patch_delta": %s,\n' "$(./dev-bin/version-calculator --current-version "$current_version" --bump-type patch --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$total_bonus" --json 2>/dev/null | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "1")"
-        printf '    "minor_delta": %s,\n' "$(./dev-bin/version-calculator --current-version "$current_version" --bump-type minor --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$total_bonus" --json 2>/dev/null | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "5")"
-        printf '    "major_delta": %s\n' "$(./dev-bin/version-calculator --current-version "$current_version" --bump-type major --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$total_bonus" --json 2>/dev/null | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "10")"
+        printf '    "patch_delta": %s,\n' "$patch_delta"
+        printf '    "minor_delta": %s,\n' "$minor_delta"
+        printf '    "major_delta": %s\n' "$major_delta"
         printf '  }\n'
         printf '}\n'
     elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
@@ -370,7 +404,7 @@ main() {
         printf '=== Semantic Version Analysis v2 ===\n'
         printf 'Analyzing changes: %s -> %s\n' "$BASE_REF" "$TARGET_REF"
         printf '\nCurrent version: %s\n' "$current_version"
-        printf 'Total bonus points: %s\n' "$total_bonus"
+        printf 'Total bonus points: %s\n' "$TOTAL_BONUS"
         printf '\nSuggested bump: %s\n' "$(printf '%s' "$suggestion" | tr '[:lower:]' '[:upper:]')"
         if [[ -n "$next_version" ]]; then
             printf 'Next version: %s\n' "$next_version"
