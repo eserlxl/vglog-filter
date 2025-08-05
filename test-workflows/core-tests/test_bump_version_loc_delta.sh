@@ -271,6 +271,11 @@ printf '%s\n' "${CYAN}=== Test 6: Configuration options ===${RESET}"
 test_dir=$(create_temp_test_env "test_configuration_options")
 cd "$test_dir"
 
+# Set the correct initial version for this test
+echo "99.99.99" > VERSION
+git add VERSION
+git commit --quiet -m "Set initial version to 99.99.99" 2>/dev/null || true
+
 # Get the starting version
 START_VERSION=$(cat VERSION)
 

@@ -55,7 +55,7 @@ run_test() {
 # Function to extract JSON value from loc_delta section
 extract_json_value() {
     local key="$1"
-    grep -A 10 '"loc_delta"' | grep -o "\"$key\":[[:space:]]*[0-9]*" | cut -d: -f2 | tr -d ' ' || echo "0"
+    jq -r ".loc_delta.$key // 0" 2>/dev/null || echo "0"
 }
 
 SEMANTIC_ANALYZER_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
@@ -157,8 +157,9 @@ echo "// Test change" > src/test.c
 git add src/test.c
 git commit --quiet -m "Add test change" 2>/dev/null || true
 
-# Should always include loc_delta in JSON
-output=$(cd "$PROJECT_ROOT" && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root "$(pwd)" 2>/dev/null)
+# Should always include loc_delta in JSON - use a simpler approach
+cd "$PROJECT_ROOT"
+output=$($SEMANTIC_ANALYZER_SCRIPT --json --repo-root "$test_dir" 2>/dev/null || echo "{}")
 
 if [[ "$output" == *"loc_delta"* ]]; then
     printf '%s\n' "${GREEN}✓ PASS: System always includes loc_delta${NC}"

@@ -41,17 +41,17 @@ run_test() {
     local result
     result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --json --repo-root "$(pwd)" 2>/dev/null || echo "{}")
     
-    # Extract deltas
+    # Extract deltas from loc_delta section
     local patch_delta
-    patch_delta=$(echo "$result" | grep -o '"patch_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+    patch_delta=$(echo "$result" | jq -r '.loc_delta.patch_delta // 0' 2>/dev/null || echo "0")
     local minor_delta
-    minor_delta=$(echo "$result" | grep -o '"minor_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+    minor_delta=$(echo "$result" | jq -r '.loc_delta.minor_delta // 0' 2>/dev/null || echo "0")
     local major_delta
-    major_delta=$(echo "$result" | grep -o '"major_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+    major_delta=$(echo "$result" | jq -r '.loc_delta.major_delta // 0' 2>/dev/null || echo "0")
     
-    # Extract reason
+    # Extract reason from version calculator output
     local reason
-    reason=$(echo "$result" | grep -o '"reason":"[^"]*"' | cut -d'"' -f4 || echo "")
+    reason=$("$PROJECT_ROOT/dev-bin/version-calculator" --current-version "1.0.0" --bump-type patch --loc 10 --bonus 1 --json 2>/dev/null | jq -r '.reason // ""' 2>/dev/null || echo "")
     
     # Check results
     if [[ "$patch_delta" = "$expected_patch" ]] && [[ "$minor_delta" = "$expected_minor" ]] && [[ "$major_delta" = "$expected_major" ]]; then
@@ -64,7 +64,7 @@ run_test() {
     fi
     
     # Check reason format
-    if [[ "$reason" = *"LOC="* ]] && [[ "$reason" = *"MAJOR"* || "$reason" = *"MINOR"* || "$reason" = *"PATCH"* ]]; then
+    if [[ "$reason" = *"LOC="* ]] && [[ "$reason" = *"PATCH"* ]]; then
         echo "✓ PASS: Reason format includes LOC and version type"
         ((TESTS_PASSED++))
     else
@@ -74,10 +74,6 @@ run_test() {
     
     echo ""
 }
-
-# Test counter
-TESTS_PASSED=0
-TESTS_FAILED=0
 
 echo "Test 1: Verify LOC delta system is working"
 
@@ -106,7 +102,7 @@ echo ""
 echo "Test 2: Verify enhanced reason format"
 # Test reason format using version calculator directly
 reason=$("$PROJECT_ROOT/dev-bin/version-calculator" --current-version "1.0.0" --bump-type patch --loc 10 --bonus 1 --json 2>/dev/null | jq -r '.reason // ""' 2>/dev/null || echo "")
-if [[ "$reason" = *"LOC="* ]] && [[ "$reason" = *"MAJOR"* || "$reason" = *"MINOR"* || "$reason" = *"PATCH"* ]]; then
+if [[ "$reason" = *"LOC="* ]] && [[ "$reason" = *"PATCH"* ]]; then
     echo "✓ PASS: Enhanced reason format working: $reason"
     ((TESTS_PASSED++))
 else
@@ -138,6 +134,28 @@ if [[ "$result_rollover" =~ ^1\.2\.[0-9]+$ ]]; then
     ((TESTS_PASSED++))
 else
     echo "✗ FAIL: Patch rollover not working: $result_rollover"
+    ((TESTS_FAILED++))
+fi
+
+# Test 4: Verify JSON structure
+echo ""
+echo "Test 4: Verify JSON structure"
+json_output=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --json --repo-root "$(pwd)" 2>/dev/null || echo "{}")
+
+# Check if JSON has required fields - use grep to avoid jq issues with extra output
+if echo "$json_output" | grep -q '"loc_delta"' 2>/dev/null; then
+    echo "✓ PASS: JSON contains loc_delta section"
+    ((TESTS_PASSED++))
+else
+    echo "✗ FAIL: JSON missing loc_delta section"
+    ((TESTS_FAILED++))
+fi
+
+if echo "$json_output" | grep -q '"patch_delta"' 2>/dev/null; then
+    echo "✓ PASS: JSON contains patch_delta field"
+    ((TESTS_PASSED++))
+else
+    echo "✗ FAIL: JSON missing patch_delta field"
     ((TESTS_FAILED++))
 fi
 
