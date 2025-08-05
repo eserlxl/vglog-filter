@@ -202,7 +202,7 @@ main() {
         "1.2.3" "minor" "100" "0" \
         "6" "1.20" "0" "6" "1.2.9"
     
-    # Test 7: Rollover from patch to minor
+    # Test 7: Rollover from patch to minor (MAIN_VERSION_MOD=1000)
     # current=1.2.995, patch, LOC=100, bonus=10
     # base_delta = 1*(1+100/250) = 1.4 ≈ 1
     # multiplier = 1+100/250 = 1.4
@@ -219,7 +219,7 @@ main() {
         "Rollover from patch to minor" \
         "1.2.995" "patch" "100" "10" "1.3.10"
     
-    # Test 8: Multiple rollovers
+    # Test 8: Multiple rollovers (MAIN_VERSION_MOD=1000)
     # current=1.999.999, major, LOC=1000, bonus=100
     # base_delta = 10*(1+1000/1000) = 20
     # multiplier = 1+1000/1000 = 2.0
@@ -249,7 +249,7 @@ main() {
         "1.2.3" "patch" "1" "0" \
         "1" "1.00" "0" "1" "1.2.4"
     
-    # Test 10: Very large numbers
+    # Test 10: Very large numbers (MAIN_VERSION_MOD=1000)
     # LOC=10000, bonus=1000, major
     # base_delta = 10*(1+10000/1000) = 10*(1+10) = 110
     # multiplier = 1+10000/1000 = 11.0
@@ -265,6 +265,41 @@ main() {
     test_rollover \
         "Very large numbers" \
         "1.2.3" "major" "10000" "1000" "1.13.113"
+    
+    # Test 11: Rollover at exactly 1000 (MAIN_VERSION_MOD=1000)
+    # current=1.2.999, patch, LOC=1, bonus=0
+    # base_delta = 1*(1+1/250) = 1.004 ≈ 1
+    # multiplier = 1+1/250 = 1.004
+    # total_bonus = 0*1.004 = 0
+    # total_delta = 1+0 = 1
+    # new_patch = 999 + 1 = 1000
+    # delta_y = (1000 - 1000%1000) / 1000 = 1000 / 1000 = 1
+    # final_z = 1000 % 1000 = 0
+    # new_y = 2 + 1 = 3
+    # final_y = 3 % 1000 = 3
+    # final_x = 1 + 0 = 1
+    # next_version = 1.3.0
+    test_rollover \
+        "Rollover at exactly 1000" \
+        "1.2.999" "patch" "1" "0" "1.3.0"
+    
+    # Test 12: Large rollover with multiple components
+    # current=1.999.999, patch, LOC=1, bonus=0
+    # base_delta = 1*(1+1/250) = 1.004 ≈ 1
+    # multiplier = 1+1/250 = 1.004
+    # total_bonus = 0*1.004 = 0
+    # total_delta = 1+0 = 1
+    # new_patch = 999 + 1 = 1000
+    # delta_y = (1000 - 1000%1000) / 1000 = 1000 / 1000 = 1
+    # final_z = 1000 % 1000 = 0
+    # new_y = 999 + 1 = 1000
+    # delta_x = (1000 - 1000%1000) / 1000 = 1000 / 1000 = 1
+    # final_y = 1000 % 1000 = 0
+    # final_x = 1 + 1 = 2
+    # next_version = 2.0.0
+    test_rollover \
+        "Large rollover with multiple components" \
+        "1.999.999" "patch" "1" "0" "2.0.0"
     
     # Print summary
     printf '=== Test Summary ===\n'
