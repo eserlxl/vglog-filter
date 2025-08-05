@@ -6,816 +6,187 @@
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
 #
-# Version bump script for vglog-filter
-# Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push] [--push-tags]
+# Core version bump orchestrator for vglog-filter
+# Modular version of the original bump-version script
 
 set -euo pipefail
 
-# Ensure consistent locale and behavior
-export LC_ALL=C
-
-# Set predictable file permissions
-umask 022
-
-# --- Resolve paths early
+# Source utilities
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-VERSION_FILE="$PROJECT_ROOT/VERSION"
+source "$SCRIPT_DIR/version-utils"
 
-# Note: Directory change will happen after --repo-root processing
-
-# --- Dependency helpers -------------------------------------------------------
-
-# Hash function with fallback (GNU coreutils preferred)
-_hash_file() {
-    if command -v sha1sum >/dev/null 2>&1; then
-        sha1sum "$1" | awk '{print $1}'
-    elif command -v shasum >/dev/null 2>&1; then
-        shasum -a 1 "$1" | awk '{print $1}'
-    else
-        # Last-resort: no hashing available; return empty (features using it will behave gracefully)
-        printf ''
-    fi
-}
-
-require_cmd() {
-    local missing=()
-    for c in git realpath sed grep awk; do
-        command -v "$c" >/dev/null 2>&1 || missing+=("$c")
-    done
-    if ((${#missing[@]} > 0)); then
-        printf 'Error: Missing required tools: %s\n' "${missing[*]}" >&2
-        exit 1
-    fi
-}
-require_cmd
-
-# --- Cleanup trap -------------------------------------------------------------
-TMP_FILE=""
-cleanup() {
-    if [[ -n "$TMP_FILE" ]]; then
-        rm -f "$TMP_FILE" 2>/dev/null || true
-    fi
-}
-trap cleanup INT TERM EXIT
-
-# --- Option state -------------------------------------------------------------
-COMMIT_MSG=""
-ALLOW_DIRTY="false"
-ANNOTATED_TAG="true"     # default to annotated tag
-SIGNED_TAG="false"       # default to unsigned tag
-COMMIT_SIGN="false"      # default to unsigned commit
-NO_VERIFY="false"        # default to running hooks
-UPDATE_CMAKE="true"      # default to updating CMake
-TAG_PREFIX="${TAG_PREFIX:-v}"   # default tag prefix, can be overridden by env var
-SET_VERSION=""           # for --set option
-NO_COLOR="false"         # for --no-color option
-DO_PUSH="false"          # for --push option
-PUSH_TAGS="false"        # for --push-tags option
-ALLOW_NONMONOTONIC_TAG="false"  # for --allow-nonmonotonic-tag option
-ALLOW_PRERELEASE="false"         # for --allow-prerelease option
-REPO_ROOT=""             # for --repo-root option
-REMOTE="${REMOTE:-origin}" # default remote for push operations
-
-# Colors (initialized after parsing / TTY checks)
-RED='' ; GREEN='' ; YELLOW='' ; CYAN='' ; RESET=''
-
-# --- Utilities ---------------------------------------------------------------
-has_cmake_version_field() {
-    local cmake="$PROJECT_ROOT/CMakeLists.txt"
-    [[ -f "$cmake" ]] || return 1
-    if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+\$\{[^}]+\}' "$cmake"; then
-        return 0
-    elif grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-        return 0
-    elif grep -Eq '^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-        return 0
-    fi
-    return 1
-}
-
-check_dirty_tree() {
-    local exclude_paths=()
-    # Always exclude VERSION from dirty check since we'll be updating it
-    exclude_paths+=("VERSION")
-    if [[ "$UPDATE_CMAKE" != "true" ]]; then
-        exclude_paths+=("CMakeLists.txt")
-    fi
-
-    local diff_args=(--no-ext-diff -- .)
-    for path in "${exclude_paths[@]}"; do
-        diff_args+=(":(exclude)$path")
-    done
-
-    if ! git diff --quiet "${diff_args[@]}"; then
-        local allowed="VERSION"
-        [[ "$UPDATE_CMAKE" != "true" ]] && allowed+=" and CMakeLists.txt"
-
-        printf '%s' "${RED}Error:${RESET} working tree has disallowed changes. Use --allow-dirty to override." >&2
-        [[ -n "$allowed" ]] && printf ' Allowed: %s.' "$allowed" >&2
-        printf '\n' >&2
-
-        printf '%s\n' "Dirty files:" >&2
-        git diff --name-only "${diff_args[@]}" >&2
-        exit 1
-    fi
-
-    if git ls-files --others --exclude-standard | grep -q .; then
-        printf '%s\n' "${YELLOW}Warning:${RESET} untracked files present (ignored)." >&2
-    fi
-}
-
-validate_version_format() {
-    local version="$1"
-    local allow_prerelease="$2"
-
-    if [[ "$allow_prerelease" == "true" ]]; then
-        if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
-            printf '%s\n' "${RED}Error: Invalid version format: $version${RESET}" >&2
-            printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-PRERELEASE (e.g., 1.0.0 or 1.0.0-rc.1)${RESET}" >&2
-            printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed${RESET}" >&2
-            exit 1
-        fi
-    else
-        if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            printf '%s\n' "${RED}Error: Invalid version format: $version${RESET}" >&2
-            printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH (e.g., 1.0.0)${RESET}" >&2
-            printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed${RESET}" >&2
-            printf '%s\n' "${YELLOW}Note: Pre-releases require --allow-prerelease with --set${RESET}" >&2
-            exit 1
-        fi
-    fi
-}
-
-bump_version() {
-    local bump_type="$1"
-    local current_major current_minor current_patch
-    local new_major new_minor new_patch
-
-    IFS='.' read -r current_major current_minor current_patch <<< "$CURRENT_VERSION"
-
-    # Use semantic analyzer to calculate LOC-based delta
-    local delta=1
-    # Try to find semantic analyzer in various locations
-    local analyzer_path=""
-    if [[ -x "$ORIGINAL_PROJECT_ROOT/dev-bin/semantic-version-analyzer" ]]; then
-        analyzer_path="$ORIGINAL_PROJECT_ROOT/dev-bin/semantic-version-analyzer"
-    elif [[ -x "./dev-bin/semantic-version-analyzer" ]]; then
-        analyzer_path="./dev-bin/semantic-version-analyzer"
-    elif [[ -x "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/semantic-version-analyzer" ]]; then
-        analyzer_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/semantic-version-analyzer"
-    fi
+# --- Initialize and setup ----------------------------------------------------
+setup_environment() {
+    # Initialize colors
+    init_colors "${NO_COLOR:-false}"
     
-    if [[ -n "$analyzer_path" ]]; then
-        # Get the delta from semantic analyzer
-        local analyzer_output
-        local analyzer_args="--json"
-        if [[ -n "$REPO_ROOT" ]]; then
-            analyzer_args="$analyzer_args --repo-root '$REPO_ROOT'"
-        fi
-        # Call semantic analyzer from original project root to ensure it can find its dependencies
-        analyzer_output=$(cd "$ORIGINAL_PROJECT_ROOT" && "$analyzer_path" $analyzer_args 2>/dev/null || true)
+    # Resolve paths
+    resolve_script_paths "$0" "${REPO_ROOT:-}"
+    
+    # Store original project root for semantic analyzer
+    ORIGINAL_PROJECT_ROOT="$PROJECT_ROOT"
+    
+    # Setup cleanup
+    setup_cleanup "TMP_FILE"
+    
+    # Check dependencies
+    require_cmd
+}
+
+# --- Version file operations -------------------------------------------------
+handle_version_file() {
+    local version_exists="false"
+    local current_version="none"
+    
+    if [[ -f "$VERSION_FILE" ]]; then
+        version_exists="true"
+        validate_version_file_path "$VERSION_FILE" "$PROJECT_ROOT"
+        current_version=$(read_version_file "$VERSION_FILE")
         
-        if [[ -n "$analyzer_output" ]]; then
-            # Extract delta from JSON output - look for nested fields under loc_delta
-            case "$bump_type" in
-                patch)
-                    delta=$(printf '%s' "$analyzer_output" | grep -o '"patch_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "1")
-                    ;;
-                minor)
-                    delta=$(printf '%s' "$analyzer_output" | grep -o '"minor_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "5")
-                    ;;
-                major)
-                    delta=$(printf '%s' "$analyzer_output" | grep -o '"major_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || echo "10")
-                    ;;
-            esac
+        if ! is_semver "$current_version"; then
+            die "Invalid version format in VERSION: $current_version"
+            printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH${RESET}" >&2
+            exit 1
         fi
+    elif [[ -n "${SET_VERSION:-}" ]]; then
+        printf '%s\n' "${YELLOW}Note: VERSION not found; will create with $SET_VERSION${RESET}" >&2
+    else
+        die "VERSION file not found at $VERSION_FILE"
+        printf '%s\n' "${YELLOW}Use --set VERSION to create it${RESET}" >&2
+        exit 1
     fi
     
-    # Ensure delta is numeric
-    if [[ ! "$delta" =~ ^[0-9]+$ ]]; then
-        case "$bump_type" in
-            patch) delta=1 ;;
-            minor) delta=5 ;;
-            major) delta=10 ;;
-        esac
-    fi
-    
-    # Apply delta with rollover logic
-    case "$bump_type" in
-        major|minor|patch)
-            local patch_limit="${VERSION_PATCH_LIMIT:-100}"
-            local minor_limit="${VERSION_MINOR_LIMIT:-100}"
-            
-            # Calculate new patch with modulo 100
-            local new_patch=$((current_patch + delta))
-            if [[ "$new_patch" -ge "$patch_limit" ]]; then
-                # Calculate how many minor increments we need
-                local minor_increments=$((new_patch / patch_limit))
-                local remaining_patch=$((new_patch % patch_limit))
-                
-                # Calculate new minor version
-                local new_minor=$((current_minor + minor_increments))
-                
-                if [[ "$new_minor" -ge "$minor_limit" ]]; then
-                    # Calculate how many major increments we need
-                    local major_increments=$((new_minor / minor_limit))
-                    new_major=$((current_major + major_increments))
-                    new_minor=$((new_minor % minor_limit))
-                    new_patch=$remaining_patch
-                else
-                    new_major=$current_major
-                    new_patch=$remaining_patch
-                fi
-            else
-                new_major=$current_major
-                new_minor=$current_minor
-            fi
-            ;;
-        *) printf '%s\n' "${RED}Error: Invalid bump type '$bump_type'${RESET}" >&2; exit 1 ;;
-    esac
-
-    NEW_VERSION="$new_major.$new_minor.$new_patch"
+    printf '%s\n%s' "$version_exists" "$current_version"
 }
 
-update_version_file() {
-    if [[ "$NEW_VERSION" == *-* ]]; then
-        printf '%s\n' "${YELLOW}Note: Pre-release $NEW_VERSION - not writing to VERSION file${RESET}" >&2
+# --- Version calculation ----------------------------------------------------
+calculate_new_version() {
+    local current_version="$1"
+    local bump_type="${BUMP_TYPE:-}"
+    local set_version="${SET_VERSION:-}"
+    
+    if [[ -n "$set_version" ]]; then
+        validate_version_format "$set_version" "${ALLOW_PRERELEASE:-false}"
+        printf '%s' "$set_version"
+    else
+        [[ -z "$bump_type" ]] && die "No bump type specified"
+        printf '%s\n' "${CYAN}Bumping version from $current_version...${RESET}" >&2
+        
+        # Use the LOC-based calculator
+        local new_version
+        local calculator_args=(
+            --current-version "$current_version"
+            --bump-type "$bump_type"
+            --original-project-root "$ORIGINAL_PROJECT_ROOT"
+        )
+        if [[ -n "${REPO_ROOT:-}" ]]; then
+            calculator_args+=(--repo-root "${REPO_ROOT}")
+        fi
+        
+        new_version=$("$SCRIPT_DIR/version-calculator-loc" "${calculator_args[@]}")
+        
+        printf '%s' "$new_version"
+    fi
+}
+
+# --- File updates -----------------------------------------------------------
+update_files() {
+    local new_version="$1"
+    local current_version="$2"
+    
+    # Update VERSION file
+    if [[ "$new_version" != *-* ]]; then
+        safe_write_file "$VERSION_FILE" "$new_version"
+        TMP_FILE_VAR="TMP_FILE"
+        
+        if [[ "$current_version" == "none" ]]; then
+            success "Created VERSION file: $new_version"
+        else
+            success "Updated VERSION file: $current_version → $new_version"
+        fi
+    else
+        warn "Pre-release $new_version - not writing to VERSION file"
         printf '%s\n' "${CYAN}Pre-release versions should not be stored in VERSION file${RESET}" >&2
-        return 0
     fi
-
-    TMP_FILE="${VERSION_FILE}.tmp.$$"
-    printf '%s\n' "$NEW_VERSION" > "$TMP_FILE"
-
-    # Best-effort durability
-    sync -f "$TMP_FILE" 2>/dev/null || sync "$TMP_FILE" 2>/dev/null || sync || true
-    mv -f "$TMP_FILE" "$VERSION_FILE"
-    TMP_FILE=""
-    sync -f "$VERSION_FILE" 2>/dev/null || sync -f "$(dirname "$VERSION_FILE")" 2>/dev/null || sync || true
-
-    if [[ "$CURRENT_VERSION" == "none" ]]; then
-        printf '%s\n' "${GREEN}Created VERSION file: $NEW_VERSION${RESET}" >&2
-    else
-        printf '%s\n' "${GREEN}Updated VERSION file: $CURRENT_VERSION → $NEW_VERSION${RESET}" >&2
-    fi
-}
-
-update_cmake_version() {
-    if [[ "$NEW_VERSION" == *-* ]]; then
-        printf '%s\n' "${YELLOW}Note: Skipping CMakeLists.txt update for pre-release${RESET}" >&2
-        return 0
-    fi
-    local cmake="$PROJECT_ROOT/CMakeLists.txt"
-    [[ -f "$cmake" ]] || return 0
-
-    local before after
-    before="$(_hash_file "$cmake")"
-
-    if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+\$\{[^}]+\}' "$cmake"; then
-        # Handle variable format like ${VGLOG_FILTER_VERSION_STRING}
-        # No update needed since CMakeLists.txt reads from VERSION file
-        printf '%s\n' "${GREEN}CMakeLists.txt uses VERSION file variable (no update needed)${RESET}" >&2
-        return 0
-    elif grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-        sed -E -i "s/(^[[:space:]]*project\([^)]*VERSION[[:space:]]+)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
-    elif grep -Eq '^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+\"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake"; then
-        sed -E -i "s/(^[[:space:]]*set[[:space:]]*\([[:space:]]*PROJECT_VERSION[[:space:]]+\"?)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$cmake"
-    else
-        printf '%s\n' "${YELLOW}Note: CMakeLists.txt present but no recognizable version field${RESET}" >&2
-        return 0
-    fi
-
-    after="$(_hash_file "$cmake")"
-    if [[ -n "$before" && -n "$after" && "$before" != "$after" ]]; then
-        printf '%s\n' "${GREEN}Updated CMakeLists.txt to ${NEW_VERSION}${RESET}" >&2
-        git add -- "$cmake"
-    fi
-}
-
-stage_files() {
-    [[ "$NEW_VERSION" != *-* ]] && git add -- "$VERSION_FILE"
-    if [[ "$UPDATE_CMAKE" != "true" && "$ALLOW_DIRTY" != "true" ]]; then
-        git reset -- "$PROJECT_ROOT/CMakeLists.txt" 2>/dev/null || true
-    fi
-}
-
-check_git_identity() {
-    git config --get user.name >/dev/null || printf '%s\n' "${YELLOW}Warning: git user.name is not set${RESET}" >&2
-    git config --get user.email >/dev/null || printf '%s\n' "${YELLOW}Warning: git user.email is not set${RESET}" >&2
-}
-
-create_commit() {
-    stage_files
-
-    if git diff --cached --quiet; then
-        if [[ "$NEW_VERSION" == *-* ]]; then
-            printf '%s\n' "${YELLOW}Skipping commit: pre-release made no file changes${RESET}" >&2
+    
+    # Update CMakeLists.txt
+    if [[ "${UPDATE_CMAKE:-true}" == "true" ]]; then
+        if [[ "${DRY_RUN:-false}" == "true" ]]; then
+            "$SCRIPT_DIR/cmake-updater" simulate \
+                "$PROJECT_ROOT/CMakeLists.txt" \
+                "$new_version"
         else
-            printf '%s\n' "${YELLOW}No staged changes to commit${RESET}" >&2
+            "$SCRIPT_DIR/cmake-updater" update \
+                "$PROJECT_ROOT/CMakeLists.txt" \
+                "$new_version"
         fi
-        return 0
     fi
+}
 
-    check_git_identity
-
-    local staged_files=()
-    if [[ "$NEW_VERSION" != *-* && -f "$VERSION_FILE" ]]; then
-        staged_files+=("$VERSION_FILE")
+# --- Git operations ---------------------------------------------------------
+perform_git_operations() {
+    local new_version="$1"
+    local current_version="$2"
+    
+    if [[ "${DO_COMMIT:-false}" == "true" || "${DO_TAG:-false}" == "true" || "${DO_PUSH:-false}" == "true" || "${PUSH_TAGS:-false}" == "true" ]]; then
+        "$SCRIPT_DIR/git-operations" perform_git_operations \
+            "$VERSION_FILE" \
+            "${UPDATE_CMAKE:-true}" \
+            "$new_version" \
+            "$current_version" \
+            "${DO_COMMIT:-false}" \
+            "${DO_TAG:-false}" \
+            "${DO_PUSH:-false}" \
+            "${PUSH_TAGS:-false}" \
+            "${COMMIT_MSG:-}" \
+            "${NO_VERIFY:-false}" \
+            "${COMMIT_SIGN:-false}" \
+            "${TAG_PREFIX:-v}" \
+            "${ANNOTATED_TAG:-true}" \
+            "${SIGNED_TAG:-false}" \
+            "${ALLOW_DIRTY:-false}" \
+            "$PROJECT_ROOT" \
+            "$ORIGINAL_PROJECT_ROOT" \
+            "${REMOTE:-origin}" \
+            "${ALLOW_NONMONOTONIC_TAG:-false}"
     fi
-    if [[ "$UPDATE_CMAKE" == "true" && -f "$PROJECT_ROOT/CMakeLists.txt" ]]; then
-        staged_files+=("$PROJECT_ROOT/CMakeLists.txt")
-    fi
+}
 
-    if [[ -z "$COMMIT_MSG" ]]; then
-        local commit_args=()
-        [[ "$NO_VERIFY" == "true" ]] && commit_args+=(--no-verify)
-        [[ "$COMMIT_SIGN" == "true" ]] && commit_args+=(-S)
-        commit_args+=(-m "chore(release): ${TAG_PREFIX}${NEW_VERSION}${GITHUB_ACTIONS:+ [skip ci]}")
-        if [[ "$CURRENT_VERSION" == "none" ]]; then
-            commit_args+=(-m "bump: initial version ${NEW_VERSION}")
+# --- Dry run simulation -----------------------------------------------------
+simulate_dry_run() {
+    local new_version="$1"
+    local current_version="$2"
+    local version_exists="$3"
+    
+    if [[ "$current_version" == "none" ]]; then
+        if [[ "$new_version" == *-* ]]; then
+            printf '%s\n' "${YELLOW}DRY RUN: Would print pre-release $new_version (not write VERSION)${RESET}" >&2
         else
-            commit_args+=(-m "bump: ${CURRENT_VERSION} → ${NEW_VERSION}")
-        fi
-        if [[ -n "${ANALYSIS_MESSAGE:-}" ]]; then
-            commit_args+=(-m "$ANALYSIS_MESSAGE")
-        fi
-        
-        # Add explanation if semantic analyzer is available and we're in CI
-        if [[ -n "${GITHUB_ACTIONS:-}" && -x "./dev-bin/semantic-version-analyzer" ]]; then
-            # Try to get explanation from semantic analyzer
-            local explanation=""
-            local analyzer_output
-            analyzer_output="$(./dev-bin/semantic-version-analyzer --verbose 2>/dev/null || true)"
-            
-            if [[ -n "$analyzer_output" ]]; then
-                # Extract reason from verbose output
-                local reason_line
-                reason_line="$(printf '%s\n' "$analyzer_output" | grep -E '^Reason:' | head -1)"
-                if [[ -n "$reason_line" ]]; then
-                    explanation="${reason_line#Reason: }"
-                fi
-            fi
-            
-            # If no explanation from analyzer, create a basic one
-            if [[ -z "$explanation" ]]; then
-                case "$BUMP_TYPE" in
-                    major) explanation="Major version bump due to significant changes" ;;
-                    minor) explanation="Minor version bump due to new features or additions" ;;
-                    patch) explanation="Patch version bump due to bug fixes or improvements" ;;
-                    *) explanation="Version bump triggered by automated analysis" ;;
-                esac
-            fi
-            
-            if [[ -n "$explanation" ]]; then
-                commit_args+=(-m "Reason: $explanation")
-            fi
-        fi
-        if ((${#staged_files[@]} > 0)); then
-            git commit "${commit_args[@]}" -- "${staged_files[@]}"
-        else
-            git commit "${commit_args[@]}"
+            printf '%s\n' "${YELLOW}DRY RUN: Would create VERSION with $new_version${RESET}" >&2
         fi
     else
-        if ((${#staged_files[@]} > 0)); then
-            git commit ${NO_VERIFY:+--no-verify} ${COMMIT_SIGN:+-S} -m "$COMMIT_MSG" -- "${staged_files[@]}"
+        if [[ "$new_version" == *-* ]]; then
+            printf '%s\n' "${YELLOW}DRY RUN: Would print pre-release $new_version (not update VERSION)${RESET}" >&2
         else
-            git commit ${NO_VERIFY:+--no-verify} ${COMMIT_SIGN:+-S} -m "$COMMIT_MSG"
+            printf '%s\n' "${YELLOW}DRY RUN: Would update VERSION to $new_version${RESET}" >&2
         fi
     fi
-
-    printf '%s\n' "${GREEN}Created commit${RESET}" >&2
-    local commit_sha
-    commit_sha=$(git rev-parse --short HEAD)
-    printf '%s\n' "${CYAN}Commit SHA: $commit_sha${RESET}" >&2
-}
-
-create_tag() {
-    local tag_name="${TAG_PREFIX}${NEW_VERSION}"
-
-    if [[ "$NEW_VERSION" == *-* ]]; then
-        printf '%s\n' "${RED}Error: Cannot create tag for pre-release version${RESET}" >&2
-        printf '%s\n' "${YELLOW}Pre-release versions should not be tagged${RESET}" >&2
-        exit 1
-    fi
-
-    if git rev-parse -q --verify "$tag_name" >/dev/null; then
-        if [[ "$(git rev-parse "$tag_name^{commit}")" != "$(git rev-parse HEAD)" ]]; then
-            printf '%s\n' "${RED}Error: tag $tag_name exists but not on HEAD.${RESET}" >&2
-            exit 1
-        fi
-        printf '%s\n' "${YELLOW}Tag $tag_name already exists${RESET}" >&2
-        return 0
-    fi
-
-    if [[ "$SIGNED_TAG" == "true" ]]; then
-        git tag -s "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
-        printf '%s\n' "${GREEN}Created signed tag: $tag_name${RESET}" >&2
-    elif [[ "$ANNOTATED_TAG" == "true" ]]; then
-        git tag -a "$tag_name" -m "Release ${TAG_PREFIX}${NEW_VERSION}"
-        printf '%s\n' "${GREEN}Created annotated tag: $tag_name${RESET}" >&2
-    else
-        git tag "$tag_name"
-        printf '%s\n' "${GREEN}Created lightweight tag: $tag_name${RESET}" >&2
-    fi
-
-    local tag_sha
-    tag_sha=$(git rev-parse --short "$tag_name")
-    printf '%s\n' "${CYAN}Tag SHA: $tag_sha${RESET}" >&2
-}
-
-sanitize_tag_prefix() {
-    local p="$1"
-    p="${p//\\/\\\\}"   # \  -> \\
-    p="${p//\*/\\*}"    # *  -> \*
-    p="${p//\?/\\?}"    # ?  -> \?
-    p="${p//\[/\\[}"    # [  -> \[
-    p="${p//\]/\\]}"    # ]  -> \]
-    printf '%s' "$p"
-}
-
-last_tag_for_prefix() {
-    # Echo the last tag matching prefix with version-like suffix, using a
-    # sort key compatible with a wide range of Git versions.
-    local sanitized_prefix
-    sanitized_prefix=$(sanitize_tag_prefix "$TAG_PREFIX")
-    local pattern="${sanitized_prefix}[0-9]*.[0-9]*.[0-9]*"
-    local t=""
-    t=$(git tag --list "$pattern" --sort=-version:refname | head -n1 || true)
-    if [[ -z "$t" ]]; then
-        t=$(git tag --list "$pattern" --sort=-v:refname | head -n1 || true)
-    fi
-    printf '%s' "$t"
-}
-
-check_version_order() {
-    if [[ "$NEW_VERSION" == *-* ]]; then
-        return 0
-    fi
-    local last_tag
-    last_tag="$(last_tag_for_prefix)"
-
-    if [[ -n "$last_tag" ]]; then
-        local last_version="${last_tag:${#TAG_PREFIX}}"
-        [[ "$last_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 0
-
-        local new_major new_minor new_patch last_major last_minor last_patch
-        IFS='.' read -r new_major new_minor new_patch <<< "$NEW_VERSION"
-        IFS='.' read -r last_major last_minor last_patch <<< "$last_version"
-
-        local not_greater=false
-        if [[ "$NEW_VERSION" == "$last_version" ]] ||
-           (( new_major <  last_major )) ||
-           (( new_major == last_major && new_minor <  last_minor )) ||
-           (( new_major == last_major && new_minor == last_minor && new_patch <= last_patch )); then
-            not_greater=true
-        fi
-
-        if $not_greater; then
-            printf '%s\n' "${YELLOW}Warning:${RESET} New version $NEW_VERSION is not greater than last tag $last_tag${RESET}" >&2
-            if [[ -n "${GITHUB_ACTIONS:-}" && "$ALLOW_NONMONOTONIC_TAG" != "true" ]]; then
-                printf '%s\n' "${RED}Error:${RESET} NEW_VERSION ($NEW_VERSION) must be greater than last tag ($last_tag)${RESET}" >&2
-                printf '%s\n' "${YELLOW}Use --allow-nonmonotonic-tag to override${RESET}" >&2
-                exit 1
-            fi
-        fi
-    fi
-}
-
-usage() {
-    local help_version="N/A"
-    [[ -f "$VERSION_FILE" ]] && help_version=$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || printf 'N/A')
-    cat << EOF
-Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push] [--push-tags] [--allow-nonmonotonic-tag] [--allow-prerelease] [--repo-root PATH] [--remote REMOTE]
-
-Bump the semantic version of vglog-filter
-
-Requirements:
-  GNU tools on Linux: realpath, sha1sum (or shasum), GNU sed, GNU grep
-  macOS users: run in GNU coreutils + gsed environment (e.g., brew install coreutils gnu-sed)
-
-Behavior notes:
-  • Pre-releases (X.Y.Z-PRERELEASE) are supported only with --set.
-    They are not written to VERSION and cannot be tagged.
-  • --print computes the version and exits early without validations or git checks.
-  • --dry-run prints actions and skips dirty-tree enforcement.
-  • Commits only include VERSION and CMakeLists.txt (if updated).
-
-File Tracking Requirements:
-  • VERSION file must be tracked in git for version bumps
-  • CMakeLists.txt is automatically updated if it contains a version field
-  • Only tracked files are included in version bump commits
-
-Arguments:
-  major | minor | patch
-
-Options:
-  --commit                 Create a git commit with the version bump
-  --tag                    Create a git tag for the new version
-  --dry-run                Show actions without making changes
-  --print                  Print the new version and exit
-  --message MSG            Use MSG as the full commit message (overrides default)
-  --allow-dirty            Allow committing/tagging with other changes present
-  --lightweight-tag        Create a lightweight tag (default is annotated)
-  --signed-tag             Create a signed tag (requires GPG config)
-  --sign-commit            GPG-sign the commit (requires GPG config)
-  --no-verify              Skip commit hooks
-  --no-cmake               Skip updating CMakeLists.txt version
-  --tag-prefix PREFIX      Tag prefix (default: v; empty allowed)
-  --set VERSION            Set version to VERSION (format X.Y.Z or with --allow-prerelease)
-  --no-color               Disable colored output
-  --push                   Push current branch and, if tagged, the new tag
-  --push-tags              Push all tags
-  --allow-nonmonotonic-tag Allow setting a version lower/equal to the last tag
-  --allow-prerelease       Allow prerelease with --set (e.g., 1.0.0-rc.1)
-  --repo-root PATH         Use PATH as repository root
-  --remote REMOTE          Git remote to push to (default: \$REMOTE or 'origin')
-
-Environment:
-  ANALYSIS_MESSAGE         Extra paragraph appended to default commit message
-  TAG_PREFIX               Default tag prefix (overridden by --tag-prefix)
-  REMOTE                   Default remote for push operations (overridden by --remote)
-  VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
-  VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
-  VERSION_PATCH_DELTA      Patch delta formula (default: 1*(1+LOC/250))
-  VERSION_MINOR_DELTA      Minor delta formula (default: 5*(1+LOC/500))
-  VERSION_MAJOR_DELTA      Major delta formula (default: 10*(1+LOC/1000))
-
-Examples:
-  ./dev-bin/bump-version patch
-  ./dev-bin/bump-version minor --commit
-  ./dev-bin/bump-version major --commit --tag
-  ./dev-bin/bump-version patch --dry-run
-  ./dev-bin/bump-version patch --print
-  ANALYSIS_MESSAGE='…' ./dev-bin/bump-version patch --commit
-  ./dev-bin/bump-version patch --signed-tag --tag
-  ./dev-bin/bump-version --set 2.1.0 --commit
-  ./dev-bin/bump-version --set 1.0.0-rc.1 --allow-prerelease --print
-
-Current version: $help_version
-EOF
-}
-
-# --- Parse args ---------------------------------------------------------------
-BUMP_TYPE=""
-DO_COMMIT="false"
-DO_TAG="false"
-DRY_RUN="false"
-PRINT_ONLY="false"
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        major|minor|patch)
-            [[ -n "$BUMP_TYPE" ]] && { printf '%s\n' "${RED}Error: Multiple bump types specified${RESET}" >&2; usage; exit 1; }
-            BUMP_TYPE="$1"; shift ;;
-        --commit) DO_COMMIT="true"; shift ;;
-        --tag)    DO_TAG="true"; shift ;;
-        --dry-run) DRY_RUN="true"; shift ;;
-        --print)  PRINT_ONLY="true"; shift ;;
-        --message)
-            # allow empty message only if explicitly provided after the flag
-            if [[ $# -lt 2 ]]; then
-                printf '%s\n' "${RED}Error: --message requires a value${RESET}" >&2; exit 1
-            fi
-            COMMIT_MSG="${2-}"; shift 2 ;;
-        --allow-dirty) ALLOW_DIRTY="true"; shift ;;
-        --lightweight-tag) ANNOTATED_TAG="false"; shift ;;
-        --signed-tag) SIGNED_TAG="true"; ANNOTATED_TAG="false"; shift ;;
-        --sign-commit) COMMIT_SIGN="true"; shift ;;
-        --no-verify) NO_VERIFY="true"; shift ;;
-        --no-cmake)  UPDATE_CMAKE="false"; shift ;;
-        --tag-prefix)
-            # Allow empty prefix (e.g., --tag-prefix '')
-            if [[ $# -lt 2 ]]; then
-                printf '%s\n' "${RED}Error: --tag-prefix requires a value (use '' for empty)${RESET}" >&2; exit 1
-            fi
-            TAG_PREFIX="$2"; shift 2 ;;
-        --set)
-            if [[ $# -lt 2 ]]; then
-                printf '%s\n' "${RED}Error: --set requires a value${RESET}" >&2; exit 1
-            fi
-            SET_VERSION="$2"; shift 2 ;;
-        --no-color) NO_COLOR="true"; shift ;;
-        --push) DO_PUSH="true"; shift ;;
-        --push-tags) PUSH_TAGS="true"; shift ;;
-        --allow-nonmonotonic-tag) ALLOW_NONMONOTONIC_TAG="true"; shift ;;
-        --allow-prerelease) ALLOW_PRERELEASE="true"; shift ;;
-        --repo-root)
-            if [[ $# -lt 2 ]]; then
-                printf '%s\n' "${RED}Error: --repo-root requires a value${RESET}" >&2; exit 1
-            fi
-            REPO_ROOT="$2"; shift 2 ;;
-        --remote)
-            if [[ $# -lt 2 || -z "${2-}" ]]; then
-                printf '%s\n' "${RED}Error: --remote requires a non-empty value${RESET}" >&2; exit 1
-            fi
-            REMOTE="$2"; shift 2 ;;
-        -h|--help) usage; exit 0 ;;
-        *) printf '%s\n' "${RED}Error: Unknown option '$1'${RESET}" >&2; usage; exit 1 ;;
-    esac
-done
-
-# Colors: enable unless disabled or not a TTY
-if [[ "$NO_COLOR" != "true" && -t 2 ]]; then
-    RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'; CYAN=$'\033[0;36m'; RESET=$'\033[0m'
-fi
-
-# Store original project root for semantic analyzer
-ORIGINAL_PROJECT_ROOT="$PROJECT_ROOT"
-
-# --repo-root handling
-if [[ -n "$REPO_ROOT" ]]; then
-    [[ -d "$REPO_ROOT" ]] || { printf '%s\n' "${RED}Error: Repository root '$REPO_ROOT' does not exist${RESET}" >&2; exit 1; }
-    PROJECT_ROOT="$REPO_ROOT"
-    VERSION_FILE="$PROJECT_ROOT/VERSION"
-    cd "$PROJECT_ROOT"
-    printf '%s\n' "${CYAN}Using repository root: $PROJECT_ROOT${RESET}" >&2
-else
-    # Change to project root for git operations (default behavior)
-    cd "$PROJECT_ROOT"
-fi
-
-# Early exclusivity check
-if [[ "$DRY_RUN" == "true" && "$PRINT_ONLY" == "true" ]]; then
-    printf '%s\n' "${RED}Error: --dry-run and --print cannot be used together${RESET}" >&2
-    exit 1
-fi
-
-# Handle --print early (no validations)
-if [[ "$PRINT_ONLY" == "true" ]]; then
-    if [[ -n "$SET_VERSION" ]]; then
-        validate_version_format "$SET_VERSION" "$ALLOW_PRERELEASE"
-        printf '%s\n' "$SET_VERSION"
-        exit 0
-    elif [[ -n "$BUMP_TYPE" && -f "$VERSION_FILE" ]]; then
-        CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
-        if [[ "$CURRENT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            # Use bump_version function to ensure LOC-based delta system is used
-            bump_version "$BUMP_TYPE"
-            printf '%s\n' "$NEW_VERSION"
-            exit 0
-        fi
-    fi
-    printf '%s\n' "${RED}Error: Cannot compute version for --print. Provide --set VERSION or a bump type with existing VERSION file.${RESET}" >&2
-    exit 1
-fi
-
-# Validate TAG_PREFIX content
-if [[ "$TAG_PREFIX" == *$'\n'* || "$TAG_PREFIX" == *$'\r'* ]]; then
-    printf '%s\n' "${RED}Error: TAG_PREFIX contains newline characters${RESET}" >&2
-    exit 1
-fi
-
-# VERSION file checks
-VERSION_EXISTS="false"
-CURRENT_VERSION="none"
-if [[ -f "$VERSION_FILE" ]]; then
-    VERSION_EXISTS="true"
-
-    VERSION_REAL="$(realpath -e "$VERSION_FILE" 2>/dev/null || printf '')"
-    if [[ -z "$VERSION_REAL" ]]; then
-        printf '%s\n' "${RED}Error: VERSION path is a broken symlink${RESET}" >&2
-        exit 1
-    fi
-    case "$VERSION_REAL" in
-        "$PROJECT_ROOT"/*) : ;;
-        *) printf '%s\n' "${RED}Error: VERSION resolves outside repo${RESET}" >&2; exit 1 ;;
-    esac
-
-    CURRENT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
-    if [[ ! "$CURRENT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-        printf '%s\n' "${RED}Error: Invalid version format in VERSION: $CURRENT_VERSION${RESET}" >&2
-        printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH${RESET}" >&2
-        exit 1
-    fi
-elif [[ -n "$SET_VERSION" ]]; then
-    printf '%s\n' "${YELLOW}Note: VERSION not found; will create with $SET_VERSION${RESET}" >&2
-else
-    printf '%s\n' "${RED}Error: VERSION file not found at $VERSION_FILE${RESET}" >&2
-    printf '%s\n' "${YELLOW}Use --set VERSION to create it${RESET}" >&2
-    exit 1
-fi
-
-# Compute NEW_VERSION
-if [[ -n "$SET_VERSION" ]]; then
-    validate_version_format "$SET_VERSION" "$ALLOW_PRERELEASE"
-    NEW_VERSION="$SET_VERSION"
-    BUMP_TYPE="set"
-else
-    [[ -z "$BUMP_TYPE" ]] && { printf '%s\n' "${RED}Error: No bump type specified${RESET}" >&2; usage; exit 1; }
-    printf '%s\n' "${CYAN}Bumping version from $CURRENT_VERSION...${RESET}" >&2
-    bump_version "$BUMP_TYPE"
-fi
-
-# No-op guard
-if [[ "$CURRENT_VERSION" == "$NEW_VERSION" ]]; then
-    printf '%s\n' "${YELLOW}Version unchanged ($CURRENT_VERSION); nothing to do.${RESET}" >&2
-    printf '%s\n' "$NEW_VERSION"
-    exit 0
-fi
-
-# Git repository checks (only if committing/tagging/pushing)
-IN_GIT_REPO="false"
-if git rev-parse --git-dir >/dev/null 2>&1; then
-    IN_GIT_REPO="true"
-fi
-
-if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" || "$DO_PUSH" == "true" || "$PUSH_TAGS" == "true" ]]; then
-    [[ "$IN_GIT_REPO" == "true" ]] || { printf '%s\n' "${RED}Error: Not in a git repository${RESET}" >&2; exit 1; }
-    if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
-        git symbolic-ref -q HEAD >/dev/null || { printf '%s\n' "${RED}Error:${RESET} detached HEAD; checkout a branch before committing/tagging.${RESET}" >&2; exit 1; }
-    fi
-fi
-
-# VERSION must be tracked if we will commit/tag and it exists
-if [[ ( "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ) && "$VERSION_EXISTS" == "true" ]]; then
-    git ls-files --error-unmatch -- "$VERSION_FILE" >/dev/null 2>&1 || { printf '%s\n' "${RED}Error: VERSION is not tracked by git${RESET}" >&2; exit 1; }
-fi
-
-# Signing prerequisites
-if [[ "$SIGNED_TAG" == "true" ]] && ! git config --get user.signingkey >/dev/null; then
-    printf '%s\n' "${YELLOW}Warning:${RESET} --signed-tag requested but no user.signingkey configured.${RESET}" >&2
-    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
-        printf '%s\n' "${RED}Error:${RESET} --signed-tag requested in CI but no signing key configured.${RESET}" >&2
-        exit 1
-    fi
-fi
-if [[ "$COMMIT_SIGN" == "true" ]] && ! git config --get user.signingkey >/dev/null; then
-    printf '%s\n' "${YELLOW}Warning:${RESET} --sign-commit requested but no user.signingkey configured.${RESET}" >&2
-    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
-        printf '%s\n' "${RED}Error:${RESET} --sign-commit requested in CI but no signing key configured.${RESET}" >&2
-        exit 1
-    fi
-fi
-
-if [[ "$SIGNED_TAG" == "true" || "$COMMIT_SIGN" == "true" ]]; then
-    [[ -t 1 && -z "${GPG_TTY:-}" ]] && printf '%s\n' "${YELLOW}Hint:${RESET} export GPG_TTY=\$(tty) may be required for pinentry.${RESET}" >&2
-fi
-if [[ "$DO_COMMIT" == "true" && "$COMMIT_SIGN" != "true" ]] && git config --get commit.gpgSign >/dev/null; then
-    printf '%s\n' "${YELLOW}Note:${RESET} commit.gpgSign=true is configured; Git may sign commits anyway.${RESET}" >&2
-fi
-
-# Warn if --allow-prerelease without --set
-if [[ "$ALLOW_PRERELEASE" == "true" && -z "$SET_VERSION" ]]; then
-    printf '%s\n' "${YELLOW}Warning:${RESET} --allow-prerelease has no effect without --set.${RESET}" >&2
-fi
-
-# Refresh index before diff checks
-if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" ]]; then
-    git update-index -q --refresh || true
-fi
-
-# Dirty-tree enforcement
-    if { [[ "$DO_COMMIT" == "true" ]] || [[ "$DO_TAG" == "true" ]]; } && [[ "$ALLOW_DIRTY" != "true" ]] && [[ "$DRY_RUN" != "true" ]]; then
-    [[ "$IN_GIT_REPO" == "true" ]] || { printf '%s\n' "${RED}Error: Not in a git repository${RESET}" >&2; exit 1; }
-    check_dirty_tree
-fi
-
-# DRY RUN plan
-if [[ "$DRY_RUN" == "true" ]]; then
-    if [[ "$CURRENT_VERSION" == "none" ]]; then
-        if [[ "$NEW_VERSION" == *-* ]]; then
-            printf '%s\n' "${YELLOW}DRY RUN: Would print pre-release $NEW_VERSION (not write VERSION)${RESET}" >&2
-        else
-            printf '%s\n' "${YELLOW}DRY RUN: Would create VERSION with $NEW_VERSION${RESET}" >&2
-        fi
-    else
-        if [[ "$NEW_VERSION" == *-* ]]; then
-            printf '%s\n' "${YELLOW}DRY RUN: Would print pre-release $NEW_VERSION (not update VERSION)${RESET}" >&2
-        else
-            printf '%s\n' "${YELLOW}DRY RUN: Would update VERSION to $NEW_VERSION${RESET}" >&2
-        fi
-    fi
-
-    if [[ "$UPDATE_CMAKE" == "true" ]]; then
-        if [[ "$NEW_VERSION" == *-* ]]; then
-            printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists update (pre-release)${RESET}" >&2
-        else
-            if [[ -f "$PROJECT_ROOT/CMakeLists.txt" ]]; then
-                if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+\$\{[^}]+\}' "$PROJECT_ROOT/CMakeLists.txt"; then
-                    printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (uses VERSION file variable)${RESET}" >&2
-                elif has_cmake_version_field; then
-                    printf '%s\n' "${YELLOW}DRY RUN: Would update CMakeLists.txt to $NEW_VERSION${RESET}" >&2
-                else
-                    printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists.txt update (no recognizable version field)${RESET}" >&2
-                fi
-            else
-                printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists (file not found)${RESET}" >&2
-            fi
-        fi
-    else
-        printf '%s\n' "${YELLOW}DRY RUN: Would skip CMakeLists (--no-cmake)${RESET}" >&2
-    fi
-
-    if [[ "$DO_COMMIT" == "true" ]]; then
-        printf '%s\n' "${YELLOW}DRY RUN: Would create commit: chore(release): ${TAG_PREFIX}${NEW_VERSION}${RESET}" >&2
-        effective_files=()
-        [[ "$NEW_VERSION" != *-* ]] && effective_files+=("VERSION")
-        if [[ "$UPDATE_CMAKE" == "true" && "$NEW_VERSION" != *-* ]]; then
-            if grep -Eq '^[[:space:]]*project\([^)]*VERSION[[:space:]]+\$\{[^}]+\}' "$PROJECT_ROOT/CMakeLists.txt"; then
+    
+    # Simulate CMake update
+    "$SCRIPT_DIR/cmake-updater" simulate \
+        "$PROJECT_ROOT/CMakeLists.txt" \
+        "$new_version"
+    
+    # Simulate git operations
+    if [[ "${DO_COMMIT:-false}" == "true" ]]; then
+        printf '%s\n' "${YELLOW}DRY RUN: Would create commit: chore(release): ${TAG_PREFIX:-v}${new_version}${RESET}" >&2
+        local effective_files=()
+        [[ "$new_version" != *-* ]] && effective_files+=("VERSION")
+        if [[ "${UPDATE_CMAKE:-true}" == "true" && "$new_version" != *-* ]]; then
+            if "$SCRIPT_DIR/cmake-updater" detect_cmake_version_format "$PROJECT_ROOT/CMakeLists.txt" | grep -q "variable"; then
                 # Skip CMakeLists.txt since it uses VERSION file variable
                 :
-            elif has_cmake_version_field; then
+            elif "$SCRIPT_DIR/cmake-updater" detect_cmake_version_format "$PROJECT_ROOT/CMakeLists.txt" | grep -q -E "(inline|set)"; then
                 effective_files+=("CMakeLists.txt")
             fi
         fi
@@ -825,136 +196,139 @@ if [[ "$DRY_RUN" == "true" ]]; then
             printf '%s\n' "${YELLOW}DRY RUN: Would skip commit (no files to commit)${RESET}" >&2
         fi
     fi
-
-    if [[ "$DO_TAG" == "true" ]]; then
-        if [[ "$NEW_VERSION" == *-* ]]; then
-            printf '%s\n' "${YELLOW}DRY RUN: Would block tag creation for pre-release $NEW_VERSION${RESET}" >&2
+    
+    if [[ "${DO_TAG:-false}" == "true" ]]; then
+        if [[ "$new_version" == *-* ]]; then
+            printf '%s\n' "${YELLOW}DRY RUN: Would block tag creation for pre-release $new_version${RESET}" >&2
         else
-            printf '%s\n' "${YELLOW}DRY RUN: Would create tag: ${TAG_PREFIX}${NEW_VERSION}${RESET}" >&2
+            printf '%s\n' "${YELLOW}DRY RUN: Would create tag: ${TAG_PREFIX:-v}${new_version}${RESET}" >&2
         fi
-        last_tag=$(last_tag_for_prefix)
+        local last_tag
+        last_tag=$("$SCRIPT_DIR/version-utils" last-tag "${TAG_PREFIX:-v}")
         if [[ -n "$last_tag" ]]; then
             printf '%s\n' "${YELLOW}DRY RUN: Last tag for comparison: $last_tag${RESET}" >&2
-            if git rev-parse -q --verify "$last_tag" >/dev/null; then
-                if [[ "$(git rev-parse "$last_tag^{commit}")" == "$(git rev-parse HEAD)" ]]; then
-                    printf '%s\n' "${YELLOW}DRY RUN: Last tag points to HEAD${RESET}" >&2
-                else
-                    printf '%s\n' "${YELLOW}DRY RUN: Last tag does not point to HEAD${RESET}" >&2
+        fi
+    fi
+    
+    # Print the computed version to stdout for pipelines
+    printf '%s\n' "$new_version"
+}
+
+# --- Print only mode --------------------------------------------------------
+handle_print_only() {
+    local set_version="${SET_VERSION:-}"
+    local bump_type="${BUMP_TYPE:-}"
+    
+    if [[ -n "$set_version" ]]; then
+        validate_version_format "$set_version" "${ALLOW_PRERELEASE:-false}"
+        printf '%s\n' "$set_version"
+        exit 0
+    elif [[ -n "$bump_type" && -f "$VERSION_FILE" ]]; then
+        local current_version
+        current_version=$(read_version_file "$VERSION_FILE")
+        if is_semver "$current_version"; then
+            local new_version
+            local calculator_args=(
+                --current-version "$current_version"
+                --bump-type "$bump_type"
+                --original-project-root "$ORIGINAL_PROJECT_ROOT"
+            )
+            if [[ -n "${REPO_ROOT:-}" ]]; then
+                calculator_args+=(--repo-root "${REPO_ROOT}")
+            fi
+            
+            new_version=$("$SCRIPT_DIR/version-calculator-loc" "${calculator_args[@]}")
+            printf '%s\n' "$new_version"
+            exit 0
+        fi
+    fi
+    
+    die "Cannot compute version for --print. Provide --set VERSION or a bump type with existing VERSION file."
+}
+
+# --- Main orchestration function --------------------------------------------
+main() {
+    # Handle help case early
+    if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+        "$SCRIPT_DIR/cli-parser" help
+        exit 0
+    fi
+    
+    # Parse CLI arguments and source variables
+    eval "$("$SCRIPT_DIR/cli-parser" parse "$@")"
+    
+    # Setup environment
+    setup_environment
+    
+    # Handle print-only mode early
+    if [[ "${PRINT_ONLY:-false}" == "true" ]]; then
+        handle_print_only
+    fi
+    
+    # Handle version file
+    local version_info
+    version_info=$(handle_version_file)
+    local version_exists="${version_info%$'\n'*}"
+    local current_version="${version_info#*$'\n'}"
+    
+    # Calculate new version
+    local new_version
+    new_version=$(calculate_new_version "$current_version")
+    
+    # No-op guard
+    if [[ "$current_version" == "$new_version" ]]; then
+        printf '%s\n' "${YELLOW}Version unchanged ($current_version); nothing to do.${RESET}" >&2
+        printf '%s\n' "$new_version"
+        exit 0
+    fi
+    
+    # Handle dry run
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        simulate_dry_run "$new_version" "$current_version" "$version_exists"
+        exit 0
+    fi
+    
+    # Update files
+    update_files "$new_version" "$current_version"
+    
+    # Perform git operations
+    perform_git_operations "$new_version" "$current_version"
+    
+    # Warn about order for --set when not tagging
+    if [[ -n "${SET_VERSION:-}" && "${DO_TAG:-false}" != "true" && "$new_version" != *-* ]]; then
+        local last_tag
+        last_tag=$("$SCRIPT_DIR/version-utils" last-tag "${TAG_PREFIX:-v}")
+        if [[ -n "$last_tag" ]]; then
+            local last_version="${last_tag:${#TAG_PREFIX:-v}}"
+            if is_semver "$last_version"; then
+                if ! "$SCRIPT_DIR/version-validator" is_version_greater "$new_version" "$last_version"; then
+                    warn "--set version $new_version is not greater than last tag $last_tag"
                 fi
             fi
         fi
     fi
-    # Also print the computed version to stdout for pipelines
-    printf '%s\n' "$NEW_VERSION"
-    exit 0
-fi
-
-# --- Perform updates ----------------------------------------------------------
-update_version_file
-
-if [[ "$UPDATE_CMAKE" == "true" ]]; then
-    update_cmake_version
-else
-    printf '%s\n' "${YELLOW}Skipped CMakeLists.txt update (--no-cmake)${RESET}" >&2
-fi
-
-# Create commit if requested
-if [[ "$DO_COMMIT" == "true" ]]; then
-    create_commit
-fi
-
-if [[ "$DO_TAG" == "true" ]]; then
-    if [[ "$DO_COMMIT" != "true" ]]; then
-        # Warn if tagging without committing version bump
-        files_to_check=("$VERSION_FILE")
-        [[ "$UPDATE_CMAKE" == "true" ]] && files_to_check+=("$PROJECT_ROOT/CMakeLists.txt")
-        if ! git diff --quiet -- "${files_to_check[@]}"; then
-            printf '%s\n' "${YELLOW}Warning:${RESET} Tagging without --commit; ensure the bump commit is pushed before the tag.${RESET}" >&2
-        fi
-        # Warn if any uncommitted changes exist
-        if ! git diff --quiet; then
-            printf '%s\n' "${YELLOW}Warning:${RESET} Uncommitted changes exist; tag may not reflect working tree.${RESET}" >&2
-        fi
-    fi
-    check_version_order
-    create_tag
-fi
-
-# Warn about order for --set when not tagging
-if [[ -n "$SET_VERSION" && "$DO_TAG" != "true" && "$NEW_VERSION" != *-* ]]; then
-    last_tag=$(last_tag_for_prefix)
-    if [[ -n "$last_tag" ]]; then
-        last_version="${last_tag:${#TAG_PREFIX}}"
-        if [[ "$last_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            IFS='.' read -r new_major new_minor new_patch <<< "$NEW_VERSION"
-            IFS='.' read -r last_major last_minor last_patch <<< "$last_version"
-            if [[ "$NEW_VERSION" == "$last_version" ]] ||
-               (( new_major <  last_major )) ||
-               (( new_major == last_major && new_minor <  last_minor )) ||
-               (( new_major == last_major && new_minor == last_minor && new_patch <= last_patch )); then
-                printf '%s\n' "${YELLOW}Warning:${RESET} --set version $NEW_VERSION is not greater than last tag $last_tag${RESET}" >&2
-            fi
-        fi
-    fi
-fi
-
-if [[ "$CURRENT_VERSION" == "none" ]]; then
-    printf '%s\n' "${GREEN}Version bump completed: created $NEW_VERSION${RESET}" >&2
-else
-    printf '%s\n' "${GREEN}Version bump completed: $CURRENT_VERSION → $NEW_VERSION${RESET}" >&2
-fi
-
-if [[ "$DO_TAG" == "true" ]]; then
-    printf '%s\n' "${YELLOW}Next steps:${RESET}" >&2
-    current_branch="$(git rev-parse --abbrev-ref HEAD)"
-    printf '%s\n' "  git push $REMOTE ${current_branch}" >&2
-    printf '%s\n' "  git push $REMOTE ${TAG_PREFIX}${NEW_VERSION}" >&2
-fi
-
-# Push logic
-if [[ "$DO_PUSH" == "true" ]]; then
-    [[ "$IN_GIT_REPO" == "true" ]] || { printf '%s\n' "${RED}Error: Not in a git repository${RESET}" >&2; exit 1; }
-    git symbolic-ref -q HEAD >/dev/null || { printf '%s\n' "${RED}Error: Detached HEAD; checkout a branch before pushing${RESET}" >&2; exit 1; }
-    git remote get-url "$REMOTE" >/dev/null 2>&1 || { printf '%s\n' "${RED}Error: No remote '$REMOTE' configured${RESET}" >&2; exit 1; }
-
-    current_branch="$(git rev-parse --abbrev-ref HEAD)"
-    printf '%s\n' "${CYAN}Pushing changes...${RESET}" >&2
-    git push "$REMOTE" "$current_branch" || { printf '%s\n' "${RED}Error: Failed to push branch $current_branch${RESET}" >&2; exit 1; }
-    if [[ "$DO_TAG" == "true" ]]; then
-        git push "$REMOTE" "${TAG_PREFIX}${NEW_VERSION}" || { printf '%s\n' "${RED}Error: Failed to push tag ${TAG_PREFIX}${NEW_VERSION}${RESET}" >&2; exit 1; }
-    fi
-    printf '%s\n' "${GREEN}Push completed${RESET}" >&2
-fi
-
-if [[ "$PUSH_TAGS" == "true" ]]; then
-    [[ "$IN_GIT_REPO" == "true" ]] || { printf '%s\n' "${RED}Error: Not in a git repository${RESET}" >&2; exit 1; }
-    git remote get-url "$REMOTE" >/dev/null 2>&1 || { printf '%s\n' "${RED}Error: No remote '$REMOTE' configured${RESET}" >&2; exit 1; }
-    printf '%s\n' "${CYAN}Pushing all tags...${RESET}" >&2
-    git push "$REMOTE" --tags || { printf '%s\n' "${RED}Error: Failed to push tags${RESET}" >&2; exit 1; }
-    printf '%s\n' "${GREEN}Tags push completed${RESET}" >&2
-fi
-
-# Diagnostic summary
-if [[ "$DO_COMMIT" == "true" || "$DO_TAG" == "true" || "$DO_PUSH" == "true" || "$PUSH_TAGS" == "true" ]]; then
-    printf '%s\n' "${CYAN}Summary:${RESET}" >&2
-    if [[ "$DO_COMMIT" == "true" ]]; then
-        commit_sha=$(git rev-parse --short HEAD)
-        current_branch=$(git rev-parse --abbrev-ref HEAD)
-        printf '%s\n' "  Branch: $current_branch" >&2
-        printf '%s\n' "  Commit: $commit_sha" >&2
-    fi
-    if [[ "$DO_TAG" == "true" ]]; then
-        tag_sha=$(git rev-parse --short "${TAG_PREFIX}${NEW_VERSION}")
-        printf '%s\n' "  Tag: ${TAG_PREFIX}${NEW_VERSION}/$tag_sha" >&2
-    fi
-    if [[ "$DO_PUSH" == "true" ]]; then
-        printf '%s\n' "  Pushed: yes (branch${DO_TAG:+ + tag})" >&2
-    elif [[ "$PUSH_TAGS" == "true" ]]; then
-        printf '%s\n' "  Tags pushed: yes" >&2
+    
+    # Success message
+    if [[ "$current_version" == "none" ]]; then
+        success "Version bump completed: created $new_version"
     else
-        printf '%s\n' "  Pushed: no" >&2
+        success "Version bump completed: $current_version → $new_version"
     fi
-fi
+    
+    # Next steps
+    if [[ "${DO_TAG:-false}" == "true" ]]; then
+        printf '%s\n' "${YELLOW}Next steps:${RESET}" >&2
+        local current_branch
+        current_branch="$(git rev-parse --abbrev-ref HEAD)"
+        printf '%s\n' "  git push ${REMOTE:-origin} ${current_branch}" >&2
+        printf '%s\n' "  git push ${REMOTE:-origin} ${TAG_PREFIX:-v}${new_version}" >&2
+    fi
+    
+    # Print the new version on stdout for scripting
+    printf '%s\n' "$new_version"
+}
 
-# Print the new version on stdout for scripting
-printf '%s\n' "$NEW_VERSION"
+# --- Script execution -------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi 

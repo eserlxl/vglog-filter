@@ -1,0 +1,274 @@
+#!/bin/bash
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
+# LOC-based version calculator for vglog-filter
+# Calculates version bumps based on lines of code changes and semantic analysis
+
+set -euo pipefail
+
+# Source utilities
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+source "$SCRIPT_DIR/version-utils"
+
+# --- Default configuration ----------------------------------------------------
+VERSION_PATCH_LIMIT="${VERSION_PATCH_LIMIT:-100}"
+VERSION_MINOR_LIMIT="${VERSION_MINOR_LIMIT:-100}"
+VERSION_PATCH_DELTA="${VERSION_PATCH_DELTA:-1}"
+VERSION_MINOR_DELTA="${VERSION_MINOR_DELTA:-5}"
+VERSION_MAJOR_DELTA="${VERSION_MAJOR_DELTA:-10}"
+
+# --- Semantic analyzer integration -------------------------------------------
+find_semantic_analyzer() {
+    local original_project_root="$1"
+    local current_dir="$2"
+    
+    # Try to find semantic analyzer in various locations
+    local analyzer_path=""
+    if [[ -x "$original_project_root/dev-bin/semantic-version-analyzer" ]]; then
+        analyzer_path="$original_project_root/dev-bin/semantic-version-analyzer"
+    elif [[ -x "$current_dir/dev-bin/semantic-version-analyzer" ]]; then
+        analyzer_path="$current_dir/dev-bin/semantic-version-analyzer"
+    elif [[ -x "$SCRIPT_DIR/semantic-version-analyzer" ]]; then
+        analyzer_path="$SCRIPT_DIR/semantic-version-analyzer"
+    fi
+    
+    printf '%s' "$analyzer_path"
+}
+
+get_semantic_delta() {
+    local analyzer_path="$1"
+    local bump_type="$2"
+    local repo_root="$3"
+    local original_project_root="$4"
+    
+    if [[ -z "$analyzer_path" ]]; then
+        return 1
+    fi
+    
+    # Get the delta from semantic analyzer
+    local analyzer_output
+    local analyzer_args="--json"
+    if [[ -n "$repo_root" ]]; then
+        analyzer_args="$analyzer_args --repo-root '$repo_root'"
+    fi
+    
+    # Call semantic analyzer from original project root to ensure it can find its dependencies
+    analyzer_output=$(cd "$original_project_root" && "$analyzer_path" $analyzer_args 2>/dev/null || true)
+    
+    if [[ -n "$analyzer_output" ]]; then
+        # Extract delta from JSON output - look for nested fields under loc_delta
+        case "$bump_type" in
+            patch)
+                printf '%s' "$analyzer_output" | grep -o '"patch_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || printf '%s' "$VERSION_PATCH_DELTA"
+                ;;
+            minor)
+                printf '%s' "$analyzer_output" | grep -o '"minor_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || printf '%s' "$VERSION_MINOR_DELTA"
+                ;;
+            major)
+                printf '%s' "$analyzer_output" | grep -o '"major_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' | head -1 || printf '%s' "$VERSION_MAJOR_DELTA"
+                ;;
+        esac
+    else
+        return 1
+    fi
+}
+
+# --- Version calculation with rollover logic ---------------------------------
+calculate_version_bump() {
+    local current_version="$1"
+    local bump_type="$2"
+    local original_project_root="$3"
+    local repo_root="$4"
+    
+    local current_major current_minor current_patch
+    local new_major new_minor new_patch
+    
+    IFS='.' read -r current_major current_minor current_patch <<< "$current_version"
+    
+    # Use semantic analyzer to calculate LOC-based delta
+    local delta=1
+    local analyzer_path
+    analyzer_path=$(find_semantic_analyzer "$original_project_root" "$(pwd)")
+    
+    if [[ -n "$analyzer_path" ]]; then
+        local semantic_delta
+        semantic_delta=$(get_semantic_delta "$analyzer_path" "$bump_type" "$repo_root" "$original_project_root")
+        if [[ -n "$semantic_delta" && "$semantic_delta" =~ ^[0-9]+$ ]]; then
+            delta="$semantic_delta"
+        fi
+    fi
+    
+    # Apply delta with rollover logic
+    case "$bump_type" in
+        major|minor|patch)
+            # Calculate new patch with modulo 100
+            local new_patch=$((current_patch + delta))
+            if [[ "$new_patch" -ge "$VERSION_PATCH_LIMIT" ]]; then
+                # Calculate how many minor increments we need
+                local minor_increments=$((new_patch / VERSION_PATCH_LIMIT))
+                local remaining_patch=$((new_patch % VERSION_PATCH_LIMIT))
+                
+                # Calculate new minor version
+                local new_minor=$((current_minor + minor_increments))
+                
+                if [[ "$new_minor" -ge "$VERSION_MINOR_LIMIT" ]]; then
+                    # Calculate how many major increments we need
+                    local major_increments=$((new_minor / VERSION_MINOR_LIMIT))
+                    new_major=$((current_major + major_increments))
+                    new_minor=$((new_minor % VERSION_MINOR_LIMIT))
+                    new_patch=$remaining_patch
+                else
+                    new_major=$current_major
+                    new_patch=$remaining_patch
+                fi
+            else
+                new_major=$current_major
+                new_minor=$current_minor
+            fi
+            ;;
+        *) die "Invalid bump type '$bump_type'" ;;
+    esac
+    
+    printf '%s.%s.%s' "$new_major" "$new_minor" "$new_patch"
+}
+
+# --- Configuration management -------------------------------------------------
+load_version_config() {
+    local config_file="$1"
+    
+    if [[ -f "$config_file" ]]; then
+        # Source the config file if it exists
+        source "$config_file"
+    fi
+}
+
+# --- Analysis explanation ----------------------------------------------------
+get_analysis_explanation() {
+    local analyzer_path="$1"
+    local original_project_root="$2"
+    
+    if [[ -z "$analyzer_path" ]]; then
+        return 1
+    fi
+    
+    # Try to get explanation from semantic analyzer
+    local explanation=""
+    local analyzer_output
+    analyzer_output="$(cd "$original_project_root" && "$analyzer_path" --verbose 2>/dev/null || true)"
+    
+    if [[ -n "$analyzer_output" ]]; then
+        # Extract reason from verbose output
+        local reason_line
+        reason_line="$(printf '%s\n' "$analyzer_output" | grep -E '^Reason:' | head -1)"
+        if [[ -n "$reason_line" ]]; then
+            explanation="${reason_line#Reason: }"
+        fi
+    fi
+    
+    printf '%s' "$explanation"
+}
+
+# --- Main calculation function -----------------------------------------------
+bump_version_with_loc() {
+    local current_version="$1"
+    local bump_type="$2"
+    local original_project_root="$3"
+    local repo_root="$4"
+    
+    # Validate inputs
+    if [[ -z "$current_version" ]]; then
+        die "Current version is required"
+    fi
+    
+    if [[ -z "$bump_type" ]]; then
+        die "Bump type is required"
+    fi
+    
+    case "$bump_type" in
+        major|minor|patch) ;;
+        *) die "Bump type must be major, minor, or patch" ;;
+    esac
+    
+    # Calculate new version
+    local new_version
+    new_version=$(calculate_version_bump "$current_version" "$bump_type" "$original_project_root" "$repo_root")
+    
+    printf '%s' "$new_version"
+}
+
+# --- Standalone usage --------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Initialize colors
+    init_colors "${NO_COLOR:-false}"
+    
+    # Parse command line arguments
+    current_version=""
+    bump_type=""
+    original_project_root=""
+    repo_root=""
+    config_file=""
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --current-version)
+                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--current-version requires a value"
+                current_version="$2"; shift 2 ;;
+            --bump-type)
+                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--bump-type requires a value"
+                bump_type="$2"; shift 2 ;;
+            --original-project-root)
+                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--original-project-root requires a value"
+                original_project_root="$2"; shift 2 ;;
+            --repo-root)
+                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--repo-root requires a value"
+                repo_root="$2"; shift 2 ;;
+            --config)
+                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--config requires a value"
+                config_file="$2"; shift 2 ;;
+            --help|-h)
+                cat << EOF
+Usage: $0 [options]
+
+Options:
+  --current-version VERSION     Current version to bump from
+  --bump-type TYPE              Bump type (major|minor|patch)
+  --original-project-root PATH  Original project root for analyzer
+  --repo-root PATH              Repository root for analysis
+  --config FILE                 Configuration file to load
+  --help, -h                    Show this help message
+
+Environment variables:
+  VERSION_PATCH_LIMIT           Patch version limit (default: 100)
+  VERSION_MINOR_LIMIT           Minor version limit (default: 100)
+  VERSION_PATCH_DELTA           Default patch delta (default: 1)
+  VERSION_MINOR_DELTA           Default minor delta (default: 5)
+  VERSION_MAJOR_DELTA           Default major delta (default: 10)
+
+Examples:
+  $0 --current-version 1.0.0 --bump-type patch
+  $0 --current-version 1.0.0 --bump-type minor --repo-root /path/to/repo
+EOF
+                exit 0 ;;
+            *)
+                die "Unknown option: $1" ;;
+        esac
+    done
+    
+    # Load configuration if provided
+    if [[ -n "$config_file" ]]; then
+        load_version_config "$config_file"
+    fi
+    
+    # Validate required arguments
+    [[ -n "$current_version" ]] || die "--current-version is required"
+    [[ -n "$bump_type" ]] || die "--bump-type is required"
+    
+    # Calculate and output new version
+    new_version=$(bump_version_with_loc "$current_version" "$bump_type" "$original_project_root" "$repo_root")
+    printf '%s\n' "$new_version"
+fi 

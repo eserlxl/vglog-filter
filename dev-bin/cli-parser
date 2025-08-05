@@ -1,0 +1,346 @@
+#!/bin/bash
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
+# CLI parser for vglog-filter
+# Handles command line argument parsing for version management scripts
+
+set -euo pipefail
+
+# Source utilities
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+source "$SCRIPT_DIR/version-utils"
+
+# --- Default option values ---------------------------------------------------
+declare -A DEFAULT_OPTIONS=(
+    ["COMMIT_MSG"]=""
+    ["ALLOW_DIRTY"]="false"
+    ["ANNOTATED_TAG"]="true"
+    ["SIGNED_TAG"]="false"
+    ["COMMIT_SIGN"]="false"
+    ["NO_VERIFY"]="false"
+    ["UPDATE_CMAKE"]="true"
+    ["TAG_PREFIX"]="${TAG_PREFIX:-v}"
+    ["SET_VERSION"]=""
+    ["NO_COLOR"]="false"
+    ["DO_PUSH"]="false"
+    ["PUSH_TAGS"]="false"
+    ["ALLOW_NONMONOTONIC_TAG"]="false"
+    ["ALLOW_PRERELEASE"]="false"
+    ["REPO_ROOT"]=""
+    ["REMOTE"]="${REMOTE:-origin}"
+    ["BUMP_TYPE"]=""
+    ["DO_COMMIT"]="false"
+    ["DO_TAG"]="false"
+    ["DRY_RUN"]="false"
+    ["PRINT_ONLY"]="false"
+)
+
+# --- Option parsing ---------------------------------------------------------
+parse_bump_version_args() {
+    local args=("$@")
+    local i=0
+    
+    # Initialize options with defaults
+    for key in "${!DEFAULT_OPTIONS[@]}"; do
+        eval "$key=\"${DEFAULT_OPTIONS[$key]}\""
+    done
+    
+    while [[ $i -lt ${#args[@]} ]]; do
+        local arg="${args[$i]}"
+        
+        case "$arg" in
+            major|minor|patch)
+                if [[ -n "$BUMP_TYPE" ]]; then
+                    die "Multiple bump types specified"
+                fi
+                BUMP_TYPE="$arg"
+                ;;
+            --commit)
+                DO_COMMIT="true"
+                ;;
+            --tag)
+                DO_TAG="true"
+                ;;
+            --dry-run)
+                DRY_RUN="true"
+                ;;
+            --print)
+                PRINT_ONLY="true"
+                ;;
+            --message)
+                if [[ $((i + 1)) -ge ${#args[@]} ]]; then
+                    die "--message requires a value"
+                fi
+                COMMIT_MSG="${args[$((i + 1))]}"
+                i=$((i + 1))
+                ;;
+            --allow-dirty)
+                ALLOW_DIRTY="true"
+                ;;
+            --lightweight-tag)
+                ANNOTATED_TAG="false"
+                ;;
+            --signed-tag)
+                SIGNED_TAG="true"
+                ANNOTATED_TAG="false"
+                ;;
+            --sign-commit)
+                COMMIT_SIGN="true"
+                ;;
+            --no-verify)
+                NO_VERIFY="true"
+                ;;
+            --no-cmake)
+                UPDATE_CMAKE="false"
+                ;;
+            --tag-prefix)
+                if [[ $((i + 1)) -ge ${#args[@]} ]]; then
+                    die "--tag-prefix requires a value (use '' for empty)"
+                fi
+                TAG_PREFIX="${args[$((i + 1))]}"
+                i=$((i + 1))
+                ;;
+            --set)
+                if [[ $((i + 1)) -ge ${#args[@]} ]]; then
+                    die "--set requires a value"
+                fi
+                SET_VERSION="${args[$((i + 1))]}"
+                i=$((i + 1))
+                ;;
+            --no-color)
+                NO_COLOR="true"
+                ;;
+            --push)
+                DO_PUSH="true"
+                ;;
+            --push-tags)
+                PUSH_TAGS="true"
+                ;;
+            --allow-nonmonotonic-tag)
+                ALLOW_NONMONOTONIC_TAG="true"
+                ;;
+            --allow-prerelease)
+                ALLOW_PRERELEASE="true"
+                ;;
+            --repo-root)
+                if [[ $((i + 1)) -ge ${#args[@]} ]]; then
+                    die "--repo-root requires a value"
+                fi
+                REPO_ROOT="${args[$((i + 1))]}"
+                i=$((i + 1))
+                ;;
+            --remote)
+                if [[ $((i + 1)) -ge ${#args[@]} || -z "${args[$((i + 1))]}" ]]; then
+                    die "--remote requires a non-empty value"
+                fi
+                REMOTE="${args[$((i + 1))]}"
+                i=$((i + 1))
+                ;;
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            --help)
+                show_usage
+                exit 0
+                ;;
+            *)
+                die "Unknown option '$arg'"
+                ;;
+        esac
+        i=$((i + 1))
+    done
+    
+    # Validate TAG_PREFIX content
+    if [[ "$TAG_PREFIX" == *$'\n'* || "$TAG_PREFIX" == *$'\r'* ]]; then
+        die "TAG_PREFIX contains newline characters"
+    fi
+    
+    # Early exclusivity check
+    if [[ "$DRY_RUN" == "true" && "$PRINT_ONLY" == "true" ]]; then
+        die "--dry-run and --print cannot be used together"
+    fi
+    
+    # Warn if --allow-prerelease without --set
+    if [[ "$ALLOW_PRERELEASE" == "true" && -z "$SET_VERSION" ]]; then
+        warn "--allow-prerelease has no effect without --set"
+    fi
+}
+
+# --- Usage and help ---------------------------------------------------------
+show_usage() {
+    local help_version="N/A"
+    if [[ -f "${VERSION_FILE:-}" ]]; then
+        help_version=$(tr -d '[:space:]' < "${VERSION_FILE:-}" 2>/dev/null || printf 'N/A')
+    fi
+    
+    cat << EOF
+Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push] [--push-tags] [--allow-nonmonotonic-tag] [--allow-prerelease] [--repo-root PATH] [--remote REMOTE]
+
+Bump the semantic version of vglog-filter
+
+Requirements:
+  GNU tools on Linux: realpath, sha1sum (or shasum), GNU sed, GNU grep
+  macOS users: run in GNU coreutils + gsed environment (e.g., brew install coreutils gnu-sed)
+
+Behavior notes:
+  • Pre-releases (X.Y.Z-PRERELEASE) are supported only with --set.
+    They are not written to VERSION and cannot be tagged.
+  • --print computes the version and exits early without validations or git checks.
+  • --dry-run prints actions and skips dirty-tree enforcement.
+  • Commits only include VERSION and CMakeLists.txt (if updated).
+
+File Tracking Requirements:
+  • VERSION file must be tracked in git for version bumps
+  • CMakeLists.txt is automatically updated if it contains a version field
+  • Only tracked files are included in version bump commits
+
+Arguments:
+  major | minor | patch
+
+Options:
+  --commit                 Create a git commit with the version bump
+  --tag                    Create a git tag for the new version
+  --dry-run                Show actions without making changes
+  --print                  Print the new version and exit
+  --message MSG            Use MSG as the full commit message (overrides default)
+  --allow-dirty            Allow committing/tagging with other changes present
+  --lightweight-tag        Create a lightweight tag (default is annotated)
+  --signed-tag             Create a signed tag (requires GPG config)
+  --sign-commit            GPG-sign the commit (requires GPG config)
+  --no-verify              Skip commit hooks
+  --no-cmake               Skip updating CMakeLists.txt version
+  --tag-prefix PREFIX      Tag prefix (default: v; empty allowed)
+  --set VERSION            Set version to VERSION (format X.Y.Z or with --allow-prerelease)
+  --no-color               Disable colored output
+  --push                   Push current branch and, if tagged, the new tag
+  --push-tags              Push all tags
+  --allow-nonmonotonic-tag Allow setting a version lower/equal to the last tag
+  --allow-prerelease       Allow prerelease with --set (e.g., 1.0.0-rc.1)
+  --repo-root PATH         Use PATH as repository root
+  --remote REMOTE          Git remote to push to (default: \$REMOTE or 'origin')
+
+Environment:
+  ANALYSIS_MESSAGE         Extra paragraph appended to default commit message
+  TAG_PREFIX               Default tag prefix (overridden by --tag-prefix)
+  REMOTE                   Default remote for push operations (overridden by --remote)
+  VERSION_PATCH_LIMIT      Patch version limit before rollover (default: 100)
+  VERSION_MINOR_LIMIT      Minor version limit before rollover (default: 100)
+  VERSION_PATCH_DELTA      Patch delta formula (default: 1*(1+LOC/250))
+  VERSION_MINOR_DELTA      Minor delta formula (default: 5*(1+LOC/500))
+  VERSION_MAJOR_DELTA      Major delta formula (default: 10*(1+LOC/1000))
+
+Examples:
+  ./dev-bin/bump-version patch
+  ./dev-bin/bump-version minor --commit
+  ./dev-bin/bump-version major --commit --tag
+  ./dev-bin/bump-version patch --dry-run
+  ./dev-bin/bump-version patch --print
+  ANALYSIS_MESSAGE='…' ./dev-bin/bump-version patch --commit
+  ./dev-bin/bump-version patch --signed-tag --tag
+  ./dev-bin/bump-version --set 2.1.0 --commit
+  ./dev-bin/bump-version --set 1.0.0-rc.1 --allow-prerelease --print
+
+Current version: $help_version
+EOF
+}
+
+# --- Option validation ------------------------------------------------------
+validate_parsed_options() {
+    # Validate that we have either a bump type or --set
+    if [[ -z "$BUMP_TYPE" && -z "$SET_VERSION" ]]; then
+        die "No bump type specified"
+    fi
+    
+    # Validate that we don't have both bump type and --set
+    if [[ -n "$BUMP_TYPE" && -n "$SET_VERSION" ]]; then
+        die "Cannot specify both bump type and --set"
+    fi
+    
+    # Validate --set requires --allow-prerelease for pre-releases
+    if [[ -n "$SET_VERSION" && "$SET_VERSION" == *-* && "$ALLOW_PRERELEASE" != "true" ]]; then
+        die "Pre-release versions require --allow-prerelease with --set"
+    fi
+}
+
+# --- Option export ----------------------------------------------------------
+export_parsed_options() {
+    # Export all parsed options as environment variables
+    for key in "${!DEFAULT_OPTIONS[@]}"; do
+        if [[ -n "${!key:-}" ]]; then
+            export "$key"
+        fi
+    done
+}
+
+output_parsed_options() {
+    # Output all parsed options as variable assignments
+    for key in "${!DEFAULT_OPTIONS[@]}"; do
+        if [[ -n "${!key:-}" ]]; then
+            printf '%s="%s"\n' "$key" "${!key}"
+        fi
+    done
+}
+
+# --- Main parsing function --------------------------------------------------
+parse_cli_args() {
+    local args=("$@")
+    
+    # Parse arguments
+    parse_bump_version_args "${args[@]}"
+    
+    # Validate parsed options
+    validate_parsed_options
+    
+    # Export options for use by other modules
+    export_parsed_options
+    
+    # Output options for sourcing
+    output_parsed_options
+}
+
+# --- Standalone usage --------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Initialize colors
+    init_colors "${NO_COLOR:-false}"
+    
+    case "${1:-}" in
+        "parse")
+            shift
+            parse_cli_args "$@"
+            # Print parsed options for debugging
+            for key in "${!DEFAULT_OPTIONS[@]}"; do
+                printf '%s=%s\n' "$key" "${!key:-}"
+            done
+            ;;
+        "validate")
+            shift
+            parse_cli_args "$@"
+            success "CLI arguments are valid"
+            ;;
+        "help")
+            show_usage
+            ;;
+        *)
+            cat << EOF
+Usage: $0 <command> [args...]
+
+Commands:
+  parse [args...]           Parse CLI arguments and export as environment variables
+  validate [args...]        Validate CLI arguments
+  help                      Show usage information
+
+Examples:
+  $0 parse patch --commit --tag
+  $0 validate --set 1.0.0 --allow-prerelease
+  $0 help
+EOF
+            exit 1
+            ;;
+    esac
+fi 
