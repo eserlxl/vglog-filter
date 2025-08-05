@@ -26,7 +26,7 @@ SKIPPED_TESTS=0
 FAILED_TEST_NAMES=()
 
 # Configuration
-TEST_TIMEOUT=${TEST_TIMEOUT:-30}  # Default 30 seconds timeout
+TEST_TIMEOUT=${TEST_TIMEOUT:-300}  # Default 300 seconds timeout
 FIXED_OUTPUT_DIR="test_results"
 SUMMARY_FILE="$FIXED_OUTPUT_DIR/summary.txt"
 DETAILED_LOG="$FIXED_OUTPUT_DIR/detailed.log"

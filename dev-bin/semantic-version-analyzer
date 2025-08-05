@@ -109,6 +109,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+
 # Check if required binaries exist
 check_binary() {
     local binary="$1"
@@ -118,12 +121,12 @@ check_binary() {
     fi
 }
 
-check_binary "./dev-bin/ref-resolver"
-check_binary "./dev-bin/version-config-loader"
-check_binary "./dev-bin/file-change-analyzer"
-check_binary "./dev-bin/cli-options-analyzer"
-check_binary "./dev-bin/security-keyword-analyzer"
-check_binary "./dev-bin/version-calculator"
+check_binary "$SCRIPT_DIR/ref-resolver"
+check_binary "$SCRIPT_DIR/version-config-loader"
+check_binary "$SCRIPT_DIR/file-change-analyzer"
+check_binary "$SCRIPT_DIR/cli-options-analyzer"
+check_binary "$SCRIPT_DIR/security-keyword-analyzer"
+check_binary "$SCRIPT_DIR/version-calculator"
 
 # Build common arguments for all components
 build_common_args() {
@@ -170,7 +173,7 @@ main() {
     local ref_args
     ref_args=$(build_ref_args)
     local ref_output
-    ref_output=$(eval "./dev-bin/ref-resolver $ref_args")
+    ref_output=$(eval "$SCRIPT_DIR/ref-resolver $ref_args")
     
     if [[ "$MACHINE_OUTPUT" = "true" ]]; then
         # Parse machine output
@@ -202,7 +205,7 @@ main() {
     # Step 2: Load configuration
     [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Loading version configuration...\n' >&2
     local config_output
-    config_output=$(./dev-bin/version-config-loader --machine)
+    config_output=$("$SCRIPT_DIR/version-config-loader" --machine)
     
     # Parse configuration output manually
     declare -A config_data
@@ -216,22 +219,22 @@ main() {
     common_args=$(build_common_args)
     # Force machine output for internal component calls
     local file_output
-    file_output=$(eval "./dev-bin/file-change-analyzer $common_args --machine")
+    file_output=$(eval "$SCRIPT_DIR/file-change-analyzer $common_args --machine")
     
     # Step 4: Analyze CLI options
     [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing CLI options...\n' >&2
     local cli_output
-    cli_output=$(eval "./dev-bin/cli-options-analyzer $common_args --machine")
+    cli_output=$(eval "$SCRIPT_DIR/cli-options-analyzer $common_args --machine")
     
     # Step 5: Analyze security keywords
     [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing security keywords...\n' >&2
     local security_output
-    security_output=$(eval "./dev-bin/security-keyword-analyzer $common_args --machine")
+    security_output=$(eval "$SCRIPT_DIR/security-keyword-analyzer $common_args --machine")
     
     # Step 6: Analyze keywords for breaking changes and bonuses
     [[ "$VERBOSE" = "true" ]] && printf 'Verbose: Analyzing keywords...\n' >&2
     local keyword_output
-    keyword_output=$(eval "./dev-bin/keyword-analyzer $common_args --machine")
+    keyword_output=$(eval "$SCRIPT_DIR/keyword-analyzer $common_args --machine")
     
     # Initialize result arrays with defaults
     declare -A file_result cli_result security_result keyword_result
@@ -352,7 +355,7 @@ main() {
         [[ "$JSON_OUTPUT" = "true" ]] && calc_args="$calc_args --json"
         
         local calc_output
-        calc_output=$(eval "./dev-bin/version-calculator $calc_args")
+        calc_output=$(eval "$SCRIPT_DIR/version-calculator $calc_args")
         
         if [[ "$MACHINE_OUTPUT" = "true" ]]; then
             local calc_data
@@ -379,11 +382,11 @@ main() {
         printf '  "target_ref": "%s",\n' "$TARGET_REF"
         # Calculate LOC deltas with bonus points
         local patch_delta_json
-        patch_delta_json=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type patch --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 1}')
+        patch_delta_json=$("$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type patch --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 1}')
         local minor_delta_json
-        minor_delta_json=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type minor --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 5}')
+        minor_delta_json=$("$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type minor --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 5}')
         local major_delta_json
-        major_delta_json=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type major --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 10}')
+        major_delta_json=$("$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type major --loc "${file_result[DIFF_SIZE]:-0}" --bonus "$TOTAL_BONUS" --json 2>/dev/null || echo '{"total_delta": 10}')
         
         local patch_delta
         patch_delta=$(printf '%s' "$patch_delta_json" | grep -o '"total_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ' || echo "1")
