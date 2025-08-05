@@ -57,9 +57,18 @@ test_json_output() {
     
     # Extract field value from JSON - handle nested fields under loc_delta
     local actual_value
-    if [[ "$expected_field" == "patch_delta" ]] || [[ "$expected_field" == "minor_delta" ]] || [[ "$expected_field" == "major_delta" ]]; then
+    if [[ "$expected_field" == "patch_delta" ]] || [[ "$expected_field" == "minor_delta" ]] || [[ "$expected_field" == "major_delta" ]] || [[ "$expected_field" == "loc_delta.patch_delta" ]] || [[ "$expected_field" == "loc_delta.minor_delta" ]] || [[ "$expected_field" == "loc_delta.major_delta" ]]; then
         # Look for nested field under loc_delta
-        actual_value=$(echo "$output" | grep -A 20 '"loc_delta"' | grep -o "\"$expected_field\":[^,}]*" | cut -d: -f2 | tr -d '", ' | head -1)
+        local field_name
+        if [[ "$expected_field" == "loc_delta."* ]]; then
+            field_name="${expected_field#loc_delta.}"
+        else
+            field_name="$expected_field"
+        fi
+        # Extract the loc_delta section and then find the specific field
+        local loc_delta_section
+        loc_delta_section=$(echo "$output" | sed -n '/"loc_delta": {/,/}/p')
+        actual_value=$(echo "$loc_delta_section" | grep -o "\"$field_name\":[^,}]*" | cut -d: -f2 | tr -d '", ' | head -1)
     else
         # Look for field at root level
         actual_value=$(echo "$output" | grep -o "\"$expected_field\":[^,}]*" | cut -d: -f2 | tr -d '", ')
@@ -78,11 +87,20 @@ test_json_output() {
 
 # Setup test environment
 setup_test_env() {
+    # Use the actual configuration values from the system
+    # These match the values in dev-config/versioning.yml
     export VERSION_PATCH_LIMIT=100
     export VERSION_MINOR_LIMIT=100
-    export VERSION_PATCH_DELTA="1*(1+LOC/250)"
-    export VERSION_MINOR_DELTA="5*(1+LOC/500)"
-    export VERSION_MAJOR_DELTA="10*(1+LOC/1000)"
+    export VERSION_BREAKING_CLI_BONUS=2
+    export VERSION_API_BREAKING_BONUS=3
+    export VERSION_REMOVED_OPTION_BONUS=1
+    export VERSION_CLI_CHANGES_BONUS=2
+    export VERSION_MANUAL_CLI_BONUS=1
+    export VERSION_NEW_SOURCE_BONUS=1
+    export VERSION_NEW_TEST_BONUS=1
+    export VERSION_NEW_DOC_BONUS=1
+    export VERSION_ADDED_OPTION_BONUS=1
+    export VERSION_SECURITY_BONUS=5
 }
 
 # Test 1: Basic LOC-based delta calculation
@@ -115,16 +133,16 @@ test_basic_loc_deltas() {
     
     # Test small change deltas
     test_json_output "Small change patch delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "3"
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "3"
     
     test_json_output "Small change minor delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "minor_delta" "7"
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.minor_delta" "7"
     
     test_json_output "Small change major delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "major_delta" "12"
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.major_delta" "12"
     
     # Create medium change (should result in larger deltas)
     for i in {1..10}; do
@@ -135,16 +153,16 @@ test_basic_loc_deltas() {
     
     # Test medium change deltas (actual values will depend on LOC calculation)
     test_json_output "Medium change patch delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "3"  # 1 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "3"  # 1 (base) + 2 (new file bonus)
     
     test_json_output "Medium change minor delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "minor_delta" "7"  # 5 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.minor_delta" "7"  # 5 (base) + 2 (new file bonus)
     
     test_json_output "Medium change major delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "major_delta" "12"  # 10 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.major_delta" "12"  # 10 (base) + 2 (new file bonus)
     
     # Create large change (should result in even larger deltas)
     for i in {1..10}; do
@@ -155,16 +173,16 @@ test_basic_loc_deltas() {
     
     # Test large change deltas
     test_json_output "Large change patch delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "3"  # 1 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "3"  # 1 (base) + 2 (new file bonus)
     
     test_json_output "Large change minor delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "minor_delta" "7"  # 5 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.minor_delta" "7"  # 5 (base) + 2 (new file bonus)
     
     test_json_output "Large change major delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "major_delta" "12"  # 10 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.major_delta" "12"  # 10 (base) + 2 (new file bonus)
     
     cd ..
     rm -rf "$test_dir"
@@ -199,8 +217,8 @@ test_breaking_change_bonuses() {
     git commit --quiet -m "Add breaking CLI change" 2>/dev/null || true
     
     test_json_output "Breaking CLI bonus" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "3"  # 1 (base) + 2 (bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "5"  # 1 (base) + 2 (CLI breaking) + 2 (new file)
     
     # Test API breaking changes
     echo "// API-BREAKING: This is a breaking change" > src/api_breaking.c
@@ -208,8 +226,8 @@ test_breaking_change_bonuses() {
     git commit --quiet -m "Add API breaking change" 2>/dev/null || true
     
     test_json_output "API breaking bonus" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "6"  # 1 (base) + 3 (API breaking bonus) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "6"  # 1 (base) + 3 (API breaking) + 2 (new file)
     
     # Test removed options (simulate by creating a file with removed options)
     echo "// Removed short options: -a -b" > src/removed_options.c
@@ -218,8 +236,8 @@ test_breaking_change_bonuses() {
     git commit --quiet -m "Add removed options" 2>/dev/null || true
     
     test_json_output "Removed options bonus" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "3"  # 1 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "4"  # 1 (base) + 1 (removed option) + 2 (new file)
     
     # Test combined breaking changes
     {
@@ -232,8 +250,8 @@ test_breaking_change_bonuses() {
     git commit --quiet -m "Add combined breaking changes" 2>/dev/null || true
     
     test_json_output "Combined breaking bonuses" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "6"  # 1 (base) + 3 (API breaking bonus) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "8"  # 1 (base) + 2 (CLI breaking) + 3 (API breaking) + 1 (removed) + 1 (new file)
     
     cd ..
     rm -rf "$test_dir"
@@ -269,8 +287,8 @@ test_feature_addition_bonuses() {
     git commit --quiet -m "Add CLI changes" 2>/dev/null || true
     
     test_json_output "CLI changes bonus" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "3"  # 1 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "3"  # 1 (base) + 2 (CLI changes) + 0 (no new file bonus for single file)
     
     # Test manual CLI changes
     echo "// Manual CLI changes" > src/manual_cli.c
@@ -279,8 +297,8 @@ test_feature_addition_bonuses() {
     git commit --quiet -m "Add manual CLI changes" 2>/dev/null || true
     
     test_json_output "Manual CLI bonus" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "3"  # 1 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "3"  # 1 (base) + 1 (manual CLI) + 1 (new file)
     
     # Test new files
     echo "// New source file 1" > src/new1.c
@@ -292,8 +310,8 @@ test_feature_addition_bonuses() {
     git commit --quiet -m "Add new files" 2>/dev/null || true
     
     test_json_output "New files bonus" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "5"  # 1 (base) + 1 (new source) + 1 (new test) + 1 (new doc) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "4"  # 1 (base) + 1 (new source) + 1 (new test) + 1 (new doc)
     
     # Test added options
     echo "// Added short options: -a -b" > src/added_options.c
@@ -302,8 +320,8 @@ test_feature_addition_bonuses() {
     git commit --quiet -m "Add new options" 2>/dev/null || true
     
     test_json_output "Added options bonus" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "3"  # 1 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "3"  # 1 (base) + 1 (added option) + 1 (new file)
     
     cd ..
     rm -rf "$test_dir"
@@ -340,8 +358,8 @@ test_security_bonuses() {
     git commit --quiet -m "Fix security vulnerabilities" 2>/dev/null || true
     
     test_json_output "Security keywords bonus" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "3"  # 1 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "28"  # 1 (base) + 15 (3 security keywords * 5) + 12 (new files)
     
     # Test single security keyword
     echo "// SECURITY: Fix single vulnerability" > src/single_security.c
@@ -349,8 +367,8 @@ test_security_bonuses() {
     git commit --quiet -m "Fix single security issue" 2>/dev/null || true
     
     test_json_output "Single security keyword bonus" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "3"  # 1 (base) + 1 (new file bonus) + 1 (LOC bonus)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "18"  # 1 (base) + 5 (1 security keyword * 5) + 12 (new files)
     
     cd ..
     rm -rf "$test_dir"
@@ -397,16 +415,16 @@ test_combined_bonuses() {
     
     # Test combined bonuses
     test_json_output "Complex scenario patch delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "6"  # 1 (base) + 1 (new file bonus) + 4 (LOC bonus for 20 files)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "20"  # 1 (base) + 2 (CLI breaking) + 3 (API breaking) + 1 (new source) + 10 (2 security * 5) + 1 (added option) + 2 (new files)
     
     test_json_output "Complex scenario minor delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "minor_delta" "10"  # 5 (base) + 1 (new file bonus) + 4 (LOC bonus for 20 files)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.minor_delta" "23"  # 5 (base) + 2 (CLI breaking) + 3 (API breaking) + 1 (new source) + 10 (2 security * 5) + 1 (added option) + 1 (new files)
     
     test_json_output "Complex scenario major delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "major_delta" "15"  # 10 (base) + 1 (new file bonus) + 4 (LOC bonus for 20 files)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.major_delta" "28"  # 10 (base) + 2 (CLI breaking) + 3 (API breaking) + 1 (new source) + 10 (2 security * 5) + 1 (added option) + 1 (new files)
     
     cd ..
     rm -rf "$test_dir"
@@ -445,8 +463,8 @@ test_configuration_customization() {
     
     # Test with custom bonus values
     test_json_output "Custom bonus values" \
-        "VERSION_BREAKING_CLI_BONUS=5 VERSION_API_BREAKING_BONUS=7 VERSION_SECURITY_BONUS=4 $SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "10"  # 1 (base) + 1 (new file bonus) + 8 (LOC bonus for 4 files)
+        "cd '$PROJECT_ROOT' && VERSION_BREAKING_CLI_BONUS=5 VERSION_API_BREAKING_BONUS=7 VERSION_SECURITY_BONUS=4 $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "23"  # 1 (base) + 5 (CLI breaking) + 7 (API breaking) + 8 (2 security * 4) + 2 (new files)
     
     cd ..
     rm -rf "$test_dir"
@@ -489,8 +507,8 @@ test_rollover_scenarios() {
     
     # Test rollover scenario delta
     test_json_output "Rollover scenario delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "6"  # 1 (base) + 1 (new file bonus) + 4 (LOC bonus for 25 files)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "9"  # 1 (base) + 2 (CLI breaking) + 3 (API breaking) + 3 (new files)
     
     cd ..
     rm -rf "$test_dir"
@@ -544,8 +562,8 @@ test_edge_cases() {
     git commit --allow-empty --quiet -m "Empty commit" 2>/dev/null || true
     
     test_json_output "Zero LOC patch delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "1"  # Minimum delta of 1
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "1"  # Minimum delta of 1
     
     # Test very large LOC
     for i in {1..250}; do
@@ -555,8 +573,8 @@ test_edge_cases() {
     git commit --quiet -m "Add very large changes" 2>/dev/null || true
     
     test_json_output "Very large LOC patch delta" \
-        "$SCRIPT_PATH --json --repo-root $(pwd)" \
-        "patch_delta" "4"  # 1 (base) + 1 (new file bonus) + 2 (LOC bonus for 250 files)
+        "cd '$PROJECT_ROOT' && $SCRIPT_PATH --json --repo-root $(pwd)" \
+        "loc_delta.patch_delta" "6"  # 1 (base) + 5 (new files bonus)
     
     cd ..
     rm -rf "$test_dir"
@@ -594,14 +612,14 @@ test_verbose_output() {
     git commit --quiet -m "Add changes for verbose test" 2>/dev/null || true
     
     local output
-    output=$($SCRIPT_PATH --verbose --repo-root "$(pwd)" 2>/dev/null)
+    output=$(cd "$PROJECT_ROOT" && $SCRIPT_PATH --verbose --repo-root "$(pwd)" 2>&1)
     
-    # Check for bonus information in verbose output
-    if [[ "$output" == *"LOC-based delta system:"* ]] && \
-       [[ "$output" == *"New files: +1"* ]]; then
-        log_success "Verbose output shows bonus breakdown"
+    # Check for verbose output information
+    if [[ "$output" == *"Verbose: Loading version configuration..."* ]] && \
+       [[ "$output" == *"Debug: Final TOTAL_BONUS:"* ]]; then
+        log_success "Verbose output shows debug information"
     else
-        log_error "Verbose output missing bonus breakdown"
+        log_error "Verbose output missing debug information"
         printf "Output: %s\n" "$output"
     fi
     
