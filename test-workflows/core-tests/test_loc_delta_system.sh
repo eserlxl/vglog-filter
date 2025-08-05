@@ -14,16 +14,12 @@ IFS=$'\n\t'
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
-# Create a temporary clean environment for testing
-TEMP_DIR=$(mktemp -d)
-# Copy everything except .git directory
-find "$PROJECT_ROOT" -maxdepth 1 -not -name . -not -name .git -exec cp -r {} "$TEMP_DIR/" \;
-cd "$TEMP_DIR" || exit 1
+# Source the test helper
+source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
-# Initialize git in the temp directory
-git init
-git config user.name "Test User"
-git config user.email "test@example.com"
+# Create a temporary clean environment for testing
+test_dir=$(create_temp_test_env "loc_delta_system_test")
+cd "$test_dir"
 
 echo "=== Testing LOC-based Delta System with New Versioning System ==="
 
@@ -151,8 +147,7 @@ echo "Tests passed: $TESTS_PASSED"
 echo "Tests failed: $TESTS_FAILED"
 
 # Cleanup
-cd /
-rm -rf "$TEMP_DIR"
+cleanup_temp_test_env "$test_dir"
 
 if [[ "$TESTS_FAILED" -eq 0 ]]; then
     echo "✓ All tests passed! LOC delta system is working correctly."

@@ -2,32 +2,23 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Focused test script for version calculation logic
+# Test script for version calculation logic
 
-set -Euo pipefail
-IFS=$'\n\t'
+set -euo pipefail
+
+# Source the test helper
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
-echo "Testing Version Calculation Logic"
-echo "================================"
-
-# Go to project root
-cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." || exit 1
-
-# Create a temporary clean environment for testing
-TEMP_DIR=$(mktemp -d)
-# Copy everything except .git directory
-find . -maxdepth 1 -not -name . -not -name .git -exec cp -r {} "$TEMP_DIR/" \;
-cd "$TEMP_DIR" || exit 1
-
-# Initialize git in the temp directory
-git init
-git config user.name "Test User"
-git config user.email "test@example.com"
+# Create a temporary test environment
+test_dir=$(create_temp_test_env "version_calculation_test")
+cd "$test_dir"
 
 # Test 1: Basic version calculation
 echo ""
@@ -47,8 +38,8 @@ git commit -m "Add test change" -q
 # Run semantic analyzer and extract next version
 base_commit=$(git rev-parse HEAD~1)
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." || exit 1
-result=$(./dev-bin/semantic-version-analyzer --base "$base_commit" --repo-root "$TEMP_DIR" --json 2>/dev/null)
-cd "$TEMP_DIR" || exit 1
+result=$(./dev-bin/semantic-version-analyzer --base "$base_commit" --repo-root "$test_dir" --json 2>/dev/null)
+cd "$test_dir" || exit 1
 
 # Parse JSON properly - handle multiline JSON
 if command -v jq >/dev/null 2>&1; then
@@ -84,8 +75,8 @@ git commit -m "Add another test change" -q
 # Run semantic analyzer
 base_commit2=$(git rev-parse HEAD~1)
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." || exit 1
-result2=$(./dev-bin/semantic-version-analyzer --base "$base_commit2" --repo-root "$TEMP_DIR" --json 2>/dev/null)
-cd "$TEMP_DIR" || exit 1
+result2=$(./dev-bin/semantic-version-analyzer --base "$base_commit2" --repo-root "$test_dir" --json 2>/dev/null)
+cd "$test_dir" || exit 1
 if command -v jq >/dev/null 2>&1; then
     next_version2=$(echo "$result2" | jq -r '.next_version')
 else
@@ -119,8 +110,8 @@ git commit -m "Add third test change" -q
 # Run semantic analyzer
 base_commit3=$(git rev-parse HEAD~1)
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." || exit 1
-result3=$(./dev-bin/semantic-version-analyzer --base "$base_commit3" --repo-root "$TEMP_DIR" --json 2>/dev/null)
-cd "$TEMP_DIR" || exit 1
+result3=$(./dev-bin/semantic-version-analyzer --base "$base_commit3" --repo-root "$test_dir" --json 2>/dev/null)
+cd "$test_dir" || exit 1
 if command -v jq >/dev/null 2>&1; then
     next_version3=$(echo "$result3" | jq -r '.next_version')
 else
@@ -176,7 +167,6 @@ echo "Major delta: $major_delta"
 # Cleanup
 echo ""
 echo "Cleaning up..."
-cd /
-rm -rf "$TEMP_DIR"
+cleanup_temp_test_env "$test_dir"
 
 echo "Test completed!" 

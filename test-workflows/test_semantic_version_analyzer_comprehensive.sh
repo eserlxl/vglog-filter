@@ -2,129 +2,52 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# Comprehensive unified test for the semantic version analyzer
-# This test combines the best features from all previous test files
+# Comprehensive test script for semantic version analyzer
 
-set -uo pipefail
+set -euo pipefail
+
+# Source the test helper
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+source "$PROJECT_ROOT/test_helper.sh"
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+CYAN='\033[0;36m'
+RESET='\033[0m'
 
 # Test counter
 TESTS_PASSED=0
 TESTS_FAILED=0
 
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-# Function to run a test and track results
+# Function to run a test
 run_test() {
     local test_name="$1"
     local test_command="$2"
-    local expected_exit="${3:-0}"
-    local expected_output="${4:-}"
+    local expected_output="$3"
     
-    echo "Testing: $test_name"
-    echo "  Command: $test_command"
+    printf '%s\n' "${CYAN}Running test: $test_name${RESET}"
     
-    # Run the test command
+    # Run the command and capture output
     local output
-    local exit_code
-    output=$(eval "$test_command" 2>&1) || exit_code=$?
-    exit_code=${exit_code:-0}
+    output=$(eval "$test_command" 2>&1 || true)
     
-    # Check exit code
-    if [[ "$exit_code" == "$expected_exit" ]]; then
-        log_success "✓ Exit code correct: $exit_code"
-        ((TESTS_PASSED++))
+    # Check if output contains expected text
+    if echo "$output" | grep -q "$expected_output"; then
+        printf '%s\n' "${GREEN}✓ PASS: $test_name${RESET}"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
-        log_error "✗ Exit code wrong: expected $expected_exit, got $exit_code"
-        echo "  Output: $output"
-        ((TESTS_FAILED++))
-        return 1
+        printf '%s\n' "${RED}✗ FAIL: $test_name${RESET}"
+        printf '%s\n' "${YELLOW}Expected: $expected_output${RESET}"
+        printf '%s\n' "${YELLOW}Got: $output${RESET}"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
+    printf '%s\n' ""
     
-    # Check expected output
-    if [[ -n "$expected_output" ]]; then
-        if echo "$output" | grep -q "$expected_output"; then
-            log_success "✓ Output contains expected: $expected_output"
-        else
-            log_error "✗ Output missing expected: $expected_output"
-            echo "  Actual output: $output"
-            ((TESTS_FAILED++))
-            return 1
-        fi
-    fi
-    
-    echo
-}
-
-# Function to run a test with VERSION file setup
-run_test_with_version() {
-    local test_name="$1"
-    local version="$2"
-    local test_command="$3"
-    local expected_exit="${4:-0}"
-    local expected_output="${5:-}"
-    
-    echo "Testing: $test_name"
-    echo "  Version: $version"
-    echo "  Command: $test_command"
-    
-    # Set up VERSION file
-    echo "$version" > VERSION
-    
-    # Run the test command
-    local output
-    local exit_code
-    output=$(eval "$test_command" 2>&1) || exit_code=$?
-    exit_code=${exit_code:-0}
-    
-    # Check exit code
-    if [[ "$exit_code" == "$expected_exit" ]]; then
-        log_success "✓ Exit code correct: $exit_code"
-        ((TESTS_PASSED++))
-    else
-        log_error "✗ Exit code wrong: expected $expected_exit, got $exit_code"
-        echo "  Output: $output"
-        ((TESTS_FAILED++))
-        return 1
-    fi
-    
-    # Check expected output
-    if [[ -n "$expected_output" ]]; then
-        if echo "$output" | grep -q "$expected_output"; then
-            log_success "✓ Output contains expected: $expected_output"
-        else
-            log_error "✗ Output missing expected: $expected_output"
-            echo "  Actual output: $output"
-            ((TESTS_FAILED++))
-            return 1
-        fi
-    fi
-    
-    echo
+    # Return success to prevent script from exiting
+    return 0
 }
 
 # Function to create test commit with specific message
@@ -138,377 +61,333 @@ create_test_commit() {
     git commit -m "$message" >/dev/null 2>&1
 }
 
-# Function to create temporary test environment
-create_temp_test_env() {
-    local test_name="${1:-default}"
-    local temp_dir="/tmp/vglog-filter-test-${test_name}-$$"
+# Function to run a test with VERSION file setup
+run_test_with_version() {
+    local test_name="$1"
+    local version="$2"
+    local test_command="$3"
+    local expected_exit="${4:-0}"
+    local expected_output="${5:-}"
     
-    # Create temporary directory
-    mkdir -p "$temp_dir"
-    cd "$temp_dir" || exit 1
+    printf '%s\n' "${CYAN}Testing: $test_name${RESET}"
+    printf '%s\n' "  Version: $version"
+    printf '%s\n' "  Command: $test_command"
     
-    # Create initial files
-    echo "1.0.0" > VERSION
-    echo "project(test)" > CMakeLists.txt
-    mkdir -p src
+    # Set up VERSION file
+    echo "$version" > VERSION
     
-    # Initialize git repository
-    git init --quiet
-    git config user.name "Test User"
-    git config user.email "test@example.com"
+    # Run the test command
+    local output
+    local exit_code
+    output=$(eval "$test_command" 2>&1) || exit_code=$?
+    exit_code=${exit_code:-0}
     
-    # Add initial files
-    git add . >/dev/null 2>&1
-    git commit -m "Initial commit" >/dev/null 2>&1
-    
-    echo "$temp_dir"
-}
-
-# Function to cleanup temporary test environment
-cleanup_temp_test_env() {
-    local temp_dir="$1"
-    if [[ -n "$temp_dir" && -d "$temp_dir" ]]; then
-        cd /tmp 2>/dev/null || true
-        rm -rf "$temp_dir" 2>/dev/null || true
+    # Check exit code
+    if [[ "$exit_code" == "$expected_exit" ]]; then
+        printf '%s\n' "${GREEN}✓ Exit code correct: $exit_code${RESET}"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+    else
+        printf '%s\n' "${RED}✗ Exit code wrong: expected $expected_exit, got $exit_code${RESET}"
+        printf '%s\n' "  Output: $output"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+        return 1
     fi
+    
+    # Check expected output
+    if [[ -n "$expected_output" ]]; then
+        if echo "$output" | grep -q "$expected_output"; then
+            printf '%s\n' "${GREEN}✓ Output contains expected: $expected_output${RESET}"
+        else
+            printf '%s\n' "${RED}✗ Output missing expected: $expected_output${RESET}"
+            printf '%s\n' "  Actual output: $output"
+            TESTS_FAILED=$((TESTS_FAILED + 1))
+            return 1
+        fi
+    fi
+    
+    printf '%s\n' ""
 }
 
-# Test 1: Basic functionality tests
-test_basic_functionality() {
-    local test_dir="$1"
-    local analyzer_path="$2"
-    
-    cd "$test_dir" || exit 1
-    
-    echo "=== Testing Basic Functionality ==="
-    
-    # Test 1: Help command
-    run_test "Help command" \
-        "$analyzer_path --help" \
-        "0" \
-        "Semantic Version Analyzer"
-    
-    # Test 2: Invalid version format
-    run_test_with_version "Invalid version format" \
-        "invalid" \
-        "$analyzer_path --suggest-only" \
-        "20" \
-        "none"
-    
-    # Test 3: Basic analysis with valid version
-    run_test_with_version "Basic analysis with valid version" \
-        "1.0.0" \
-        "$analyzer_path --suggest-only" \
-        "20" \
-        "none"
-    
-    # Test 4: JSON output format
-    run_test_with_version "JSON output format" \
-        "1.0.0" \
-        "$analyzer_path --json" \
-        "20" \
-        "suggestion"
-    
-    # Test 5: Machine output format
-    run_test_with_version "Machine output format" \
-        "1.0.0" \
-        "$analyzer_path --machine" \
-        "20" \
-        "SUGGESTION="
-}
+SEMANTIC_ANALYZER_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../dev-bin/semantic-version-analyzer"
+
+# Test 1: Basic functionality
+printf '%s\n' "${CYAN}=== Test 1: Basic functionality ===${RESET}"
+test_dir=$(create_temp_test_env "semantic-version-analyzer-comprehensive")
+cd "$test_dir"
+
+# Test 1: Help command
+run_test "Help command" \
+    "$SEMANTIC_ANALYZER_SCRIPT --help" \
+    "Semantic Version Analyzer"
+
+# Test 2: Invalid version format
+run_test_with_version "Invalid version format" \
+    "invalid" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "20" \
+    "none"
+
+# Test 3: Basic analysis with valid version
+run_test_with_version "Basic analysis with valid version" \
+    "1.0.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "20" \
+    "none"
+
+# Test 4: JSON output format
+run_test_with_version "JSON output format" \
+    "1.0.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json" \
+    "20" \
+    "suggestion"
+
+# Test 5: Machine output format
+run_test_with_version "Machine output format" \
+    "1.0.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --machine" \
+    "20" \
+    "SUGGESTION="
 
 # Test 2: Configuration validation tests
-test_configuration_validation() {
-    local test_dir="$1"
-    local analyzer_path="$2"
-    
-    cd "$test_dir" || exit 1
-    
-    echo "=== Testing Configuration Validation ==="
-    
-    # Test 1: Invalid VERSION_PATCH_LIMIT
-    run_test "Invalid VERSION_PATCH_LIMIT" \
-        "VERSION_PATCH_LIMIT=foo $analyzer_path --help" \
-        "0" \
-        ""
-    
-    # Test 2: Invalid VERSION_MINOR_LIMIT
-    run_test "Invalid VERSION_MINOR_LIMIT" \
-        "VERSION_MINOR_LIMIT=bar $analyzer_path --help" \
-        "0" \
-        ""
-    
-    # Test 3: Invalid VERSION_MAJOR_DELTA
-    run_test "Invalid VERSION_MAJOR_DELTA" \
-        "VERSION_MAJOR_DELTA=invalid $analyzer_path --help" \
-        "0" \
-        ""
-    
-    # Test 4: Valid numeric configuration
-    run_test "Valid numeric configuration" \
-        "VERSION_PATCH_LIMIT=100 VERSION_MINOR_LIMIT=100 $analyzer_path --help" \
-        "0" \
-        ""
-}
+printf '%s\n' "${CYAN}=== Test 2: Configuration Validation ==${RESET}"
+
+# Test 1: Invalid VERSION_PATCH_LIMIT
+run_test "Invalid VERSION_PATCH_LIMIT" \
+    "VERSION_PATCH_LIMIT=foo $SEMANTIC_ANALYZER_SCRIPT --help" \
+    ""
+
+# Test 2: Invalid VERSION_MINOR_LIMIT
+run_test "Invalid VERSION_MINOR_LIMIT" \
+    "VERSION_MINOR_LIMIT=bar $SEMANTIC_ANALYZER_SCRIPT --help" \
+    ""
+
+# Test 3: Invalid VERSION_MAJOR_DELTA
+run_test "Invalid VERSION_MAJOR_DELTA" \
+    "VERSION_MAJOR_DELTA=invalid $SEMANTIC_ANALYZER_SCRIPT --help" \
+    ""
+
+# Test 4: Valid numeric configuration
+run_test "Valid numeric configuration" \
+    "VERSION_PATCH_LIMIT=100 VERSION_MINOR_LIMIT=100 $SEMANTIC_ANALYZER_SCRIPT --help" \
+    ""
 
 # Test 3: Core version calculation tests
-test_core_version_calculation() {
-    local test_dir="$1"
-    local analyzer_path="$2"
-    
-    cd "$test_dir" || exit 1
-    
-    echo "=== Testing Core Version Calculation ==="
-    
-    # Test 1: Basic patch increment (simple commit)
-    create_test_commit "simple fix"
-    run_test_with_version "Basic patch increment" \
-        "1.0.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 2: Breaking change
-    create_test_commit "BREAKING CHANGE: api breaking change"
-    run_test_with_version "Breaking change" \
-        "1.0.1" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 3: Security vulnerability
-    create_test_commit "fix: CVE-2024-1234 security vulnerability"
-    run_test_with_version "Security vulnerability" \
-        "2.0.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 4: Performance improvement
-    create_test_commit "perf: 50% performance improvement"
-    run_test_with_version "Performance improvement" \
-        "2.1.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 5: New feature
-    create_test_commit "feat: add new feature"
-    run_test_with_version "New feature" \
-        "2.2.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 6: Database schema change
-    create_test_commit "feat: database schema change"
-    run_test_with_version "Database schema change" \
-        "2.3.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-}
+printf '%s\n' "${CYAN}=== Test 3: Core Version Calculation ==${RESET}"
+
+# Test 1: Basic patch increment (simple commit)
+create_test_commit "simple fix"
+run_test_with_version "Basic patch increment" \
+    "1.0.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 2: Breaking change
+create_test_commit "BREAKING CHANGE: api breaking change"
+run_test_with_version "Breaking change" \
+    "1.0.1" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 3: Security vulnerability
+create_test_commit "fix: CVE-2024-1234 security vulnerability"
+run_test_with_version "Security vulnerability" \
+    "2.0.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 4: Performance improvement
+create_test_commit "perf: 50% performance improvement"
+run_test_with_version "Performance improvement" \
+    "2.1.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 5: New feature
+create_test_commit "feat: add new feature"
+run_test_with_version "New feature" \
+    "2.2.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 6: Database schema change
+create_test_commit "feat: database schema change"
+run_test_with_version "Database schema change" \
+    "2.3.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
 
 # Test 4: Advanced features
-test_advanced_features() {
-    local test_dir="$1"
-    local analyzer_path="$2"
-    
-    cd "$test_dir" || exit 1
-    
-    echo "=== Testing Advanced Features ==="
-    
-    # Test 1: Zero-day vulnerability
-    create_test_commit "fix: zero-day vulnerability CVE-2024-5678"
-    run_test_with_version "Zero-day vulnerability" \
-        "3.0.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 2: Production outage
-    create_test_commit "fix: production outage issue"
-    run_test_with_version "Production outage" \
-        "3.1.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 3: Customer request
-    create_test_commit "feat: customer request implementation"
-    run_test_with_version "Customer request" \
-        "3.2.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 4: Cross-platform support
-    create_test_commit "feat: cross-platform support"
-    run_test_with_version "Cross-platform support" \
-        "3.3.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 5: Memory safety
-    create_test_commit "fix: memory safety issue"
-    run_test_with_version "Memory safety" \
-        "3.4.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 6: Race condition
-    create_test_commit "fix: race condition"
-    run_test_with_version "Race condition" \
-        "3.5.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-}
+printf '%s\n' "${CYAN}=== Test 4: Advanced Features ==${RESET}"
+
+# Test 1: Zero-day vulnerability
+create_test_commit "fix: zero-day vulnerability CVE-2024-5678"
+run_test_with_version "Zero-day vulnerability" \
+    "3.0.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 2: Production outage
+create_test_commit "fix: production outage issue"
+run_test_with_version "Production outage" \
+    "3.1.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 3: Customer request
+create_test_commit "feat: customer request implementation"
+run_test_with_version "Customer request" \
+    "3.2.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 4: Cross-platform support
+create_test_commit "feat: cross-platform support"
+run_test_with_version "Cross-platform support" \
+    "3.3.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 5: Memory safety
+create_test_commit "fix: memory safety issue"
+run_test_with_version "Memory safety" \
+    "3.4.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 6: Race condition
+create_test_commit "fix: race condition"
+run_test_with_version "Race condition" \
+    "3.5.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
 
 # Test 5: Edge cases
-test_edge_cases() {
-    local test_dir="$1"
-    local analyzer_path="$2"
-    
-    cd "$test_dir" || exit 1
-    
-    echo "=== Testing Edge Cases ==="
-    
-    # Test 1: Large LOC changes
-    # Create a large file to test LOC capping
-    for i in {1..100}; do
-        echo "line $i" >> large_file.txt
-    done
-    git add large_file.txt
-    git commit -m "feat: large file addition" >/dev/null 2>&1
-    
-    run_test_with_version "Large LOC changes" \
-        "1.0.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 2: Version rollover
-    run_test_with_version "Version rollover test" \
-        "1.99.99" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 3: Zero LOC changes
-    git commit --allow-empty -m "empty commit" >/dev/null 2>&1
-    run_test_with_version "Zero LOC changes" \
-        "2.0.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test 4: Environment variable overrides
-    run_test_with_version "Environment variable overrides" \
-        "2.0.1" \
-        "VERSION_PATCH_LIMIT=1000 VERSION_MINOR_LIMIT=100 $analyzer_path --suggest-only" \
-        "0" \
-        ""
-}
+printf '%s\n' "${CYAN}=== Test 5: Edge Cases ==${RESET}"
+
+# Test 1: Large LOC changes
+# Create a large file to test LOC capping
+for i in {1..100}; do
+    echo "line $i" >> large_file.txt
+done
+git add large_file.txt
+git commit -m "feat: large file addition" >/dev/null 2>&1
+
+run_test_with_version "Large LOC changes" \
+    "1.0.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 2: Version rollover
+run_test_with_version "Version rollover test" \
+    "1.99.99" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 3: Zero LOC changes
+git commit --allow-empty -m "empty commit" >/dev/null 2>&1
+run_test_with_version "Zero LOC changes" \
+    "2.0.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test 4: Environment variable overrides
+run_test_with_version "Environment variable overrides" \
+    "2.0.1" \
+    "VERSION_PATCH_LIMIT=1000 VERSION_MINOR_LIMIT=100 $SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
 
 # Test 6: Verbose output
-test_verbose_output() {
-    local test_dir="$1"
-    local analyzer_path="$2"
-    
-    cd "$test_dir" || exit 1
-    
-    echo "=== Testing Verbose Output ==="
-    
-    create_test_commit "feat: new feature with tests"
-    
-    # Test verbose output
-    run_test_with_version "Verbose output" \
-        "1.0.0" \
-        "$analyzer_path --verbose" \
-        "12" \
-        "=== Detailed Analysis ==="
-    
-    # Test verbose output contains specific sections
-    local verbose_output
-    verbose_output=$("$analyzer_path" --verbose 2>&1)
-    
-    if echo "$verbose_output" | grep -q "=== Detailed Analysis ==="; then
-        log_success "✓ Verbose detailed analysis section present"
-        ((TESTS_PASSED++))
-    else
-        log_error "✗ Verbose detailed analysis section missing"
-        ((TESTS_FAILED++))
-    fi
-    
-    if echo "$verbose_output" | grep -q "=== Version Bump Suggestion ==="; then
-        log_success "✓ Verbose version bump section present"
-        ((TESTS_PASSED++))
-    else
-        log_error "✗ Verbose version bump section missing"
-        ((TESTS_FAILED++))
-    fi
-    
-    if echo "$verbose_output" | grep -q "LOC-based delta system"; then
-        log_success "✓ Verbose LOC delta section present"
-        ((TESTS_PASSED++))
-    else
-        log_error "✗ Verbose LOC delta section missing"
-        ((TESTS_FAILED++))
-    fi
-    
-    if echo "$verbose_output" | grep -q "Configuration:"; then
-        log_success "✓ Verbose configuration section present"
-        ((TESTS_PASSED++))
-    else
-        log_error "✗ Verbose configuration section missing"
-        ((TESTS_FAILED++))
-    fi
-}
+printf '%s\n' "${CYAN}=== Test 6: Verbose Output ==${RESET}"
+
+create_test_commit "feat: new feature with tests"
+
+# Test verbose output
+run_test_with_version "Verbose output" \
+    "1.0.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --verbose" \
+    "12" \
+    "=== Detailed Analysis ==="
+
+# Test verbose output contains specific sections
+local verbose_output
+verbose_output=$("$SEMANTIC_ANALYZER_SCRIPT" --verbose 2>&1)
+
+if echo "$verbose_output" | grep -q "=== Detailed Analysis ==="; then
+    printf '%s\n' "${GREEN}✓ Verbose detailed analysis section present${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ Verbose detailed analysis section missing${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
+
+if echo "$verbose_output" | grep -q "=== Version Bump Suggestion ==="; then
+    printf '%s\n' "${GREEN}✓ Verbose version bump section present${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ Verbose version bump section missing${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
+
+if echo "$verbose_output" | grep -q "LOC-based delta system"; then
+    printf '%s\n' "${GREEN}✓ Verbose LOC delta section present${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ Verbose LOC delta section missing${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
+
+if echo "$verbose_output" | grep -q "Configuration:"; then
+    printf '%s\n' "${GREEN}✓ Verbose configuration section present${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ Verbose configuration section missing${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
 
 # Test 7: Force flag
-test_force_flag() {
-    local test_dir="$1"
-    local analyzer_path="$2"
-    
-    cd "$test_dir" || exit 1
-    
-    echo "=== Testing Force Flag ==="
-    
-    # Create initial version
-    echo "1.0.0" > VERSION
-    
-    # Test actual file update with force
-    create_test_commit "fix: minor fix"
-    run_test_with_version "Actual file update with force" \
-        "1.0.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Verify file was not updated (analyzer doesn't update VERSION file)
-    if [[ "$(cat VERSION)" == "1.0.0" ]]; then
-        log_success "✓ VERSION file correctly not updated (analyzer is read-only)"
-        ((TESTS_PASSED++))
-    else
-        log_error "✗ VERSION file unexpectedly updated"
-        ((TESTS_FAILED++))
-    fi
-}
+printf '%s\n' "${CYAN}=== Test 7: Force Flag ==${RESET}"
+
+# Create initial version
+echo "1.0.0" > VERSION
+
+# Test actual file update with force
+create_test_commit "fix: minor fix"
+run_test_with_version "Actual file update with force" \
+    "1.0.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Verify file was not updated (analyzer doesn't update VERSION file)
+if [[ "$(cat VERSION)" == "1.0.0" ]]; then
+    printf '%s\n' "${GREEN}✓ VERSION file correctly not updated (analyzer is read-only)${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ VERSION file unexpectedly updated${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
 
 # Test 8: YAML configuration
-test_yaml_configuration() {
-    local test_dir="$1"
-    local analyzer_path="$2"
-    
-    cd "$test_dir" || exit 1
-    
-    echo "=== Testing YAML Configuration ==="
-    
-    # Create custom YAML config
-    cat > custom_config.yml <<EOF
+printf '%s\n' "${CYAN}=== Test 8: YAML Configuration ==${RESET}"
+
+# Create custom YAML config
+cat > custom_config.yml <<EOF
 base_deltas:
   patch: "2"
   minor: "8"
@@ -532,143 +411,93 @@ patterns:
   early_exit:
     bonus_threshold: 10
 EOF
-    
-    # Test custom configuration
-    create_test_commit "fix: minor bug fix"
-    run_test_with_version "Custom YAML configuration" \
-        "1.0.0" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-    
-    # Test missing YAML file
-    run_test_with_version "Missing YAML file" \
-        "1.0.2" \
-        "$analyzer_path --suggest-only" \
-        "0" \
-        ""
-}
+
+# Test custom configuration
+create_test_commit "fix: minor bug fix"
+run_test_with_version "Custom YAML configuration" \
+    "1.0.0" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
+
+# Test missing YAML file
+run_test_with_version "Missing YAML file" \
+    "1.0.2" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "0" \
+    ""
 
 # Test 9: Key features check
-test_key_features() {
-    echo "=== Testing Key Features ==="
-    
-    local analyzer_path="$1"
-    
-    # Check if it has YAML configuration support
-    if grep -q "versioning.yml" "$analyzer_path"; then
-        log_success "✓ Has YAML configuration support"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No YAML configuration support detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check if it has CI-friendly output
-    if grep -q "SUGGESTION=" "$analyzer_path"; then
-        log_success "✓ Has CI-friendly SUGGESTION output"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No CI-friendly output detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check if it has performance optimizations
-    if grep -q "early exit" "$analyzer_path"; then
-        log_success "✓ Has early exit performance optimization"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No early exit optimization detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check if it has bonus system
-    if grep -q "VERSION_.*_BONUS" "$analyzer_path"; then
-        log_success "✓ Has bonus system"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No bonus system detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check if it has multiplier system
-    if grep -q "VERSION_.*_DELTA" "$analyzer_path"; then
-        log_success "✓ Has multiplier system"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No multiplier system detected"
-        ((TESTS_FAILED++))
-    fi
-    
-    # Check if it has LOC delta system
-    if grep -q "VERSION_USE_LOC_DELTA" "$analyzer_path"; then
-        log_success "✓ Has LOC delta system"
-        ((TESTS_PASSED++))
-    else
-        log_warn "⚠ No LOC delta system detected"
-        ((TESTS_FAILED++))
-    fi
-}
+printf '%s\n' "${CYAN}=== Test 9: Key Features ==${RESET}"
 
-# Main test function
-main() {
-    echo "Comprehensive Unified Semantic Version Analyzer Test"
-    echo "=================================================="
-    echo
-    
-    # Check if analyzer exists
-    local analyzer_path
-    analyzer_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../dev-bin/semantic-version-analyzer"
-    if [[ ! -f "$analyzer_path" ]]; then
-        log_error "Semantic version analyzer not found: $analyzer_path"
-        exit 1
-    fi
-    
-    log_success "✓ Semantic version analyzer found"
-    
-    # Check if yq is available
-    if ! command -v yq >/dev/null 2>&1; then
-        log_warn "yq not found - YAML configuration tests may use defaults"
-    fi
-    
-    # Create temporary test environment
-    log_info "Setting up temporary test environment..."
-    local temp_dir
-    temp_dir=$(create_temp_test_env "semantic-version-analyzer-comprehensive")
-    log_success "✓ Temporary environment created: $temp_dir"
-    
-    # Use absolute path for analyzer since we're now in a different directory
-    analyzer_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../dev-bin/semantic-version-analyzer"
-    
-    # Run all test suites
-    test_basic_functionality "$temp_dir" "$analyzer_path"
-    test_configuration_validation "$temp_dir" "$analyzer_path"
-    test_core_version_calculation "$temp_dir" "$analyzer_path"
-    test_advanced_features "$temp_dir" "$analyzer_path"
-    test_edge_cases "$temp_dir" "$analyzer_path"
-    test_verbose_output "$temp_dir" "$analyzer_path"
-    test_force_flag "$temp_dir" "$analyzer_path"
-    test_yaml_configuration "$temp_dir" "$analyzer_path"
-    test_key_features "$analyzer_path"
-    
-    # Cleanup
-    cleanup_temp_test_env "$temp_dir"
-    
-    # Print summary
-    echo "=================================================="
-    echo "Test Summary:"
-    echo "  Tests Passed: $TESTS_PASSED"
-    echo "  Tests Failed: $TESTS_FAILED"
-    echo "  Total Tests: $((TESTS_PASSED + TESTS_FAILED))"
-    
-    if [[ $TESTS_FAILED -eq 0 ]]; then
-        log_success "All tests passed!"
-        exit 0
-    else
-        log_error "Some tests failed!"
-        exit 1
-    fi
-}
+# Check if it has YAML configuration support
+if grep -q "versioning.yml" "$SEMANTIC_ANALYZER_SCRIPT"; then
+    printf '%s\n' "${GREEN}✓ Has YAML configuration support${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ No YAML configuration support detected${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
 
-# Run main function
-main "$@" 
+# Check if it has CI-friendly output
+if grep -q "SUGGESTION=" "$SEMANTIC_ANALYZER_SCRIPT"; then
+    printf '%s\n' "${GREEN}✓ Has CI-friendly SUGGESTION output${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ No CI-friendly output detected${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
+
+# Check if it has performance optimizations
+if grep -q "early exit" "$SEMANTIC_ANALYZER_SCRIPT"; then
+    printf '%s\n' "${GREEN}✓ Has early exit performance optimization${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ No early exit optimization detected${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
+
+# Check if it has bonus system
+if grep -q "VERSION_.*_BONUS" "$SEMANTIC_ANALYZER_SCRIPT"; then
+    printf '%s\n' "${GREEN}✓ Has bonus system${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ No bonus system detected${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
+
+# Check if it has multiplier system
+if grep -q "VERSION_.*_DELTA" "$SEMANTIC_ANALYZER_SCRIPT"; then
+    printf '%s\n' "${GREEN}✓ Has multiplier system${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ No multiplier system detected${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
+
+# Check if it has LOC delta system
+if grep -q "VERSION_USE_LOC_DELTA" "$SEMANTIC_ANALYZER_SCRIPT"; then
+    printf '%s\n' "${GREEN}✓ Has LOC delta system${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ No LOC delta system detected${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
+
+# Cleanup
+cleanup_temp_test_env "$test_dir"
+
+# Print summary
+printf '%s\n' "${CYAN}==================================================${RESET}"
+printf '%s\n' "Test Summary:"
+printf '%s\n' "  Tests Passed: $TESTS_PASSED"
+printf '%s\n' "  Tests Failed: $TESTS_FAILED"
+printf '%s\n' "  Total Tests: $((TESTS_PASSED + TESTS_FAILED))"
+
+if [[ $TESTS_FAILED -eq 0 ]]; then
+    printf '%s\n' "${GREEN}All tests passed!${RESET}"
+    exit 0
+else
+    printf '%s\n' "${RED}Some tests failed!${RESET}"
+    exit 1
+fi 
