@@ -15,14 +15,17 @@ export LC_ALL=C
 # Prevent any pager and avoid unnecessary repo locks for better performance.
 export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
+# Bash features used by this script (for trimming globs safely)
+shopt -s extglob
+
 show_help() {
-    cat << EOF
+    cat << 'EOF'
 File Change Analyzer
 
-Usage: $(basename "$0") [options]
+Usage: file-change-analyzer [options]
 
 Options:
-  --base <ref>             Base reference for comparison
+  --base <ref>             Base reference for comparison              (required)
   --target <ref>           Target reference for comparison (default: HEAD)
   --repo-root <path>       Set repository root directory
   --only-paths <globs>     Restrict analysis to comma-separated path globs
@@ -32,13 +35,13 @@ Options:
   --help, -h               Show this help
 
 Examples:
-  $(basename "$0") --base v1.0.0 --target HEAD
-  $(basename "$0") --base HEAD~5 --target HEAD --machine
-  $(basename "$0") --base v1.0.0 --target v1.1.0 --json
+  file-change-analyzer --base v1.0.0 --target HEAD
+  file-change-analyzer --base HEAD~5 --target HEAD --machine
+  file-change-analyzer --base v1.0.0 --target v1.1.0 --json
 EOF
 }
 
-# Parse arguments
+# --- Parse arguments ----------------------------------------------------------
 BASE_REF=""
 TARGET_REF="HEAD"
 REPO_ROOT=""
@@ -69,15 +72,24 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# --- Validation & setup -------------------------------------------------------
+err() { printf '%s\n' "$*" >&2; }
+
 # Validate required arguments
 if [[ -z "$BASE_REF" ]]; then
-    printf 'Error: --base is required\n' >&2
+    err 'Error: --base is required'
     exit 1
 fi
 
 # Check git command
 if ! command -v git >/dev/null 2>&1; then
-    printf 'Error: git command not found\n' >&2
+    err 'Error: git command not found'
+    exit 1
+fi
+
+# Validate output format options
+if [[ "$MACHINE_OUTPUT" == true && "$JSON_OUTPUT" == true ]]; then
+    err 'Error: --json and --machine cannot be used together'
     exit 1
 fi
 
@@ -85,29 +97,31 @@ fi
 if [[ -n "$REPO_ROOT" ]]; then
     cd "$REPO_ROOT"
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
-        printf 'Error: Not in a git repository at %s\n' "$REPO_ROOT" >&2
+        err "Error: Not in a git repository at $REPO_ROOT"
         exit 1
     }
 fi
 
-# Build PATH_ARGS array from --only-paths
+# Build PATH_ARGS array from --only-paths (as pathspecs)
 PATH_ARGS=()
 if [[ -n "$ONLY_PATHS" ]]; then
-    IFS=',' read -r -a tmp <<< "$ONLY_PATHS"
-    PATH_ARGS+=(--)
-    for g in "${tmp[@]}"; do
-        # Trim surrounding spaces
-        g="${g##+([[:space:]])}"
-        g="${g%%+([[:space:]])}"
-        [[ -n "$g" ]] && PATH_ARGS+=("$g")
-    done
+    IFS=',' read -r -a _paths <<< "$ONLY_PATHS"
+    if ((${#_paths[@]} > 0)); then
+        PATH_ARGS+=(--)
+        for g in "${_paths[@]}"; do
+            # Trim surrounding spaces via extglob
+            g="${g##+([[:space:]])}"
+            g="${g%%+([[:space:]])}"
+            [[ -n "$g" ]] && PATH_ARGS+=("$g")
+        done
+    fi
 fi
 
 # Validate git references
 verify_ref() {
     local ref="$1"
     if ! git -c color.ui=false rev-parse -q --verify "$ref^{commit}" >/dev/null; then
-        printf 'Error: Invalid reference: %s\n' "$ref" >&2
+        err "Error: Invalid reference: $ref"
         exit 1
     fi
 }
@@ -115,58 +129,79 @@ verify_ref() {
 verify_ref "$BASE_REF"
 verify_ref "$TARGET_REF"
 
-# Classify file path - improved to handle multiple folder patterns and nested directories
+# --- Classification -----------------------------------------------------------
+# Returns: 30=source, 10=test, 20=doc, 0=other/ignored
 classify_path() {
     local path="$1"
     local path_lower
     path_lower=$(printf '%s' "$path" | tr '[:upper:]' '[:lower:]')
 
-    # Skip noise directories and binary/lock artifacts (including nested ones)
-    if [[ "$path" =~ /(build|dist|out|third_party|vendor|\.git|node_modules|target|bin|obj)/ ]] || \
-       [[ "$path" =~ ^(build|dist|out|third_party|vendor|\.git|node_modules|target|bin|obj)/ ]] || \
-       [[ "$path" =~ \.(lock|exe|dll|so|dylib|jar|war|ear|zip|tar|gz|bz2|xz|7z|rar)$ ]]; then
-        printf '0'
-        return
+    # Ignore build/third-party/binary artifacts (nested-aware)
+    if [[ "$path" =~ (^|/)(build|dist|out|third_party|vendor|\.git|node_modules|target|bin|obj)(/|$) ]] || \
+       [[ "$path" =~ \.(lock|exe|dll|so|dylib|jar|war|ear|zip|tar|gz|bz2|xz|7z|rar|png|jpg|jpeg|gif|bmp|ico|pdf)$ ]]; then
+        printf '0'; return
     fi
 
-    # Source files (including headers)
-    if [[ "$path" =~ (^|/)src/ ]] || [[ "$path" =~ (^|/)source/ ]] || [[ "$path" =~ (^|/)app/ ]] || \
-       [[ "$path" =~ \.(c|cc|cpp|cxx|h|hpp|hh)$ ]]; then
-        printf '30'
-        return
+    # Source files (common languages + C/C++)
+    if [[ "$path" =~ (^|/)(src|source|app|lib|include)(/|$) ]] || \
+       [[ "$path" =~ \.(c|cc|cpp|cxx|h|hh|hpp|inl|go|rs|java|cs|m|mm|swift|kt|ts|tsx|js|jsx|sh|py|rb|php|pl|lua|sql|cmake)$ ]] || \
+       [[ "$path" =~ (^|/)(CMakeLists\.txt|Makefile|makefile|GNUmakefile)$ ]]; then
+        printf '30'; return
     fi
 
-    # Test files
-    if [[ "$path" =~ (^|/)(test|tests|unittests)/ ]] || [[ "$path" =~ \.(test|spec)\.(c|cpp|sh|py)$ ]]; then
-        printf '10'
-        return
+    # Tests
+    if [[ "$path" =~ (^|/)(test|tests|unittests|it|e2e)(/|$) ]] || \
+       [[ "$path" =~ (_test|\.test|\.spec)\.(c|cc|cpp|cxx|py|js|ts|sh)$ ]]; then
+        printf '10'; return
     fi
 
-    # Documentation files (case-insensitive)
-    if [[ "$path_lower" =~ (^|/)(doc|docs)/ ]] || \
+    # Documentation
+    if [[ "$path_lower" =~ (^|/)(doc|docs|documentation|examples)(/|$) ]] || \
        [[ "$path_lower" =~ (^|/)(readme|changelog|contributing|license|copying|authors|install|news|history) ]] || \
-       [[ "$path_lower" =~ \.(md|rst|adoc|txt)$ ]]; then
-        printf '20'
-        return
+       [[ "$path_lower" =~ \.(md|markdown|mkd|rst|adoc|txt)$ ]]; then
+        printf '20'; return
     fi
 
     printf '0'
 }
 
-# Binary-safe numstat summation function
+# --- Helpers -----------------------------------------------------------------
+# Binary-safe numstat summation (treats '-' as 0)
 sum_numstat() {
-    local cmd=("$@")
     local total_ins=0 total_del=0
+    # shellcheck disable=SC2068  # intentional array expansion to pass full cmd
     while IFS=$'\t' read -r ins del _; do
         [[ $ins =~ ^[0-9]+$ ]] || ins=0
         [[ $del =~ ^[0-9]+$ ]] || del=0
         total_ins=$((total_ins + ins))
         total_del=$((total_del + del))
-    done < <("${cmd[@]}")
+    done < <("$@")
     printf '%s' $((total_ins + total_del))
 }
 
-# Analyze file changes
+print_empty_results() {
+    local reason="$1"
+    [[ -n "$reason" ]] && err "Warning: $reason"
+    if [[ "$JSON_OUTPUT" = "true" ]]; then
+        cat <<'JSON'
+{
+  "added_files": 0,
+  "modified_files": 0,
+  "deleted_files": 0,
+  "new_source_files": 0,
+  "new_test_files": 0,
+  "new_doc_files": 0,
+  "diff_size": 0
+}
+JSON
+    elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
+        printf 'ADDED_FILES=0\nMODIFIED_FILES=0\nDELETED_FILES=0\nNEW_SOURCE_FILES=0\nNEW_TEST_FILES=0\nNEW_DOC_FILES=0\nDIFF_SIZE=0\n'
+    else
+        printf '=== File Change Analysis ===\nNo changes detected\n'
+    fi
+}
+
+# --- Core --------------------------------------------------------------------
 analyze_file_changes() {
     local base_ref="$1"
     local target_ref="$2"
@@ -180,75 +215,28 @@ analyze_file_changes() {
     local new_doc_files=0
     local diff_size=0
 
-    # Check if there are any changes
+    # Build common git diff args
+    local -a DIFF_ARGS=( -c color.ui=false -c core.quotepath=false )
+    local -a DIFF_OPTS=( -M -C )
     if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        if git -c color.ui=false diff -M -C -w --quiet "$base_ref".."$target_ref"; then
-            printf 'Warning: No changes detected between %s and %s (ignoring whitespace)\n' "$base_ref" "$target_ref" >&2
-            # Output empty results
-            if [[ "$JSON_OUTPUT" = "true" ]]; then
-                printf '{\n'
-                printf '  "added_files": 0,\n'
-                printf '  "modified_files": 0,\n'
-                printf '  "deleted_files": 0,\n'
-                printf '  "new_source_files": 0,\n'
-                printf '  "new_test_files": 0,\n'
-                printf '  "new_doc_files": 0,\n'
-                printf '  "diff_size": 0\n'
-                printf '}\n'
-            elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
-                printf 'ADDED_FILES=0\n'
-                printf 'MODIFIED_FILES=0\n'
-                printf 'DELETED_FILES=0\n'
-                printf 'NEW_SOURCE_FILES=0\n'
-                printf 'NEW_TEST_FILES=0\n'
-                printf 'NEW_DOC_FILES=0\n'
-                printf 'DIFF_SIZE=0\n'
-            else
-                printf '=== File Change Analysis ===\n'
-                printf 'No changes detected\n'
-            fi
-            return
-        fi
-    else
-        if git -c color.ui=false diff -M -C --quiet "$base_ref".."$target_ref"; then
-            printf 'Warning: No changes detected between %s and %s\n' "$base_ref" "$target_ref" >&2
-            # Output empty results
-            if [[ "$JSON_OUTPUT" = "true" ]]; then
-                printf '{\n'
-                printf '  "added_files": 0,\n'
-                printf '  "modified_files": 0,\n'
-                printf '  "deleted_files": 0,\n'
-                printf '  "new_source_files": 0,\n'
-                printf '  "new_test_files": 0,\n'
-                printf '  "new_doc_files": 0,\n'
-                printf '  "diff_size": 0\n'
-                printf '}\n'
-            elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
-                printf 'ADDED_FILES=0\n'
-                printf 'MODIFIED_FILES=0\n'
-                printf 'DELETED_FILES=0\n'
-                printf 'NEW_SOURCE_FILES=0\n'
-                printf 'NEW_TEST_FILES=0\n'
-                printf 'NEW_DOC_FILES=0\n'
-                printf 'DIFF_SIZE=0\n'
-            else
-                printf '=== File Change Analysis ===\n'
-                printf 'No changes detected\n'
-            fi
-            return
-        fi
+        DIFF_OPTS+=( -w )
     fi
 
-    # NUL-delimited, handle renames/copies
+    # Quick check: any changes? (respect path filters)
+    if git "${DIFF_ARGS[@]}" diff "${DIFF_OPTS[@]}" --quiet "${base_ref}..${target_ref}" "${PATH_ARGS[@]}" 2>/dev/null; then
+        local msg="No changes detected between ${base_ref} and ${target_ref}"
+        [[ "$IGNORE_WHITESPACE" = "true" ]] && msg+=" (ignoring whitespace)"
+        print_empty_results "$msg"
+        return
+    fi
+
+    # NUL-delimited status (rename/copy aware)
     while IFS= read -r -d '' status; do
         local path1 path2 file
-        IFS= read -r -d '' path1
+        IFS= read -r -d '' path1 || true
         file="$path1"
         case "${status:0:1}" in
-            R|C)
-                IFS= read -r -d '' path2
-                file="$path2"
-                ;;
+            R|C) IFS= read -r -d '' path2 || true; file="$path2" ;;
         esac
 
         case "${status:0:1}" in
@@ -262,57 +250,48 @@ analyze_file_changes() {
                 ;;
             M|T) modified_files=$((modified_files + 1)) ;;
             D)   deleted_files=$((deleted_files + 1)) ;;
-            R)   modified_files=$((modified_files + 1)) ;;
-            C)   modified_files=$((modified_files + 1)) ;; # Count copies as modifications, not additions
+            R|C) modified_files=$((modified_files + 1)) ;; # count rename/copy as modification
         esac
-    done < <(if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        git -c color.ui=false -c core.quotepath=false diff -M -C -w --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
-    else
-        git -c color.ui=false -c core.quotepath=false diff -M -C --name-status -z "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null
-    fi)
+    done < <(git "${DIFF_ARGS[@]}" diff "${DIFF_OPTS[@]}" --name-status -z "${base_ref}..${target_ref}" "${PATH_ARGS[@]}" 2>/dev/null)
 
-    # Get diff size using numstat (binary-safe)
-    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        diff_size=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C -w --numstat "$base_ref".."$target_ref" "${PATH_ARGS[@]}")
-    else
-        diff_size=$(sum_numstat git -c color.ui=false -c core.quotepath=false diff -M -C --numstat "$base_ref".."$target_ref" "${PATH_ARGS[@]}")
-    fi
+    # Compute diff size (insertions + deletions)
+    diff_size=$(sum_numstat git "${DIFF_ARGS[@]}" diff "${DIFF_OPTS[@]}" --numstat "${base_ref}..${target_ref}" "${PATH_ARGS[@]}")
 
     # Output results
     if [[ "$JSON_OUTPUT" = "true" ]]; then
         printf '{\n'
-        printf '  "added_files": %s,\n' "$added_files"
-        printf '  "modified_files": %s,\n' "$modified_files"
-        printf '  "deleted_files": %s,\n' "$deleted_files"
-        printf '  "new_source_files": %s,\n' "$new_source_files"
-        printf '  "new_test_files": %s,\n' "$new_test_files"
-        printf '  "new_doc_files": %s,\n' "$new_doc_files"
-        printf '  "diff_size": %s\n' "$diff_size"
+        printf '  "added_files": %s,\n'        "$added_files"
+        printf '  "modified_files": %s,\n'     "$modified_files"
+        printf '  "deleted_files": %s,\n'      "$deleted_files"
+        printf '  "new_source_files": %s,\n'   "$new_source_files"
+        printf '  "new_test_files": %s,\n'     "$new_test_files"
+        printf '  "new_doc_files": %s,\n'      "$new_doc_files"
+        printf '  "diff_size": %s\n'           "$diff_size"
         printf '}\n'
     elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
-        printf 'ADDED_FILES=%s\n' "$added_files"
-        printf 'MODIFIED_FILES=%s\n' "$modified_files"
-        printf 'DELETED_FILES=%s\n' "$deleted_files"
-        printf 'NEW_SOURCE_FILES=%s\n' "$new_source_files"
-        printf 'NEW_TEST_FILES=%s\n' "$new_test_files"
-        printf 'NEW_DOC_FILES=%s\n' "$new_doc_files"
-        printf 'DIFF_SIZE=%s\n' "$diff_size"
+        printf 'ADDED_FILES=%s\n'       "$added_files"
+        printf 'MODIFIED_FILES=%s\n'    "$modified_files"
+        printf 'DELETED_FILES=%s\n'     "$deleted_files"
+        printf 'NEW_SOURCE_FILES=%s\n'  "$new_source_files"
+        printf 'NEW_TEST_FILES=%s\n'    "$new_test_files"
+        printf 'NEW_DOC_FILES=%s\n'     "$new_doc_files"
+        printf 'DIFF_SIZE=%s\n'         "$diff_size"
     else
         printf '=== File Change Analysis ===\n'
-        printf 'Base reference: %s\n' "$base_ref"
+        printf 'Base reference:   %s\n' "$base_ref"
         printf 'Target reference: %s\n' "$target_ref"
         printf '\nFile Changes:\n'
-        printf '  Added files: %s\n' "$added_files"
+        printf '  Added files:    %s\n' "$added_files"
         printf '  Modified files: %s\n' "$modified_files"
-        printf '  Deleted files: %s\n' "$deleted_files"
+        printf '  Deleted files:  %s\n' "$deleted_files"
         printf '\nNew Content:\n'
         printf '  New source files: %s\n' "$new_source_files"
-        printf '  New test files: %s\n' "$new_test_files"
-        printf '  New doc files: %s\n' "$new_doc_files"
+        printf '  New test files:   %s\n' "$new_test_files"
+        printf '  New doc files:    %s\n' "$new_doc_files"
         printf '\nChange Magnitude:\n'
         printf '  Diff size: %s lines\n' "$diff_size"
     fi
 }
 
-# Main execution
+# --- Main --------------------------------------------------------------------
 analyze_file_changes "$BASE_REF" "$TARGET_REF" 
