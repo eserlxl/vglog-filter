@@ -32,23 +32,20 @@ test_new_rollover_logic() {
     current_patch=${current_patch:-0}
 
     # New versioning system: always increase only the last identifier (patch)
-    local new_patch=$((current_patch + delta))
-    local new_minor=$current_minor
-    local new_major=$current_major
+    # Uses MAIN_VERSION_MOD=1000 for rollover logic
+    local MAIN_VERSION_MOD=1000
     
-    # Handle patch rollover: if patch + delta >= 100, apply mod 100 and increment minor
-    if [[ "$new_patch" -ge 100 ]]; then
-        new_patch=$((new_patch % 100))
-        new_minor=$((current_minor + 1))
-        
-        # Handle minor rollover: if minor + 1 >= 100, apply mod 100 and increment major
-        if [[ "$new_minor" -ge 100 ]]; then
-            new_minor=$((new_minor % 100))
-            new_major=$((current_major + 1))
-        fi
-    fi
+    local new_patch=$((current_patch + delta))
+    local delta_y=$(((new_patch - (new_patch % MAIN_VERSION_MOD)) / MAIN_VERSION_MOD))
+    local final_patch=$((new_patch % MAIN_VERSION_MOD))
+    
+    local new_minor=$((current_minor + delta_y))
+    local delta_x=$(((new_minor - (new_minor % MAIN_VERSION_MOD)) / MAIN_VERSION_MOD))
+    local final_minor=$((new_minor % MAIN_VERSION_MOD))
+    
+    local final_major=$((current_major + delta_x))
 
-    printf '%s.%s.%s' "$new_major" "$new_minor" "$new_patch"
+    printf '%s.%s.%s' "$final_major" "$final_minor" "$final_patch"
 }
 
 # ─── Helper to run a single test ───────────────────────────────────────────────
@@ -82,35 +79,35 @@ main() {
     run_test "Basic patch increment 2"          "9.6.10"  "9.6.8"   2
     run_test "Zero delta"                       "9.6.0"   "9.6.0"   0
     
-    # Patch rollover tests
-    run_test "Patch rollover to minor"          "9.7.1"   "9.6.99"  2
-    run_test "Patch rollover exact boundary"    "9.7.0"   "9.6.99"  1
-    run_test "Patch rollover large delta"       "9.7.50"  "9.6.99"  51
-    run_test "Patch rollover multiple times"    "9.7.0"   "9.6.99"  101
+    # Patch rollover tests (using 1000 as rollover)
+    run_test "Patch rollover to minor"          "9.7.1"   "9.6.999" 2
+    run_test "Patch rollover exact boundary"    "9.7.0"   "9.6.999" 1
+    run_test "Patch rollover large delta"       "9.7.50"  "9.6.999" 51
+    run_test "Patch rollover multiple times"    "9.8.0"   "9.6.999" 1001
     
-    # Minor rollover tests
-    run_test "Minor rollover to major"          "10.0.1"  "9.99.99" 2
-    run_test "Minor rollover exact boundary"    "10.0.0"  "9.99.99" 1
-    run_test "Minor rollover large delta"       "10.0.50" "9.99.99" 51
-    run_test "Minor rollover multiple times"    "10.0.0"  "9.99.99" 101
+    # Minor rollover tests (using 1000 as rollover)
+    run_test "Minor rollover to major"          "10.0.1"  "9.999.999" 2
+    run_test "Minor rollover exact boundary"    "10.0.0"  "9.999.999" 1
+    run_test "Minor rollover large delta"       "10.0.50" "9.999.999" 51
+    run_test "Minor rollover multiple times"    "10.1.0"  "9.999.999" 1001
     
     # Complex rollover scenarios
-    run_test "Double rollover scenario"         "10.0.1"  "9.99.95" 6
-    run_test "Complex rollover scenario"        "10.0.25" "9.99.75" 150
-    run_test "Very large delta"                 "10.0.99" "9.99.99" 1000
-    run_test "Boundary condition 1"             "9.7.0"   "9.6.99"  1
-    run_test "Boundary condition 2"             "10.0.0"  "9.99.99" 1
+    run_test "Double rollover scenario"         "10.0.1"  "9.999.995" 6
+    run_test "Complex rollover scenario"        "10.1.25" "9.999.975" 1050
+    run_test "Very large delta"                 "10.0.999" "9.999.999" 1000
+    run_test "Boundary condition 1"             "9.7.0"   "9.6.999"  1
+    run_test "Boundary condition 2"             "10.0.0"  "9.999.999" 1
     
     # Edge cases
     run_test "Version 0.0.0"                    "0.0.1"   "0.0.0"   1
-    run_test "Version 0.0.99"                   "0.1.0"   "0.0.99"  1
-    run_test "Version 0.99.99"                  "1.0.0"   "0.99.99" 1
-    run_test "Version 99.99.99"                 "100.0.0" "99.99.99" 1
+    run_test "Version 0.0.999"                  "0.1.0"   "0.0.999" 1
+    run_test "Version 0.999.999"                "1.0.0"   "0.999.999" 1
+    run_test "Version 99.999.999"               "100.0.0" "99.999.999" 1
     
-    # Specification examples
+    # Specification examples (updated for 1000 rollover)
     run_test "Spec example: 9.3.0 + 6"          "9.3.6"   "9.3.0"   6
-    run_test "Spec example: 9.3.95 + 6"         "9.4.1"   "9.3.95"  6
-    run_test "Spec example: 9.99.95 + 6"        "10.0.1"  "9.99.95" 6
+    run_test "Spec example: 9.3.995 + 6"        "9.4.1"   "9.3.995" 6
+    run_test "Spec example: 9.999.995 + 6"      "10.0.1"  "9.999.995" 6
     run_test "Spec example: 9.3.0 + 16"         "9.3.16"  "9.3.0"   16
     run_test "Spec example: 9.3.0 + 37"         "9.3.37"  "9.3.0"   37
 
@@ -122,8 +119,8 @@ main() {
         printf '%bAll tests passed! New versioning system rollover logic is working correctly.%b\n' "$GREEN" "$RESET"
         printf '\n%bKey features verified:%b\n' "$BLUE" "$RESET"
         printf '  • Always increases only the last identifier (patch)\n'
-        printf '  • Patch rollover: when patch + delta >= 100, apply mod 100 and increment minor\n'
-        printf '  • Minor rollover: when minor + 1 >= 100, apply mod 100 and increment major\n'
+        printf '  • Patch rollover: when patch + delta >= 1000, apply mod 1000 and increment minor\n'
+        printf '  • Minor rollover: when minor + 1 >= 1000, apply mod 1000 and increment major\n'
         printf '  • All specification examples working correctly\n'
         return 0
     else
