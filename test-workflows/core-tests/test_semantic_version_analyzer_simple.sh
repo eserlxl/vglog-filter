@@ -14,14 +14,22 @@ SCRIPT_PATH="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic
 # Change to project root for tests
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.."
 
-echo "Testing basic functionality..."
+echo "Testing semantic version analyzer v2 modular architecture..."
 
 # Test help output
 echo "Testing help output..."
 if "$SCRIPT_PATH" --help | grep -q "Semantic Version Analyzer v2 for vglog-filter"; then
-    echo "✅ PASS: Help output"
+    echo "✅ PASS: Help output shows v2 architecture"
 else
     echo "❌ FAIL: Help output"
+    exit 1
+fi
+
+# Test that help mentions modular components
+if "$SCRIPT_PATH" --help | grep -q "modular components"; then
+    echo "✅ PASS: Help mentions modular components"
+else
+    echo "❌ FAIL: Help doesn't mention modular components"
     exit 1
 fi
 
@@ -36,4 +44,64 @@ else
     exit 1
 fi
 
-echo "✅ All basic tests passed!"
+# Test JSON output format
+echo "Testing JSON output format..."
+json_output=$("$SCRIPT_PATH" --json 2>&1 || true)
+if echo "$json_output" | grep -q '"suggestion"'; then
+    echo "✅ PASS: JSON output contains suggestion field"
+else
+    echo "❌ FAIL: JSON output missing suggestion field"
+    echo "Output: $json_output"
+    exit 1
+fi
+
+if echo "$json_output" | grep -q '"current_version"'; then
+    echo "✅ PASS: JSON output contains current_version field"
+else
+    echo "❌ FAIL: JSON output missing current_version field"
+    echo "Output: $json_output"
+    exit 1
+fi
+
+if echo "$json_output" | grep -q '"loc_delta"'; then
+    echo "✅ PASS: JSON output contains loc_delta field"
+else
+    echo "❌ FAIL: JSON output missing loc_delta field"
+    echo "Output: $json_output"
+    exit 1
+fi
+
+# Test suggest-only output
+echo "Testing suggest-only output..."
+suggest_output=$("$SCRIPT_PATH" --suggest-only 2>&1 || true)
+if echo "$suggest_output" | grep -E -q "^(major|minor|patch|none)$"; then
+    echo "✅ PASS: Suggest-only output format"
+else
+    echo "❌ FAIL: Suggest-only output format"
+    echo "Output: $suggest_output"
+    exit 1
+fi
+
+# Test exit codes
+echo "Testing exit codes..."
+exit_code=0
+"$SCRIPT_PATH" --suggest-only --strict-status > /dev/null 2>&1 || exit_code=$?
+if [[ $exit_code -ge 10 && $exit_code -le 20 ]]; then
+    echo "✅ PASS: Exit codes are in expected range (10-20): $exit_code"
+else
+    echo "❌ FAIL: Unexpected exit code: $exit_code"
+    exit 1
+fi
+
+# Test verbose output
+echo "Testing verbose output..."
+verbose_output=$("$SCRIPT_PATH" --verbose 2>&1 || true)
+if echo "$verbose_output" | grep -q "SUGGESTION="; then
+    echo "✅ PASS: Verbose output contains suggestion"
+else
+    echo "❌ FAIL: Verbose output missing suggestion"
+    echo "Output: $verbose_output"
+    exit 1
+fi
+
+echo "✅ All semantic version analyzer v2 tests passed!"
