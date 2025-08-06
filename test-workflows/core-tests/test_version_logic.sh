@@ -7,13 +7,18 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-
+# Source the test helper
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 echo "Testing Version Calculation Logic (Direct)"
 echo "========================================="
 
-# Go to project root
-cd ../../
+# Create temporary test environment
+test_dir=$(create_temp_test_env "version_logic_test")
+cd "$test_dir"
 
 # Test the calculate_next_version function directly by creating a test script
 cat > /tmp/test_version_calc.sh << 'EOF'
@@ -172,6 +177,9 @@ echo "Test 9: 9.99.98 + patch bump (LOC=500, bonus=0) = 10.0.1 (base_delta=3, ro
 
 # Cleanup
 rm -f /tmp/test_version_calc.sh
+
+# Clean up the test directory
+cleanup_temp_test_env "$test_dir"
 
 echo ""
 echo "Test completed!" 

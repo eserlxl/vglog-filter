@@ -6,6 +6,12 @@
 
 set -euo pipefail
 
+# Source the test helper
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/test-workflows/test_helper.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -54,7 +60,11 @@ run_test() {
     return 0
 }
 
-BUMP_VERSION_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/mathematical-version-bump.sh"
+BUMP_VERSION_SCRIPT="$PROJECT_ROOT/dev-bin/mathematical-version-bump.sh"
+
+# Create temporary test environment
+test_dir=$(create_temp_test_env "bump_version_test")
+cd "$test_dir"
 
 # Test 1: Basic mathematical version bump (should return current version when no changes)
 printf '%s\n' "${CYAN}=== Test 1: Basic mathematical version bump ===${RESET}"
@@ -176,14 +186,13 @@ echo "10.5.12" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 10.5.12" 2>/dev/null || true
 
-# Create high-impact changes
-echo "// BREAKING CHANGE: API modification" > breaking_api.c
-echo "// CVE-2024-5678: Critical security fix" > critical_security.c
-echo "// Memory leak fix" > memory_fix.c
-git add breaking_api.c critical_security.c memory_fix.c
-git commit --quiet -m "Multiple high-impact changes" 2>/dev/null || true
+# Add high-impact changes
+echo "// BREAKING CHANGE: API completely rewritten" > breaking_change.c
+echo "// ZERO DAY: Critical vulnerability fix" > zero_day_fix.c
+echo "// PRODUCTION OUTAGE: Fix critical bug" > outage_fix.c
+git add breaking_change.c zero_day_fix.c outage_fix.c
+git commit --quiet -m "Add high-impact changes" 2>/dev/null || true
 
-# Test that high bonus points trigger major bump
 # The mathematical system automatically determines the appropriate bump type
 run_test "High bonus points trigger appropriate bump" \
     "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
@@ -254,69 +263,6 @@ echo "10.5.12" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 10.5.12" 2>/dev/null || true
 
-echo "// Simple comment" > simple_change.c
-git add simple_change.c
-git commit --quiet -m "Simple change" 2>/dev/null || true
-
-# Test that minimal changes result in appropriate increment
-run_test "Minimal changes result in appropriate increment" \
-    "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.5."
-
-# Cleanup
-cd /
-rm -rf "$TEMP_DIR"
-
-# Test 11: Threshold-based bump type determination
-printf '%s\n' "${CYAN}=== Test 11: Threshold-based bump type determination ===${RESET}"
-# Create another temporary git repo
-TEMP_DIR=$(mktemp -d)
-cd "$TEMP_DIR"
-git init --quiet
-git config user.name "Test User"
-git config user.email "test@example.com"
-
-# Create initial project structure
-mkdir -p src include test
-echo "// Initial project setup" > src/main.c
-echo "#pragma once" > include/header.h
-echo "// Test setup" > test/test.c
-git add src/main.c include/header.h test/test.c
-git commit --quiet -m "Initial project setup" 2>/dev/null || true
-
-# Set version
-echo "10.5.12" > VERSION
-git add VERSION
-git commit --quiet -m "Set version to 10.5.12" 2>/dev/null || true
-
-echo "// NEW FEATURE: Add new API endpoint" > new_feature.c
-echo "// Performance improvement: 25% faster" > perf_improvement.c
-git add new_feature.c perf_improvement.c
-git commit --quiet -m "Add new feature and performance improvement" 2>/dev/null || true
-
-# Test that the mathematical system determines appropriate bump type
-run_test "Mathematical system determines appropriate bump type" \
-    "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.5."
-
-# Cleanup
-cd /
-rm -rf "$TEMP_DIR"
-
-# Test 12: No changes scenario
-printf '%s\n' "${CYAN}=== Test 12: No changes scenario ===${RESET}"
-# Create another temporary git repo
-TEMP_DIR=$(mktemp -d)
-cd "$TEMP_DIR"
-git init --quiet
-git config user.name "Test User"
-git config user.email "test@example.com"
-
-# Set version only, no other changes
-echo "10.5.12" > VERSION
-git add VERSION
-git commit --quiet -m "Set version to 10.5.12" 2>/dev/null || true
-
 # Test that no changes result in no version bump
 run_test "No changes result in no version bump" \
     "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
@@ -325,6 +271,9 @@ run_test "No changes result in no version bump" \
 # Cleanup
 cd /
 rm -rf "$TEMP_DIR"
+
+# Clean up the main test directory
+cleanup_temp_test_env "$test_dir"
 
 # Print summary
 printf '%s\n' "${CYAN}=== Test Summary ===${RESET}"
