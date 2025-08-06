@@ -60,8 +60,8 @@ test_dir=$(create_temp_test_env "test_loc_delta_patch")
 cd "$test_dir"
 
 # Enable LOC delta system
-export VERSION_PATCH_LIMIT=100
-export VERSION_MINOR_LIMIT=100
+export VERSION_PATCH_LIMIT=1000
+export VERSION_MINOR_LIMIT=1000
 
 # Test patch bump with LOC delta
 run_test "Patch bump with LOC delta enabled" \
@@ -76,8 +76,8 @@ test_dir=$(create_temp_test_env "test_new_system_changes")
 cd "$test_dir"
 
 # Enable new versioning system
-export VERSION_PATCH_LIMIT=100
-export VERSION_MINOR_LIMIT=100
+export VERSION_PATCH_LIMIT=1000
+export VERSION_MINOR_LIMIT=1000
 
 # Add some changes to trigger LOC delta calculation
 echo "// New code for testing" > new_file.c
@@ -97,8 +97,8 @@ test_dir=$(create_temp_test_env "test_rollover_new_system")
 cd "$test_dir"
 
 # Enable new versioning system
-export VERSION_PATCH_LIMIT=100
-export VERSION_MINOR_LIMIT=100
+export VERSION_PATCH_LIMIT=1000
+export VERSION_MINOR_LIMIT=1000
 
 # Set version to test patch rollover
 echo "10.5.95" > VERSION
@@ -128,8 +128,8 @@ test_dir=$(create_temp_test_env "test_semantic_analyzer_integration")
 cd "$test_dir"
 
 # Enable new versioning system
-export VERSION_PATCH_LIMIT=100
-export VERSION_MINOR_LIMIT=100
+export VERSION_PATCH_LIMIT=1000
+export VERSION_MINOR_LIMIT=1000
 
 # Add changes to trigger analysis
 echo "// Changes for semantic analysis" > changes.c
@@ -154,8 +154,8 @@ test_dir=$(create_temp_test_env "test_delta_formulas")
 cd "$test_dir"
 
 # Enable new versioning system
-export VERSION_PATCH_LIMIT=100
-export VERSION_MINOR_LIMIT=100
+export VERSION_PATCH_LIMIT=1000
+export VERSION_MINOR_LIMIT=1000
 
 # Add changes to trigger delta calculation
 echo "// Code for delta testing" > delta_test.c

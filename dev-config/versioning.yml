@@ -13,7 +13,7 @@ base_deltas:
 # rollover must be > 1 (renamed from "radix" for clarity)
 limits:
   loc_cap: 10000
-  rollover: 100  # Two-digit rollover feels right for most projects
+  rollover: 1000  # Three-digit rollover for better version management
 
 # Bonus system - 7 categories with point values
 # This is the ONLY mechanism for determining version bump types

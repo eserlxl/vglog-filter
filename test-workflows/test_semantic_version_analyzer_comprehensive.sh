@@ -168,7 +168,7 @@ run_test "Invalid VERSION_MAJOR_DELTA" \
 
 # Test 4: Valid numeric configuration
 run_test "Valid numeric configuration" \
-    "VERSION_PATCH_LIMIT=100 VERSION_MINOR_LIMIT=100 $SEMANTIC_ANALYZER_SCRIPT --help" \
+    "VERSION_PATCH_LIMIT=1000 VERSION_MINOR_LIMIT=1000 $SEMANTIC_ANALYZER_SCRIPT --help" \
     ""
 
 # Test 3: Core version calculation tests
@@ -308,7 +308,7 @@ run_test_with_version "Zero LOC changes" \
 # Test 4: Environment variable overrides
 run_test_with_version "Environment variable overrides" \
     "2.0.1" \
-    "VERSION_PATCH_LIMIT=1000 VERSION_MINOR_LIMIT=100 $SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "VERSION_PATCH_LIMIT=1000 VERSION_MINOR_LIMIT=1000 $SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
     "0" \
     ""
 

@@ -16,6 +16,12 @@ _warn()  { printf '%s\n' "${YELLOW:-}Warning:${RESET:-} $*">&2; }
 _info()  { printf '%s\n' "${CYAN:-}$*${RESET:-}">&2; }
 _ok()    { printf '%s\n' "${GREEN:-}$*${RESET:-}">&2; }
 
+# Export functions for use by other scripts
+die()    { _die "$@"; }
+warn()   { _warn "$@"; }
+info()   { _info "$@"; }
+ok()     { _ok "$@"; }
+
 # Trap to show failing line for unexpected errors.
 trap 'rc=$?; [[ $rc -ne 0 ]] && printf "Error on line %s: %s (exit %s)\n" "$LINENO" "$BASH_COMMAND" "$rc" >&2' ERR
 
@@ -216,6 +222,17 @@ last_tag_for_prefix() {
 
 # ------------------- validation utilities -------------------
 is_uint() { [[ "$1" =~ ^[0-9]+$ ]]; }
+
+# Export is_semver function for use by other scripts
+is_semver() { _is_semver_core "$@"; }
+
+# Split semver into components
+split_semver() {
+    local version="$1"
+    local major minor patch
+    IFS='.' read -r major minor patch <<< "$version"
+    printf '%s %s %s' "$major" "$minor" "$patch"
+}
 
 # Strict semver core X.Y.Z (no leading zeros)
 _is_semver_core() {

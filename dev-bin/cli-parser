@@ -63,6 +63,7 @@ require_value() {
     fi
     i=$((i + 1))
     printf '%s' "${args[$i]}"
+    # Debug: echo "require_value: $opt = ${args[$i]}, i = $i" >&2
 }
 
 normalize_bool() {
@@ -81,6 +82,7 @@ is_prerelease() {
 parse_bump_version_args() {
     local args=("$@")
     local i=0
+    local skip_increment=false
     
     # Initialize options with defaults
     for key in "${!DEFAULT_OPTIONS[@]}"; do
@@ -89,6 +91,7 @@ parse_bump_version_args() {
     
     while [[ $i -lt ${#args[@]} ]]; do
         local arg="${args[$i]}"
+        skip_increment=false
         
         case "$arg" in
             --)  # end-of-options (no positional args expected beyond this point)
@@ -116,6 +119,7 @@ parse_bump_version_args() {
                 ;;
             --message)
                 COMMIT_MSG="$(require_value --message)"
+                skip_increment=true
                 ;;
             --allow-dirty)
                 ALLOW_DIRTY="true"
@@ -140,9 +144,11 @@ parse_bump_version_args() {
                 ;;
             --tag-prefix)
                 TAG_PREFIX="$(require_value --tag-prefix)"
+                skip_increment=true
                 ;;
             --set)
                 SET_VERSION="$(require_value --set)"
+                skip_increment=true
                 ;;
             --no-color)
                 NO_COLOR="true"
@@ -161,14 +167,14 @@ parse_bump_version_args() {
                 ;;
             --repo-root)
                 REPO_ROOT="$(require_value --repo-root)"
-                # Normalize if possible; fall back to provided path
-                REPO_ROOT="$(realpath -m -- "$REPO_ROOT" 2>/dev/null || printf '%s' "$REPO_ROOT")"
+                skip_increment=true
                 ;;
             --remote)
                 REMOTE="$(require_value --remote)"
                 if [[ -z "$REMOTE" ]]; then
                     die "--remote requires a non-empty value"
                 fi
+                skip_increment=true
                 ;;
             -h|--help|help)
                 show_usage
@@ -181,7 +187,9 @@ parse_bump_version_args() {
                 die "Unknown argument '$arg'"
                 ;;
         esac
-        i=$((i + 1))
+        if [[ "$skip_increment" != "true" ]]; then
+            i=$((i + 1))
+        fi
     done
     
     # Validate TAG_PREFIX content

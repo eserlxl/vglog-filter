@@ -31,6 +31,14 @@ fi
 if ! command -v init_colors >/dev/null 2>&1; then
     init_colors() { :; }
 fi
+if ! command -v split_semver >/dev/null 2>&1; then
+    split_semver() {
+        local version="$1"
+        local major minor patch
+        IFS='.' read -r major minor patch <<< "$version"
+        printf '%s %s %s' "$major" "$minor" "$patch"
+    }
+fi
 
 # --- Utility functions -------------------------------------------------------
 has_cmd() { command -v "$1" >/dev/null 2>&1; }
@@ -38,8 +46,8 @@ has_cmd() { command -v "$1" >/dev/null 2>&1; }
 is_uint() { [[ "${1-}" =~ ^[0-9]+$ ]]; }
 
 # --- Default configuration ----------------------------------------------------
-: "${VERSION_PATCH_LIMIT:=100}"
-: "${VERSION_MINOR_LIMIT:=100}"
+: "${VERSION_PATCH_LIMIT:=1000}"
+: "${VERSION_MINOR_LIMIT:=1000}"
 : "${VERSION_PATCH_DELTA:=1}"
 : "${VERSION_MINOR_DELTA:=5}"
 : "${VERSION_MAJOR_DELTA:=10}"
@@ -136,31 +144,49 @@ ensure_semver() {
 
 split_semver() {
     local v="$1"
-    IFS='.' read -r MAJOR MINOR PATCH <<<"$v"
-    printf '%s %s %s' "$MAJOR" "$MINOR" "$PATCH"
+    local major minor patch
+    IFS='.' read -r major minor patch <<<"$v"
+    printf '%s %s %s' "$major" "$minor" "$patch"
 }
 
-# --- Bump math with rollover -------------------------------------------------
+# --- Mathematical rollover system --------------------------------------------
+# Implements sophisticated multi-level rollover with proper carry propagation
+# Formula: z_new = (z + delta_z) % MAIN_VERSION_MOD
+#          delta_y = ((z + delta_z) - (z + delta_z) % MAIN_VERSION_MOD) / MAIN_VERSION_MOD
+#          y_new = (y + delta_y) % MAIN_VERSION_MOD
+#          delta_x = ((y + delta_y) - (y + delta_y) % MAIN_VERSION_MOD) / MAIN_VERSION_MOD
+#          x_new = x + delta_x
+
 roll_patch() {
-    local patch="$1" minor="$2" major="$3"
-    local carry=0
-    if (( patch >= VERSION_PATCH_LIMIT )); then
-        carry=$(( patch / VERSION_PATCH_LIMIT ))
-        patch=$(( patch % VERSION_PATCH_LIMIT ))
-        minor=$(( minor + carry ))
-    fi
-    printf '%s %s %s' "$patch" "$minor" "$major"
+    local patch="$1" minor="$2" major="$3" delta="$4"
+    local main_version_mod="${VERSION_PATCH_LIMIT:-1000}"
+    
+    # Apply mathematical rollover system
+    local new_patch=$((patch + delta))
+    local delta_minor=$(((new_patch - (new_patch % main_version_mod)) / main_version_mod))
+    local final_patch=$((new_patch % main_version_mod))
+    
+    local new_minor=$((minor + delta_minor))
+    local delta_major=$(((new_minor - (new_minor % main_version_mod)) / main_version_mod))
+    local final_minor=$((new_minor % main_version_mod))
+    
+    local final_major=$((major + delta_major))
+    
+    printf '%s %s %s' "$final_patch" "$final_minor" "$final_major"
 }
 
 roll_minor() {
-    local minor="$1" major="$2"
-    local carry=0
-    if (( minor >= VERSION_MINOR_LIMIT )); then
-        carry=$(( minor / VERSION_MINOR_LIMIT ))
-        minor=$(( minor % VERSION_MINOR_LIMIT ))
-        major=$(( major + carry ))
-    fi
-    printf '%s %s' "$minor" "$major"
+    local minor="$1" major="$2" delta="$3"
+    local main_version_mod="${VERSION_MINOR_LIMIT:-1000}"
+    
+    # Apply mathematical rollover system
+    local new_minor=$((minor + delta))
+    local delta_major=$(((new_minor - (new_minor % main_version_mod)) / main_version_mod))
+    local final_minor=$((new_minor % main_version_mod))
+    
+    local final_major=$((major + delta_major))
+    
+    printf '%s %s' "$final_minor" "$final_major"
 }
 
 # --- Version calculation with rollover logic ---------------------------------
@@ -177,15 +203,12 @@ calculate_version_bump() {
     
     case "$bump_type" in
         patch)
-            PATCH=$(( PATCH + delta ))
-            read -r PATCH MINOR MAJOR < <(roll_patch "$PATCH" "$MINOR" "$MAJOR")
-            read -r MINOR MAJOR < <(roll_minor "$MINOR" "$MAJOR")
+            read -r PATCH MINOR MAJOR < <(roll_patch "$PATCH" "$MINOR" "$MAJOR" "$delta")
             ;;
         
         minor)
             [[ "${PRESERVE_PATCH_ON_MINOR,,}" == "true" ]] || PATCH=0
-            MINOR=$(( MINOR + delta ))
-            read -r MINOR MAJOR < <(roll_minor "$MINOR" "$MAJOR")
+            read -r MINOR MAJOR < <(roll_minor "$MINOR" "$MAJOR" "$delta")
             ;;
         
         major)
@@ -315,8 +338,8 @@ Options:
   --help, -h                 Show this help
 
 Environment:
-  VERSION_PATCH_LIMIT        [default: 100]
-  VERSION_MINOR_LIMIT        [default: 100]
+  VERSION_PATCH_LIMIT        [default: 1000]
+  VERSION_MINOR_LIMIT        [default: 1000]
   VERSION_PATCH_DELTA        [default: 1]
   VERSION_MINOR_DELTA        [default: 5]
   VERSION_MAJOR_DELTA        [default: 10]

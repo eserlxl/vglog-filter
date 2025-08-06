@@ -100,7 +100,7 @@ git add VERSION
 git commit --quiet -m "Set version to 10.5.12" 2>/dev/null || true
 
 # Enable LOC delta system
-export VERSION_PATCH_LIMIT=100
+export VERSION_PATCH_LIMIT=1000
 export VERSION_MINOR_LIMIT=100
 
 # Test patch bump with LOC delta
