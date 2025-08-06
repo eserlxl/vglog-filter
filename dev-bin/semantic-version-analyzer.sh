@@ -116,25 +116,28 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # shellcheck disable=SC2329
 log()   { printf '%s\n' "$*" >&2; }
-debug() { [[ "$VERBOSE" == "true" ]] && printf 'Debug: %s\n' "$*" >&2; }
+debug() { [[ "$VERBOSE" == "true" ]] && printf 'Debug: %s\n' "$*" >&2 || true; }
 
-check_binary() {
+require_exec() {
   local path="$1"
   if [[ -x "$path" ]]; then return 0; fi
   # Fallback to PATH by basename to be forgiving
   local base; base="$(basename -- "$path")"
   if command -v -- "$base" >/dev/null 2>&1; then return 0; fi
-  printf 'Error: Required binary not found: %s\n' "$path" >&2
+  printf 'Error: Required executable not found: %s\n' "$path" >&2
   exit 1
 }
 
-# nameref-based key=value parser into associative array
-# usage: parse_kv_into assoc_name <<< "$output"
+# Parse key=value lines into an associative array (nameref).
+# Accepts values containing '=' by splitting only on the first '='.
 parse_kv_into() {
   local -n __dst="$1"
-  local k v
-  while IFS='=' read -r k v; do
-    [[ -z "${k// }" ]] && continue
+  local line k v
+  while IFS= read -r line; do
+    [[ -z "${line}" || "${line}" != *"="* ]] && continue
+    k=${line%%=*}
+    v=${line#*=}
+    # shellcheck disable=SC2034
     __dst["$k"]="$v"
   done
 }
@@ -142,13 +145,17 @@ parse_kv_into() {
 # Integer coercion with default
 int_or_default() {
   local v="${1:-}"; local def="${2:-0}"
-  if [[ "$v" =~ ^-?[0-9]+$ ]]; then printf '%s' "$v"; else printf '%s' "$def"; fi
+  [[ "$v" =~ ^-?[0-9]+$ ]] && printf '%s' "$v" || printf '%s' "$def"
 }
 
-# Minimal JSON string escaper (for refs/versions; conservative)
+# Minimal JSON string escaper (enough for refs/versions/short fields)
 json_escape() {
   local s=${1:-}
-  s=${s//\\/\\\\}; s=${s//\"/\\\"}; s=${s//$'\n'/\\n}
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
   printf '%s' "$s"
 }
 
@@ -178,14 +185,53 @@ build_ref_argv() {
   _out+=(--machine) # always machine for parsing
 }
 
-# Run a component and capture stdout in a variable name (nameref)
-run_cmd_capture() {
+# Component runner with tolerant handling for known non-zero semantics.
+run_component() {
   local -n _dst="$1"; shift
-  local out
-  if ! out="$("$@")"; then
-    # Special handling for security-keyword-analyzer which may return exit code 2 for "no issues found"
-    if [[ "$*" == *"security-keyword-analyzer"* ]]; then
-      _dst="SECURITY_KEYWORDS=0
+  local cmd="$1"; shift || true
+  local out="" ec=0 base
+  base="$(basename -- "$cmd")"
+  if out="$("$cmd" "$@")"; then
+    _dst="$out"; return 0
+  else
+    ec=$?
+    # security-keyword-analyzer may exit 2 to indicate "no issues found"
+    if [[ "$base" == "security-keyword-analyzer.sh" && "$ec" -eq 2 ]]; then
+      _dst="$(default_security_kv)"
+      return 0
+    fi
+    printf 'Error: Command failed (%s, exit=%d)\n' "$base" "$ec" >&2
+    exit 1
+  fi
+}
+
+# ----------------------------- component defaults -----------------------------
+default_file_kv() {
+  cat <<'EOF'
+ADDED_FILES=0
+MODIFIED_FILES=0
+DELETED_FILES=0
+NEW_SOURCE_FILES=0
+NEW_TEST_FILES=0
+NEW_DOC_FILES=0
+DIFF_SIZE=0
+EOF
+}
+
+default_cli_kv() {
+  cat <<'EOF'
+CLI_CHANGES=false
+BREAKING_CLI_CHANGES=false
+API_BREAKING=false
+MANUAL_CLI_CHANGES=false
+REMOVED_SHORT_COUNT=0
+REMOVED_LONG_COUNT=0
+EOF
+}
+
+default_security_kv() {
+  cat <<'EOF'
+SECURITY_KEYWORDS=0
 SECURITY_PATTERNS=0
 CVE_PATTERNS=0
 MEMORY_SAFETY_ISSUES=0
@@ -195,48 +241,62 @@ WEIGHT_COMMITS=1
 WEIGHT_DIFF_SEC=1
 WEIGHT_CVE=3
 WEIGHT_MEMORY=2
-WEIGHT_CRASH=1"
-      return 0
-    fi
-    printf 'Error: Command failed: %s\n' "$*" >&2
-    exit 1
-  fi
-  _dst="$out"
+WEIGHT_CRASH=1
+EOF
+}
+
+default_keyword_kv() {
+  cat <<'EOF'
+HAS_CLI_BREAKING=false
+HAS_API_BREAKING=false
+TOTAL_SECURITY=0
+REMOVED_OPTIONS_KEYWORDS=0
+EOF
 }
 
 # ----------------------------- binary checks ----------------------------------
-check_binary "$SCRIPT_DIR/ref-resolver.sh"
-check_binary "$SCRIPT_DIR/version-config-loader.sh"
-check_binary "$SCRIPT_DIR/file-change-analyzer.sh"
-check_binary "$SCRIPT_DIR/cli-options-analyzer.sh"
-check_binary "$SCRIPT_DIR/security-keyword-analyzer.sh"
-check_binary "$SCRIPT_DIR/keyword-analyzer.sh"
-check_binary "$SCRIPT_DIR/version-calculator.sh"
+require_exec "$SCRIPT_DIR/ref-resolver.sh"
+require_exec "$SCRIPT_DIR/version-config-loader.sh"
+require_exec "$SCRIPT_DIR/file-change-analyzer.sh"
+require_exec "$SCRIPT_DIR/cli-options-analyzer.sh"
+require_exec "$SCRIPT_DIR/security-keyword-analyzer.sh"
+require_exec "$SCRIPT_DIR/keyword-analyzer.sh"
+require_exec "$SCRIPT_DIR/version-calculator.sh"
 
 # ----------------------------- main -------------------------------------------
+cleanup() {
+  [[ "${__did_pushd:-false}" == "true" ]] && { popd >/dev/null || true; }
+}
+
 main() {
   # If a repo root is specified, temporarily cd there to keep relative file reads consistent.
-  local did_pushd=false
   if [[ -n "$REPO_ROOT" ]]; then
     pushd "$REPO_ROOT" >/dev/null
-    did_pushd=true
-    trap '[[ "${did_pushd:-false}" == "true" ]] && popd >/dev/null || true' EXIT
+    __did_pushd=true
+    trap cleanup EXIT
+  else
+    __did_pushd=false
+    trap cleanup EXIT
+  fi
+
+  # Warn (debug) on potentially conflicting inputs
+  if [[ -n "$BASE_REF" || -n "$TARGET_REF" ]]; then
+    if [[ -n "$SINCE_TAG" || -n "$SINCE_COMMIT" || -n "$SINCE_DATE" ]]; then
+      debug "Both explicit base/target and since* given; resolver will prefer explicit refs."
+    fi
   fi
 
   # 1) Resolve refs
   debug "Resolving git references..."
   local ref_argv=(); build_ref_argv ref_argv
-  local ref_raw; run_cmd_capture ref_raw "$SCRIPT_DIR/ref-resolver.sh" "${ref_argv[@]}"
+  local ref_raw; run_component ref_raw "$SCRIPT_DIR/ref-resolver.sh" "${ref_argv[@]}"
   declare -A REF=(); parse_kv_into REF <<<"$ref_raw"
 
   # Handle trivial repos (empty or single commit)
   if [[ "${REF[SINGLE_COMMIT_REPO]:-false}" == "true" || "${REF[EMPTY_REPO]:-false}" == "true" || "${REF[HAS_COMMITS]:-true}" == "false" ]]; then
-    debug "Trivial repository detected - proceeding with analysis"
-    # For trivial repos, we'll continue with analysis but set appropriate defaults
+    debug "Trivial repository detected - proceeding with defaults where necessary"
     if [[ "${REF[EMPTY_REPO]:-false}" == "true" ]]; then
-      # For empty repos, we can't analyze changes, but we can suggest initial version
-      BASE_REF="EMPTY"
-      TARGET_REF="HEAD"
+      BASE_REF="EMPTY"; TARGET_REF="HEAD"
     else
       BASE_REF="${REF[BASE_REF]:-HEAD}"
       TARGET_REF="${REF[TARGET_REF]:-HEAD}"
@@ -245,12 +305,10 @@ main() {
 
   BASE_REF="${REF[BASE_REF]:-$BASE_REF}"
   TARGET_REF="${REF[TARGET_REF]:-${TARGET_REF:-HEAD}}"
-  
-
 
   # 2) Load config (key=value)
   debug "Loading version configuration..."
-  local cfg_raw; run_cmd_capture cfg_raw "$SCRIPT_DIR/version-config-loader.sh" --machine
+  local cfg_raw; run_component cfg_raw "$SCRIPT_DIR/version-config-loader.sh" --machine
   declare -A CFG=(); parse_kv_into CFG <<<"$cfg_raw"
 
   # 3) Analyze file changes
@@ -258,17 +316,10 @@ main() {
   local common_argv=(); build_common_argv common_argv
   local file_raw
   if [[ "$BASE_REF" == "EMPTY" ]]; then
-    # For empty repositories, we can't analyze file changes
     debug "Empty repository - skipping file change analysis"
-    file_raw="ADDED_FILES=0
-MODIFIED_FILES=0
-DELETED_FILES=0
-NEW_SOURCE_FILES=0
-NEW_TEST_FILES=0
-NEW_DOC_FILES=0
-DIFF_SIZE=0"
+    file_raw="$(default_file_kv)"
   else
-    run_cmd_capture file_raw "$SCRIPT_DIR/file-change-analyzer.sh" "${common_argv[@]}"
+    run_component file_raw "$SCRIPT_DIR/file-change-analyzer.sh" "${common_argv[@]}"
   fi
   declare -A FILE=(); parse_kv_into FILE <<<"$file_raw"
 
@@ -276,16 +327,10 @@ DIFF_SIZE=0"
   debug "Analyzing CLI options..."
   local cli_raw
   if [[ "$BASE_REF" == "EMPTY" ]]; then
-    # For empty repositories, we can't analyze CLI changes
     debug "Empty repository - skipping CLI analysis"
-    cli_raw="CLI_CHANGES=false
-BREAKING_CLI_CHANGES=false
-API_BREAKING=false
-MANUAL_CLI_CHANGES=false
-REMOVED_SHORT_COUNT=0
-REMOVED_LONG_COUNT=0"
+    cli_raw="$(default_cli_kv)"
   else
-    run_cmd_capture cli_raw "$SCRIPT_DIR/cli-options-analyzer.sh" "${common_argv[@]}"
+    run_component cli_raw "$SCRIPT_DIR/cli-options-analyzer.sh" "${common_argv[@]}"
   fi
   declare -A CLI=(); parse_kv_into CLI <<<"$cli_raw"
 
@@ -293,21 +338,10 @@ REMOVED_LONG_COUNT=0"
   debug "Analyzing security keywords..."
   local sec_raw
   if [[ "$BASE_REF" == "EMPTY" ]]; then
-    # For empty repositories, we can't analyze security changes
     debug "Empty repository - skipping security analysis"
-    sec_raw="SECURITY_KEYWORDS=0
-SECURITY_PATTERNS=0
-CVE_PATTERNS=0
-MEMORY_SAFETY_ISSUES=0
-CRASH_FIXES=0
-TOTAL_SECURITY_SCORE=0
-WEIGHT_COMMITS=1
-WEIGHT_DIFF_SEC=1
-WEIGHT_CVE=3
-WEIGHT_MEMORY=2
-WEIGHT_CRASH=1"
+    sec_raw="$(default_security_kv)"
   else
-    run_cmd_capture sec_raw "$SCRIPT_DIR/security-keyword-analyzer.sh" "${common_argv[@]}"
+    run_component sec_raw "$SCRIPT_DIR/security-keyword-analyzer.sh" "${common_argv[@]}"
   fi
   declare -A SEC=(); parse_kv_into SEC <<<"$sec_raw"
 
@@ -315,14 +349,10 @@ WEIGHT_CRASH=1"
   debug "Analyzing breaking-change keywords..."
   local kw_raw
   if [[ "$BASE_REF" == "EMPTY" ]]; then
-    # For empty repositories, we can't analyze keyword changes
     debug "Empty repository - skipping keyword analysis"
-    kw_raw="HAS_CLI_BREAKING=false
-HAS_API_BREAKING=false
-TOTAL_SECURITY=0
-REMOVED_OPTIONS_KEYWORDS=0"
+    kw_raw="$(default_keyword_kv)"
   else
-    run_cmd_capture kw_raw "$SCRIPT_DIR/keyword-analyzer.sh" "${common_argv[@]}"
+    run_component kw_raw "$SCRIPT_DIR/keyword-analyzer.sh" "${common_argv[@]}"
   fi
   declare -A KW=(); parse_kv_into KW <<<"$kw_raw"
 
@@ -404,7 +434,7 @@ REMOVED_OPTIONS_KEYWORDS=0"
     local vc_argv=( --current-version "$current_version" --bump-type "$suggestion"
                     --loc "$(int_or_default "${FILE[DIFF_SIZE]}" 0)"
                     --bonus "$TOTAL_BONUS" --machine )
-    local vc_raw; run_cmd_capture vc_raw "$SCRIPT_DIR/version-calculator.sh" "${vc_argv[@]}"
+    local vc_raw; run_component vc_raw "$SCRIPT_DIR/version-calculator.sh" "${vc_argv[@]}"
     declare -A VC=(); parse_kv_into VC <<<"$vc_raw"
     next_version="${VC[NEXT_VERSION]:-}"
   fi
@@ -412,17 +442,15 @@ REMOVED_OPTIONS_KEYWORDS=0"
   # 11) Output formats ---------------------------------------------------------
   debug "Output section reached, SUGGEST_ONLY=$SUGGEST_ONLY, suggestion=$suggestion"
   if [[ "$SUGGEST_ONLY" == "true" ]]; then
-    echo "$suggestion"
+    printf '%s\n' "$suggestion"
   elif [[ "$JSON_OUTPUT" == "true" ]]; then
-    # Ask calculator for deltas (patch/minor/major) with machine, convert totals
-    local loc
-    loc="$(int_or_default "${FILE[DIFF_SIZE]}" 0)"
-
-    local pd_raw; run_cmd_capture pd_raw "$SCRIPT_DIR/version-calculator.sh" --current-version "$current_version" --bump-type patch --loc "$loc" --bonus "$TOTAL_BONUS" --machine
+    local loc; loc="$(int_or_default "${FILE[DIFF_SIZE]}" 0)"
+    local pd_raw md_raw jd_raw
+    run_component pd_raw "$SCRIPT_DIR/version-calculator.sh" --current-version "$current_version" --bump-type patch --loc "$loc" --bonus "$TOTAL_BONUS" --machine
+    run_component md_raw "$SCRIPT_DIR/version-calculator.sh" --current-version "$current_version" --bump-type minor --loc "$loc" --bonus "$TOTAL_BONUS" --machine
+    run_component jd_raw "$SCRIPT_DIR/version-calculator.sh" --current-version "$current_version" --bump-type major --loc "$loc" --bonus "$TOTAL_BONUS" --machine
     declare -A PD=(); parse_kv_into PD <<<"$pd_raw"
-    local md_raw; run_cmd_capture md_raw "$SCRIPT_DIR/version-calculator.sh" --current-version "$current_version" --bump-type minor --loc "$loc" --bonus "$TOTAL_BONUS" --machine
     declare -A MD=(); parse_kv_into MD <<<"$md_raw"
-    local jd_raw; run_cmd_capture jd_raw "$SCRIPT_DIR/version-calculator.sh" --current-version "$current_version" --bump-type major --loc "$loc" --bonus "$TOTAL_BONUS" --machine
     declare -A JD=(); parse_kv_into JD <<<"$jd_raw"
 
     printf '{\n'
