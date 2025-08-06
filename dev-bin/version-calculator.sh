@@ -13,6 +13,9 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
 
+# ----- guards ----------------------------------------------------------------
+(( BASH_VERSINFO[0] >= 4 )) || { echo "Error: requires Bash ≥ 4" >&2; exit 1; }
+
 show_help() {
     cat << 'EOF'
 Version Calculator
@@ -21,15 +24,19 @@ Usage:
   $(basename "$0") [options]
 
 Options:
-  --current-version <ver>  Current version (e.g., 1.2.3)
-  --bump-type <type>       Bump type: major, minor, patch
-  --loc <number>           Lines of code changed (non-negative integer)
-  --bonus <number>         Bonus points to add (non-negative integer)
-  --machine                Output machine-readable key=value format
-  --json                   Output machine-readable JSON
-  --main-mod <number>      MAIN_VERSION_MOD (default: 1000)
-  --strict                 Fail on invalid --current-version instead of falling back to 0.0.0
+  --current-version <ver>  Current version (e.g., 1.2.3)                 (required)
+  --bump-type <type>       One of: major, minor, patch                    (required)
+  --loc <n>                Lines of code changed (non-negative integer)   (default: 0)
+  --bonus <n>              Bonus points (non-negative integer)            (default: 0)
+  --main-mod <n>           MAIN_VERSION_MOD (positive integer)            (default: 1000)
+  --machine                Output key=value
+  --json                   Output JSON (takes precedence over --machine)
+  --quiet, -q              Print only the next version (no labels)
+  --strict                 Fail on invalid --current-version (no 0.0.0 fallback)
   --help, -h               Show this help
+
+LOC divisors (for base/bonus scale):
+  patch: 250   minor: 500   major: 1000
 
 Examples:
   $(basename "$0") --current-version 1.2.3 --bump-type minor --loc 500
@@ -38,9 +45,11 @@ Examples:
 EOF
 }
 
-# ---------- utilities ----------
+# ----- utilities -------------------------------------------------------------
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 is_uint() { [[ "$1" =~ ^[0-9]+$ ]]; }
+to_lower() { printf '%s' "${1,,}"; }
+is_semver_xyz() { [[ "$1" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; }
 
 # round_div a/b with nearest-integer rounding
 # works for non-negative integers only (we validate inputs as non-negative)
@@ -59,17 +68,18 @@ fmt_fixed2_from_int100() {
     printf '%d.%02d' "$whole" "$frac"
 }
 
-# ---------- defaults ----------
+# ----- defaults --------------------------------------------------------------
 CURRENT_VERSION=""
 BUMP_TYPE=""
 LOC=0
 BONUS=0
 MACHINE_OUTPUT=false
 JSON_OUTPUT=false
+QUIET_OUTPUT=false
 STRICT=false
 MAIN_VERSION_MOD=1000
 
-# ---------- parse args ----------
+# ----- parse args ------------------------------------------------------------
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --current-version)
@@ -77,7 +87,7 @@ while [[ $# -gt 0 ]]; do
             CURRENT_VERSION="$2"; shift 2;;
         --bump-type)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--bump-type requires a value"
-            BUMP_TYPE="$2"; shift 2;;
+            BUMP_TYPE="$(to_lower "$2")"; shift 2;;
         --loc)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--loc requires a value"
             LOC="$2"; shift 2;;
@@ -89,13 +99,14 @@ while [[ $# -gt 0 ]]; do
             MAIN_VERSION_MOD="$2"; shift 2;;
         --machine) MACHINE_OUTPUT=true; shift;;
         --json) JSON_OUTPUT=true; shift;;
+        --quiet|-q) QUIET_OUTPUT=true; shift;;
         --strict) STRICT=true; shift;;
         --help|-h) show_help; exit 0;;
         *) die "Unknown option: $1";;
     esac
 done
 
-# ---------- validate ----------
+# ----- validation ------------------------------------------------------------
 [[ -n "$CURRENT_VERSION" ]] || die "--current-version is required"
 [[ -n "$BUMP_TYPE"    ]] || die "--bump-type is required"
 
@@ -105,8 +116,9 @@ is_uint "$BONUS" || die "--bonus must be a non-negative integer"
 # shellcheck disable=SC2015
 is_uint "$MAIN_VERSION_MOD" && (( MAIN_VERSION_MOD >= 1 )) || die "--main-mod must be a positive integer"
 
-# ---------- parse semver (fallback or strict) ----------
-if [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+# ----- parse semver (fallback or strict) -------------------------------------
+major=0 minor=0 patch=0
+if is_semver_xyz "$CURRENT_VERSION"; then
     major="${BASH_REMATCH[1]}"
     minor="${BASH_REMATCH[2]}"
     patch="${BASH_REMATCH[3]}"
@@ -114,76 +126,92 @@ else
     if $STRICT; then
         die "--current-version must be in form X.Y.Z (strict mode)"
     fi
-    major=0 minor=0 patch=0
+    # fallback remains 0.0.0
 fi
 
-# Handle special case for 0.0.0
-if [[ "$CURRENT_VERSION" = "0.0.0" ]] || [[ -z "$CURRENT_VERSION" ]]; then
+# ----- output helpers --------------------------------------------------------
+emit_json() {
+    printf '{\n'
+    printf '  "current_version": "%s",\n' "$CURRENT_VERSION"
+    printf '  "bump_type": "%s",\n' "$BUMP_TYPE"
+    printf '  "next_version": "%s",\n' "$NEXT_VERSION"
+    printf '  "loc": %s,\n' "$LOC"
+    printf '  "bonus": %s,\n' "$BONUS"
+    printf '  "base_delta": %s,\n' "$BASE_DELTA"
+    printf '  "bonus_multiplier": "%s",\n' "$BONUS_MULTIPLIER_STR"
+    printf '  "total_bonus": %s,\n' "$TOTAL_BONUS"
+    printf '  "total_delta": %s,\n' "$TOTAL_DELTA"
+    printf '  "main_version_mod": %s,\n' "$MAIN_VERSION_MOD"
+    printf '  "loc_divisor": %s,\n' "$LOC_DIVISOR"
+    printf '  "reason": "%s"\n' "$REASON"
+    printf '}\n'
+}
+
+emit_machine() {
+    printf 'CURRENT_VERSION=%s\n'  "$CURRENT_VERSION"
+    printf 'BUMP_TYPE=%s\n'        "$BUMP_TYPE"
+    printf 'NEXT_VERSION=%s\n'     "$NEXT_VERSION"
+    printf 'LOC=%s\n'              "$LOC"
+    printf 'BONUS=%s\n'            "$BONUS"
+    printf 'BASE_DELTA=%s\n'       "$BASE_DELTA"
+    printf 'BONUS_MULTIPLIER=%s\n' "$BONUS_MULTIPLIER_STR"
+    printf 'TOTAL_BONUS=%s\n'      "$TOTAL_BONUS"
+    printf 'TOTAL_DELTA=%s\n'      "$TOTAL_DELTA"
+    printf 'MAIN_VERSION_MOD=%s\n' "$MAIN_VERSION_MOD"
+    printf 'LOC_DIVISOR=%s\n'      "$LOC_DIVISOR"
+    printf 'REASON=%s\n'           "$REASON"
+}
+
+emit_human() {
+    printf '=== Version Calculation ===\n'
+    printf 'Current version: %s\n' "$CURRENT_VERSION"
+    printf 'Bump type: %s\n'       "$BUMP_TYPE"
+    printf 'Next version: %s\n'    "$NEXT_VERSION"
+    printf '\nCalculation Details:\n'
+    printf '  Lines of code: %s\n'     "$LOC"
+    printf '  Base bonus: %s\n'        "$BONUS"
+    printf '  Base delta: %s\n'        "$BASE_DELTA"
+    printf '  Bonus multiplier: %s\n'  "$BONUS_MULTIPLIER_STR"
+    printf '  Total bonus: %s\n'       "$TOTAL_BONUS"
+    printf '  Total delta: %s\n'       "$TOTAL_DELTA"
+    printf '  Main version mod: %s\n'  "$MAIN_VERSION_MOD"
+    printf '  LOC divisor: %s\n'       "$LOC_DIVISOR"
+    printf '\nReason: %s\n' "$REASON"
+}
+
+emit_plain() { printf '%s\n' "$NEXT_VERSION"; }
+
+# ----- initial 0.0.0 handling ------------------------------------------------
+# If the effective parsed version is 0.0.0 (either explicit or fallback), we
+# emit the first version per bump type and keep deltas as zeros.
+if (( major == 0 && minor == 0 && patch == 0 )); then
     case "$BUMP_TYPE" in
         major) NEXT_VERSION="1.0.0" ;;
         minor) NEXT_VERSION="0.1.0" ;;
         patch) NEXT_VERSION="0.0.1" ;;
-        *) NEXT_VERSION="0.0.0" ;;
     esac
     
-    # Output results for 0.0.0 case
-    if [[ "$JSON_OUTPUT" = "true" ]]; then
-        printf '{\n'
-        printf '  "current_version": "%s",\n' "$CURRENT_VERSION"
-        printf '  "bump_type": "%s",\n' "$BUMP_TYPE"
-        printf '  "next_version": "%s",\n' "$NEXT_VERSION"
-        printf '  "loc": %s,\n' "$LOC"
-        printf '  "bonus": %s,\n' "$BONUS"
-        printf '  "base_delta": 0,\n'
-        printf '  "bonus_multiplier": "1.00",\n'
-        printf '  "total_bonus": 0,\n'
-        printf '  "total_delta": 0,\n'
-        printf '  "main_version_mod": %s,\n' "$MAIN_VERSION_MOD"
-        printf '  "loc_divisor": 0,\n'
-        printf '  "reason": "Initial version from 0.0.0"\n'
-        printf '}\n'
-    elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
-        printf 'CURRENT_VERSION=%s\n' "$CURRENT_VERSION"
-        printf 'BUMP_TYPE=%s\n' "$BUMP_TYPE"
-        printf 'NEXT_VERSION=%s\n' "$NEXT_VERSION"
-        printf 'LOC=%s\n' "$LOC"
-        printf 'BONUS=%s\n' "$BONUS"
-        printf 'BASE_DELTA=0\n'
-        printf 'BONUS_MULTIPLIER=1.00\n'
-        printf 'TOTAL_BONUS=0\n'
-        printf 'TOTAL_DELTA=0\n'
-        printf 'MAIN_VERSION_MOD=%s\n' "$MAIN_VERSION_MOD"
-        printf 'LOC_DIVISOR=0\n'
-        printf 'REASON=Initial version from 0.0.0\n'
-    else
-        printf '=== Version Calculation ===\n'
-        printf 'Current version: %s\n' "$CURRENT_VERSION"
-        printf 'Bump type: %s\n' "$BUMP_TYPE"
-        printf 'Next version: %s\n' "$NEXT_VERSION"
-        printf '\nCalculation Details:\n'
-        printf '  Lines of code: %s\n' "$LOC"
-        printf '  Base bonus: %s\n' "$BONUS"
-        printf '  Base delta: 0\n'
-        printf '  Bonus multiplier: 1.00\n'
-        printf '  Total bonus: 0\n'
-        printf '  Total delta: 0\n'
-        printf '  Main version mod: %s\n' "$MAIN_VERSION_MOD"
-        printf '  LOC divisor: 0\n'
-        printf '\nReason: Initial version from 0.0.0\n'
-    fi
-    exit 0
+    BASE_DELTA=0
+    TOTAL_BONUS=0
+    TOTAL_DELTA=0
+    LOC_DIVISOR=0
+    BONUS_MULTIPLIER_STR="1.00"
+    REASON="Initial version from 0.0.0"
+    
+    $QUIET_OUTPUT && { emit_plain; exit 0; }
+    $JSON_OUTPUT && { emit_json; exit 0; }
+    $MACHINE_OUTPUT && { emit_machine; exit 0; }
+    emit_human; exit 0
 fi
 
-# ---------- constants per bump type ----------
+# ----- divisors & base delta -------------------------------------------------
 # LOC divisor used both for base delta slope and for bonus multiplier (1 + LOC/L)
-loc_divisor=250
 case "$BUMP_TYPE" in
-    patch) loc_divisor=250 ;;
-    minor) loc_divisor=500 ;;
-    major) loc_divisor=1000 ;;
+    patch) LOC_DIVISOR=250 ;;
+    minor) LOC_DIVISOR=500 ;;
+    major) LOC_DIVISOR=1000 ;;
 esac
 
-# ---------- base delta (pure integer with rounding) ----------
 # Given in original:
 #  patch: round(1   * (1 + LOC/250))  == 1 + round(LOC/250)
 #  minor: round(5   * (1 + LOC/500))  == 5 + round(LOC/100)
@@ -204,21 +232,21 @@ calc_base_delta() {
 
 BASE_DELTA="$(calc_base_delta "$BUMP_TYPE" "$LOC")"
 
-# ---------- bonus multiplier and total bonus ----------
+# ----- bonus multiplier and total bonus --------------------------------------
 # bonus_multiplier = 1 + LOC/loc_divisor (rendered as 2 decimals for output)
 # total_bonus = round(BONUS * (1 + LOC/loc_divisor)) = BONUS + round(BONUS*LOC/loc_divisor)
 # Keep math integer, only render multiplier as string w/2 decimals.
-bonus_scale_100=$(( (100 * (loc_divisor + LOC) + loc_divisor/2) / loc_divisor ))   # == round(100*(1+LOC/L))
+bonus_scale_100=$(( (100 * (LOC_DIVISOR + LOC) + LOC_DIVISOR/2) / LOC_DIVISOR ))   # == round(100*(1+LOC/L))
 BONUS_MULTIPLIER_STR="$(fmt_fixed2_from_int100 "$bonus_scale_100")"
 
-bonus_extra="$(round_div "$(( BONUS * LOC ))" "$loc_divisor")"
+bonus_extra="$(round_div "$(( BONUS * LOC ))" "$LOC_DIVISOR")"
 TOTAL_BONUS=$(( BONUS + bonus_extra ))
 
-# ---------- total delta ----------
+# ----- total delta -----------------------------------------------------------
 TOTAL_DELTA=$(( BASE_DELTA + TOTAL_BONUS ))
 (( TOTAL_DELTA < 1 )) && TOTAL_DELTA=1
 
-# ---------- rollover math ----------
+# ----- rollover math ---------------------------------------------------------
 # z_new = (patch + TOTAL_DELTA)
 # delta_y = floor(z_new / MAIN_VERSION_MOD)
 # y_new = minor + delta_y
@@ -235,54 +263,13 @@ final_y=$(( y_new % MAIN_VERSION_MOD ))
 final_x=$(( major + delta_x ))
 NEXT_VERSION="${final_x}.${final_y}.${final_z}"
 
-# ---------- output ----------
-if $JSON_OUTPUT; then
-    printf '{\n'
-    printf '  "current_version": "%s",\n' "$CURRENT_VERSION"
-    printf '  "bump_type": "%s",\n' "$BUMP_TYPE"
-    printf '  "next_version": "%s",\n' "$NEXT_VERSION"
-    printf '  "loc": %s,\n' "$LOC"
-    printf '  "bonus": %s,\n' "$BONUS"
-    printf '  "base_delta": %s,\n' "$BASE_DELTA"
-    printf '  "bonus_multiplier": "%s",\n' "$BONUS_MULTIPLIER_STR"
-    printf '  "total_bonus": %s,\n' "$TOTAL_BONUS"
-    printf '  "total_delta": %s,\n' "$TOTAL_DELTA"
-    printf '  "main_version_mod": %s,\n' "$MAIN_VERSION_MOD"
-    printf '  "loc_divisor": %s,\n' "$loc_divisor"
-    printf '  "reason": "LOC=%s, %s update, base_delta=%s, bonus=%s*%s=%s, total_delta=%s"\n' \
-           "$LOC" "$(printf '%s' "$BUMP_TYPE" | tr '[:lower:]' '[:upper:]')" \
-           "$BASE_DELTA" "$BONUS" "$BONUS_MULTIPLIER_STR" "$TOTAL_BONUS" "$TOTAL_DELTA"
-    printf '}\n'
-elif $MACHINE_OUTPUT; then
-    printf 'CURRENT_VERSION=%s\n'  "$CURRENT_VERSION"
-    printf 'BUMP_TYPE=%s\n'        "$BUMP_TYPE"
-    printf 'NEXT_VERSION=%s\n'     "$NEXT_VERSION"
-    printf 'LOC=%s\n'              "$LOC"
-    printf 'BONUS=%s\n'            "$BONUS"
-    printf 'BASE_DELTA=%s\n'       "$BASE_DELTA"
-    printf 'BONUS_MULTIPLIER=%s\n' "$BONUS_MULTIPLIER_STR"
-    printf 'TOTAL_BONUS=%s\n'      "$TOTAL_BONUS"
-    printf 'TOTAL_DELTA=%s\n'      "$TOTAL_DELTA"
-    printf 'MAIN_VERSION_MOD=%s\n' "$MAIN_VERSION_MOD"
-    printf 'LOC_DIVISOR=%s\n'      "$loc_divisor"
-    printf 'REASON=LOC=%s, %s update, base_delta=%s, bonus=%s*%s=%s, total_delta=%s\n' \
-           "$LOC" "$(printf '%s' "$BUMP_TYPE" | tr '[:lower:]' '[:upper:]')" \
-           "$BASE_DELTA" "$BONUS" "$BONUS_MULTIPLIER_STR" "$TOTAL_BONUS" "$TOTAL_DELTA"
-else
-    printf '=== Version Calculation ===\n'
-    printf 'Current version: %s\n' "$CURRENT_VERSION"
-    printf 'Bump type: %s\n'       "$BUMP_TYPE"
-    printf 'Next version: %s\n'    "$NEXT_VERSION"
-    printf '\nCalculation Details:\n'
-    printf '  Lines of code: %s\n'     "$LOC"
-    printf '  Base bonus: %s\n'        "$BONUS"
-    printf '  Base delta: %s\n'        "$BASE_DELTA"
-    printf '  Bonus multiplier: %s\n'  "$BONUS_MULTIPLIER_STR"
-    printf '  Total bonus: %s\n'       "$TOTAL_BONUS"
-    printf '  Total delta: %s\n'       "$TOTAL_DELTA"
-    printf '  Main version mod: %s\n'  "$MAIN_VERSION_MOD"
-    printf '  LOC divisor: %s\n'       "$loc_divisor"
-    printf '\nReason: LOC=%s, %s update, base_delta=%s, bonus=%s*%s=%s, total_delta=%s\n' \
-           "$LOC" "$(printf '%s' "$BUMP_TYPE" | tr '[:lower:]' '[:upper:]')" \
-           "$BASE_DELTA" "$BONUS" "$BONUS_MULTIPLIER_STR" "$TOTAL_BONUS" "$TOTAL_DELTA"
-fi 
+REASON=$(
+    printf 'LOC=%s, %s update, base_delta=%s, bonus=%s*%s=%s, total_delta=%s' \
+        "$LOC" "${BUMP_TYPE^^}" "$BASE_DELTA" "$BONUS" "$BONUS_MULTIPLIER_STR" "$TOTAL_BONUS" "$TOTAL_DELTA"
+)
+
+# ----- emit ------------------------------------------------------------------
+$QUIET_OUTPUT && { emit_plain; exit 0; }
+$JSON_OUTPUT && { emit_json; exit 0; }
+$MACHINE_OUTPUT && { emit_machine; exit 0; }
+emit_human 

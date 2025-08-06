@@ -9,12 +9,20 @@
 # Tag management script for vglog-filter
 # Usage: ./dev-bin/tag-manager [list|cleanup|create|info] [options]
 
-set -Eeo pipefail
+set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
+export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
 # ---- trap unexpected errors with context ---------------------------------------------------------
-trap 'echo "Error: line $LINENO: $BASH_COMMAND" >&2' ERR
+err_trap() {
+  local exit_code=$?
+  local line=${1:-?}
+  local cmd=${2:-?}
+  printf 'Error (exit %d) at line %s: %s\n' "$exit_code" "$line" "$cmd" >&2
+  exit "$exit_code"
+}
+trap 'err_trap "$LINENO" "$BASH_COMMAND"' ERR
 
 # ---- guards --------------------------------------------------------------------------------------
 (( BASH_VERSINFO[0] >= 4 )) || { echo "Bash ≥ 4 required" >&2; exit 1; }
@@ -45,15 +53,34 @@ warn()  { printf '%s\n' "Warning: $*" >&2; }
 info()  { printf '%s\n' "$*"; }
 is_tty(){ [[ -t 0 && -t 1 ]]; }
 
+# generic boolean parser: true/false, yes/no, on/off, 1/0
+is_true() {
+  local v="${1:-0}"
+  shopt -s nocasematch
+  [[ "$v" == 1 || "$v" == "true" || "$v" == "yes" || "$v" == "on" ]]
+}
+
 confirm() {
   local prompt="${1:-Proceed?}"
-  if [[ "$ASSUME_YES" == "1" ]]; then return 0; fi
+  if is_true "$ASSUME_YES"; then return 0; fi
   if ! is_tty; then
     warn "Non-interactive session; confirmation required. Set ASSUME_YES=1 to proceed automatically."
     return 1
   fi
   read -r -p "$prompt (y/N): " reply
-  [[ "$reply" =~ ^[Yy]$ ]]
+  shopt -s nocasematch
+  [[ "$reply" =~ ^y(es)?$ ]]
+}
+
+# dry-run aware executor
+run_cmd() {
+  if is_true "$DRY_RUN"; then
+    printf '[DRY-RUN] ' >&2
+    printf '%q ' "$@" >&2
+    printf '\n' >&2
+    return 0
+  fi
+  "$@"
 }
 
 ensure_git_repo()       { git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not inside a git repository."; }
@@ -141,7 +168,7 @@ list_tags() {
     info "Total tags: 0"
     return 0
   fi
-  git tag -l "$glob" --sort=-version:refname | nl -ba
+  git -c pager.tag=false tag -l "$glob" --sort=-version:refname | nl -ba
   echo
   local count
   count=$(git tag -l "$glob" | sed -n '$=' || true)
@@ -155,17 +182,19 @@ cleanup_tags() {
   local glob="${2:-$TAG_GLOB}"
 
   [[ "$keep_count" =~ ^[0-9]+$ ]] || die "keep must be a non-negative integer."
-  [[ "$REMOTE_ONLY" == "1" && "$LOCAL_ONLY" == "1" ]] && die "REMOTE_ONLY and LOCAL_ONLY are mutually exclusive."
+  if is_true "$REMOTE_ONLY" && is_true "$LOCAL_ONLY"; then
+    die "REMOTE_ONLY and LOCAL_ONLY are mutually exclusive."
+  fi
 
   local do_local=1 do_remote=1
-  [[ "$REMOTE_ONLY" == "1" ]] && do_local=0
-  [[ "$LOCAL_ONLY" == "1"  ]] && do_remote=0
+  is_true "$REMOTE_ONLY" && do_local=0
+  is_true "$LOCAL_ONLY"  && do_remote=0
 
   if (( do_remote )); then
     ensure_remote_exists
-    if [[ "$FETCH_BEFORE_CLEANUP" == "1" && "$DRY_RUN" != "1" ]]; then
+    if is_true "$FETCH_BEFORE_CLEANUP" && ! is_true "$DRY_RUN"; then
       info "Fetching tags from ${REMOTE}..."
-      git fetch --tags --prune "$REMOTE"
+      run_cmd git fetch --tags --prune "$REMOTE"
     fi
   fi
 
@@ -175,7 +204,7 @@ cleanup_tags() {
   info "Keep newest: ${keep_count}"
   info "Local deletions: $([[ $do_local -eq 1 ]] && echo enabled || echo disabled)"
   info "Remote deletions on ${REMOTE}: $([[ $do_remote -eq 1 ]] && echo enabled || echo disabled)"
-  info "DRY_RUN: $([[ $DRY_RUN == 1 ]] && echo yes || echo no)"
+  info "DRY_RUN: $([[ $(is_true "$DRY_RUN"; echo $?) -eq 0 ]] && echo yes || echo no)"
 
   mapfile -t tags < <(git tag -l "$glob" --sort=-version:refname)
   local total_tags="${#tags[@]}"
@@ -192,10 +221,10 @@ cleanup_tags() {
   # Build protection set: PROTECT_GLOB (as globs) + tags pointing at HEAD (names)
   local -a protect_pats=()
   if [[ -n "$PROTECT_GLOB" ]]; then
-    # shellcheck disable=SC2206
-    protect_pats=( $PROTECT_GLOB ) # space-separated globs intentionally split
+    # shellcheck disable=SC2206  # intended word-splitting on space-separated globs
+    protect_pats=( $PROTECT_GLOB )
   fi
-  if [[ "$PROTECT_CURRENT" == "1" ]]; then
+  if is_true "$PROTECT_CURRENT"; then
     while IFS= read -r t; do
       [[ -n "$t" ]] && protect_pats+=( "$t" )
     done < <(git tag --points-at HEAD || true)
@@ -240,13 +269,12 @@ cleanup_tags() {
       [[ -n "$tag" ]] || continue
       if (( do_local )); then
         info "  - local:  $tag"
-        [[ "$DRY_RUN" == "1" ]] || git tag -d -- "$tag" >/dev/null
+        run_cmd git tag -d -- "$tag" >/dev/null
       fi
       if (( do_remote )); then
         info "  - remote: $tag"
-        if [[ "$DRY_RUN" != "1" ]]; then
-          git push --delete "$REMOTE" "$tag" || git push "$REMOTE" ":refs/tags/$tag"
-        fi
+        # Try modern syntax first; fallback to refspec form
+        run_cmd git push --delete "$REMOTE" "$tag" || run_cmd git push "$REMOTE" ":refs/tags/$tag"
       fi
     done
     info "Tag cleanup completed."
@@ -276,13 +304,13 @@ create_tag() {
   fi
 
   # Signed tag prerequisites
-  if [[ "$TAG_SIGN" == "1" ]]; then
+  if is_true "$TAG_SIGN"; then
     command -v gpg >/dev/null 2>&1 || die "TAG_SIGN=1 but gpg not found."
     git config --get user.signingkey >/dev/null || die "TAG_SIGN=1 but git user.signingkey is not configured."
   fi
 
   # Dirty tree warning only when tagging HEAD and not allowed
-  if [[ "$ALLOW_DIRTY_TAG" != "1" && "$commit" == "$(git rev-parse HEAD)" ]]; then
+  if ! is_true "$ALLOW_DIRTY_TAG" && [[ "$commit" == "$(git rev-parse HEAD)" ]]; then
     if [[ -n "$(git status --porcelain=v1 --untracked-files=normal 2>/dev/null)" ]]; then
       warn "You have uncommitted and/or untracked changes."
       confirm "Continue creating ${tag_name} at ${commit:0:7}?" || die "Aborted."
@@ -300,17 +328,17 @@ create_tag() {
   local msg="${TAG_MSG_PREFIX} ${tag_name}"
   info "Creating tag: ${tag_name} at ${commit}"
 
-  if [[ "$TAG_SIGN" == "1" ]]; then
-    git tag -s -m "$msg" -- "$tag_name" "$commit"
+  if is_true "$TAG_SIGN"; then
+    run_cmd git tag -s -m "$msg" -- "$tag_name" "$commit"
   else
-    git tag -a -m "$msg" -- "$tag_name" "$commit"
+    run_cmd git tag -a -m "$msg" -- "$tag_name" "$commit"
   fi
-  info "Tag created locally."
+  info "Tag created locally."  # in dry-run, only simulated
 
-  if [[ "$PUSH_AFTER_CREATE" == "1" ]]; then
+  if is_true "$PUSH_AFTER_CREATE"; then
     ensure_remote_exists
     info "Pushing ${tag_name} to ${REMOTE}..."
-    git push "$REMOTE" "$tag_name"
+    run_cmd git push "$REMOTE" "$tag_name"
     info "Tag pushed."
   else
     info "Push with:"
@@ -356,11 +384,11 @@ show_tag_info() {
   if [[ -n "$prev_tag" ]]; then
     info "(prev: ${prev_tag})"
     local -a LOG_OPTS=(--oneline --no-decorate)
-    [[ "$FIRST_PARENT" == "1" ]] && LOG_OPTS+=(--first-parent)
+    is_true "$FIRST_PARENT" && LOG_OPTS+=(--first-parent)
     git --no-pager log "${LOG_OPTS[@]}" "${prev_tag}..${tag}"
     echo
     local -a COUNT_OPTS=()
-    [[ "$FIRST_PARENT" == "1" ]] && COUNT_OPTS+=(--first-parent)
+    is_true "$FIRST_PARENT" && COUNT_OPTS+=(--first-parent)
     info "Commit count: $(git rev-list --count "${COUNT_OPTS[@]}" "${prev_tag}..${tag}")"
     info "Diffstat:"
     git --no-pager diff --stat "${prev_tag}..${tag}" || true
