@@ -112,20 +112,7 @@ test_version_calculator() {
         "Usage:"
 }
 
-# Test cmake-updater
-test_cmake_updater() {
-    printf '\n%s=== Testing cmake-updater ===%s\n' "${YELLOW}" "${RESET}"
-    
-    # Test detect command
-    run_test "cmake-updater detect" \
-        "./dev-bin/cmake-updater.sh detect CMakeLists.txt" \
-        "variable"
-    
-    # Test help command
-    run_test "cmake-updater help" \
-        "./dev-bin/cmake-updater.sh" \
-        "Usage:"
-}
+# CMakeLists.txt now auto-updates from VERSION file (no cmake-updater needed)
 
 # Test git-operations
 test_git_operations() {
@@ -199,7 +186,6 @@ main() {
     test_version_utils
     test_version_validator
     test_version_calculator
-    test_cmake_updater
     test_git_operations
     test_cli_parser
     test_bump_version_core

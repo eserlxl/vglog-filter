@@ -44,7 +44,6 @@ _need_exec() {
 [[ -r "$SCRIPT_DIR/version-utils.sh" ]] || _die_boot "Missing: $SCRIPT_DIR/version-utils.sh"
 # Other helpers are called as executables
 _need_exec "$SCRIPT_DIR/cli-parser.sh"         "cli-parser"
-_need_exec "$SCRIPT_DIR/cmake-updater.sh"      "cmake-updater"
 _need_exec "$SCRIPT_DIR/version-calculator-loc.sh" "version-calculator-loc"
 _need_exec "$SCRIPT_DIR/git-operations.sh"     "git-operations"
 _need_exec "$SCRIPT_DIR/version-validator.sh"  "version-validator"
@@ -139,7 +138,7 @@ calculate_new_version() {
     fi
     
     local new_version
-    new_version="$("$SCRIPT_DIR/version-calculator-loc" "${calculator_args[@]}")"
+    new_version="$("$SCRIPT_DIR/version-calculator-loc.sh" "${calculator_args[@]}")"
     printf '%s' "$new_version"
 }
 
@@ -162,13 +161,9 @@ update_files() {
         printf '%s\n' "${CYAN}Note: Pre-release identifiers are not stored in VERSION.${RESET}" >&2
     fi
     
-    # CMakeLists.txt update (skip when disabled)
-    if [[ "${UPDATE_CMAKE:-true}" == "true" ]]; then
-        if [[ "${DRY_RUN:-false}" == "true" ]]; then
-            "$SCRIPT_DIR/cmake-updater.sh" simulate "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
-        else
-            "$SCRIPT_DIR/cmake-updater.sh" update   "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
-        fi
+    # CMakeLists.txt auto-updates from VERSION file (no manual update needed)
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        printf '%s\n' "${YELLOW}DRY RUN: CMakeLists.txt will auto-update from VERSION file${RESET}" >&2
     fi
 }
 
@@ -183,7 +178,7 @@ perform_git_operations() {
         
         "$SCRIPT_DIR/git-operations.sh" perform_git_operations \
             "$VERSION_FILE" \
-            "${UPDATE_CMAKE:-true}" \
+            "false" \
             "$new_version" \
             "$current_version" \
             "${DO_COMMIT:-false}" \
@@ -226,22 +221,13 @@ simulate_dry_run() {
     fi
     
     # Simulate CMake update once (detect format only once)
-    local detect_out
-    detect_out="$("$SCRIPT_DIR/cmake-updater.sh" detect_cmake_version_format "$PROJECT_ROOT/CMakeLists.txt" || true)"
-    "$SCRIPT_DIR/cmake-updater.sh" simulate "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
     
     # Simulate git operations
     if [[ "${DO_COMMIT:-false}" == "true" ]]; then
         printf '%s\n' "${YELLOW}DRY RUN: Would create commit: chore(release): ${TAG_PREFIX:-v}${new_version}${RESET}" >&2
         local -a effective_files=()
         [[ "$new_version" != *-* ]] && effective_files+=("VERSION")
-        if [[ "${UPDATE_CMAKE:-true}" == "true" && "$new_version" != *-* ]]; then
-            if grep -q "variable" <<<"$detect_out"; then
-                : # uses VERSION variable; no inline update
-            elif grep -Eq "(^|[^a-z])(inline|set)([^a-z]|$)" <<<"$detect_out"; then
-                effective_files+=("CMakeLists.txt")
-            fi
-        fi
+        # CMakeLists.txt auto-updates from VERSION file, so no need to track it separately
         if ((${#effective_files[@]} > 0)); then
             printf '%s\n' "${YELLOW}DRY RUN: Would commit files: ${effective_files[*]}${RESET}" >&2
         else

@@ -69,7 +69,7 @@ Options:
 
 Env overrides:
   EXPECT_VERSION=<ver>          Expected "current" VERSION when asserted (default: $EXPECT_VERSION)
-  EXPECT_CMAKE_DETECT=<value>   Expected cmake-updater detect result (default: $EXPECT_CMAKE_DETECT)
+  # CMakeLists.txt now auto-updates from VERSION file (no cmake-updater needed)
   NO_COLOR=true                 Disable colors
 EOF
 }
@@ -357,10 +357,7 @@ build_tests() {
         add_test "version-calculator-loc help" "\"$DEV_BIN/version-calculator-loc\" --help" "Usage:" "contains"
     fi
 
-    if [[ -x "$DEV_BIN/cmake-updater.sh" ]]; then
-    add_test "cmake-updater detect CMakeLists.txt" "\"$DEV_BIN/cmake-updater.sh\" detect CMakeLists.txt" "$EXPECT_CMAKE_DETECT" "contains"
-    add_test "cmake-updater help" "\"$DEV_BIN/cmake-updater.sh\"" "Usage:" "contains"
-    fi
+    # CMakeLists.txt now auto-updates from VERSION file (no cmake-updater needed)
 
     if [[ -x "$DEV_BIN/git-operations.sh" ]]; then
     add_test "git-operations help" "\"$DEV_BIN/git-operations.sh\"" "Usage:" "contains"
