@@ -18,6 +18,7 @@ export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 readonly PROG=${0##*/}
 
 # ------------------------- error handling ------------------------------------
+# shellcheck disable=SC2154
 trap 'rc=$?; echo "Error: ${PROG}: line ${LINENO}: ${BASH_COMMAND}" >&2; exit $rc' ERR
 
 # ------------------------- usage ---------------------------------------------
@@ -65,7 +66,7 @@ FAIL_ON="none"        # none|any|break|security
 # ------------------------- helpers -------------------------------------------
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 
-vnote() { $VERBOSE && printf '[%s] %s\n' "$PROG" "$*" || :; }
+# vnote() { $VERBOSE && printf '[%s] %s\n' "$PROG" "$*" || :; }  # Unused function - commented out to fix shellcheck warning
 
 trim() {
     # trim leading/trailing whitespace (portable)

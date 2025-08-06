@@ -35,6 +35,7 @@ _stacktrace() {
   done
 }
 
+# shellcheck disable=SC2154
 trap '_status=$?; [[ $_status -ne 0 ]] && _warn "Command failed: ${BASH_COMMAND} (exit $_status)"; _stacktrace; exit $_status' ERR
 
 # ------------------- color utilities -------------------

@@ -21,8 +21,9 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$SCRIPT_DIR/version-utils.sh"
 
 # Fail loudly with context
+# shellcheck disable=SC2154
 trap '{
-  ec=$?; cmd=${BASH_COMMAND:-}
+  local ec=$?; local cmd=${BASH_COMMAND:-}
   printf "%s\n" "${RED:-}Error:${RESET:-} line $LINENO: \`$cmd\` (exit $ec)" >&2
   exit $ec
 }' ERR
@@ -391,9 +392,11 @@ check_version_order() {
 
     if (( ok != 0 )); then
         warn "New version $new_version is not greater than last tag $last_tag"
-        if [[ -n "${GITHUB_ACTIONS:-}" && ! to_bool "$allow_nonmonotonic" ]]; then
+        if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+            if ! to_bool "$allow_nonmonotonic"; then
             printf '%s\n' "${YELLOW}Use --allow-nonmonotonic-tag to override${RESET}" >&2
             die "NEW_VERSION ($new_version) must be greater than last tag ($last_tag)"
+            fi
         fi
     fi
 }

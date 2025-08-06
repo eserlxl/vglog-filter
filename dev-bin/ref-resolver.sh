@@ -121,7 +121,7 @@ fi
 
 # Return 0 if repo has at least one commit; otherwise 1 (unborn HEAD)
 repo_has_commits() {
-    git -c color.ui=false rev-parse -q --verify HEAD^{commit} >/dev/null 2>&1
+    git -c color.ui=false rev-parse -q --verify "HEAD^{commit}" >/dev/null 2>&1
 }
 
 # Resolve a ref (tag/branch/sha) to a commit SHA (40-hex). Echo empty on failure.
@@ -133,7 +133,7 @@ resolve_sha() {
 # Validate git reference
 verify_ref() {
     local ref="$1"
-    if ! git -c color.ui=false rev-parse -q --verify "$ref^{commit}" >/dev/null; then
+    if ! git -c color.ui=false rev-parse -q --verify "${ref}^{commit}" >/dev/null; then
         die "Invalid reference: $ref"
     fi
 }

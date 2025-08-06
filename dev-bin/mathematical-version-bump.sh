@@ -50,6 +50,7 @@ source "$SCRIPT_DIR/version-utils.sh"
 # Ensure cleanup hook exists even if utilities change later
 setup_cleanup "TMP_FILE"
 
+# shellcheck disable=SC2154
 trap '{
   st=$?
   if (( st != 0 )); then
@@ -445,11 +446,13 @@ main() {
     success "Mathematical version bump completed: $current_version → $new_version"
   fi
 
-  if [[ "$OPT_DO_TAG" == "true" && ! _is_prerelease "$new_version" ]]; then
+  if [[ "$OPT_DO_TAG" == "true" ]]; then
+    if ! _is_prerelease "$new_version"; then
     local current_branch; current_branch="$(git rev-parse --abbrev-ref HEAD)"
     printf '%s\n' "${YELLOW}Next steps:${RESET}" >&2
-    printf '%s\n' "  git push ${OPT_REMOTE} ${current_branch}" >&2
-    printf '%s\n' "  git push ${OPT_REMOTE} ${OPT_TAG_PREFIX}${new_version}" >&2
+          printf '%s\n' "  git push ${OPT_REMOTE} ${current_branch}" >&2
+      printf '%s\n' "  git push ${OPT_REMOTE} ${OPT_TAG_PREFIX}${new_version}" >&2
+    fi
   fi
 
   # Stdout only: computed version (for pipelines)

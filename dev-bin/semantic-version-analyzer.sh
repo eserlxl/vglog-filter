@@ -264,6 +264,7 @@ require_exec "$SCRIPT_DIR/keyword-analyzer.sh"
 require_exec "$SCRIPT_DIR/version-calculator.sh"
 
 # ----------------------------- main -------------------------------------------
+# shellcheck disable=SC2329
 cleanup() {
   [[ "${__did_pushd:-false}" == "true" ]] && { popd >/dev/null || true; }
 }

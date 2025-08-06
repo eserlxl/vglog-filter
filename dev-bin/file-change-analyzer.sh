@@ -18,7 +18,7 @@ export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 # Bash features used by this script (for trimming globs safely)
 shopt -s extglob
 
-PROG="${0##*/}"
+# PROG="${0##*/}"  # Unused variable - commented out to fix shellcheck warning
 
 show_help() {
     cat << 'EOF'
