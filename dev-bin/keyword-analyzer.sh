@@ -15,6 +15,11 @@ export LC_ALL=C
 # Prevent any pager and avoid unnecessary repo locks for better performance.
 export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
+readonly PROG=${0##*/}
+
+# ------------------------- error handling ------------------------------------
+trap 'rc=$?; echo "Error: ${PROG}: line ${LINENO}: ${BASH_COMMAND}" >&2; exit $rc' ERR
+
 # ------------------------- usage ---------------------------------------------
 show_help() {
     cat << 'EOF'
@@ -30,7 +35,10 @@ Options:
   --only-paths <globs>     Restrict analysis to comma-separated path globs
   --ignore-whitespace      Ignore whitespace changes in diff analysis
   --added-only             Count only added lines (excludes diff headers like '+++')
+  --no-merges              Exclude merge commits when scanning messages
   --format <fmt>           Output format: human | kv | json  (default: human)
+  --fail-on <what>         Exit non-zero on signal: none|any|break|security (default: none)
+  --verbose                Verbose diagnostics
   --machine                (deprecated) same as --format kv
   --json                   (deprecated) same as --format json
   --help, -h               Show this help
@@ -38,7 +46,7 @@ Options:
 Examples:
   $(basename "$0") --base v1.0.0 --target HEAD
   $(basename "$0") --base HEAD~5 --target HEAD --format kv
-  $(basename "$0") --base v1.0.0 --target v1.1.0 --format json
+  $(basename "$0") --base v1.0.0 --target v1.1.0 --format json --fail-on break
 EOF
 }
 
@@ -50,15 +58,20 @@ ONLY_PATHS=""
 IGNORE_WHITESPACE=false
 ADDED_ONLY=false
 FORMAT="human"        # human|kv|json
+NO_MERGES=false
+VERBOSE=false
+FAIL_ON="none"        # none|any|break|security
 
 # ------------------------- helpers -------------------------------------------
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 
+vnote() { $VERBOSE && printf '[%s] %s\n' "$PROG" "$*" || :; }
+
 trim() {
-    # trim leading/trailing whitespace
-    local s="${1:-}"
-    # shellcheck disable=SC2001
-    s="$(printf '%s' "$s" | sed -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
+    # trim leading/trailing whitespace (portable)
+    local s="${1-}"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
     printf '%s' "$s"
 }
 
@@ -117,6 +130,7 @@ while [[ $# -gt 0 ]]; do
             ONLY_PATHS="$2"; shift 2;;
         --ignore-whitespace) IGNORE_WHITESPACE=true; shift;;
         --added-only)        ADDED_ONLY=true; shift;;
+        --no-merges)         NO_MERGES=true; shift;;
         --format)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--format requires a value"
             case "$2" in
@@ -124,6 +138,14 @@ while [[ $# -gt 0 ]]; do
                 *) die "--format must be one of: human|kv|json" ;;
             esac
             shift 2;;
+        --fail-on)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--fail-on requires a value"
+            case "$2" in
+                none|any|break|security) FAIL_ON="$2" ;;
+                *) die "--fail-on must be one of: none|any|break|security" ;;
+            esac
+            shift 2;;
+        --verbose)           VERBOSE=true; shift;;
         --machine) FORMAT="kv"; shift;;
         --json)    FORMAT="json"; shift;;
         --help|-h) show_help; exit 0;;
@@ -156,16 +178,21 @@ if [[ -n "$ONLY_PATHS" ]]; then
     fi
 fi
 
+$VERBOSE && { printf '[%s] base=%s target=%s\n' "$PROG" "$BASE_REF" "$TARGET_REF"; [[ ${#PATH_ARGS[@]} -gt 0 ]] && printf '[%s] paths=%s\n' "$PROG" "${PATH_ARGS[*]}"; }
+
 # ------------------------- collect data --------------------------------------
 
 # Prepare git diff
-DIFF_OPTS=(-M -C --unified=0)
+DIFF_OPTS=(-M -C --unified=0 --no-ext-diff)
 if [[ "$IGNORE_WHITESPACE" == "true" ]]; then
     DIFF_OPTS+=(-w)
 fi
 
+# consistent filename quoting off (avoid \nnn escapes)
+git_config=(-c color.ui=false -c core.quotepath=false)
+
 # Get raw diff
-DIFF_CONTENT="$(git -c color.ui=false diff "${DIFF_OPTS[@]}" "$BASE_REF..$TARGET_REF" "${PATH_ARGS[@]}" 2>/dev/null || true)"
+DIFF_CONTENT="$(git "${git_config[@]}" diff "${DIFF_OPTS[@]}" "$BASE_REF..$TARGET_REF" "${PATH_ARGS[@]}" 2>/dev/null || true)"
 
 # Optionally restrict to added lines only (strip headers)
 if [[ "$ADDED_ONLY" == "true" ]]; then
@@ -175,24 +202,25 @@ if [[ "$ADDED_ONLY" == "true" ]]; then
 fi
 
 # Get commit messages (subject + body) in range
-COMMIT_MESSAGES="$(git -c color.ui=false log --format='%s %b' "$BASE_REF..$TARGET_REF" 2>/dev/null || true)"
+log_opts=(--format='%s %b')
+$NO_MERGES && log_opts+=(--no-merges)
+COMMIT_MESSAGES="$(git "${git_config[@]}" log "${log_opts[@]}" "$BASE_REF..$TARGET_REF" 2>/dev/null || true)"
 
 # ------------------------- patterns ------------------------------------------
-# Code comment markers + tokens (case-insensitive)
-# We look for //, /*, or # followed by optional spaces, then the token
+# Accept optional leading diff marker and whitespace, then common comment starters.
+# This tolerates: '+ // TOKEN', '-# TOKEN', '   /* TOKEN', etc.
 comment_pat_for() {
     local token="$1"
-    printf '(^|[[:space:]])(//|/\\*|#)[[:space:]]*%s' "$token"
+    printf '(^|[[:space:]])[+-]?[[:space:]]*(//|/\\*|#|--)[[:space:]]*%s' "$token"
 }
 
-# Tokens
-TOKEN_CLI_BREAKING='CLI-BREAKING'
-TOKEN_API_BREAKING='API-BREAKING'
-TOKEN_NEW_FEATURE='NEW-FEATURE'
-TOKEN_SECURITY='SECURITY'
-# Options tokens (broad, still anchored to comment markers for code)
-TOKEN_REMOVED_OPT='REMOVED[[:space:]]+OPTION'
-TOKEN_ADDED_OPT='ADDED[[:space:]]+OPTION'
+# Tokens (customize here if needed)
+readonly TOKEN_CLI_BREAKING='CLI[- ]?BREAKING'
+readonly TOKEN_API_BREAKING='API[- ]?BREAKING'
+readonly TOKEN_NEW_FEATURE='NEW[- ]?FEATURE'
+readonly TOKEN_SECURITY='SECURITY'
+readonly TOKEN_REMOVED_OPT='REMOVED[[:space:]]+OPTION(S)?'
+readonly TOKEN_ADDED_OPT='ADDED[[:space:]]+OPTION(S)?'
 
 PAT_CLI_BREAKING_CODE="$(comment_pat_for "$TOKEN_CLI_BREAKING")"
 PAT_API_BREAKING_CODE="$(comment_pat_for "$TOKEN_API_BREAKING")"
@@ -202,10 +230,10 @@ PAT_REMOVED_OPT_CODE="$(comment_pat_for "$TOKEN_REMOVED_OPT")"
 PAT_ADDED_OPT_CODE="$(comment_pat_for "$TOKEN_ADDED_OPT")"
 
 # Commit message patterns (looser)
-PAT_CLI_BREAKING_COMMIT='(CLI-BREAKING|BREAKING[[:space:]]*.*CLI)'
-PAT_API_BREAKING_COMMIT='(API-BREAKING|BREAKING[[:space:]]*.*API)'
-PAT_NEW_FEATURE_COMMIT='(NEW-FEATURE|FEATURE[[:space:]]*ADD)'
-PAT_SECURITY_COMMIT='(SECURITY|VULNERABILITY|CVE)'
+readonly PAT_CLI_BREAKING_COMMIT='(CLI[- ]?BREAKING|BREAKING[^[:alnum:]]+.*CLI)'
+readonly PAT_API_BREAKING_COMMIT='(API[- ]?BREAKING|BREAKING[^[:alnum:]]+.*API)'
+readonly PAT_NEW_FEATURE_COMMIT='(NEW[- ]?FEATURE|FEATURE(S)?[^[:alnum:]]+.*(ADD(ED)?|INTRODUC(ED|ES)))'
+readonly PAT_SECURITY_COMMIT='(SECURITY|VULNERABILIT(Y|IES)|CVE[- ]?[0-9]{4}-[0-9]+)'
 
 # ------------------------- counting ------------------------------------------
 cli_breaking_keywords="$(printf '%s' "$DIFF_CONTENT" | count_matches "$PAT_CLI_BREAKING_CODE")"
@@ -285,6 +313,7 @@ case "$FORMAT" in
     [[ -n "$ONLY_PATHS" ]] && printf 'Paths: %s\n' "$ONLY_PATHS"
     [[ "$IGNORE_WHITESPACE" == "true" ]] && printf '(ignoring whitespace)\n'
     [[ "$ADDED_ONLY" == "true" ]] && printf '(added lines only)\n'
+    [[ "$NO_MERGES" == "true" ]] && printf '(excluding merge commits)\n'
     printf '\nBreaking Change Keywords:\n'
     printf '  CLI-BREAKING in code:    %s\n' "$cli_breaking_keywords"
     printf '  API-BREAKING in code:    %s\n' "$api_breaking_keywords"
@@ -311,4 +340,14 @@ case "$FORMAT" in
     printf '  Has removed options:     %s\n' "$has_removed_options"
     printf '  Has added options:       %s\n' "$has_added_options"
     ;;
-esac 
+esac
+
+# ------------------------- CI gating -----------------------------------------
+exit_rc=0
+case "$FAIL_ON" in
+  any)      $has_cli_breaking || $has_api_breaking || $has_security || $has_new_features || $has_removed_options || $has_added_options && exit_rc=2 ;;
+  break)    $has_cli_breaking || $has_api_breaking && exit_rc=3 ;;
+  security) $has_security && exit_rc=4 ;;
+  none)     : ;;
+esac
+exit "$exit_rc" 
