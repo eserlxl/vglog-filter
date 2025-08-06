@@ -20,6 +20,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 if [[ -f "$SCRIPT_DIR/version-utils.sh" ]]; then
     # Expected to provide: init_colors, die, etc.
     # shellcheck source=/dev/null
+    # shellcheck disable=SC1091
     source "$SCRIPT_DIR/version-utils.sh"
 fi
 
@@ -32,6 +33,7 @@ if ! command -v init_colors >/dev/null 2>&1; then
     init_colors() { :; }
 fi
 if ! command -v split_semver >/dev/null 2>&1; then
+    # shellcheck disable=SC2329
     split_semver() {
         local version="$1"
         local major minor patch

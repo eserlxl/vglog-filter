@@ -14,6 +14,7 @@ export LC_ALL=C
 
 # Source utilities
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/version-utils.sh"
 
 # --- Config / Flags ----------------------------------------------------------

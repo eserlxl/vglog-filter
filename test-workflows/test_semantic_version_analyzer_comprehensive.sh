@@ -9,6 +9,7 @@ set -euo pipefail
 # Source the test helper
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck disable=SC1091
 source "$PROJECT_ROOT/test_helper.sh"
 
 # Colors for output

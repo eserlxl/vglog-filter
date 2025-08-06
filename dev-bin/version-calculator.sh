@@ -102,6 +102,7 @@ done
 case "$BUMP_TYPE" in major|minor|patch) ;; *) die "--bump-type must be major, minor, or patch";; esac
 is_uint "$LOC"   || die "--loc must be a non-negative integer"
 is_uint "$BONUS" || die "--bonus must be a non-negative integer"
+# shellcheck disable=SC2015
 is_uint "$MAIN_VERSION_MOD" && (( MAIN_VERSION_MOD >= 1 )) || die "--main-mod must be a positive integer"
 
 # ---------- parse semver (fallback or strict) ----------

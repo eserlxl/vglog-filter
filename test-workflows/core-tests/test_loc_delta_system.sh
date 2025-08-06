@@ -15,6 +15,8 @@ SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # Source the test helper
+# shellcheck source=test_helper.sh
+# shellcheck disable=SC1091
 source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 # Create a temporary clean environment for testing
@@ -29,6 +31,7 @@ TESTS_FAILED=0
 
 # Function to run a test
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 run_test() {
     local test_name="$1"
     local expected_patch="$2"

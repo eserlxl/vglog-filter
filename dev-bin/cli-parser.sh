@@ -13,6 +13,7 @@ set -euo pipefail
 
 # Source utilities
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/version-utils.sh"
 
 # --- Default option values ---------------------------------------------------
@@ -118,10 +119,12 @@ parse_bump_version_args() {
                 PRINT_ONLY="true"
                 ;;
             --message)
+                # shellcheck disable=SC2034
                 COMMIT_MSG="$(require_value --message)"
                 skip_increment=true
                 ;;
             --allow-dirty)
+                # shellcheck disable=SC2034
                 ALLOW_DIRTY="true"
                 ;;
             --lightweight-tag)
@@ -134,12 +137,15 @@ parse_bump_version_args() {
                 ANNOTATED_TAG="true"
                 ;;
             --sign-commit)
+                # shellcheck disable=SC2034
                 COMMIT_SIGN="true"
                 ;;
             --no-verify)
+                # shellcheck disable=SC2034
                 NO_VERIFY="true"
                 ;;
             --no-cmake)
+                # shellcheck disable=SC2034
                 UPDATE_CMAKE="false"
                 ;;
             --tag-prefix)
@@ -160,12 +166,14 @@ parse_bump_version_args() {
                 PUSH_TAGS="true"
                 ;;
             --allow-nonmonotonic-tag)
+                # shellcheck disable=SC2034
                 ALLOW_NONMONOTONIC_TAG="true"
                 ;;
             --allow-prerelease)
                 ALLOW_PRERELEASE="true"
                 ;;
             --repo-root)
+                # shellcheck disable=SC2034
                 REPO_ROOT="$(require_value --repo-root)"
                 skip_increment=true
                 ;;

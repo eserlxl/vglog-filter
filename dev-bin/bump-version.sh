@@ -50,6 +50,7 @@ _need_exec "$SCRIPT_DIR/git-operations.sh"     "git-operations"
 _need_exec "$SCRIPT_DIR/version-validator.sh"  "version-validator"
 
 # shellcheck source=/dev/null
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/version-utils.sh"
 
 # ------------------------------ traps/cleanup --------------------------------
@@ -57,6 +58,7 @@ source "$SCRIPT_DIR/version-utils.sh"
 # Ensure cleanup hook exists even if utilities change later
 setup_cleanup "TMP_FILE"
 
+# shellcheck disable=SC2154
 trap '{
   st=$?
   if (( st != 0 )); then

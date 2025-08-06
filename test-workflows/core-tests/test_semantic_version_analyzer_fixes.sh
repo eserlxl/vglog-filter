@@ -20,6 +20,7 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 # Helper function to run a test
+# shellcheck disable=SC2329
 run_test() {
     local test_name="$1"
     local test_command="$2"
@@ -161,6 +162,7 @@ test_help_text() {
 }
 
 # Test 6: Verify double-counting warning is documented
+# shellcheck disable=SC2329
 test_double_counting_warning() {
     local script_path
     script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer.sh"
@@ -176,6 +178,7 @@ test_double_counting_warning() {
 }
 
 # Test 7: Verify language limitation is documented
+# shellcheck disable=SC2329
 test_language_limitation() {
     local script_path
     script_path="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer.sh"

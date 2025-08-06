@@ -114,7 +114,7 @@ fi
 
 # Returns empty string for null/missing; raw scalar only
 yq_get_raw() {
-    $_yq_base "$1 // \"\"" 2>/dev/null | sed 's/^null$//'
+    _yq_base "$1 // \"\"" 2>/dev/null | sed 's/^null$//'
 }
 
 # Strict numeric fetcher (returns empty if not numeric)

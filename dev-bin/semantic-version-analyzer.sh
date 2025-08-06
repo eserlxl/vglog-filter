@@ -111,6 +111,7 @@ done
 # ----------------------------- helpers ----------------------------------------
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
+# shellcheck disable=SC2329
 log()   { printf '%s\n' "$*" >&2; }
 debug() { [[ "$VERBOSE" == "true" ]] && printf 'Debug: %s\n' "$*" >&2; }
 

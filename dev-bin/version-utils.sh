@@ -92,6 +92,7 @@ setup_cleanup() {
   local tmp_var="$1"
   # shellcheck disable=SC2034
   eval "$tmp_var=''"
+  # shellcheck disable=SC2329
   cleanup() {
     local f="${TMP_FILE:-}"
     if [[ -n "$f" && -e "$f" ]]; then rm -f -- "$f" 2>/dev/null || true; fi

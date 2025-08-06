@@ -14,6 +14,7 @@ PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # Source test helper functions
 # shellcheck disable=SC1091
+# shellcheck source=test_helper.sh
 source "$SCRIPT_DIR/../test_helper.sh"
 
 echo "=== Testing Whitespace Ignore ==="

@@ -10,6 +10,8 @@ set -euo pipefail
 # Source the test helper
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+# shellcheck source=test_helper.sh
+# shellcheck disable=SC1091
 source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 # Colors for output
@@ -52,6 +54,7 @@ run_test() {
 }
 
 # Function to extract JSON value from loc_delta section
+# shellcheck disable=SC2329
 extract_json_value() {
     local key="$1"
     grep -A 10 '"loc_delta"' | grep -o "\"$key\":[[:space:]]*[0-9]*" | cut -d: -f2 | tr -d ' ' || echo "0"

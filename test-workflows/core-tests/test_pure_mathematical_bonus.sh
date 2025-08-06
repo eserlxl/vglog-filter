@@ -11,6 +11,7 @@ IFS=
 # Source the test helper script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
+# shellcheck source=test_helper.sh
 source "$SCRIPT_DIR/../test_helper.sh"
 
 # Colors for output
@@ -47,12 +48,14 @@ log_error() {
 }
 
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 log_warning() {
     printf "%s[WARN]%s %s\n" "${YELLOW}" "${NC}" "$1"
 }
 
 # Test function
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 run_test() {
     local test_name="$1"
     local test_command="$2"

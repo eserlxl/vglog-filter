@@ -16,6 +16,7 @@ SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
 # Source test helper functions
 # shellcheck disable=SC1091
+# shellcheck source=test_helper.sh
 source "$SCRIPT_DIR/../test_helper.sh"
 
 echo "Testing manual CLI detection..."
