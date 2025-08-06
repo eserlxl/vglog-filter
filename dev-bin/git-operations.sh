@@ -20,14 +20,30 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/version-utils.sh"
 
+# Fail loudly with context
+trap '{
+  ec=$?; cmd=${BASH_COMMAND:-}
+  printf "%s\n" "${RED:-}Error:${RESET:-} line $LINENO: \`$cmd\` (exit $ec)" >&2
+  exit $ec
+}' ERR
+
 # --- Helper functions --------------------------------------------------------
+to_bool() {
+    # normalize various truthy/falsey inputs to 0/1 return code
+    local v="${1:-}"
+    case "${v,,}" in
+        1|true|t|yes|y|on)  return 0 ;;
+        0|false|f|no|n|off) return 1 ;;
+        *)                  return 1 ;;
+    esac
+}
+
 is_true() {
-    # Accepts: true/false, 1/0, yes/no (case-insensitive)
-    [[ "${1:-}" =~ ^([Tt]rue|1|[Yy](es)?)$ ]]
+    to_bool "${1:-}"
 }
 
 is_false() {
-    [[ "${1:-}" =~ ^([Ff]alse|0|[Nn]o?)$ ]]
+    ! to_bool "${1:-}"
 }
 
 git_in_repo() {
@@ -43,7 +59,12 @@ has_commit_history() {
 }
 
 current_branch_name() {
-    git rev-parse --abbrev-ref HEAD
+    # safe even when upstream missing; caller should have checked detached HEAD
+    git rev-parse --abbrev-ref HEAD 2>/dev/null
+}
+
+require_git() { 
+    command -v git >/dev/null 2>&1 || die "git not found"
 }
 
 # --- Git state checks --------------------------------------------------------
@@ -51,8 +72,13 @@ check_dirty_tree() {
     local exclude_paths=()
     # Always exclude VERSION from dirty check since we'll be updating it
     exclude_paths+=("VERSION")
-    if ! is_true "${UPDATE_CMAKE:-true}"; then
+    if is_false "${UPDATE_CMAKE:-true}"; then
         exclude_paths+=("CMakeLists.txt")
+    fi
+
+    # Fast pre-check (untracked excluded later)
+    if ! git status --porcelain=v1 >/dev/null 2>&1; then
+        die "Not in a git repository"
     fi
 
     local diff_args=(--no-ext-diff -- .)
@@ -62,15 +88,16 @@ check_dirty_tree() {
 
     if ! git diff --quiet "${diff_args[@]}"; then
         local allowed="VERSION"
-        ! is_true "${UPDATE_CMAKE:-true}" && allowed+=" and CMakeLists.txt"
+        is_false "${UPDATE_CMAKE:-true}" && allowed+=" and CMakeLists.txt"
 
         printf '%s' "${RED}Error:${RESET} working tree has disallowed changes. Use --allow-dirty to override." >&2
         [[ -n "$allowed" ]] && printf ' Allowed: %s.' "$allowed" >&2
-        printf '\nDirty files:\n' >&2
+        printf '\nDirty files (excludes applied):\n' >&2
         git diff --name-only "${diff_args[@]}" >&2
         exit 1
     fi
 
+    # Warn on untracked files (not fatal)
     if git ls-files --others --exclude-standard | grep -q .; then
         printf '%s\n' "${YELLOW}Warning:${RESET} untracked files present (ignored)." >&2
     fi
@@ -82,13 +109,13 @@ check_git_prerequisites() {
     local do_push="$3"
     local push_tags="$4"
     
-    # Check if we're in a git repository
+    require_git
     git_in_repo || die "Not in a git repository"
     
     # Check for detached HEAD if committing/tagging/pushing
     if is_true "$do_commit" || is_true "$do_tag" || is_true "$do_push" || is_true "$push_tags"; then
         if is_detached_head; then
-            die "Detached HEAD; checkout a branch before continuing"
+            die "Detached HEAD; checkout a branch before continuing (e.g., git switch <branch>)"
         fi
     fi
     
@@ -146,7 +173,7 @@ stage_files() {
         [[ -f "$project_root/CMakeLists.txt" ]] && git add -- "$project_root/CMakeLists.txt"
     else
         # Ensure it's not accidentally staged unless ALLOW_DIRTY is true
-        if ! is_true "${ALLOW_DIRTY:-false}"; then
+        if is_false "${ALLOW_DIRTY:-false}"; then
             git reset -- "$project_root/CMakeLists.txt" 2>/dev/null || true
         fi
     fi
@@ -232,9 +259,6 @@ create_commit() {
                 commit_args+=(-m "Reason: $explanation")
             fi
         fi
-    else
-        # Use provided message as-is
-        :
     fi
     
     # Limit commit to staged files if we know them; otherwise commit everything staged
@@ -246,7 +270,7 @@ create_commit() {
     
     success "Created commit"
     local commit_sha
-    commit_sha="$(git rev-parse --short HEAD)"
+    commit_sha="$(git rev-parse --short HEAD 2>/dev/null || echo "?")"
     info "Commit SHA: $commit_sha"
 }
 
@@ -284,7 +308,7 @@ create_tag() {
     fi
     
     local tag_sha
-    tag_sha="$(git rev-parse --short "$tag_name")"
+    tag_sha="$(git rev-parse --short "$tag_name" 2>/dev/null || echo "?")"
     info "Tag SHA: $tag_sha"
 }
 
@@ -331,6 +355,17 @@ push_all_tags() {
 }
 
 # --- Version order validation -------------------------------------------------
+_check_version_greater_fallback() {
+    # Fallback using sort -V when external validator is absent.
+    # Returns 0 if $1 > $2, else 1.
+    local a="$1" b="$2"
+    [[ "$a" == "$b" ]] && return 1
+    if printf '%s\n' "$b" "$a" | sort -V | tail -1 | grep -qx -- "$a"; then
+        return 0
+    fi
+    return 1
+}
+
 check_version_order() {
     local new_version="$1"
     local tag_prefix="$2"
@@ -347,9 +382,16 @@ check_version_order() {
     last_version="${last_tag:${#tag_prefix}}"
     is_semver "$last_version" || return 0
 
-    if ! "$SCRIPT_DIR/version-validator" is_version_greater "$new_version" "$last_version"; then
+    local ok=1
+    if [[ -x "$SCRIPT_DIR/version-validator" ]]; then
+        "$SCRIPT_DIR/version-validator" is_version_greater "$new_version" "$last_version" >/dev/null 2>&1 && ok=0 || ok=1
+    else
+        _check_version_greater_fallback "$new_version" "$last_version" && ok=0 || ok=1
+    fi
+
+    if (( ok != 0 )); then
         warn "New version $new_version is not greater than last tag $last_tag"
-        if [[ -n "${GITHUB_ACTIONS:-}" && ! $(is_true "$allow_nonmonotonic") ]]; then
+        if [[ -n "${GITHUB_ACTIONS:-}" && ! to_bool "$allow_nonmonotonic" ]]; then
             printf '%s\n' "${YELLOW}Use --allow-nonmonotonic-tag to override${RESET}" >&2
             die "NEW_VERSION ($new_version) must be greater than last tag ($last_tag)"
         fi
@@ -370,14 +412,14 @@ generate_summary() {
         info "Summary:"
         if is_true "$do_commit"; then
             local sha branch
-            sha="$(git rev-parse --short HEAD)"
+            sha="$(git rev-parse --short HEAD 2>/dev/null || echo "?")"
             branch="$(current_branch_name)"
             printf '  Branch: %s\n' "$branch" >&2
             printf '  Commit: %s\n' "$sha" >&2
         fi
         if is_true "$do_tag"; then
             local tag_sha
-            tag_sha="$(git rev-parse --short "${tag_prefix}${new_version}")"
+            tag_sha="$(git rev-parse --short "${tag_prefix}${new_version}" 2>/dev/null || echo "?")"
             printf '  Tag: %s/%s\n' "${tag_prefix}${new_version}" "$tag_sha" >&2
         fi
         if is_true "$do_push"; then
@@ -419,7 +461,7 @@ perform_git_operations() {
     check_signing_prerequisites "$signed_tag" "$commit_sign"
     
     # Check dirty tree if needed
-    if { is_true "$do_commit" || is_true "$do_tag"; } && ! is_true "$allow_dirty"; then
+    if { is_true "$do_commit" || is_true "$do_tag"; } && is_false "$allow_dirty"; then
         check_dirty_tree
     fi
     
@@ -435,7 +477,7 @@ perform_git_operations() {
     fi
     
     if is_true "$do_tag"; then
-        if ! is_true "$do_commit"; then
+        if is_false "$do_commit"; then
             # Warn if tagging without committing version bump
             local files_to_check=("$version_file")
             is_true "$update_cmake" && files_to_check+=("$project_root/CMakeLists.txt")
@@ -475,45 +517,45 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             ;;
         "create-commit")
             if [[ $# -lt 9 ]]; then
-                die "Usage: $0 create-commit <version_file> <update_cmake:true|false> <new_version> <current_version> <commit_msg|''> <no_verify:true|false> <commit_sign:true|false> <tag_prefix> [project_root] [original_project_root]"
+                die "Usage: $(basename "$0") create-commit <version_file> <update_cmake:true|false> <new_version> <current_version> <commit_msg|''> <no_verify:true|false> <commit_sign:true|false> <tag_prefix> [project_root] [original_project_root]"
             fi
             create_commit "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10:-}" "${11:-}"
             ;;
         "create-tag")
             if [[ $# -lt 5 ]]; then
-                die "Usage: $0 create-tag <new_version> <tag_prefix> <annotated_tag:true|false> <signed_tag:true|false>"
+                die "Usage: $(basename "$0") create-tag <new_version> <tag_prefix> <annotated_tag:true|false> <signed_tag:true|false>"
             fi
             create_tag "$2" "$3" "$4" "$5"
             ;;
         "push-changes")
             if [[ $# -lt 5 ]]; then
-                die "Usage: $0 push-changes <remote> <do_tag:true|false> <new_version> <tag_prefix>"
+                die "Usage: $(basename "$0") push-changes <remote> <do_tag:true|false> <new_version> <tag_prefix>"
             fi
             push_changes "$2" "$3" "$4" "$5"
             ;;
         "push-tags")
             if [[ $# -lt 2 ]]; then
-                die "Usage: $0 push-tags <remote>"
+                die "Usage: $(basename "$0") push-tags <remote>"
             fi
             push_all_tags "$2"
             ;;
         *)
             cat <<'EOF'
-Usage: $0 <command> [args...]
+Usage: git-operations.sh <command> [args...]
 
 Commands:
   check-dirty                                    Check if working tree is dirty (excluding VERSION and optionally CMakeLists.txt)
   create-commit <args...>                        Create a commit with version bump
   create-tag <args...>                           Create a tag for the new version (pre-releases are rejected)
-  push-changes <args...>                         Push current branch; if do_tag=true, performs an --atomic push of branch+tag
+  push-changes <remote> <do_tag> <new_ver> <pfx> Push current branch; if do_tag=true, performs an --atomic push of branch+tag
   push-tags <remote>                             Push all tags
 
 Examples:
-  $0 check-dirty
-  $0 create-commit VERSION true 1.0.1 1.0.0 "" false false v /path/to/project
-  $0 create-tag 1.0.1 v true false
-  $0 push-changes origin true 1.0.1 v
-  $0 push-tags origin
+  git-operations.sh check-dirty
+  git-operations.sh create-commit VERSION true 1.0.1 1.0.0 "" false false v /path/to/project
+  git-operations.sh create-tag 1.0.1 v true false
+  git-operations.sh push-changes origin true 1.0.1 v
+  git-operations.sh push-tags origin
 EOF
             exit 1
             ;;
