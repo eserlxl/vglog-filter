@@ -65,8 +65,8 @@ export VERSION_PATCH_LIMIT=1000
 export VERSION_MINOR_LIMIT=1000
 
 # Test patch bump with LOC delta
-run_test "Patch bump with LOC delta enabled" \
-    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+run_test "LOC delta system enabled" \
+    "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
     "10.5.13"
 
 cleanup_temp_test_env "$test_dir"
@@ -86,8 +86,8 @@ git add new_file.c
 git commit --quiet -m "Add new file for testing" 2>/dev/null || true
 
 # Test patch bump with actual changes
-run_test "Patch bump with actual changes" \
-    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+run_test "Mathematical versioning with actual changes" \
+    "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
     "10.5.14"
 
 cleanup_temp_test_env "$test_dir"
@@ -108,7 +108,7 @@ git commit --quiet -m "Set version to 10.5.95" 2>/dev/null || true
 
 # Test patch rollover
 run_test "Patch rollover (10.5.95 + delta)" \
-    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
     "10.5.96"
 
 # Set version to test minor rollover
@@ -118,7 +118,7 @@ git commit --quiet -m "Set version to 10.99.95" 2>/dev/null || true
 
 # Test minor rollover
 run_test "Minor rollover (10.99.95 + delta)" \
-    "$BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
     "10.99.96"
 
 cleanup_temp_test_env "$test_dir"
@@ -185,7 +185,7 @@ cd "$test_dir"
 
 # Test custom patch limit
 run_test "Custom patch limit works" \
-    "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd)" \
+    "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
     "10.5.13"
 
 # Test custom minor limit with rollover
@@ -195,7 +195,7 @@ git add VERSION
 git commit --quiet -m "Set version to 10.5.48" 2>/dev/null || true
 
 run_test "Custom minor limit with rollover" \
-    "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT minor --print --repo-root $(pwd)" \
+    "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
     "10.6.3"
 
 cleanup_temp_test_env "$test_dir"
@@ -207,7 +207,7 @@ cd "$test_dir"
 
 # Test invalid delta formula
 run_test "Invalid delta formula handling" \
-    "VERSION_PATCH_DELTA='invalid_formula' $BUMP_VERSION_SCRIPT patch --print --repo-root $(pwd) 2>&1 || true" \
+    "VERSION_PATCH_DELTA='invalid_formula' $BUMP_VERSION_SCRIPT --print --repo-root $(pwd) 2>&1 || true" \
     "10.5.13"
 
 cleanup_temp_test_env "$test_dir"

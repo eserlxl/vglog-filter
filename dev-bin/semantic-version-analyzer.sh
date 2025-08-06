@@ -202,13 +202,13 @@ WEIGHT_CRASH=1"
 }
 
 # ----------------------------- binary checks ----------------------------------
-check_binary "$SCRIPT_DIR/ref-resolver"
-check_binary "$SCRIPT_DIR/version-config-loader"
-check_binary "$SCRIPT_DIR/file-change-analyzer"
-check_binary "$SCRIPT_DIR/cli-options-analyzer"
-check_binary "$SCRIPT_DIR/security-keyword-analyzer"
-check_binary "$SCRIPT_DIR/keyword-analyzer"
-check_binary "$SCRIPT_DIR/version-calculator"
+check_binary "$SCRIPT_DIR/ref-resolver.sh"
+check_binary "$SCRIPT_DIR/version-config-loader.sh"
+check_binary "$SCRIPT_DIR/file-change-analyzer.sh"
+check_binary "$SCRIPT_DIR/cli-options-analyzer.sh"
+check_binary "$SCRIPT_DIR/security-keyword-analyzer.sh"
+check_binary "$SCRIPT_DIR/keyword-analyzer.sh"
+check_binary "$SCRIPT_DIR/version-calculator.sh"
 
 # ----------------------------- main -------------------------------------------
 main() {
@@ -223,7 +223,7 @@ main() {
   # 1) Resolve refs
   debug "Resolving git references..."
   local ref_argv=(); build_ref_argv ref_argv
-  local ref_raw; run_cmd_capture ref_raw "$SCRIPT_DIR/ref-resolver" "${ref_argv[@]}"
+  local ref_raw; run_cmd_capture ref_raw "$SCRIPT_DIR/ref-resolver.sh" "${ref_argv[@]}"
   declare -A REF=(); parse_kv_into REF <<<"$ref_raw"
 
   # Early-outs on trivial repos
@@ -247,28 +247,28 @@ main() {
 
   # 2) Load config (key=value)
   debug "Loading version configuration..."
-  local cfg_raw; run_cmd_capture cfg_raw "$SCRIPT_DIR/version-config-loader" --machine
+  local cfg_raw; run_cmd_capture cfg_raw "$SCRIPT_DIR/version-config-loader.sh" --machine
   declare -A CFG=(); parse_kv_into CFG <<<"$cfg_raw"
 
   # 3) Analyze file changes
   debug "Analyzing file changes..."
   local common_argv=(); build_common_argv common_argv
-  local file_raw; run_cmd_capture file_raw "$SCRIPT_DIR/file-change-analyzer" "${common_argv[@]}"
+  local file_raw; run_cmd_capture file_raw "$SCRIPT_DIR/file-change-analyzer.sh" "${common_argv[@]}"
   declare -A FILE=(); parse_kv_into FILE <<<"$file_raw"
 
   # 4) Analyze CLI options
   debug "Analyzing CLI options..."
-  local cli_raw; run_cmd_capture cli_raw "$SCRIPT_DIR/cli-options-analyzer" "${common_argv[@]}"
+  local cli_raw; run_cmd_capture cli_raw "$SCRIPT_DIR/cli-options-analyzer.sh" "${common_argv[@]}"
   declare -A CLI=(); parse_kv_into CLI <<<"$cli_raw"
 
   # 5) Security keywords
   debug "Analyzing security keywords..."
-  local sec_raw; run_cmd_capture sec_raw "$SCRIPT_DIR/security-keyword-analyzer" "${common_argv[@]}"
+  local sec_raw; run_cmd_capture sec_raw "$SCRIPT_DIR/security-keyword-analyzer.sh" "${common_argv[@]}"
   declare -A SEC=(); parse_kv_into SEC <<<"$sec_raw"
 
   # 6) General keyword analysis
   debug "Analyzing breaking-change keywords..."
-  local kw_raw; run_cmd_capture kw_raw "$SCRIPT_DIR/keyword-analyzer" "${common_argv[@]}"
+  local kw_raw; run_cmd_capture kw_raw "$SCRIPT_DIR/keyword-analyzer.sh" "${common_argv[@]}"
   declare -A KW=(); parse_kv_into KW <<<"$kw_raw"
 
   # 7) Bonus calculation -------------------------------------------------------
@@ -349,7 +349,7 @@ main() {
     local vc_argv=( --current-version "$current_version" --bump-type "$suggestion"
                     --loc "$(int_or_default "${FILE[DIFF_SIZE]}" 0)"
                     --bonus "$TOTAL_BONUS" --machine )
-    local vc_raw; run_cmd_capture vc_raw "$SCRIPT_DIR/version-calculator" "${vc_argv[@]}"
+    local vc_raw; run_cmd_capture vc_raw "$SCRIPT_DIR/version-calculator.sh" "${vc_argv[@]}"
     declare -A VC=(); parse_kv_into VC <<<"$vc_raw"
     next_version="${VC[NEXT_VERSION]:-}"
   fi
@@ -364,11 +364,11 @@ main() {
     local loc
     loc="$(int_or_default "${FILE[DIFF_SIZE]}" 0)"
 
-    local pd_raw; run_cmd_capture pd_raw "$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type patch --loc "$loc" --bonus "$TOTAL_BONUS" --machine
+    local pd_raw; run_cmd_capture pd_raw "$SCRIPT_DIR/version-calculator.sh" --current-version "$current_version" --bump-type patch --loc "$loc" --bonus "$TOTAL_BONUS" --machine
     declare -A PD=(); parse_kv_into PD <<<"$pd_raw"
-    local md_raw; run_cmd_capture md_raw "$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type minor --loc "$loc" --bonus "$TOTAL_BONUS" --machine
+    local md_raw; run_cmd_capture md_raw "$SCRIPT_DIR/version-calculator.sh" --current-version "$current_version" --bump-type minor --loc "$loc" --bonus "$TOTAL_BONUS" --machine
     declare -A MD=(); parse_kv_into MD <<<"$md_raw"
-    local jd_raw; run_cmd_capture jd_raw "$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type major --loc "$loc" --bonus "$TOTAL_BONUS" --machine
+    local jd_raw; run_cmd_capture jd_raw "$SCRIPT_DIR/version-calculator.sh" --current-version "$current_version" --bump-type major --loc "$loc" --bonus "$TOTAL_BONUS" --machine
     declare -A JD=(); parse_kv_into JD <<<"$jd_raw"
 
     printf '{\n'

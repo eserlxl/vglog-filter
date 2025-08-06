@@ -288,55 +288,55 @@ build_tests() {
     [[ -n "$BASE_COMMIT_SHA" ]] || die "Cannot resolve base ref: $BASE_REF"
 
     # Binary availability tests
-    add_test "ref-resolver exists" "test -x \"$DEV_BIN/ref-resolver\"" "" "succeeds"
-    add_test "version-config-loader exists" "test -x \"$DEV_BIN/version-config-loader\"" "" "succeeds"
-    add_test "file-change-analyzer exists" "test -x \"$DEV_BIN/file-change-analyzer\"" "" "succeeds"
-    add_test "cli-options-analyzer exists" "test -x \"$DEV_BIN/cli-options-analyzer\"" "" "succeeds"
-    add_test "security-keyword-analyzer exists" "test -x \"$DEV_BIN/security-keyword-analyzer\"" "" "succeeds"
-    add_test "version-calculator exists" "test -x \"$DEV_BIN/version-calculator\"" "" "succeeds"
-    add_test "semantic-version-analyzer exists" "test -x \"$DEV_BIN/semantic-version-analyzer\"" "" "succeeds"
+    add_test "ref-resolver exists" "test -x \"$DEV_BIN/ref-resolver.sh\"" "" "succeeds"
+    add_test "version-config-loader exists" "test -x \"$DEV_BIN/version-config-loader.sh\"" "" "succeeds"
+    add_test "file-change-analyzer exists" "test -x \"$DEV_BIN/file-change-analyzer.sh\"" "" "succeeds"
+    add_test "cli-options-analyzer exists" "test -x \"$DEV_BIN/cli-options-analyzer.sh\"" "" "succeeds"
+    add_test "security-keyword-analyzer exists" "test -x \"$DEV_BIN/security-keyword-analyzer.sh\"" "" "succeeds"
+    add_test "version-calculator exists" "test -x \"$DEV_BIN/version-calculator.sh\"" "" "succeeds"
+    add_test "semantic-version-analyzer exists" "test -x \"$DEV_BIN/semantic-version-analyzer.sh\"" "" "succeeds"
 
     # Help output tests
-    add_test "ref-resolver --help" "\"$DEV_BIN/ref-resolver\" --help" "Usage:" "contains"
-    add_test "version-config-loader --help" "\"$DEV_BIN/version-config-loader\" --help" "Usage:" "contains"
-    add_test "file-change-analyzer --help" "\"$DEV_BIN/file-change-analyzer\" --help" "Usage:" "contains"
-    add_test "cli-options-analyzer --help" "\"$DEV_BIN/cli-options-analyzer\" --help" "Usage:" "contains"
-    add_test "security-keyword-analyzer --help" "\"$DEV_BIN/security-keyword-analyzer\" --help" "Usage:" "contains"
-    add_test "version-calculator --help" "\"$DEV_BIN/version-calculator\" --help" "Usage:" "contains"
-    add_test "semantic-version-analyzer --help" "\"$DEV_BIN/semantic-version-analyzer\" --help" "Usage:" "contains"
+    add_test "ref-resolver --help" "\"$DEV_BIN/ref-resolver.sh\" --help" "Usage:" "contains"
+    add_test "version-config-loader --help" "\"$DEV_BIN/version-config-loader.sh\" --help" "Usage:" "contains"
+    add_test "file-change-analyzer --help" "\"$DEV_BIN/file-change-analyzer.sh\" --help" "Usage:" "contains"
+    add_test "cli-options-analyzer --help" "\"$DEV_BIN/cli-options-analyzer.sh\" --help" "Usage:" "contains"
+    add_test "security-keyword-analyzer --help" "\"$DEV_BIN/security-keyword-analyzer.sh\" --help" "Usage:" "contains"
+    add_test "version-calculator --help" "\"$DEV_BIN/version-calculator.sh\" --help" "Usage:" "contains"
+    add_test "semantic-version-analyzer --help" "\"$DEV_BIN/semantic-version-analyzer.sh\" --help" "Usage:" "contains"
 
     # Configuration loading tests
-    add_test "version-config-loader --validate-only" "\"$DEV_BIN/version-config-loader\" --validate-only" "" "succeeds"
-    add_test "version-config-loader --machine" "\"$DEV_BIN/version-config-loader\" --machine" "" "succeeds"
+    add_test "version-config-loader --validate-only" "\"$DEV_BIN/version-config-loader.sh\" --validate-only" "" "succeeds"
+    add_test "version-config-loader --machine" "\"$DEV_BIN/version-config-loader.sh\" --machine" "" "succeeds"
 
     # Reference resolution tests
-    add_test "ref-resolver --print-base" "\"$DEV_BIN/ref-resolver\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --print-base" "" "succeeds"
-    add_test "ref-resolver --machine" "\"$DEV_BIN/ref-resolver\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
+    add_test "ref-resolver --print-base" "\"$DEV_BIN/ref-resolver.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --print-base" "" "succeeds"
+    add_test "ref-resolver --machine" "\"$DEV_BIN/ref-resolver.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
 
     # File change analysis tests
-    add_test "file-change-analyzer basic" "\"$DEV_BIN/file-change-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
-    add_test "file-change-analyzer machine" "\"$DEV_BIN/file-change-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
+    add_test "file-change-analyzer basic" "\"$DEV_BIN/file-change-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
+    add_test "file-change-analyzer machine" "\"$DEV_BIN/file-change-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
 
     # CLI options analysis tests
-    add_test "cli-options-analyzer basic" "\"$DEV_BIN/cli-options-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
-    add_test "cli-options-analyzer machine" "\"$DEV_BIN/cli-options-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
+    add_test "cli-options-analyzer basic" "\"$DEV_BIN/cli-options-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
+    add_test "cli-options-analyzer machine" "\"$DEV_BIN/cli-options-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
 
     # Security keyword analysis tests
-    add_test "security-keyword-analyzer basic" "\"$DEV_BIN/security-keyword-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
-    add_test "security-keyword-analyzer machine" "\"$DEV_BIN/security-keyword-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
+    add_test "security-keyword-analyzer basic" "\"$DEV_BIN/security-keyword-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
+    add_test "security-keyword-analyzer machine" "\"$DEV_BIN/security-keyword-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
 
     # Version calculation tests
-    add_test "version-calculator basic" "\"$DEV_BIN/version-calculator\" --current-version 1.2.3 --bump-type minor --loc 500" "" "succeeds"
-    add_test "version-calculator machine" "\"$DEV_BIN/version-calculator\" --current-version 1.2.3 --bump-type minor --loc 500 --machine" "" "succeeds"
+    add_test "version-calculator basic" "\"$DEV_BIN/version-calculator.sh\" --current-version 1.2.3 --bump-type minor --loc 500" "" "succeeds"
+    add_test "version-calculator machine" "\"$DEV_BIN/version-calculator.sh\" --current-version 1.2.3 --bump-type minor --loc 500 --machine" "" "succeeds"
 
     # Orchestrator tests
-    add_test "semantic-version-analyzer basic" "\"$DEV_BIN/semantic-version-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
-    add_test "semantic-version-analyzer --suggest-only" "\"$DEV_BIN/semantic-version-analyzer\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --suggest-only" "" "succeeds"
+    add_test "semantic-version-analyzer basic" "\"$DEV_BIN/semantic-version-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
+    add_test "semantic-version-analyzer --suggest-only" "\"$DEV_BIN/semantic-version-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --suggest-only" "" "succeeds"
 
     # Error handling tests
-    add_test "invalid base reference" "\"$DEV_BIN/ref-resolver\" --base INVALID_REF --target \"$TARGET_REF\"" "" "succeeds" 1
-    add_test "missing required argument" "\"$DEV_BIN/file-change-analyzer\"" "" "succeeds" 1
-    add_test "invalid bump type" "\"$DEV_BIN/version-calculator\" --current-version 1.2.3 --bump-type invalid" "" "succeeds" 1
+    add_test "invalid base reference" "\"$DEV_BIN/ref-resolver.sh\" --base INVALID_REF --target \"$TARGET_REF\"" "" "succeeds" 1
+    add_test "missing required argument" "\"$DEV_BIN/file-change-analyzer.sh\"" "" "succeeds" 1
+    add_test "invalid bump type" "\"$DEV_BIN/version-calculator.sh\" --current-version 1.2.3 --bump-type invalid" "" "succeeds" 1
 
     # Additional tools from o3 version (if they exist)
     if [[ -x "$DEV_BIN/version-utils.sh" ]]; then

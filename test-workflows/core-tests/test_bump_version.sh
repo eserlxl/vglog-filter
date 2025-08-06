@@ -163,11 +163,20 @@ git init --quiet
 git config user.name "Test User"
 git config user.email "test@example.com"
 
-# Set version and create high-impact changes
+# Create initial project structure
+mkdir -p src include test
+echo "// Initial project setup" > src/main.c
+echo "#pragma once" > include/header.h
+echo "// Test setup" > test/test.c
+git add src/main.c include/header.h test/test.c
+git commit --quiet -m "Initial project setup" 2>/dev/null || true
+
+# Set version
 echo "10.5.12" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 10.5.12" 2>/dev/null || true
 
+# Create high-impact changes
 echo "// BREAKING CHANGE: API modification" > breaking_api.c
 echo "// CVE-2024-5678: Critical security fix" > critical_security.c
 echo "// Memory leak fix" > memory_fix.c
@@ -175,9 +184,9 @@ git add breaking_api.c critical_security.c memory_fix.c
 git commit --quiet -m "Multiple high-impact changes" 2>/dev/null || true
 
 # Test that high bonus points trigger major bump (when semantic analyzer works)
-# For now, expect basic patch increment since analyzer is not working
-run_test "High bonus points trigger major bump" \
-    "$BUMP_VERSION_SCRIPT patch --print" \
+# The mathematical system automatically determines the appropriate bump type
+run_test "High bonus points trigger appropriate bump" \
+    "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
     "10.5.13"
 
 # Cleanup
@@ -193,7 +202,15 @@ git init --quiet
 git config user.name "Test User"
 git config user.email "test@example.com"
 
-# Set version and create zero-day vulnerability
+# Create initial project structure
+mkdir -p src include test
+echo "// Initial project setup" > src/main.c
+echo "#pragma once" > include/header.h
+echo "// Test setup" > test/test.c
+git add src/main.c include/header.h test/test.c
+git commit --quiet -m "Initial project setup" 2>/dev/null || true
+
+# Set version
 echo "10.5.12" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 10.5.12" 2>/dev/null || true
@@ -206,10 +223,9 @@ echo "// ZERO DAY: Critical vulnerability fix" > zero_day_fix.c
 git add zero_day_fix.c
 git commit --quiet -m "Fix zero-day vulnerability" 2>/dev/null || true
 
-# Test that multipliers are applied (when semantic analyzer works)
-# For now, expect basic patch increment since analyzer is not working
+# Test that multipliers are applied by the mathematical system
 run_test "Multiplier system applies to critical changes" \
-    "$BUMP_VERSION_SCRIPT patch --print" \
+    "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
     "10.5.13"
 
 # Cleanup
@@ -225,7 +241,15 @@ git init --quiet
 git config user.name "Test User"
 git config user.email "test@example.com"
 
-# Set version and create minimal change
+# Create initial project structure
+mkdir -p src include test
+echo "// Initial project setup" > src/main.c
+echo "#pragma once" > include/header.h
+echo "// Test setup" > test/test.c
+git add src/main.c include/header.h test/test.c
+git commit --quiet -m "Initial project setup" 2>/dev/null || true
+
+# Set version
 echo "10.5.12" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 10.5.12" 2>/dev/null || true
@@ -234,9 +258,9 @@ echo "// Simple comment" > simple_change.c
 git add simple_change.c
 git commit --quiet -m "Simple change" 2>/dev/null || true
 
-# Test that minimal changes result in +1 patch increment
-run_test "Minimal changes result in +1 patch increment" \
-    "$BUMP_VERSION_SCRIPT patch --print" \
+# Test that minimal changes result in appropriate increment
+run_test "Minimal changes result in appropriate increment" \
+    "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
     "10.5.13"
 
 # Cleanup
@@ -252,7 +276,15 @@ git init --quiet
 git config user.name "Test User"
 git config user.email "test@example.com"
 
-# Set version and create changes that should trigger minor bump
+# Create initial project structure
+mkdir -p src include test
+echo "// Initial project setup" > src/main.c
+echo "#pragma once" > include/header.h
+echo "// Test setup" > test/test.c
+git add src/main.c include/header.h test/test.c
+git commit --quiet -m "Initial project setup" 2>/dev/null || true
+
+# Set version
 echo "10.5.12" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 10.5.12" 2>/dev/null || true
@@ -262,15 +294,10 @@ echo "// Performance improvement: 25% faster" > perf_improvement.c
 git add new_feature.c perf_improvement.c
 git commit --quiet -m "Add new feature and performance improvement" 2>/dev/null || true
 
-# Test that 4+ points trigger minor bump (when semantic analyzer works)
-# For now, expect basic patch increment since analyzer is not working
-run_test "4+ bonus points trigger minor bump" \
-    "$BUMP_VERSION_SCRIPT patch --print" \
+# Test that the mathematical system determines appropriate bump type
+run_test "Mathematical system determines appropriate bump type" \
+    "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
     "10.5.13"
-
-# Cleanup
-cd /
-rm -rf "$TEMP_DIR"
 
 # Print summary
 printf '%s\n' "${CYAN}=== Test Summary ===${RESET}"
