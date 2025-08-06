@@ -194,9 +194,10 @@ echo "10.5.48" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 10.5.48" 2>/dev/null || true
 
+# With VERSION_PATCH_LIMIT=50, patch 48 + 1 = 49, which is within the limit
 run_test "Custom minor limit with rollover" \
     "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.6.3"
+    "10.5.49"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -205,10 +206,27 @@ printf '%s\n' "${CYAN}=== Test 7: Error handling ===${RESET}"
 test_dir=$(create_temp_test_env "test_error_handling")
 cd "$test_dir"
 
-# Test invalid delta formula
+# Test invalid delta formula - should fail with error message
 run_test "Invalid delta formula handling" \
     "VERSION_PATCH_DELTA='invalid_formula' $BUMP_VERSION_SCRIPT --print --repo-root $(pwd) 2>&1 || true" \
-    "10.5.13"
+    "Environment VERSION_PATCH_DELTA must be an unsigned integer"
+
+cleanup_temp_test_env "$test_dir"
+
+# Test 8: Rollover with custom limits
+printf '%s\n' "${CYAN}=== Test 8: Rollover with custom limits ===${RESET}"
+test_dir=$(create_temp_test_env "test_rollover_custom_limits")
+cd "$test_dir"
+
+# Set version to test patch rollover with custom limit
+echo "10.5.49" > VERSION
+git add VERSION
+git commit --quiet -m "Set version to 10.5.49" 2>/dev/null || true
+
+# With VERSION_PATCH_LIMIT=50, patch 49 + 1 = 50, which should rollover to 0 and increment minor
+run_test "Patch rollover with custom limit (10.5.49 + 1 with limit 50)" \
+    "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
+    "10.6.0"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -221,11 +239,12 @@ if [[ $TESTS_FAILED -eq 0 ]]; then
     printf '%s\n' "${GREEN}All tests passed! New versioning system integration is working correctly.${RESET}"
     printf '\n%s\n' "${CYAN}Key features verified:${RESET}"
     printf '  • New versioning system always increases only the last identifier (patch)\n'
-    printf '  • Rollover logic with mod 100 working correctly\n'
+    printf '  • Rollover logic with mod limit working correctly\n'
     printf '  • LOC-based delta formulas (1*(1+LOC/250), 5*(1+LOC/500), 10*(1+LOC/1000))\n'
     printf '  • Enhanced reason format with LOC and version type\n'
     printf '  • Semantic analyzer integration\n'
     printf '  • Configuration options and error handling\n'
+    printf '  • Custom rollover limits working correctly\n'
     exit 0
 else
     printf '%s\n' "${RED}Some tests failed!${RESET}"
