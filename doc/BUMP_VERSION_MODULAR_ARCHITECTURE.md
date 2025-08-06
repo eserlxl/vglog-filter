@@ -40,12 +40,6 @@ The modular architecture consists of the following components:
   - Dirty tree checking
   - Signing support
 
-- **`cmake-updater`** - ~~CMakeLists.txt version updates~~ (Removed - CMakeLists.txt now auto-updates from VERSION file)
-  - ~~Version field detection~~
-  - ~~Format-specific updates~~
-  - ~~Dry run simulation~~
-  - ~~Backup/restore functionality~~
-
 - **`cli-parser`** - Command line argument parsing
   - Option parsing
   - Validation
@@ -93,8 +87,6 @@ Each module can be used independently for specific tasks:
 
 # Calculate new version
 ./dev-bin/version-calculator.sh-loc.sh --current-version 1.0.0 --bump-type patch
-
-# CMakeLists.txt now auto-updates from VERSION file (no manual update needed)
 
 # Check git operations
 ./dev-bin/git-operations.sh check-dirty
@@ -159,16 +151,6 @@ Comprehensive git operations management:
 - Signing key validation
 - Summary generation
 
-### cmake-updater (Removed)
-~~CMakeLists.txt version field management:~~
-- ~~Automatic format detection~~
-- ~~Support for multiple CMake patterns~~
-- ~~Safe file updates with backup~~
-- ~~Dry run simulation~~
-- ~~Validation and error handling~~
-
-**Note**: This module has been removed because CMakeLists.txt now automatically reads the version from the VERSION file, eliminating the need for manual updates.
-
 ### cli-parser
 Robust command line argument handling:
 - Comprehensive option parsing
@@ -203,8 +185,6 @@ Each module includes standalone usage for testing:
 
 # Test version calculation
 ./dev-bin/version-calculator.sh-loc.sh --current-version 1.0.0 --bump-type patch
-
-# CMakeLists.txt now auto-updates from VERSION file (no manual testing needed)
 
 # Test git operations
 ./dev-bin/git-operations.sh check-dirty
