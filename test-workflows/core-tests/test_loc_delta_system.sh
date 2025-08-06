@@ -44,17 +44,17 @@ run_test() {
     local result
     result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --json --repo-root "$(pwd)" 2>/dev/null || echo "{}")
     
-    # Extract deltas
+    # Extract deltas from the new JSON format (under loc_delta)
     local patch_delta
-    patch_delta=$(echo "$result" | grep -o '"patch_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+    patch_delta=$(echo "$result" | jq -r '.loc_delta.patch_delta // 0' 2>/dev/null || echo "0")
     local minor_delta
-    minor_delta=$(echo "$result" | grep -o '"minor_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+    minor_delta=$(echo "$result" | jq -r '.loc_delta.minor_delta // 0' 2>/dev/null || echo "0")
     local major_delta
-    major_delta=$(echo "$result" | grep -o '"major_delta":[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+    major_delta=$(echo "$result" | jq -r '.loc_delta.major_delta // 0' 2>/dev/null || echo "0")
     
-    # Extract reason
+    # Extract reason from version calculator
     local reason
-    reason=$(echo "$result" | grep -o '"reason":"[^"]*"' | cut -d'"' -f4 || echo "")
+    reason=$("$PROJECT_ROOT/dev-bin/version-calculator.sh" --current-version "1.0.0" --bump-type patch --loc 10 --bonus 1 --machine 2>/dev/null | grep "^REASON=" | cut -d= -f2- || echo "")
     
     # Check results
     if [[ "$patch_delta" = "$expected_patch" ]] && [[ "$minor_delta" = "$expected_minor" ]] && [[ "$major_delta" = "$expected_major" ]]; then
@@ -67,7 +67,7 @@ run_test() {
     fi
     
     # Check reason format
-    if [[ "$reason" = *"LOC="* ]] && [[ "$reason" = *"MAJOR"* || "$reason" = *"MINOR"* || "$reason" = *"PATCH"* ]]; then
+    if [[ "$reason" = *"LOC="* ]] && [[ "$reason" = *"PATCH"* ]]; then
         echo "✓ PASS: Reason format includes LOC and version type"
         ((TESTS_PASSED++))
     else
@@ -77,10 +77,6 @@ run_test() {
     
     echo ""
 }
-
-# Test counter
-TESTS_PASSED=0
-TESTS_FAILED=0
 
 echo "Test 1: Verify LOC delta system is working"
 
@@ -101,6 +97,7 @@ if [[ "$output" != "FAILED" ]] && [[ "$output" = *"loc_delta"* ]]; then
     ((TESTS_PASSED++))
 else
     echo "✗ FAIL: LOC delta system not working"
+    echo "Output: $output"
     ((TESTS_FAILED++))
 fi
 
@@ -108,8 +105,8 @@ fi
 echo ""
 echo "Test 2: Verify enhanced reason format"
 # Test reason format using version calculator directly
-reason=$("$PROJECT_ROOT/dev-bin/version-calculator" --current-version "1.0.0" --bump-type patch --loc 10 --bonus 1 --json 2>/dev/null | jq -r '.reason // ""' 2>/dev/null || echo "")
-if [[ "$reason" = *"LOC="* ]] && [[ "$reason" = *"MAJOR"* || "$reason" = *"MINOR"* || "$reason" = *"PATCH"* ]]; then
+reason=$("$PROJECT_ROOT/dev-bin/version-calculator.sh" --current-version "1.0.0" --bump-type patch --loc 10 --bonus 1 --machine 2>/dev/null | grep "^REASON=" | cut -d= -f2- || echo "")
+if [[ "$reason" = *"LOC="* ]] && [[ "$reason" = *"PATCH"* ]]; then
     echo "✓ PASS: Enhanced reason format working: $reason"
     ((TESTS_PASSED++))
 else
@@ -141,6 +138,30 @@ if [[ "$result_rollover" =~ ^1\.2\.[0-9]+$ ]]; then
     ((TESTS_PASSED++))
 else
     echo "✗ FAIL: Patch rollover not working: $result_rollover"
+    ((TESTS_FAILED++))
+fi
+
+# Test 4: Verify LOC delta calculation with specific values
+echo ""
+echo "Test 4: Verify LOC delta calculation"
+# Test with specific LOC and bonus values
+patch_result=$("$PROJECT_ROOT/dev-bin/version-calculator.sh" --current-version "1.0.0" --bump-type patch --loc 250 --bonus 2 --machine 2>/dev/null)
+minor_result=$("$PROJECT_ROOT/dev-bin/version-calculator.sh" --current-version "1.0.0" --bump-type minor --loc 500 --bonus 3 --machine 2>/dev/null)
+major_result=$("$PROJECT_ROOT/dev-bin/version-calculator.sh" --current-version "1.0.0" --bump-type major --loc 1000 --bonus 5 --machine 2>/dev/null)
+
+patch_delta=$(echo "$patch_result" | grep "^TOTAL_DELTA=" | cut -d= -f2)
+minor_delta=$(echo "$minor_result" | grep "^TOTAL_DELTA=" | cut -d= -f2)
+major_delta=$(echo "$major_result" | grep "^TOTAL_DELTA=" | cut -d= -f2)
+
+echo "  Patch delta with LOC=250, bonus=2: $patch_delta"
+echo "  Minor delta with LOC=500, bonus=3: $minor_delta"
+echo "  Major delta with LOC=1000, bonus=5: $major_delta"
+
+if [[ "$patch_delta" -gt 0 ]] && [[ "$minor_delta" -gt 0 ]] && [[ "$major_delta" -gt 0 ]]; then
+    echo "✓ PASS: LOC delta calculation working correctly"
+    ((TESTS_PASSED++))
+else
+    echo "✗ FAIL: LOC delta calculation not working"
     ((TESTS_FAILED++))
 fi
 

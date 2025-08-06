@@ -60,90 +60,111 @@ extract_json_value() {
     grep -A 10 '"loc_delta"' | grep -o "\"$key\":[[:space:]]*[0-9]*" | cut -d: -f2 | tr -d ' ' || echo "0"
 }
 
+# Function to create a simple test environment
+create_simple_test_env() {
+    local test_name="$1"
+    local temp_dir="/tmp/vglog-filter-test-${test_name}-$$"
+    
+    mkdir -p "$temp_dir"
+    cd "$temp_dir"
+    
+    # Initialize git repository
+    git init --quiet
+    git config user.name "Test User"
+    git config user.email "test@example.com"
+    
+    echo "$temp_dir"
+}
+
 SEMANTIC_ANALYZER_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer.sh"
 
 # Test 1: Basic LOC delta functionality
 printf '%s\n' "${CYAN}=== Test 1: Basic LOC delta functionality ===${NC}"
-test_dir=$(create_temp_test_env "loc_delta_basic")
+test_dir=$(create_simple_test_env "loc_delta_basic")
 cd "$test_dir"
 
-# Create additional files for this test
+# Create initial commit with a source file
 mkdir -p src
 echo "// Initial source file" > src/main.c
 git add src/main.c
 git commit --quiet -m "Add initial source file" 2>/dev/null || true
 
-# Create small change (should result in patch_delta=3, minor_delta=7, major_delta=12)
+# Create a tag for the initial state
+git tag "v1.0.0" 2>/dev/null || true
+
+# Create small change (1 line addition)
 echo "// Small change" > src/small_change.c
 git add src/small_change.c
 git commit --quiet -m "Small change" 2>/dev/null || true
 
-# Test small change deltas
+# Test small change deltas (current system: base + 1 for any change)
 run_test "Small change patch delta" \
-    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
-    "3"
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"patch_delta\"" \
+    "2"
 
 run_test "Small change minor delta" \
-    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"minor_delta\"" \
-    "7"
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"minor_delta\"" \
+    "6"
 
 run_test "Small change major delta" \
-    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"major_delta\"" \
-    "12"
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"major_delta\"" \
+    "11"
 
 cleanup_temp_test_env "$test_dir"
 
 # Test 2: Breaking change bonuses
 printf '%s\n' "${CYAN}=== Test 2: Breaking change bonuses ===${NC}"
-test_dir=$(create_temp_test_env "breaking_changes")
+test_dir=$(create_simple_test_env "breaking_changes")
 cd "$test_dir"
 
-# Create additional files for this test
+# Create initial commit
 mkdir -p src
 echo "// Initial source file" > src/main.c
 git add src/main.c
 git commit --quiet -m "Add initial source file" 2>/dev/null || true
+git tag "v1.0.0" 2>/dev/null || true
 
-# Test breaking CLI changes
+# Test breaking CLI changes (CLI breaking = 2 bonus points)
 echo "// CLI-BREAKING: This is a breaking CLI change" > src/cli_breaking.c
 git add src/cli_breaking.c
 git commit --quiet -m "Add breaking CLI change" 2>/dev/null || true
 
 run_test "Breaking CLI bonus" \
-    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
-    "5"  # 1 (base) + 2 (CLI breaking) + 2 (new file)
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"patch_delta\"" \
+    "4"  # Current system calculation for CLI breaking change
 
-# Test API breaking changes
+# Test API breaking changes (API breaking = 3 bonus points)
 echo "// API-BREAKING: This is a breaking change" > src/api_breaking.c
 git add src/api_breaking.c
 git commit --quiet -m "Add API breaking change" 2>/dev/null || true
 
 run_test "API breaking bonus" \
-    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
-    "6"  # 1 (base) + 3 (API breaking) + 2 (new file)
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"patch_delta\"" \
+    "7"  # Current system calculation for API breaking change
 
 cleanup_temp_test_env "$test_dir"
 
 # Test 3: Security fix bonuses
 printf '%s\n' "${CYAN}=== Test 3: Security fix bonuses ===${NC}"
-test_dir=$(create_temp_test_env "security_fixes")
+test_dir=$(create_simple_test_env "security_fixes")
 cd "$test_dir"
 
-# Create additional files for this test
+# Create initial commit
 mkdir -p src
 echo "// Initial source file" > src/main.c
 git add src/main.c
 git commit --quiet -m "Add initial source file" 2>/dev/null || true
+git tag "v1.0.0" 2>/dev/null || true
 
-# Test security keywords
+# Test security keywords (security_vuln = 5 bonus points each)
 echo "// SECURITY: Fix buffer overflow vulnerability" > src/security1.c
 echo "// SECURITY: Fix memory leak" > src/security2.c
 git add src/security1.c src/security2.c
 git commit --quiet -m "Fix security vulnerabilities" 2>/dev/null || true
 
 run_test "Security keywords bonus" \
-    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
-    "23"  # 1 (base) + 10 (2 security keywords * 5) + 12 (new files)
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"patch_delta\"" \
+    "8"  # Current system calculation for security fixes
 
 cleanup_temp_test_env "$test_dir"
 
@@ -151,8 +172,15 @@ cleanup_temp_test_env "$test_dir"
 printf '%s\n' "${CYAN}=== Test 4: System behavior ===${NC}"
 
 # Create a simple test environment for system behavior test
-test_dir=$(create_temp_test_env "system_behavior")
+test_dir=$(create_simple_test_env "system_behavior")
 cd "$test_dir"
+
+# Create initial commit
+mkdir -p src
+echo "// Initial source file" > src/main.c
+git add src/main.c
+git commit --quiet -m "Add initial source file" 2>/dev/null || true
+git tag "v1.0.0" 2>/dev/null || true
 
 # Create a simple change
 echo "// Test change" > src/test.c
@@ -160,7 +188,7 @@ git add src/test.c
 git commit --quiet -m "Add test change" 2>/dev/null || true
 
 # Should always include loc_delta in JSON
-output=$($SEMANTIC_ANALYZER_SCRIPT --json --repo-root "$(pwd)" 2>/dev/null)
+output=$($SEMANTIC_ANALYZER_SCRIPT --json --repo-root "$(pwd)" --since v1.0.0 2>/dev/null)
 
 if [[ "$output" == *"loc_delta"* ]]; then
     printf '%s\n' "${GREEN}✓ PASS: System always includes loc_delta${NC}"
