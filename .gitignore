@@ -206,6 +206,9 @@ vcpkg_installed/
 *.lock
 *.lock.*
 
+# Cache directories
+.cache/
+
 # Backup files and directories
 *.bak
 *.backup
