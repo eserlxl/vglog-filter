@@ -10,8 +10,14 @@
 # Loads and validates versioning configuration from YAML files and environment variables
 
 set -Eeuo pipefail
+shopt -s lastpipe
 IFS=$'\n\t'
 export LC_ALL=C
+umask 022
+
+# ---------- program id / guards ----------
+readonly PROG="${0##*/}"
+(( BASH_VERSINFO[0] >= 4 )) || { printf '%s\n' "Error: $PROG requires Bash ≥ 4" >&2; exit 2; }
 
 # ---------- paths ----------
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -23,7 +29,7 @@ show_help() {
     cat << EOF
 Version Configuration Loader
 
-Usage: $(basename "$0") [options]
+Usage: $PROG [options]
 
 Options:
   --config-file <path>     Path to configuration file (default: $DEFAULT_CONFIG; use '-' for stdin)
@@ -50,25 +56,30 @@ Environment Variables (fallback):
   VERSION_SECURITY_BONUS   Security keyword bonus (default: 2)
 
 Examples:
-  $(basename "$0") --validate-only
-  $(basename "$0") --machine
-  $(basename "$0") --json
+  $PROG --validate-only
+  $PROG --machine
+  $PROG --json
 EOF
 }
 
 # ---------- logging / utils ----------
-die()  { printf 'Error: %s\n' "$*" >&2; exit 1; }
-warn() { printf 'Warning: %s\n' "$*" >&2; }
+warn() { printf 'Warning (%s): %s\n' "$PROG" "$*" >&2; }
+die()  { printf 'Error (%s): %s\n'   "$PROG" "$*" >&2; exit 1; }
 
-trap 'warn "line $LINENO: ${BASH_COMMAND}"' ERR
+trap 'warn "line $LINENO: $BASH_COMMAND"' ERR
 
 # test command presence
 has() { command -v "$1" >/dev/null 2>&1; }
 
 # Numeric validators (support integers/floats)
-is_number()        { [[ "$1" =~ ^-?[0-9]+([.][0-9]+)?$ ]]; }
+is_number()        { [[ "${1:-}" =~ ^-?[0-9]+([.][0-9]+)?$ ]]; }
 is_positive()      { is_number "$1" && awk -v v="$1" 'BEGIN{exit !(v>0)}'; }
 is_nonneg_number() { is_number "$1" && awk -v v="$1" 'BEGIN{exit !(v>=0)}'; }
+
+# JSON helpers
+json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+num_or_null() { [[ -n "${1:-}" ]] && printf '%s' "$1" || printf 'null'; }
+str_or_null() { [[ -n "${1:-}" ]] && { printf '"'; json_escape "$1"; printf '"'; } || printf 'null'; }
 
 # ---------- argument parsing ----------
 VALIDATE_ONLY=false
@@ -88,7 +99,29 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if $MACHINE_OUTPUT && $JSON_OUTPUT; then
+    die "Use only one of --json or --machine"
+fi
+
 # ---------- yq helpers ----------
+yq_present=false
+yaml_present=false
+yq_v4=false
+
+if has yq; then
+    yq_present=true
+    # verify v4+ (we rely on 'yq e')
+    if yq --version 2>/dev/null | grep -Eq 'version 4\.'; then
+        yq_v4=true
+    fi
+    if [[ "$CONFIG_FILE" == "-" ]]; then
+        # If reading from stdin, we need to have data; skip emptiness check (assume caller knows).
+        yaml_present=true
+    else
+        [[ -f "$CONFIG_FILE" ]] && yaml_present=true
+    fi
+fi
+
 # Read from file or stdin depending on CONFIG_FILE
 _yq_base() {
     # yq v4 syntax compatible
@@ -98,19 +131,6 @@ _yq_base() {
         yq e "$1" "$CONFIG_FILE"
     fi
 }
-
-yq_present=false
-yaml_present=false
-
-if has yq; then
-    yq_present=true
-    if [[ "$CONFIG_FILE" == "-" ]]; then
-        # If reading from stdin, we need to have data; skip emptiness check (assume caller knows).
-        yaml_present=true
-    else
-        [[ -f "$CONFIG_FILE" ]] && yaml_present=true
-    fi
-fi
 
 # Returns empty string for null/missing; raw scalar only
 yq_get_raw() {
@@ -171,11 +191,15 @@ BASE_DELTA_MAJOR=""
 
 load_config() {
     if ! $yq_present; then
-        warn "yq not found; using fallback defaults."
+        warn "yq not found; using env/hard defaults."
+        return 1
+    fi
+    if ! $yq_v4; then
+        warn "yq v4 is required; detected a different version. Using env/hard defaults."
         return 1
     fi
     if ! $yaml_present; then
-        warn "Config file '${CONFIG_FILE}' not found; using fallback defaults."
+        warn "Config file '${CONFIG_FILE}' not found; using env/hard defaults."
         return 1
     fi
 
@@ -192,9 +216,6 @@ load_config() {
     MINOR_BONUS_THRESHOLD="$(yq_get_num '.thresholds.minor_bonus')"
     PATCH_BONUS_THRESHOLD="$(yq_get_num '.thresholds.patch_bonus')"
 
-    # Export configuration variables for external use
-    export LOC_CAP MAJOR_BONUS_THRESHOLD MINOR_BONUS_THRESHOLD PATCH_BONUS_THRESHOLD
-
     # loc divisors (must be > 0 if set)
     LOC_DIVISOR_MAJOR="$(yq_get_num '.loc_divisors.major')"
     LOC_DIVISOR_MINOR="$(yq_get_num '.loc_divisors.minor')"
@@ -202,8 +223,8 @@ load_config() {
 
     # Validate LOC divisors (guard against zero)
     for name in major minor patch; do
-        var="LOC_DIVISOR_${name^^}"
-        val="${!var:-}"
+        local var="LOC_DIVISOR_${name^^}"
+        local val="${!var:-}"
         if [[ -n "$val" ]] && ! is_positive "$val"; then
             die "Invalid LOC divisor for $name: $val (must be > 0)"
         fi
@@ -218,9 +239,6 @@ load_config() {
     BUILD_TIME_THRESHOLD="$(yq_get_num '.patterns.performance.build_time_threshold')"
     PERF_50_THRESHOLD="$(yq_get_num '.patterns.performance.perf_50_threshold')"
 
-    # Export performance thresholds
-    export MEMORY_REDUCTION_THRESHOLD BUILD_TIME_THRESHOLD PERF_50_THRESHOLD
-
     # bonuses
     BONUS_API_BREAKING="$(yq_get_num '.bonuses.breaking_changes.api_breaking')"
     BONUS_CLI_BREAKING="$(yq_get_num '.bonuses.breaking_changes.cli_breaking')"
@@ -229,9 +247,6 @@ load_config() {
     BONUS_MEMORY_SAFETY="$(yq_get_num '.bonuses.security_stability.memory_safety')"
     BONUS_CRASH_FIX="$(yq_get_num '.bonuses.security_stability.crash_fix')"
     BONUS_NEW_CLI_COMMAND="$(yq_get_num '.bonuses.features.new_cli_command')"
-
-    # Export bonus values
-    export BONUS_CVE BONUS_MEMORY_SAFETY BONUS_CRASH_FIX BONUS_NEW_CLI_COMMAND
     BONUS_NEW_CONFIG_OPTION="$(yq_get_num '.bonuses.features.new_config_option')"
     BONUS_NEW_SOURCE_FILE="$(yq_get_num '.bonuses.code_quality.new_source_file')"
     BONUS_NEW_TEST_FILE="$(yq_get_num '.bonuses.code_quality.new_test_suite')"
@@ -241,9 +256,6 @@ load_config() {
     MULTIPLIER_ZERO_DAY="$(yq_get_num '.multipliers.critical.zero_day')"
     MULTIPLIER_PRODUCTION_OUTAGE="$(yq_get_num '.multipliers.critical.production_outage')"
     MULTIPLIER_COMPLIANCE="$(yq_get_num '.multipliers.critical.compliance')"
-
-    # Export multiplier values
-    export MULTIPLIER_ZERO_DAY MULTIPLIER_PRODUCTION_OUTAGE MULTIPLIER_COMPLIANCE
 
     return 0
 }
@@ -292,48 +304,29 @@ VERSION_NEW_DOC_BONUS="${BONUS_NEW_DOC_FILE:-${VERSION_NEW_DOC_BONUS:-1}}"
 VERSION_ADDED_OPTION_BONUS="${BONUS_NEW_CONFIG_OPTION:-${VERSION_ADDED_OPTION_BONUS:-1}}"
 VERSION_SECURITY_BONUS="${BONUS_SECURITY_VULN:-${VERSION_SECURITY_BONUS:-2}}"
 
+# Thresholds with safe defaults if YAML missing
+MAJOR_BONUS_THRESHOLD="${MAJOR_BONUS_THRESHOLD:-8}"
+MINOR_BONUS_THRESHOLD="${MINOR_BONUS_THRESHOLD:-4}"
+PATCH_BONUS_THRESHOLD="${PATCH_BONUS_THRESHOLD:-0}"
+
 # Early exit configuration
 EARLY_EXIT_BONUS_THRESHOLD="${EARLY_EXIT_BONUS_THRESHOLD:-8}"
 EARLY_EXIT_CHANGE_TYPE="${EARLY_EXIT_CHANGE_TYPE:-major}"
 
+# Export only intended shared variables
+export LOC_CAP MAJOR_BONUS_THRESHOLD MINOR_BONUS_THRESHOLD PATCH_BONUS_THRESHOLD
+export MEMORY_REDUCTION_THRESHOLD BUILD_TIME_THRESHOLD PERF_50_THRESHOLD
+export MULTIPLIER_ZERO_DAY MULTIPLIER_PRODUCTION_OUTAGE MULTIPLIER_COMPLIANCE
+export BONUS_CVE BONUS_MEMORY_SAFETY BONUS_CRASH_FIX BONUS_NEW_CLI_COMMAND
+
 # ---------- output ----------
-if [[ "$VALIDATE_ONLY" = "true" ]]; then
-    printf 'Configuration validation completed successfully\n'
-    exit 0
-elif [[ "$JSON_OUTPUT" = "true" ]]; then
-    printf '{\n'
-    printf '  "config_file": "%s",\n' "$CONFIG_FILE"
-    printf '  "loc_delta": {\n'
-    printf '    "patch_limit": %s,\n' "$VERSION_PATCH_LIMIT"
-    printf '    "minor_limit": %s,\n' "$VERSION_MINOR_LIMIT"
-    printf '    "patch_delta": "%s",\n' "$VERSION_PATCH_DELTA"
-    printf '    "minor_delta": "%s",\n' "$VERSION_MINOR_DELTA"
-    printf '    "major_delta": "%s"\n' "$VERSION_MAJOR_DELTA"
-    printf '  },\n'
-    printf '  "bonuses": {\n'
-    printf '    "breaking_cli": %s,\n' "$VERSION_BREAKING_CLI_BONUS"
-    printf '    "api_breaking": %s,\n' "$VERSION_API_BREAKING_BONUS"
-    printf '    "removed_option": %s,\n' "$VERSION_REMOVED_OPTION_BONUS"
-    printf '    "cli_changes": %s,\n' "$VERSION_CLI_CHANGES_BONUS"
-    printf '    "manual_cli": %s,\n' "$VERSION_MANUAL_CLI_BONUS"
-    printf '    "new_source": %s,\n' "$VERSION_NEW_SOURCE_BONUS"
-    printf '    "new_test": %s,\n' "$VERSION_NEW_TEST_BONUS"
-    printf '    "new_doc": %s,\n' "$VERSION_NEW_DOC_BONUS"
-    printf '    "added_option": %s,\n' "$VERSION_ADDED_OPTION_BONUS"
-    printf '    "security": %s\n' "$VERSION_SECURITY_BONUS"
-    printf '  },\n'
-    printf '  "early_exit": {\n'
-    printf '    "bonus_threshold": %s,\n' "$EARLY_EXIT_BONUS_THRESHOLD"
-    printf '    "change_type": "%s"\n' "$EARLY_EXIT_CHANGE_TYPE"
-    printf '  }\n'
-    printf '}\n'
-elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
+print_machine_kv() {
     printf 'CONFIG_FILE=%s\n' "$CONFIG_FILE"
     printf 'VERSION_PATCH_LIMIT=%s\n' "$VERSION_PATCH_LIMIT"
     printf 'VERSION_MINOR_LIMIT=%s\n' "$VERSION_MINOR_LIMIT"
-    printf 'MAJOR_BONUS_THRESHOLD=%s\n' "${MAJOR_BONUS_THRESHOLD:-8}"
-    printf 'MINOR_BONUS_THRESHOLD=%s\n' "${MINOR_BONUS_THRESHOLD:-4}"
-    printf 'PATCH_BONUS_THRESHOLD=%s\n' "${PATCH_BONUS_THRESHOLD:-0}"
+    printf 'MAJOR_BONUS_THRESHOLD=%s\n' "$MAJOR_BONUS_THRESHOLD"
+    printf 'MINOR_BONUS_THRESHOLD=%s\n' "$MINOR_BONUS_THRESHOLD"
+    printf 'PATCH_BONUS_THRESHOLD=%s\n' "$PATCH_BONUS_THRESHOLD"
     printf 'VERSION_BREAKING_CLI_BONUS=%s\n' "$VERSION_BREAKING_CLI_BONUS"
     printf 'VERSION_API_BREAKING_BONUS=%s\n' "$VERSION_API_BREAKING_BONUS"
     printf 'VERSION_REMOVED_OPTION_BONUS=%s\n' "$VERSION_REMOVED_OPTION_BONUS"
@@ -345,6 +338,50 @@ elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
     printf 'VERSION_ADDED_OPTION_BONUS=%s\n' "$VERSION_ADDED_OPTION_BONUS"
     printf 'VERSION_SECURITY_BONUS=%s\n' "$VERSION_SECURITY_BONUS"
     printf 'EARLY_EXIT_BONUS_THRESHOLD=%s\n' "$EARLY_EXIT_BONUS_THRESHOLD"
+    printf 'EARLY_EXIT_CHANGE_TYPE=%s\n' "$EARLY_EXIT_CHANGE_TYPE"
+    printf 'VERSION_PATCH_DELTA=%s\n' "$VERSION_PATCH_DELTA"
+    printf 'VERSION_MINOR_DELTA=%s\n' "$VERSION_MINOR_DELTA"
+    printf 'VERSION_MAJOR_DELTA=%s\n' "$VERSION_MAJOR_DELTA"
+}
+
+if $VALIDATE_ONLY; then
+    printf 'Configuration validation completed successfully\n'
+    exit 0
+elif $JSON_OUTPUT; then
+    # Only "config_file" and "change_type" may need escaping; deltas are strings by design
+    printf '{\n'
+    printf '  "config_file": %s,\n'  "$(str_or_null "$CONFIG_FILE")"
+    printf '  "loc_delta": {\n'
+    printf '    "patch_limit": %s,\n' "$(num_or_null "$VERSION_PATCH_LIMIT")"
+    printf '    "minor_limit": %s,\n' "$(num_or_null "$VERSION_MINOR_LIMIT")"
+    printf '    "patch_delta": %s,\n'  "$(str_or_null "$VERSION_PATCH_DELTA")"
+    printf '    "minor_delta": %s,\n'  "$(str_or_null "$VERSION_MINOR_DELTA")"
+    printf '    "major_delta": %s\n'   "$(str_or_null "$VERSION_MAJOR_DELTA")"
+    printf '  },\n'
+    printf '  "thresholds": {\n'
+    printf '    "major_bonus": %s,\n' "$(num_or_null "$MAJOR_BONUS_THRESHOLD")"
+    printf '    "minor_bonus": %s,\n' "$(num_or_null "$MINOR_BONUS_THRESHOLD")"
+    printf '    "patch_bonus": %s\n'  "$(num_or_null "$PATCH_BONUS_THRESHOLD")"
+    printf '  },\n'
+    printf '  "bonuses": {\n'
+    printf '    "breaking_cli": %s,\n' "$(num_or_null "$VERSION_BREAKING_CLI_BONUS")"
+    printf '    "api_breaking": %s,\n' "$(num_or_null "$VERSION_API_BREAKING_BONUS")"
+    printf '    "removed_option": %s,\n' "$(num_or_null "$VERSION_REMOVED_OPTION_BONUS")"
+    printf '    "cli_changes": %s,\n'   "$(num_or_null "$VERSION_CLI_CHANGES_BONUS")"
+    printf '    "manual_cli": %s,\n'    "$(num_or_null "$VERSION_MANUAL_CLI_BONUS")"
+    printf '    "new_source": %s,\n'    "$(num_or_null "$VERSION_NEW_SOURCE_BONUS")"
+    printf '    "new_test": %s,\n'      "$(num_or_null "$VERSION_NEW_TEST_BONUS")"
+    printf '    "new_doc": %s,\n'       "$(num_or_null "$VERSION_NEW_DOC_BONUS")"
+    printf '    "added_option": %s,\n'  "$(num_or_null "$VERSION_ADDED_OPTION_BONUS")"
+    printf '    "security": %s\n'       "$(num_or_null "$VERSION_SECURITY_BONUS")"
+    printf '  },\n'
+    printf '  "early_exit": {\n'
+    printf '    "bonus_threshold": %s,\n' "$(num_or_null "$EARLY_EXIT_BONUS_THRESHOLD")"
+    printf '    "change_type": %s\n'      "$(str_or_null "$EARLY_EXIT_CHANGE_TYPE")"
+    printf '  }\n'
+    printf '}\n'
+elif $MACHINE_OUTPUT; then
+    print_machine_kv
 else
     printf '=== Version Configuration ===\n'
     printf 'Config file: %s\n' "$CONFIG_FILE"
@@ -354,9 +391,13 @@ else
     printf '  Patch delta: %s\n' "$VERSION_PATCH_DELTA"
     printf '  Minor delta: %s\n' "$VERSION_MINOR_DELTA"
     printf '  Major delta: %s\n' "$VERSION_MAJOR_DELTA"
+    printf '\nThresholds:\n'
+    printf '  Major bonus: %s\n' "$MAJOR_BONUS_THRESHOLD"
+    printf '  Minor bonus: %s\n' "$MINOR_BONUS_THRESHOLD"
+    printf '  Patch bonus: %s\n' "$PATCH_BONUS_THRESHOLD"
     printf '\nBonus Values:\n'
     printf '  Breaking CLI: %s\n' "$VERSION_BREAKING_CLI_BONUS"
     printf '  API breaking: %s\n' "$VERSION_API_BREAKING_BONUS"
-    printf '  Security: %s\n' "$VERSION_SECURITY_BONUS"
-    printf '  Early exit threshold: %s\n' "$EARLY_EXIT_BONUS_THRESHOLD"
+    printf '  Security: %s\n'     "$VERSION_SECURITY_BONUS"
+    printf '  Early exit: threshold=%s, change_type=%s\n' "$EARLY_EXIT_BONUS_THRESHOLD" "$EARLY_EXIT_CHANGE_TYPE"
 fi 
