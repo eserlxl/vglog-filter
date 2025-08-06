@@ -6,6 +6,7 @@
 # Common functions used across version management scripts
 
 set -Eeuo pipefail
+IFS=$'\n\t'
 umask 022
 export LC_ALL=C
 
@@ -22,8 +23,19 @@ warn()   { _warn "$@"; }
 info()   { _info "$@"; }
 ok()     { _ok "$@"; }
 
-# Trap to show failing line for unexpected errors.
-trap '[[ $? -ne 0 ]] && printf "Error on line %s: %s (exit %s)\n" "$LINENO" "$BASH_COMMAND" "$?" >&2' ERR
+# ------------------- better ERR diagnostics -------------------
+_stacktrace() {
+  local i
+  _warn "Stack (most recent call first):"
+  for (( i=0; i<${#FUNCNAME[@]}-1; i++ )); do
+    local func="${FUNCNAME[$i]:-main}"
+    local line="${BASH_LINENO[$i-1]:-?}"
+    local src="${BASH_SOURCE[$i]:-?}"
+    _warn "  at ${func} (${src}:${line})"
+  done
+}
+
+trap '_status=$?; [[ $_status -ne 0 ]] && _warn "Command failed: ${BASH_COMMAND} (exit $_status)"; _stacktrace; exit $_status' ERR
 
 # ------------------- color utilities -------------------
 init_colors() {
@@ -45,13 +57,38 @@ require_cmd() {
   local need=("$@")
   # Default baseline if none provided
   if ((${#need[@]} == 0)); then
-    need=(git realpath sed grep awk)
+    need=(git sed grep awk)
+    # path helpers are handled by _realpath fallback
   fi
   local missing=()
   for c in "${need[@]}"; do
     command -v "$c" >/dev/null 2>&1 || missing+=("$c")
   done
   ((${#missing[@]}==0)) || _die "Missing required tools: ${missing[*]}"
+}
+
+# ------------------- portable realpath -------------------
+_realpath() {
+  # $1: path
+  local p="$1"
+  if command -v realpath >/dev/null 2>&1; then
+    realpath -- "$p"
+  elif command -v readlink >/dev/null 2>&1; then
+    # GNU readlink -f works; on BSD we emulate via Python
+    if readlink -f / >/dev/null 2>&1; then
+      readlink -f -- "$p"
+    elif command -v python3 >/dev/null 2>&1; then
+      python3 - <<'PY' "$p"
+import os,sys
+print(os.path.realpath(sys.argv[1]))
+PY
+    else
+      # Fallback: best effort (no symlink resolution)
+      (cd -- "$(dirname -- "$p")" 2>/dev/null && printf '%s/%s\n' "$PWD" "$(basename -- "$p")") || printf '%s\n' "$p"
+    fi
+  else
+    printf '%s\n' "$p"
+  fi
 }
 
 # ------------------- path resolution -------------------
@@ -61,21 +98,21 @@ resolve_script_paths() {
   local repo_root="${2:-}"
 
   local script_dir project_root version_file try_git_root
-  script_dir="$(dirname "$(realpath "$script_path")")"
+  script_dir="$(dirname -- "$(_realpath "$script_path")")"
 
   if [[ -n "$repo_root" ]]; then
     [[ -d "$repo_root" ]] || _die "Repository root '$repo_root' does not exist"
-    project_root="$(realpath "$repo_root")"
+    project_root="$(_realpath "$repo_root")"
   else
-    # Prefer git repo root if available
-    if command -v git >/dev/null 2>&1 && try_git_root="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)"; then
+    if command -v git >/dev/null 2>&1; then
+      try_git_root="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)"
       if [[ -n "$try_git_root" && -d "$try_git_root" ]]; then
         project_root="$try_git_root"
       else
-        project_root="$(dirname "$script_dir")"
+        project_root="$(dirname -- "$script_dir")"
       fi
     else
-      project_root="$(dirname "$script_dir")"
+      project_root="$(dirname -- "$script_dir")"
     fi
   fi
 
@@ -86,19 +123,17 @@ resolve_script_paths() {
   export VERSION_FILE="$version_file"
 }
 
-# ------------------- cleanup helpers -------------------
-# Usage: setup_cleanup "TMP_FILE_VAR"
-setup_cleanup() {
-  local tmp_var="$1"
-  # shellcheck disable=SC2034
-  eval "$tmp_var=''"
-  # shellcheck disable=SC2329
-  cleanup() {
-    local f="${TMP_FILE:-}"
-    if [[ -n "$f" && -e "$f" ]]; then rm -f -- "$f" 2>/dev/null || true; fi
-  }
-  trap cleanup INT TERM EXIT
+# ------------------- cleanup registry -------------------
+# Register any temp file path; on exit they will be removed.
+declare -a _TMP_FILES=()
+register_tmp() { [[ -n "${1:-}" ]] && _TMP_FILES+=("$1"); }
+_cleanup_tmp() {
+  local f
+  for f in "${_TMP_FILES[@]:-}"; do
+    [[ -n "$f" && -e "$f" ]] && rm -f -- "$f" || true
+  done
 }
+trap '_cleanup_tmp' EXIT INT TERM
 
 # ------------------- file operations -------------------
 # Atomic write: write to temp in same directory, then mv.
@@ -109,15 +144,15 @@ safe_write_file() {
 
   dir="$(dirname -- "$target_file")"
   base="$(basename -- "$target_file")"
-  tmp="$(mktemp --tmpdir="$dir" ".${base}.XXXXXX")" || _die "mktemp failed for $target_file"
 
-  # Expose for trap in case we die before mv
-  TMP_FILE="$tmp"
+  # Portable mktemp (BSD/GNU)
+  tmp="$(mktemp "$dir/.${base}.XXXXXX" 2>/dev/null || mktemp 2>/dev/null)" || _die "mktemp failed for $target_file"
+  register_tmp "$tmp"
 
   printf '%s\n' "$content" > "$tmp" || _die "Cannot write temp file"
+
   # Best-effort durability without relying on non-portable `sync -f`
   if command -v python3 >/dev/null 2>&1; then
-    # fsync via tiny python (works on most CI images)
     python3 - <<'PY' "$tmp"
 import os, sys
 p=sys.argv[1]
@@ -130,24 +165,26 @@ PY
   fi
 
   mv -f -- "$tmp" "$target_file" || _die "Cannot move temp file into place"
-  # Clear TMP_FILE (temp is gone after mv)
-  TMP_FILE=""
 }
 
 # ------------------- hashing -------------------
 # Prefer sha256; fall back gracefully.
 _hash_file() {
   local f="$1"
+  [[ -f "$f" ]] || { _warn "hash: file not found: $f"; printf ''; return 1; }
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$f" | awk '{print $1}'
+    sha256sum -- "$f" | awk '{print $1}'
   elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$f" | awk '{print $1}'
+    shasum -a 256 -- "$f" | awk '{print $1}'
+  elif command -v openssl >/dev/null 2>&1; then
+    # openssl writes "SHA256(file)= hash" to stdout
+    openssl dgst -sha256 -- "$f" | awk '{print $NF}'
   elif command -v sha1sum >/dev/null 2>&1; then
-    sha1sum "$f" | awk '{print $1}'
+    sha1sum -- "$f" | awk '{print $1}'
   elif command -v md5sum >/dev/null 2>&1; then
-    md5sum "$f" | awk '{print $1}'
+    md5sum -- "$f" | awk '{print $1}'
   else
-    printf ''  # no hasher; callers should tolerate empty
+    _warn "No hashing tool found"; printf ''
   fi
 }
 
@@ -179,23 +216,12 @@ validate_version_file_path() {
   local version_file="$1"
   local project_root="$2"
   local resolved
-  resolved="$(realpath -e -- "$version_file" 2>/dev/null || true)"
+  resolved="$(_realpath "$version_file" 2>/dev/null || true)"
   [[ -n "$resolved" ]] || _die "VERSION path is a broken symlink"
   case "$resolved" in
     "$project_root"/*) : ;;
     *) _die "VERSION resolves outside repo" ;;
   esac
-}
-
-# ------------------- CMake utilities -------------------
-has_cmake_version_field() {
-  local cmake="$1"
-  [[ -f "$cmake" ]] || return 1
-  # project(... VERSION X.Y.Z) or project(... VERSION ${VAR})
-  grep -Ei '^[[:space:]]*project[[:space:]]*\([^)]*version[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+|\$\{[^}]+\})' "$cmake" >/dev/null && return 0
-  # set(PROJECT_VERSION "X.Y.Z")
-  grep -Ei '^[[:space:]]*set[[:space:]]*\([[:space:]]*project_version[[:space:]]+"?[0-9]+\.[0-9]+\.[0-9]+' "$cmake" >/dev/null && return 0
-  return 1
 }
 
 # ------------------- tag utilities -------------------
@@ -212,27 +238,25 @@ sanitize_tag_prefix() {
 
 last_tag_for_prefix() {
   local tag_prefix="$1"
-  local sanitized
+  local sanitized pattern t=""
   sanitized="$(sanitize_tag_prefix "$tag_prefix")"
-  local pattern="${sanitized}[0-9]*.[0-9]*.[0-9]*"
-  local t=""
+  pattern="${sanitized}[0-9]*.[0-9]*.[0-9]*"
   t="$(git tag --list "$pattern" --sort=-version:refname | head -n1 || true)"
   [[ -n "$t" ]] || t="$(git tag --list "$pattern" --sort=-v:refname | head -n1 || true)"
   printf '%s' "$t"
 }
 
-# ------------------- validation utilities -------------------
+# ------------------- validation & semver -------------------
 is_uint() { [[ "$1" =~ ^[0-9]+$ ]]; }
 
-# Export is_semver function for use by other scripts
+# Public: strict X.Y.Z (no pre/build)
 is_semver() { _is_semver_core "$@"; }
 
-# Split semver into components
+# Split semver into components (echo "major minor patch")
 split_semver() {
-    local version="$1"
-    local major minor patch
-    IFS='.' read -r major minor patch <<< "$version"
-    printf '%s %s %s' "$major" "$minor" "$patch"
+  local version="$1" major minor patch
+  IFS='.' read -r major minor patch <<< "$version"
+  printf '%s\n%s\n%s' "$major" "$minor" "$patch"
 }
 
 # Strict semver core X.Y.Z (no leading zeros)
@@ -248,6 +272,34 @@ _is_semver_with_prerelease() {
 # Semver with optional -prerelease and +build metadata
 _is_semver_full() {
   [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]
+}
+
+semver_normalize() {
+  # Prints normalized X.Y.Z or errors out
+  local v="$1"
+  _is_semver_core "$v" || _die "Not a core semver: $v"
+  # Strip leading zeros by arithmetic context
+  local M m p
+  IFS='.' read -r M m p <<< "$v"
+  printf '%d.%d.%d\n' "$M" "$m" "$p"
+}
+
+# Compare two strict X.Y.Z versions
+# returns: 0 if equal, 1 if v1>v2, 2 if v1<v2
+semver_cmp() {
+  local v1 v2 M1 m1 p1 M2 m2 p2
+  v1="$(semver_normalize "$1")"
+  v2="$(semver_normalize "$2")"
+  IFS='.' read -r M1 m1 p1 <<< "$v1"
+  IFS='.' read -r M2 m2 p2 <<< "$v2"
+  if   (( M1 > M2 )); then return 1
+  elif (( M1 < M2 )); then return 2
+  elif (( m1 > m2 )); then return 1
+  elif (( m1 < m2 )); then return 2
+  elif (( p1 > p2 )); then return 1
+  elif (( p1 < p2 )); then return 2
+  else return 0
+  fi
 }
 
 validate_version_format() {
@@ -280,6 +332,8 @@ Commands:
   last-tag <tag_prefix>              Get last tag for a prefix (e.g., "v")
   hash-file <file_path>              Print file hash (sha256 preferred)
   read-version <version_file>        Read version, stripped of whitespace
+  validate-version <ver> [pre] [build]  Validate semver; set 'pre' or 'build' to true
+  semver-cmp <v1> <v2>              Exit code 0(equal), 10(v1>v2), 11(v1<v2)
 
 Env:
   NO_COLOR=true                      Disable ANSI colors
@@ -288,6 +342,8 @@ Examples:
   $(basename "$0") last-tag v
   $(basename "$0") hash-file CMakeLists.txt
   $(basename "$0") read-version VERSION
+  $(basename "$0") validate-version 1.2.3
+  $(basename "$0") semver-cmp 1.2.3 1.4.0
 EOF
 }
 
@@ -295,24 +351,16 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   init_colors "${NO_COLOR:-false}"
   case "${1:-}" in
     last-tag)
-      shift
-      [[ $# -ge 1 ]] || _die "last-tag requires <tag_prefix>"
-      last_tag_for_prefix "$1"
-      ;;
+      shift; [[ $# -ge 1 ]] || _die "last-tag requires <tag_prefix>"; last_tag_for_prefix "$1" ;;
     hash-file)
-      shift
-      [[ $# -ge 1 ]] || _die "hash-file requires <file_path>"
-      _hash_file "$1"
-      ;;
+      shift; [[ $# -ge 1 ]] || _die "hash-file requires <file_path>"; _hash_file "$1" ;;
     read-version)
-      shift
-      [[ $# -ge 1 ]] || _die "read-version requires <version_file>"
-      read_version_file "$1"
-      ;;
-    -h|--help|'')
-      _usage; [[ -n "${1:-}" ]] || exit 0
-      ;;
-    *)
-      _usage; exit 1 ;;
+      shift; [[ $# -ge 1 ]] || _die "read-version requires <version_file>"; read_version_file "$1" ;;
+    validate-version)
+      shift; [[ $# -ge 1 ]] || _die "validate-version requires <version>"; validate_version_format "${1:?}" "${2:-false}" "${3:-false}" ;;
+    semver-cmp)
+      shift; [[ $# -ge 2 ]] || _die "semver-cmp requires <v1> <v2>"; if semver_cmp "$1" "$2"; then exit 0; else rc=$?; [[ $rc -eq 1 ]] && exit 10 || exit 11; fi ;;
+    -h|--help|'') _usage; [[ -n "${1:-}" ]] || exit 0 ;;
+    *) _usage; exit 1 ;;
   esac
 fi
