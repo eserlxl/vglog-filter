@@ -259,6 +259,21 @@ enhanced_cli_patterns=$(printf '%s' "$CPP_DIFF" | awk '
   /^\+[[:space:]]*.*argv\[/ {print "argv_access_change"}
 ' | LC_ALL=C sort -u | wc -l | tr -d ' ' || printf '0')
 
+# Ensure all variables are numeric for arithmetic expression
+getopt_changes=${getopt_changes:-0}
+arg_parsing_changes=${arg_parsing_changes:-0}
+help_text_changes=${help_text_changes:-0}
+main_signature_changes=${main_signature_changes:-0}
+enhanced_cli_patterns=${enhanced_cli_patterns:-0}
+
+# Ensure count variables are numeric for printf statements
+removed_short_count=${removed_short_count:-0}
+added_short_count=${added_short_count:-0}
+removed_long_count=${removed_long_count:-0}
+added_long_count=${added_long_count:-0}
+manual_added_long_count=${manual_added_long_count:-0}
+manual_removed_long_count=${manual_removed_long_count:-0}
+
 # Composite CLI change flags
 cli_changes=false
 if [[ -n "$short_after" && "$short_after" != "$short_before" ]]; then
@@ -269,7 +284,15 @@ if [[ -n "$long_after" && "$long_after" != "$long_before" ]]; then
   cli_changes=true
   [[ -n "$removed_long_list" ]] && breaking_cli_changes=true
 fi
-(( getopt_changes + arg_parsing_changes + help_text_changes + main_signature_changes + enhanced_cli_patterns > 0 )) && manual_cli_changes=true
+
+# Use a more robust method for the arithmetic expression
+total_patterns=0
+[[ "$getopt_changes" =~ ^[0-9]+$ ]] && total_patterns=$((total_patterns + getopt_changes))
+[[ "$arg_parsing_changes" =~ ^[0-9]+$ ]] && total_patterns=$((total_patterns + arg_parsing_changes))
+[[ "$help_text_changes" =~ ^[0-9]+$ ]] && total_patterns=$((total_patterns + help_text_changes))
+[[ "$main_signature_changes" =~ ^[0-9]+$ ]] && total_patterns=$((total_patterns + main_signature_changes))
+[[ "$enhanced_cli_patterns" =~ ^[0-9]+$ ]] && total_patterns=$((total_patterns + enhanced_cli_patterns))
+(( total_patterns > 0 )) && manual_cli_changes=true
 
 # --- output ------------------------------------------------------------------
 

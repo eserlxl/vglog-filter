@@ -38,6 +38,7 @@ Options:
   --json                   Output machine-readable JSON (top-level result)
   --suggest-only           Output only the suggestion (major/minor/patch/none)
   --strict-status          Use strict exit codes even with --suggest-only
+ (bypasses trivial repo checks)
   --help, -h               Show this help
 
 Examples:
@@ -73,6 +74,7 @@ JSON_OUTPUT=false
 SUGGEST_ONLY=false
 STRICT_STATUS=false
 
+
 while [[ $# -gt 0 ]]; do
   case $1 in
     --since|--since-tag)
@@ -103,6 +105,7 @@ while [[ $# -gt 0 ]]; do
     --json) JSON_OUTPUT=true; shift;;
     --suggest-only) SUGGEST_ONLY=true; shift;;
     --strict-status) STRICT_STATUS=true; shift;;
+    
     --help|-h) show_help; exit 0;;
     *) printf 'Error: Unknown option: %s\n' "$1" >&2; show_help; exit 1;;
   esac
@@ -217,7 +220,7 @@ main() {
   if [[ -n "$REPO_ROOT" ]]; then
     pushd "$REPO_ROOT" >/dev/null
     did_pushd=true
-    trap '[[ "$did_pushd" == "true" ]] && popd >/dev/null || true' EXIT
+    trap '[[ "${did_pushd:-false}" == "true" ]] && popd >/dev/null || true' EXIT
   fi
 
   # 1) Resolve refs
@@ -226,24 +229,24 @@ main() {
   local ref_raw; run_cmd_capture ref_raw "$SCRIPT_DIR/ref-resolver.sh" "${ref_argv[@]}"
   declare -A REF=(); parse_kv_into REF <<<"$ref_raw"
 
-  # Early-outs on trivial repos
-  if [[ "${REF[SINGLE_COMMIT_REPO]:-false}" == "true" || "${REF[HAS_COMMITS]:-true}" == "false" ]]; then
-    if [[ "$SUGGEST_ONLY" == "true" ]]; then
-      printf 'none\n'
-      exit 0
-    fi
-    if [[ "$JSON_OUTPUT" == "true" ]]; then
-      printf '{ "suggestion": "none" }\n'
-    elif [[ "$MACHINE_OUTPUT" == "true" ]]; then
-      printf 'SUGGESTION=none\n'
+  # Handle trivial repos (empty or single commit)
+  if [[ "${REF[SINGLE_COMMIT_REPO]:-false}" == "true" || "${REF[EMPTY_REPO]:-false}" == "true" || "${REF[HAS_COMMITS]:-true}" == "false" ]]; then
+    debug "Trivial repository detected - proceeding with analysis"
+    # For trivial repos, we'll continue with analysis but set appropriate defaults
+    if [[ "${REF[EMPTY_REPO]:-false}" == "true" ]]; then
+      # For empty repos, we can't analyze changes, but we can suggest initial version
+      BASE_REF="EMPTY"
+      TARGET_REF="HEAD"
     else
-      printf '=== Semantic Version Analysis v2 ===\nNo meaningful history; suggestion: NONE\n'
+      BASE_REF="${REF[BASE_REF]:-HEAD}"
+      TARGET_REF="${REF[TARGET_REF]:-HEAD}"
     fi
-    exit 20
   fi
 
   BASE_REF="${REF[BASE_REF]:-$BASE_REF}"
   TARGET_REF="${REF[TARGET_REF]:-${TARGET_REF:-HEAD}}"
+  
+
 
   # 2) Load config (key=value)
   debug "Loading version configuration..."
@@ -253,22 +256,74 @@ main() {
   # 3) Analyze file changes
   debug "Analyzing file changes..."
   local common_argv=(); build_common_argv common_argv
-  local file_raw; run_cmd_capture file_raw "$SCRIPT_DIR/file-change-analyzer.sh" "${common_argv[@]}"
+  local file_raw
+  if [[ "$BASE_REF" == "EMPTY" ]]; then
+    # For empty repositories, we can't analyze file changes
+    debug "Empty repository - skipping file change analysis"
+    file_raw="ADDED_FILES=0
+MODIFIED_FILES=0
+DELETED_FILES=0
+NEW_SOURCE_FILES=0
+NEW_TEST_FILES=0
+NEW_DOC_FILES=0
+DIFF_SIZE=0"
+  else
+    run_cmd_capture file_raw "$SCRIPT_DIR/file-change-analyzer.sh" "${common_argv[@]}"
+  fi
   declare -A FILE=(); parse_kv_into FILE <<<"$file_raw"
 
   # 4) Analyze CLI options
   debug "Analyzing CLI options..."
-  local cli_raw; run_cmd_capture cli_raw "$SCRIPT_DIR/cli-options-analyzer.sh" "${common_argv[@]}"
+  local cli_raw
+  if [[ "$BASE_REF" == "EMPTY" ]]; then
+    # For empty repositories, we can't analyze CLI changes
+    debug "Empty repository - skipping CLI analysis"
+    cli_raw="CLI_CHANGES=false
+BREAKING_CLI_CHANGES=false
+API_BREAKING=false
+MANUAL_CLI_CHANGES=false
+REMOVED_SHORT_COUNT=0
+REMOVED_LONG_COUNT=0"
+  else
+    run_cmd_capture cli_raw "$SCRIPT_DIR/cli-options-analyzer.sh" "${common_argv[@]}"
+  fi
   declare -A CLI=(); parse_kv_into CLI <<<"$cli_raw"
 
   # 5) Security keywords
   debug "Analyzing security keywords..."
-  local sec_raw; run_cmd_capture sec_raw "$SCRIPT_DIR/security-keyword-analyzer.sh" "${common_argv[@]}"
+  local sec_raw
+  if [[ "$BASE_REF" == "EMPTY" ]]; then
+    # For empty repositories, we can't analyze security changes
+    debug "Empty repository - skipping security analysis"
+    sec_raw="SECURITY_KEYWORDS=0
+SECURITY_PATTERNS=0
+CVE_PATTERNS=0
+MEMORY_SAFETY_ISSUES=0
+CRASH_FIXES=0
+TOTAL_SECURITY_SCORE=0
+WEIGHT_COMMITS=1
+WEIGHT_DIFF_SEC=1
+WEIGHT_CVE=3
+WEIGHT_MEMORY=2
+WEIGHT_CRASH=1"
+  else
+    run_cmd_capture sec_raw "$SCRIPT_DIR/security-keyword-analyzer.sh" "${common_argv[@]}"
+  fi
   declare -A SEC=(); parse_kv_into SEC <<<"$sec_raw"
 
   # 6) General keyword analysis
   debug "Analyzing breaking-change keywords..."
-  local kw_raw; run_cmd_capture kw_raw "$SCRIPT_DIR/keyword-analyzer.sh" "${common_argv[@]}"
+  local kw_raw
+  if [[ "$BASE_REF" == "EMPTY" ]]; then
+    # For empty repositories, we can't analyze keyword changes
+    debug "Empty repository - skipping keyword analysis"
+    kw_raw="HAS_CLI_BREAKING=false
+HAS_API_BREAKING=false
+TOTAL_SECURITY=0
+REMOVED_OPTIONS_KEYWORDS=0"
+  else
+    run_cmd_capture kw_raw "$SCRIPT_DIR/keyword-analyzer.sh" "${common_argv[@]}"
+  fi
   declare -A KW=(); parse_kv_into KW <<<"$kw_raw"
 
   # 7) Bonus calculation -------------------------------------------------------
@@ -357,7 +412,6 @@ main() {
   # 11) Output formats ---------------------------------------------------------
   debug "Output section reached, SUGGEST_ONLY=$SUGGEST_ONLY, suggestion=$suggestion"
   if [[ "$SUGGEST_ONLY" == "true" ]]; then
-    echo "TEST OUTPUT: $suggestion" >&2
     echo "$suggestion"
   elif [[ "$JSON_OUTPUT" == "true" ]]; then
     # Ask calculator for deltas (patch/minor/major) with machine, convert totals

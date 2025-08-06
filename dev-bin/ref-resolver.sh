@@ -131,11 +131,15 @@ get_base_reference() {
         if [[ -n "$ref" ]]; then
             verify_ref "$ref"; printf '%s|date' "$ref"
         else
-            printf 'Warning: No commits found before %s, using first commit\n' "$SINCE_DATE" >&2
+            printf 'Warning: No commits found before %s\n' "$SINCE_DATE" >&2
             local first_commit
             first_commit=$(git -c color.ui=false rev-list --max-parents=0 HEAD 2>/dev/null || true)
-            [[ -n "$first_commit" ]] || { printf 'Error: No commits found in repository\n' >&2; exit 1; }
-            printf '%s|first' "$first_commit"
+            if [[ -n "$first_commit" ]]; then
+                printf '%s|first' "$first_commit"
+            else
+                # Empty repository - no commits yet
+                printf 'EMPTY|empty'
+            fi
         fi
         return
     fi
@@ -150,14 +154,18 @@ get_base_reference() {
         # If no tags exist, use HEAD~1 instead of first commit
         local parent_commit
         parent_commit=$(git -c color.ui=false rev-parse HEAD~1 2>/dev/null || true)
-        if [[ -n "$parent_commit" ]]; then
+        if [[ -n "$parent_commit" && "$parent_commit" != "HEAD~1" ]]; then
             printf '%s|parent' "$parent_commit"
         else
             # Only use first commit if HEAD~1 doesn't exist (single-commit repo)
             local first_commit
             first_commit=$(git -c color.ui=false rev-list --max-parents=0 HEAD 2>/dev/null || true)
-            [[ -n "$first_commit" ]] || { printf 'Error: No commits found in repository\n' >&2; exit 1; }
-            printf '%s|first' "$first_commit"
+            if [[ -n "$first_commit" ]]; then
+                printf '%s|first' "$first_commit"
+            else
+                # Empty repository - no commits yet
+                printf 'EMPTY|empty'
+            fi
         fi
     fi
 }
@@ -183,13 +191,44 @@ main() {
 
     # Set target reference (default to HEAD)
     if [[ -n "$TARGET_REF" ]]; then
-        verify_ref "$TARGET_REF"
+        # Don't verify HEAD for empty repositories
+        if [[ "$base_ref" != "EMPTY" ]]; then
+            verify_ref "$TARGET_REF"
+        fi
     fi
 
     # Check and normalize disjoint branches with merge-base
     local actual_base
     actual_base=$(git -c color.ui=false merge-base "$base_ref" "$TARGET_REF" 2>/dev/null || printf '')
     if [[ -z "$actual_base" ]]; then
+        # Check if this is an empty repository
+        if [[ "$base_ref" = "EMPTY" ]]; then
+            # Empty repository - no commits yet
+            if [[ "$PRINT_BASE" = "true" ]]; then
+                printf 'EMPTY\n'
+            elif [[ "$JSON_OUTPUT" = "true" ]]; then
+                printf '{\n'
+                printf '  "base_ref": "EMPTY",\n'
+                printf '  "base_ref_type": "empty",\n'
+                printf '  "target_ref": "%s",\n' "$TARGET_REF"
+                printf '  "commit_count": 0,\n'
+                printf '  "empty_repo": true\n'
+                printf '}\n'
+            elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
+                printf 'BASE_REF=EMPTY\n'
+                printf 'BASE_REF_TYPE=empty\n'
+                printf 'TARGET_REF=%s\n' "$TARGET_REF"
+                printf 'COMMIT_COUNT=0\n'
+                printf 'EMPTY_REPO=true\n'
+            else
+                printf '=== Reference Resolution ===\n'
+                printf 'Empty repository - no commits yet\n'
+                printf 'Base reference: EMPTY (empty)\n'
+                printf 'Target reference: %s\n' "$TARGET_REF"
+            fi
+            exit 0
+        fi
+        
         # Check if this is a single-commit repository
         local commit_count
         commit_count=$(git -c color.ui=false rev-list --count HEAD 2>/dev/null || printf '0')
