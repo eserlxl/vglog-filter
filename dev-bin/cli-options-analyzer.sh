@@ -19,6 +19,9 @@ export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 note() { :; } # overwritten by --verbose
+
+boolstr() { [[ "$1" == true ]] && printf 'true' || printf 'false'; }
+
 json_escape() { # naive escape for simple strings
   printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
@@ -28,9 +31,31 @@ trim_spaces() {
   printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
+one_line() {  # turn a newline-separated list into space-separated one line
+  paste -sd' ' -
+}
+
 join_by() { local IFS="$1"; shift; printf '%s' "$*"; }
 
+require_cmd() {
+  local miss=()
+  for c in git awk sed grep tr wc sort comm paste head tail cut; do
+    command -v "$c" >/dev/null 2>&1 || miss+=("$c")
+  done
+  ((${#miss[@]}==0)) || die "Missing required tools: ${miss[*]}"
+}
+
 have_git() { command -v git >/dev/null 2>&1; }
+
+verify_git_repo() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not inside a git repository"
+}
+
+# Validate git references
+verify_ref() {
+    local ref="$1"
+    git -c color.ui=false rev-parse -q --verify "$ref^{commit}" >/dev/null || die "Invalid reference: $ref"
+}
 
 # comm requires sorted input
 set_diff_counts() {
@@ -108,13 +133,16 @@ done
 $VERBOSE && note() { printf '[cli-analyzer] %s\n' "$*" >&2; }
 
 [[ -n "$BASE_REF" ]] || die "--base is required"
+require_cmd
 have_git || die "git command not found"
 
 # Change to repo root if specified
 if [[ -n "$REPO_ROOT" ]]; then
   cd "$REPO_ROOT" || die "Cannot cd into $REPO_ROOT"
-  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not in a git repository at $REPO_ROOT"
 fi
+verify_git_repo
+verify_ref "$BASE_REF"
+verify_ref "$TARGET_REF"
 
 # --- pathspecs ---------------------------------------------------------------
 
@@ -137,25 +165,105 @@ fi
 DIFF_FLAGS=(-M -C --unified=0)
 $IGNORE_WHITESPACE && DIFF_FLAGS+=(-w)
 
-# Validate git references
-verify_ref() {
-    local ref="$1"
-    git -c color.ui=false rev-parse -q --verify "$ref^{commit}" >/dev/null || die "Invalid reference: $ref"
+
+
+# --- extraction functions ----------------------------------------------------
+
+# Parse short options from getopt()/getopt_long() call sites.
+extract_short_opts() {
+  # Concatenate optstrings found in quotes in getopt calls, then uniq.
+  grep -Ea 'getopt(_long)?[[:space:]]*\(' -a \
+  | grep -Eo '"[^"]*"' -a \
+  | tr -d '"' \
+  | LC_ALL=C sort -u \
+  | tr -d '\n'
 }
 
-verify_ref "$BASE_REF"
-verify_ref "$TARGET_REF"
+# Parse long options from struct option arrays:
+#  - classic initializer: { "name", has_arg, flag, val }
+#  - designated initializer: { .name = "name", ... }
+extract_long_opts() {
+  awk '
+    /struct[[:space:]]+option/ { inblk=1 }
+    inblk && /};/             { inblk=0 }
+    inblk {
+      # capture first quoted token inside braces
+      if (match($0, /{\s*"([^"]+)"/, a)) print a[1];
+      # capture designated initializer .name = "xxx"
+      if (match($0, /\.name[[:space:]]*=[[:space:]]*"([^"]+)"/, b)) print b[1];
+    }
+  ' \
+  | sed '/^$/d' \
+  | LC_ALL=C sort -u \
+  | paste -sd',' -
+}
 
-# --- gather changes ----------------------------------------------------------
+# Count removed prototypes in headers as API break indicator.
+count_removed_prototypes() {
+  awk '
+    # minus lines only
+    /^-/ {
+      # crude prototype detector: ret name(args);
+      if ($0 !~ /^-[[:space:]]*(typedef|#)/ &&
+          $0 ~ /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]+[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([^;]*\)[[:space:]]*;[[:space:]]*$/)
+        print
+    }
+  ' | wc -l | tr -d ' '
+}
 
-note "Collecting changed files…"
-# Use -z to be robust to spaces/newlines; include renames/copies.
-mapfile -d '' CHANGED_FILES < <(git -c color.ui=false -c core.quotepath=false diff -z -M -C --name-only "$BASE_REF".."$TARGET_REF" -- "${PATHSPEC[@]}" || true)
+# Manual diff-based long option detection on added/removed lines (avoid strings/comments roughly).
+scan_manual_long_opts() {
+  local sign="$1" # '+' or '-'
+  awk -v s="$sign" '
+    $0 ~ ("^" s) {
+      line=$0
+      # skip obvious comments and quoted strings (naive)
+      if (line ~ /(^[+-]\s*\/\/)|(^[+-]\s*\/\*)|(^[+-].*["'\''].*--)/) next
+      if (match(line, /--([A-Za-z0-9-]+)/, m)) print "--" m[1]
+    }
+  ' | LC_ALL=C sort -u
+}
 
-if (( ${#CHANGED_FILES[@]} == 0 )); then
-  # no relevant files changed → consistent zero output
+# Switch-case removed vs added (roughly ignore comments)
+scan_case_labels() {
+  local sign="$1" # '+' or '-'
+  awk -v s="$sign" '
+    $0 ~ ("^" s) {
+      line=$0
+      if (line ~ /(^[+-]\s*\/\/)|(^[+-]\s*\/\*)/) next
+      if (match(line, /case[[:space:]]+([^:[:space:]]+)[[:space:]]*:/, m)) print m[1]
+    }
+  ' | LC_ALL=C sort -u
+}
+
+# --- output functions --------------------------------------------------------
+
+emit_results_zero() {
+  note "No relevant source/header changes"
   if $JSON_OUTPUT; then
-    printf '%s\n' '{ "cli_changes": false, "breaking_cli_changes": false, "api_breaking": false, "manual_cli_changes": false, "manual_added_long_count": 0, "manual_removed_long_count": 0, "removed_short_count": 0, "added_short_count": 0, "removed_long_count": 0, "added_long_count": 0, "getopt_changes": 0, "arg_parsing_changes": 0, "help_text_changes": 0, "main_signature_changes": 0, "enhanced_cli_patterns": 0, "removed_short_list": [], "added_short_list": [], "removed_long_list": [], "added_long_list": [] }'
+    cat <<'JSON'
+{
+  "cli_changes": false,
+  "breaking_cli_changes": false,
+  "api_breaking": false,
+  "manual_cli_changes": false,
+  "manual_added_long_count": 0,
+  "manual_removed_long_count": 0,
+  "removed_short_count": 0,
+  "added_short_count": 0,
+  "removed_long_count": 0,
+  "added_long_count": 0,
+  "getopt_changes": 0,
+  "arg_parsing_changes": 0,
+  "help_text_changes": 0,
+  "main_signature_changes": 0,
+  "enhanced_cli_patterns": 0,
+  "removed_short_list": [],
+  "added_short_list": [],
+  "removed_long_list": [],
+  "added_long_list": []
+}
+JSON
   elif $MACHINE_OUTPUT; then
     cat <<EOF
 CLI_CHANGES=false
@@ -168,10 +276,25 @@ REMOVED_SHORT_COUNT=0
 ADDED_SHORT_COUNT=0
 REMOVED_LONG_COUNT=0
 ADDED_LONG_COUNT=0
+GETOPT_CHANGES=0
+ARG_PARSING_CHANGES=0
+HELP_TEXT_CHANGES=0
+MAIN_SIGNATURE_CHANGES=0
+ENHANCED_CLI_PATTERNS=0
 EOF
   else
     printf '=== CLI Options Analysis ===\nNo relevant source/header changes between %s..%s\n' "$BASE_REF" "$TARGET_REF"
   fi
+}
+
+# --- gather changes ----------------------------------------------------------
+
+note "Collecting changed files…"
+# Use -z to be robust to spaces/newlines; include renames/copies.
+mapfile -d '' CHANGED_FILES < <(git -c color.ui=false -c core.quotepath=false diff -z -M -C --name-only "$BASE_REF".."$TARGET_REF" -- "${PATHSPEC[@]}" || true)
+
+if (( ${#CHANGED_FILES[@]} == 0 )); then
+  emit_results_zero
   exit 0
 fi
 
@@ -187,6 +310,9 @@ note "Computing diffs…"
 SRC_DIFF=$(git -c color.ui=false diff "${DIFF_FLAGS[@]}" "$BASE_REF".."$TARGET_REF" -- "${CHANGED_FILES[@]}" || true)
 CPP_DIFF=$(git -c color.ui=false diff "${DIFF_FLAGS[@]}" "$BASE_REF".."$TARGET_REF" -- "${PATHSPEC[@]}" || true)
 
+# Header-only diff subset for API analysis
+HDR_DIFF=$(printf '%s' "$SRC_DIFF" | grep -E '^\+|^\-|^diff --git|^index|^@@|/.*\.(h|hh|hpp)$' -n --color=never | sed -n 'p' || true)
+
 # --- extract option sets -----------------------------------------------------
 
 short_before_all="" ; short_after_all=""
@@ -194,12 +320,12 @@ long_before_all=""  ; long_after_all=""
 
 for f in "${CHANGED_FILES[@]}"; do
   # Extract optstrings from getopt()/getopt_long() calls: "abc:d:"
-  short_before_all+=$(printf '%s' "${BEFORE[$f]}" | grep -E 'getopt(_long)?\s*\(' -a || true | grep -o '"[^"]*"' -a | tr -d '"' || true)
-  short_after_all+=$(printf '%s' "${AFTER[$f]}"  | grep -E 'getopt(_long)?\s*\(' -a || true | grep -o '"[^"]*"' -a | tr -d '"' || true)
+  short_before_all+=$(printf '%s' "${BEFORE[$f]}" | extract_short_opts || true)
+  short_after_all+=$(printf '%s' "${AFTER[$f]}"  | extract_short_opts || true)
 
   # Extract long options from struct option arrays: { "name", …
-  long_before_all+=$(printf '%s' "${BEFORE[$f]}" | awk '/struct[[:space:]]+option/,/};/' | grep -o '"[^"]\+"' -a | tr -d '"' | tr '\n' ',' || true)
-  long_after_all+=$(printf '%s' "${AFTER[$f]}"  | awk '/struct[[:space:]]+option/,/};/' | grep -o '"[^"]\+"' -a | tr -d '"' | tr '\n' ',' || true)
+  long_before_all+=$(printf '%s' "${BEFORE[$f]}" | extract_long_opts || true)
+  long_after_all+=$(printf '%s' "${AFTER[$f]}"  | extract_long_opts || true)
 done
 
 short_before=$(printf '%s' "$short_before_all" | LC_ALL=C sort -u | tr -d '\n')
@@ -222,41 +348,43 @@ added_long_list=$(   comm -13 <(printf '%s\n' "$long_before_list")  <(printf '%s
 
 # Counts
 read -r removed_short_count added_short_count < <(set_diff_counts "$short_before_list" "$short_after_list")
+removed_short_count=$(printf '%s' "$removed_short_count" | tr -d ' ')
+added_short_count=$(printf '%s' "$added_short_count" | tr -d ' ')
 read -r removed_long_count  added_long_count  < <(set_diff_counts "$long_before_list"  "$long_after_list")
+removed_long_count=$(printf '%s' "$removed_long_count" | tr -d ' ')
+added_long_count=$(printf '%s' "$added_long_count" | tr -d ' ')
 
 # --- raw diff heuristics -----------------------------------------------------
 
-removed_cases=$(printf '%s' "$SRC_DIFF" | grep -E '^-+[[:space:]]*case[[:space:]]' -a | sed 's/^-[[:space:]]*case[[:space:]]*//' | LC_ALL=C sort -u || true)
-added_cases=$(  printf '%s' "$SRC_DIFF" | grep -E '^\++[[:space:]]*case[[:space:]]' -a | sed 's/^\+[[:space:]]*case[[:space:]]*//' | LC_ALL=C sort -u || true)
+removed_cases=$(printf '%s' "$SRC_DIFF" | scan_case_labels '-')
+added_cases=$(  printf '%s' "$SRC_DIFF" | scan_case_labels '+')
 missing_cases=$(comm -23 <(printf '%s\n' "$removed_cases") <(printf '%s\n' "$added_cases") || true)
 breaking_cli_changes=false
 [[ -n "$missing_cases" ]] && breaking_cli_changes=true
 
 # Header API change hint (removed prototypes)
-header_diff=$(git -c color.ui=false diff "${DIFF_FLAGS[@]}" "$BASE_REF".."$TARGET_REF" -- \
-  ":(glob)**/*.h" ":(glob)**/*.hh" ":(glob)**/*.hpp" 2>/dev/null || true)
-removed_prototypes=$(printf '%s' "$header_diff" | awk '/^-[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ && /\);[[:space:]]*$/ && !/^-[[:space:]]*(typedef|#)/' | wc -l | tr -d ' ' || printf '0')
+removed_prototypes=$(printf '%s' "$HDR_DIFF" | count_removed_prototypes || printf '0')
 api_breaking=false
 (( removed_prototypes > 0 )) && api_breaking=true
 
 # Manual/heuristic long option detection limited to C/C++
-added_long_opts=$(printf '%s' "$CPP_DIFF" | awk '/^\+.*--[a-zA-Z0-9-]+/ && !/^\+.*["\x27].*--[a-zA-Z0-9-]+/ { if (match($0, /--([a-zA-Z0-9-]+)/, a)) print "--" a[1] }' | LC_ALL=C sort -u || true)
-removed_long_opts=$(printf '%s' "$CPP_DIFF" | awk '/^-.*--[a-zA-Z0-9-]+/ && !/^-.*["\x27].*--[a-zA-Z0-9-]+/ { if (match($0, /--([a-zA-Z0-9-]+)/, a)) print "--" a[1] }' | LC_ALL=C sort -u || true)
+added_long_opts=$(printf '%s' "$CPP_DIFF" | scan_manual_long_opts '+')
+removed_long_opts=$(printf '%s' "$CPP_DIFF" | scan_manual_long_opts '-')
 manual_added_long_count=$(printf '%s\n' "$added_long_opts" | sed '/^$/d' | wc -l | tr -d ' ' || printf '0')
 manual_removed_long_count=$(printf '%s\n' "$removed_long_opts" | sed '/^$/d' | wc -l | tr -d ' ' || printf '0')
 manual_cli_changes=false
 (( manual_added_long_count > 0 || manual_removed_long_count > 0 )) && manual_cli_changes=true
 
-getopt_changes=$(printf '%s' "$CPP_DIFF" | grep -c -E '(getopt_long|getopt)' -a || printf '0')
-arg_parsing_changes=$(printf '%s' "$CPP_DIFF" | awk '/^\+[[:space:]]*if[[:space:]]*\([[:space:]]*argc|^\+[[:space:]]*while[[:space:]]*\([[:space:]]*argc|^\+[[:space:]]*for[[:space:]]*\([[:space:]]*argc|^\+[[:space:]]*switch[[:space:]]*\([[:space:]]*argv/ {print}' | wc -l | tr -d ' ' || printf '0')
-help_text_changes=$(printf '%s' "$CPP_DIFF" | grep -i -c -E '(^\+.*(usage|help|option|argument))' -a || printf '0')
-main_signature_changes=$(printf '%s' "$CPP_DIFF" | awk '/^\+[[:space:]]*int[[:space:]]+main[[:space:]]*\(/ {print}' | wc -l | tr -d ' ' || printf '0')
+getopt_changes=$(printf '%s' "$CPP_DIFF" | grep -c -E '(getopt_long|getopt)\s*\(' -a || printf '0')
+arg_parsing_changes=$(printf '%s' "$CPP_DIFF" | grep -c -E '^\+.*\b(argc|argv)\b' -a || printf '0')
+help_text_changes=$(printf '%s' "$CPP_DIFF" | grep -i -c -E '^\+.*\b(usage|help|option|argument)\b' -a || printf '0')
+main_signature_changes=$(printf '%s' "$CPP_DIFF" | grep -c -E '^\+[^/]*\bint[[:space:]]+main[[:space:]]*\(' -a || printf '0')
 
 enhanced_cli_patterns=$(printf '%s' "$CPP_DIFF" | awk '
-  /^\+[[:space:]]*[^/#!].*-[[:alpha:]]/ {print "short_option_change"}
-  /^\+[[:space:]]*[^/#!].*--[[:alnum:]-]+/ {print "long_option_change"}
-  /^\+[[:space:]]*.*argc[[:space:]]*[<>=!]/ {print "argc_check_change"}
-  /^\+[[:space:]]*.*argv\[/ {print "argv_access_change"}
+  /^\+[^/#!].*-[[:alpha:]]/       {print "short_option_change"}
+  /^\+[^/#!].*--[[:alnum:]-]+/    {print "long_option_change"}
+  /^\+.*\bargc[[:space:]]*[<>=!]/ {print "argc_check_change"}
+  /^\+.*\bargv\[/                 {print "argv_access_change"}
 ' | LC_ALL=C sort -u | wc -l | tr -d ' ' || printf '0')
 
 # Ensure all variables are numeric for arithmetic expression
@@ -294,14 +422,63 @@ total_patterns=0
 [[ "$enhanced_cli_patterns" =~ ^[0-9]+$ ]] && total_patterns=$((total_patterns + enhanced_cli_patterns))
 (( total_patterns > 0 )) && manual_cli_changes=true
 
-# --- output ------------------------------------------------------------------
+# --- output functions --------------------------------------------------------
 
-if $JSON_OUTPUT; then
+emit_results_zero() {
+  note "No relevant source/header changes"
+  if $JSON_OUTPUT; then
+    cat <<'JSON'
+{
+  "cli_changes": false,
+  "breaking_cli_changes": false,
+  "api_breaking": false,
+  "manual_cli_changes": false,
+  "manual_added_long_count": 0,
+  "manual_removed_long_count": 0,
+  "removed_short_count": 0,
+  "added_short_count": 0,
+  "removed_long_count": 0,
+  "added_long_count": 0,
+  "getopt_changes": 0,
+  "arg_parsing_changes": 0,
+  "help_text_changes": 0,
+  "main_signature_changes": 0,
+  "enhanced_cli_patterns": 0,
+  "removed_short_list": [],
+  "added_short_list": [],
+  "removed_long_list": [],
+  "added_long_list": []
+}
+JSON
+  elif $MACHINE_OUTPUT; then
+    cat <<EOF
+CLI_CHANGES=false
+BREAKING_CLI_CHANGES=false
+API_BREAKING=false
+MANUAL_CLI_CHANGES=false
+MANUAL_ADDED_LONG_COUNT=0
+MANUAL_REMOVED_LONG_COUNT=0
+REMOVED_SHORT_COUNT=0
+ADDED_SHORT_COUNT=0
+REMOVED_LONG_COUNT=0
+ADDED_LONG_COUNT=0
+GETOPT_CHANGES=0
+ARG_PARSING_CHANGES=0
+HELP_TEXT_CHANGES=0
+MAIN_SIGNATURE_CHANGES=0
+ENHANCED_CLI_PATTERNS=0
+EOF
+  else
+    printf '=== CLI Options Analysis ===\nNo relevant source/header changes between %s..%s\n' "$BASE_REF" "$TARGET_REF"
+  fi
+}
+
+emit_json() {
   printf '{\n'
-  printf '  "cli_changes": %s,\n' "$($cli_changes && echo true || echo false)"
-  printf '  "breaking_cli_changes": %s,\n' "$($breaking_cli_changes && echo true || echo false)"
-  printf '  "api_breaking": %s,\n' "$($api_breaking && echo true || echo false)"
-  printf '  "manual_cli_changes": %s,\n' "$($manual_cli_changes && echo true || echo false)"
+  printf '  "cli_changes": %s,\n' "$(boolstr "$cli_changes")"
+  printf '  "breaking_cli_changes": %s,\n' "$(boolstr "$breaking_cli_changes")"
+  printf '  "api_breaking": %s,\n' "$(boolstr "$api_breaking")"
+  printf '  "manual_cli_changes": %s,\n' "$(boolstr "$manual_cli_changes")"
   printf '  "manual_added_long_count": %d,\n' "$manual_added_long_count"
   printf '  "manual_removed_long_count": %d,\n' "$manual_removed_long_count"
   printf '  "removed_short_count": %d,\n' "$removed_short_count"
@@ -337,13 +514,14 @@ if $JSON_OUTPUT; then
     $first || printf ', '; first=false; printf '"%s"' "$(json_escape "$s")"
   done <<< "$added_long_list"; printf ']\n'
   printf '}\n'
+}
 
-elif $MACHINE_OUTPUT; then
+emit_machine() {
   cat <<EOF
-CLI_CHANGES=$($cli_changes && echo true || echo false)
-BREAKING_CLI_CHANGES=$($breaking_cli_changes && echo true || echo false)
-API_BREAKING=$($api_breaking && echo true || echo false)
-MANUAL_CLI_CHANGES=$($manual_cli_changes && echo true || echo false)
+CLI_CHANGES=$(boolstr "$cli_changes")
+BREAKING_CLI_CHANGES=$(boolstr "$breaking_cli_changes")
+API_BREAKING=$(boolstr "$api_breaking")
+MANUAL_CLI_CHANGES=$(boolstr "$manual_cli_changes")
 MANUAL_ADDED_LONG_COUNT=$manual_added_long_count
 MANUAL_REMOVED_LONG_COUNT=$manual_removed_long_count
 REMOVED_SHORT_COUNT=$removed_short_count
@@ -356,16 +534,17 @@ HELP_TEXT_CHANGES=$help_text_changes
 MAIN_SIGNATURE_CHANGES=$main_signature_changes
 ENHANCED_CLI_PATTERNS=$enhanced_cli_patterns
 EOF
+}
 
-else
+emit_human() {
     printf '=== CLI Options Analysis ===\n'
     printf 'Base reference:   %s\n' "$BASE_REF"
     printf 'Target reference: %s\n' "$TARGET_REF"
     printf '\nCLI Changes:\n'
-    printf '  CLI interface changes: %s\n' "$($cli_changes && echo true || echo false)"
-    printf '  Breaking CLI changes:  %s\n' "$($breaking_cli_changes && echo true || echo false)"
-    printf '  Manual CLI changes:    %s\n' "$($manual_cli_changes && echo true || echo false)"
-    printf '  API breaking changes:  %s\n' "$($api_breaking && echo true || echo false)"
+    printf '  CLI interface changes: %s\n' "$(boolstr "$cli_changes")"
+    printf '  Breaking CLI changes:  %s\n' "$(boolstr "$breaking_cli_changes")"
+    printf '  Manual CLI changes:    %s\n' "$(boolstr "$manual_cli_changes")"
+    printf '  API breaking changes:  %s\n' "$(boolstr "$api_breaking")"
     printf '\nOption Counts:\n'
     printf '  Removed short options: %d\n' "$removed_short_count"
     printf '  Added short options:   %d\n' "$added_short_count"
@@ -375,10 +554,10 @@ else
     printf '  Manual removed long:   %d\n' "$manual_removed_long_count"
     if [[ -n "$removed_short_list$added_short_list$removed_long_list$added_long_list" ]]; then
         printf '\nOption Lists:\n'
-        [[ -n "$removed_short_list" ]] && printf '  - Removed short: %s\n' "$(join_by ' ' "$removed_short_list")"
-        [[ -n "$added_short_list"   ]] && printf '  - Added short:   %s\n' "$(join_by ' ' "$added_short_list")"
-        [[ -n "$removed_long_list"  ]] && printf '  - Removed long:  %s\n' "$(echo "$removed_long_list" | paste -sd' ' -)"
-        [[ -n "$added_long_list"    ]] && printf '  - Added long:    %s\n' "$(echo "$added_long_list" | paste -sd' ' -)"
+        [[ -n "$removed_short_list" ]] && { printf '  - Removed short: '; printf '%s\n' "$(printf '%s\n' "$removed_short_list" | one_line)"; }
+        [[ -n "$added_short_list"   ]] && { printf '  - Added short:   '; printf '%s\n' "$(printf '%s\n' "$added_short_list" | one_line)"; }
+        [[ -n "$removed_long_list"  ]] && { printf '  - Removed long:  '; printf '%s\n' "$(printf '%s\n' "$removed_long_list" | one_line)"; }
+        [[ -n "$added_long_list"    ]] && { printf '  - Added long:    '; printf '%s\n' "$(printf '%s\n' "$added_long_list" | one_line)"; }
     fi
     printf '\nPattern Analysis:\n'
     printf '  getopt changes:         %d\n' "$getopt_changes"
@@ -386,6 +565,16 @@ else
     printf '  help/usage text diff:   %d\n' "$help_text_changes"
     printf '  main signature changes: %d\n' "$main_signature_changes"
     printf '  enhanced CLI patterns:  %d\n' "$enhanced_cli_patterns"
+}
+
+# --- output ------------------------------------------------------------------
+
+if $JSON_OUTPUT; then
+  emit_json
+elif $MACHINE_OUTPUT; then
+  emit_machine
+else
+  emit_human
 fi
 
 # --- exit policy -------------------------------------------------------------
