@@ -36,7 +36,7 @@ git commit -m "Second commit" >/dev/null 2>&1
 # Test that the system shows pure mathematical versioning in verbose output
 echo "Testing pure mathematical versioning output..."
 if cd "$PROJECT_ROOT"; then
-    result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --verbose --repo-root "$temp_dir" 2>/dev/null || true)
+    result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --verbose --repo-root "$temp_dir" 2>/dev/null || true)
 else
     result=""
 fi
@@ -80,8 +80,8 @@ fi
 # Test that the system produces consistent results
 echo "Testing consistent results..."
 if cd "$PROJECT_ROOT"; then
-    result1=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" 2>/dev/null || true)
-    result2=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" 2>/dev/null || true)
+    result1=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" 2>/dev/null || true)
+result2=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" 2>/dev/null || true)
 else
     result1=""
     result2=""

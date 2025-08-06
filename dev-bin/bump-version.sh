@@ -41,16 +41,16 @@ _need_exec() {
 }
 
 # version-utils is a sourced library (must exist and be readable)
-[[ -r "$SCRIPT_DIR/version-utils" ]] || _die_boot "Missing: $SCRIPT_DIR/version-utils"
+[[ -r "$SCRIPT_DIR/version-utils.sh" ]] || _die_boot "Missing: $SCRIPT_DIR/version-utils.sh"
 # Other helpers are called as executables
-_need_exec "$SCRIPT_DIR/cli-parser"         "cli-parser"
-_need_exec "$SCRIPT_DIR/cmake-updater"      "cmake-updater"
-_need_exec "$SCRIPT_DIR/version-calculator-loc" "version-calculator-loc"
-_need_exec "$SCRIPT_DIR/git-operations"     "git-operations"
-_need_exec "$SCRIPT_DIR/version-validator"  "version-validator"
+_need_exec "$SCRIPT_DIR/cli-parser.sh"         "cli-parser"
+_need_exec "$SCRIPT_DIR/cmake-updater.sh"      "cmake-updater"
+_need_exec "$SCRIPT_DIR/version-calculator-loc.sh" "version-calculator-loc"
+_need_exec "$SCRIPT_DIR/git-operations.sh"     "git-operations"
+_need_exec "$SCRIPT_DIR/version-validator.sh"  "version-validator"
 
 # shellcheck source=/dev/null
-source "$SCRIPT_DIR/version-utils"
+source "$SCRIPT_DIR/version-utils.sh"
 
 # ------------------------------ traps/cleanup --------------------------------
 
@@ -163,9 +163,9 @@ update_files() {
     # CMakeLists.txt update (skip when disabled)
     if [[ "${UPDATE_CMAKE:-true}" == "true" ]]; then
         if [[ "${DRY_RUN:-false}" == "true" ]]; then
-            "$SCRIPT_DIR/cmake-updater" simulate "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
+            "$SCRIPT_DIR/cmake-updater.sh" simulate "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
         else
-            "$SCRIPT_DIR/cmake-updater" update   "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
+            "$SCRIPT_DIR/cmake-updater.sh" update   "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
         fi
     fi
 }
@@ -179,7 +179,7 @@ perform_git_operations() {
     if [[ "${DO_COMMIT:-false}" == "true" || "${DO_TAG:-false}" == "true" || \
           "${DO_PUSH:-false}"   == "true" || "${PUSH_TAGS:-false}" == "true" ]]; then
         
-        "$SCRIPT_DIR/git-operations" perform_git_operations \
+        "$SCRIPT_DIR/git-operations.sh" perform_git_operations \
             "$VERSION_FILE" \
             "${UPDATE_CMAKE:-true}" \
             "$new_version" \
@@ -225,8 +225,8 @@ simulate_dry_run() {
     
     # Simulate CMake update once (detect format only once)
     local detect_out
-    detect_out="$("$SCRIPT_DIR/cmake-updater" detect_cmake_version_format "$PROJECT_ROOT/CMakeLists.txt" || true)"
-    "$SCRIPT_DIR/cmake-updater" simulate "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
+    detect_out="$("$SCRIPT_DIR/cmake-updater.sh" detect_cmake_version_format "$PROJECT_ROOT/CMakeLists.txt" || true)"
+    "$SCRIPT_DIR/cmake-updater.sh" simulate "$PROJECT_ROOT/CMakeLists.txt" "$new_version"
     
     # Simulate git operations
     if [[ "${DO_COMMIT:-false}" == "true" ]]; then
@@ -254,7 +254,7 @@ simulate_dry_run() {
             printf '%s\n' "${YELLOW}DRY RUN: Would create tag: ${TAG_PREFIX:-v}${new_version}${RESET}" >&2
         fi
         local last_tag
-        last_tag="$("$SCRIPT_DIR/version-utils" last-tag "${TAG_PREFIX:-v}" || true)"
+        last_tag="$("$SCRIPT_DIR/version-utils.sh" last-tag "${TAG_PREFIX:-v}" || true)"
         [[ -n "$last_tag" ]] && printf '%s\n' "${YELLOW}DRY RUN: Last tag for comparison: $last_tag${RESET}" >&2
     fi
     
@@ -284,7 +284,7 @@ handle_print_only() {
             if [[ -n "${REPO_ROOT:-}" ]]; then
                 calculator_args+=(--repo-root "${REPO_ROOT}")
             fi
-            "$SCRIPT_DIR/version-calculator-loc" "${calculator_args[@]}"
+            "$SCRIPT_DIR/version-calculator-loc.sh" "${calculator_args[@]}"
             exit 0
         fi
     fi
@@ -297,13 +297,13 @@ handle_print_only() {
 main() {
     # Fast help path
     if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-        "$SCRIPT_DIR/cli-parser" help
+        "$SCRIPT_DIR/cli-parser.sh" help
         exit 0
     fi
     
     # Parse CLI -> exports variables used below
     # We eval only the output of our trusted parser to set env vars/flags.
-    eval "$("$SCRIPT_DIR/cli-parser" parse "$@")"
+    eval "$("$SCRIPT_DIR/cli-parser.sh" parse "$@")"
     
     setup_environment
     
@@ -344,11 +344,11 @@ main() {
     # Sanity warning for --set without tagging (helps ordering in release flows)
     if [[ -n "${SET_VERSION:-}" && "${DO_TAG:-false}" != "true" && "$new_version" != *-* ]]; then
         local last_tag last_version
-        last_tag="$("$SCRIPT_DIR/version-utils" last-tag "${TAG_PREFIX:-v}" || true)"
+        last_tag="$("$SCRIPT_DIR/version-utils.sh" last-tag "${TAG_PREFIX:-v}" || true)"
         if [[ -n "$last_tag" ]]; then
             last_version="${last_tag:${#TAG_PREFIX:-v}}"
             if is_semver "$last_version"; then
-                if ! "$SCRIPT_DIR/version-validator" is_version_greater "$new_version" "$last_version"; then
+                if ! "$SCRIPT_DIR/version-validator.sh" is_version_greater "$new_version" "$last_version"; then
                     warn "--set version $new_version is not greater than last tag $last_tag"
                 fi
             fi

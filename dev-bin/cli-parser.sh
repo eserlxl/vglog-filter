@@ -13,7 +13,7 @@ set -euo pipefail
 
 # Source utilities
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-source "$SCRIPT_DIR/version-utils"
+source "$SCRIPT_DIR/version-utils.sh"
 
 # --- Default option values ---------------------------------------------------
 declare -A DEFAULT_OPTIONS=(
@@ -259,7 +259,7 @@ show_usage() {
     fi
     
     cat << EOF
-Usage: ./dev-bin/bump-version [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push] [--push-tags] [--allow-nonmonotonic-tag] [--allow-prerelease] [--repo-root PATH] [--remote REMOTE]
+Usage: ./dev-bin/bump-version.sh [major|minor|patch] [--commit] [--tag] [--dry-run] [--message MSG] [--allow-dirty] [--lightweight-tag] [--signed-tag] [--no-verify] [--print] [--no-cmake] [--tag-prefix PREFIX] [--sign-commit] [--set VERSION] [--no-color] [--push] [--push-tags] [--allow-nonmonotonic-tag] [--allow-prerelease] [--repo-root PATH] [--remote REMOTE]
 
 Bump the semantic version of vglog-filter
 
@@ -318,15 +318,15 @@ Environment:
   VERSION_MAJOR_DELTA      Major delta formula (default: 10*(1+LOC/1000))
 
 Examples:
-  ./dev-bin/bump-version patch
-  ./dev-bin/bump-version minor --commit
-  ./dev-bin/bump-version major --commit --tag
-  ./dev-bin/bump-version patch --dry-run
-  ./dev-bin/bump-version patch --print
-  ANALYSIS_MESSAGE='…' ./dev-bin/bump-version patch --commit
-  ./dev-bin/bump-version patch --signed-tag --tag
-  ./dev-bin/bump-version --set 2.1.0 --commit
-  ./dev-bin/bump-version --set 1.0.0-rc.1 --allow-prerelease --print
+  ./dev-bin/bump-version.sh patch
+  ./dev-bin/bump-version.sh minor --commit
+  ./dev-bin/bump-version.sh major --commit --tag
+  ./dev-bin/bump-version.sh patch --dry-run
+  ./dev-bin/bump-version.sh patch --print
+  ANALYSIS_MESSAGE='…' ./dev-bin/bump-version.sh patch --commit
+  ./dev-bin/bump-version.sh patch --signed-tag --tag
+  ./dev-bin/bump-version.sh --set 2.1.0 --commit
+  ./dev-bin/bump-version.sh --set 1.0.0-rc.1 --allow-prerelease --print
 
 Current version: $help_version
 EOF

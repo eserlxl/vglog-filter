@@ -140,25 +140,25 @@ While automated versioning is preferred, tools are available for manual inspecti
 
 ```sh
 # Analyze recent changes and suggest the next semantic version bump
-./dev-bin/semantic-version-analyzer --verbose
+./dev-bin/semantic-version-analyzer.sh --verbose
 
 # Get machine-readable JSON output
-./dev-bin/semantic-version-analyzer --json
+./dev-bin/semantic-version-analyzer.sh --json
 
 # Analyze changes since a specific version
-./dev-bin/semantic-version-analyzer --since v10.4.0 --verbose
+./dev-bin/semantic-version-analyzer.sh --since v10.4.0 --verbose
 
 # Manually bump the version (e.g., to major, minor, or patch)
-./dev-bin/bump-version [major|minor|patch]
+./dev-bin/bump-version.sh [major|minor|patch]
 
 # List existing Git tags
-./dev-bin/tag-manager list
+./dev-bin/tag-manager.sh list
 
 # Clean up old Git tags (e.g., keep only the last 'count' tags)
-./dev-bin/tag-manager cleanup [count]
+./dev-bin/tag-manager.sh cleanup [count]
 
 # Get detailed information about a specific tag
-./dev-bin/tag-manager info v10.5.0
+./dev-bin/tag-manager.sh info v10.5.0
 
 # Update alpha version for development releases
 ./dev-bin/update_alpha.sh

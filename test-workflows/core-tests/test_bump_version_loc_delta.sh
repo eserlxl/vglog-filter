@@ -51,8 +51,8 @@ run_test() {
 }
 
 # Get script paths from project root
-BUMP_VERSION_SCRIPT="$PROJECT_ROOT/dev-bin/bump-version"
-SEMANTIC_ANALYZER_SCRIPT="$PROJECT_ROOT/dev-bin/semantic-version-analyzer"
+BUMP_VERSION_SCRIPT="$PROJECT_ROOT/dev-bin/bump-version.sh"
+SEMANTIC_ANALYZER_SCRIPT="$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh"
 
 # Test 1: LOC delta system with patch bump
 printf '%s\n' "${CYAN}=== Test 1: LOC delta system with patch bump ===${RESET}"

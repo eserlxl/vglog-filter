@@ -26,7 +26,7 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 # Script path
-SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../dev-bin/semantic-version-analyzer"
+SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../dev-bin/semantic-version-analyzer.sh"
 
 # Helper functions
 # shellcheck disable=SC2317

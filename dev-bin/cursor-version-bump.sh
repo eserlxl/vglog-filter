@@ -99,8 +99,8 @@ resolve_bump_bin() {
     fi
     # Try project dev-bin then script dev-bin
     for cand in \
-        "$PROJECT_ROOT/dev-bin/bump-version" \
-        "$SCRIPT_DIR/dev-bin/bump-version"
+            "$PROJECT_ROOT/dev-bin/bump-version.sh" \
+    "$SCRIPT_DIR/dev-bin/bump-version.sh"
     do
         if [[ -x "$cand" ]]; then printf '%s\n' "$cand"; return; fi
     done
@@ -108,7 +108,7 @@ resolve_bump_bin() {
         command -v bump-version; return
     fi
     die "Could not find 'bump-version'. Set BUMP_VERSION_BIN or place it at \
-'$PROJECT_ROOT/dev-bin/bump-version' (or in PATH)."
+'$PROJECT_ROOT/dev-bin/bump-version.sh' (or in PATH)."
 }
 
 print_help() {

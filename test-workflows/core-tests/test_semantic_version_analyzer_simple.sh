@@ -9,7 +9,7 @@
 set -euo pipefail
 
 # shellcheck disable=SC2034 # SCRIPT_PATH is used for reference
-SCRIPT_PATH="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
+SCRIPT_PATH="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer.sh"
 
 # Change to project root for tests
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.."

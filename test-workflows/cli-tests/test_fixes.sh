@@ -77,7 +77,7 @@ first_commit=$(git rev-parse HEAD~1)
 second_commit=$(git rev-parse HEAD)
 
 # Run semantic version analyzer
-result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --verbose --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --verbose --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
 
 # Debug: Show the full result
 echo "Debug: Full result:"
@@ -135,7 +135,7 @@ first_commit=$(git rev-parse HEAD~1)
 second_commit=$(git rev-parse HEAD)
 
 # Run semantic version analyzer
-result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --verbose --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --verbose --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
 
 # Debug: Show the full result
 echo "Debug: Full result for Test 2:"
@@ -202,7 +202,7 @@ first_commit=$(git rev-parse HEAD~1)
 second_commit=$(git rev-parse HEAD)
 
 # Run semantic version analyzer
-result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "^SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
@@ -247,7 +247,7 @@ first_commit=$(git rev-parse HEAD~1)
 second_commit=$(git rev-parse HEAD)
 
 # Run semantic version analyzer with --ignore-whitespace
-result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" --ignore-whitespace 2>&1 || true)
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" --ignore-whitespace 2>&1 || true)
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "^SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
@@ -266,7 +266,7 @@ echo "Test 5: --print-base functionality"
 cd "$PROJECT_ROOT"
 
 # Run --print-base
-base_ref=$(./dev-bin/semantic-version-analyzer --print-base 2>&1 | tail -1 || echo "unknown")
+base_ref=$(./dev-bin/semantic-version-analyzer.sh --print-base 2>&1 | tail -1 || echo "unknown")
 
 if [[ "$base_ref" != "unknown" ]] && [[ "$base_ref" =~ ^[a-f0-9]+$ ]]; then
     echo "✅ PASS: --print-base returned valid SHA: $base_ref"

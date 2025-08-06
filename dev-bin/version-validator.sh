@@ -17,7 +17,7 @@ export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
 # Source utilities
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-source "$SCRIPT_DIR/version-utils"
+source "$SCRIPT_DIR/version-utils.sh"
 
 # Initialize colors only for standalone usage; library users can call directly.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

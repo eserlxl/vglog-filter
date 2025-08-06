@@ -81,7 +81,7 @@ run_cli_extraction_test() {
     # Run semantic version analyzer
     local cli_analysis
     if cd "$PROJECT_ROOT"; then
-        cli_analysis=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --base "$base_ref" --target "$target_ref" --json --repo-root "$temp_dir" 2>/dev/null || true)
+        cli_analysis=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --base "$base_ref" --target "$target_ref" --json --repo-root "$temp_dir" 2>/dev/null || true)
     else
         cli_analysis=""
     fi

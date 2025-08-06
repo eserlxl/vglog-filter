@@ -38,7 +38,7 @@ git commit -m "Add test change" -q
 # Run semantic analyzer and extract next version
 base_commit=$(git rev-parse HEAD~1)
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." || exit 1
-result=$(./dev-bin/semantic-version-analyzer --base "$base_commit" --repo-root "$test_dir" --json 2>/dev/null)
+result=$(./dev-bin/semantic-version-analyzer.sh --base "$base_commit" --repo-root "$test_dir" --json 2>/dev/null)
 cd "$test_dir" || exit 1
 
 # Parse JSON properly - handle multiline JSON
@@ -75,7 +75,7 @@ git commit -m "Add another test change" -q
 # Run semantic analyzer
 base_commit2=$(git rev-parse HEAD~1)
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." || exit 1
-result2=$(./dev-bin/semantic-version-analyzer --base "$base_commit2" --repo-root "$test_dir" --json 2>/dev/null)
+result2=$(./dev-bin/semantic-version-analyzer.sh --base "$base_commit2" --repo-root "$test_dir" --json 2>/dev/null)
 cd "$test_dir" || exit 1
 if command -v jq >/dev/null 2>&1; then
     next_version2=$(echo "$result2" | jq -r '.next_version')
@@ -110,7 +110,7 @@ git commit -m "Add third test change" -q
 # Run semantic analyzer
 base_commit3=$(git rev-parse HEAD~1)
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." || exit 1
-result3=$(./dev-bin/semantic-version-analyzer --base "$base_commit3" --repo-root "$test_dir" --json 2>/dev/null)
+result3=$(./dev-bin/semantic-version-analyzer.sh --base "$base_commit3" --repo-root "$test_dir" --json 2>/dev/null)
 cd "$test_dir" || exit 1
 if command -v jq >/dev/null 2>&1; then
     next_version3=$(echo "$result3" | jq -r '.next_version')

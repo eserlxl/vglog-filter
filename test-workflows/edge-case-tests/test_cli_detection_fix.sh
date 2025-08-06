@@ -41,7 +41,7 @@ git commit -m "Test: Update README only"
 # Run semantic version analyzer from the original project directory
 # Note: Using '|| true' to capture output even if command fails (intentional)
 if cd "$PROJECT_ROOT"; then
-    result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" 2>/dev/null || true)
+    result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" 2>/dev/null || true)
 else
     result=""
 fi

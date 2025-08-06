@@ -58,17 +58,17 @@ test_version_utils() {
     
     # Test last-tag command
     run_test "version-utils last-tag" \
-        "./dev-bin/version-utils last-tag v" \
+        "./dev-bin/version-utils.sh last-tag v" \
         ""
     
     # Test hash-file command
     run_test "version-utils hash-file" \
-        "./dev-bin/version-utils hash-file VERSION" \
+        "./dev-bin/version-utils.sh hash-file VERSION" \
         ""
     
     # Test read-version command
     run_test "version-utils read-version" \
-        "./dev-bin/version-utils read-version VERSION" \
+        "./dev-bin/version-utils.sh read-version VERSION" \
         "10.5.12"
 }
 
@@ -78,22 +78,22 @@ test_version_validator() {
     
     # Test validate command
     run_test "version-validator validate" \
-        "./dev-bin/version-validator validate 1.0.0" \
+        "./dev-bin/version-validator.sh validate 1.0.0" \
         "Version format is valid"
     
     # Test compare command
     run_test "version-validator compare" \
-        "./dev-bin/version-validator compare 1.0.0 1.0.1" \
+        "./dev-bin/version-validator.sh compare 1.0.0 1.0.1" \
         "-1"
     
     # Test parse command
     run_test "version-validator parse" \
-        "./dev-bin/version-validator parse 1.2.3" \
+        "./dev-bin/version-validator.sh parse 1.2.3" \
         "1"
     
     # Test is-prerelease command
     run_test "version-validator is-prerelease" \
-        "./dev-bin/version-validator is-prerelease 1.0.0-rc.1" \
+        "./dev-bin/version-validator.sh is-prerelease 1.0.0-rc.1" \
         "true"
 }
 
@@ -103,12 +103,12 @@ test_version_calculator() {
     
     # Test basic calculation
     run_test "version-calculator-loc basic" \
-        "./dev-bin/version-calculator-loc --current-version 1.0.0 --bump-type patch" \
+        "./dev-bin/version-calculator-loc.sh --current-version 1.0.0 --bump-type patch" \
         "1.0.1"
     
     # Test help command
     run_test "version-calculator-loc help" \
-        "./dev-bin/version-calculator-loc --help" \
+        "./dev-bin/version-calculator-loc.sh --help" \
         "Usage:"
 }
 
@@ -118,12 +118,12 @@ test_cmake_updater() {
     
     # Test detect command
     run_test "cmake-updater detect" \
-        "./dev-bin/cmake-updater detect CMakeLists.txt" \
+        "./dev-bin/cmake-updater.sh detect CMakeLists.txt" \
         "variable"
     
     # Test help command
     run_test "cmake-updater help" \
-        "./dev-bin/cmake-updater" \
+        "./dev-bin/cmake-updater.sh" \
         "Usage:"
 }
 
@@ -133,7 +133,7 @@ test_git_operations() {
     
     # Test help command
     run_test "git-operations help" \
-        "./dev-bin/git-operations" \
+        "./dev-bin/git-operations.sh" \
         "Usage:"
 }
 
@@ -143,12 +143,12 @@ test_cli_parser() {
     
     # Test help command
     run_test "cli-parser help" \
-        "./dev-bin/cli-parser help" \
+        "./dev-bin/cli-parser.sh help" \
         "Usage:"
     
     # Test validate command
     run_test "cli-parser validate" \
-        "./dev-bin/cli-parser validate patch --commit" \
+        "./dev-bin/cli-parser.sh validate patch --commit" \
         "CLI arguments are valid"
 }
 
@@ -158,12 +158,12 @@ test_bump_version_core() {
     
     # Test help command
     run_test "bump-version-core help" \
-        "./dev-bin/bump-version-core --help" \
+        "./dev-bin/bump-version.sh-core --help" \
         "Usage:"
     
     # Test dry run
     run_test "bump-version-core dry-run" \
-        "./dev-bin/bump-version-core patch --dry-run" \
+        "./dev-bin/bump-version.sh-core patch --dry-run" \
         "10.5.13"
 }
 
@@ -175,8 +175,8 @@ test_comparison() {
     local original_output
     local modular_output
     
-    original_output=$(./dev-bin/bump-version patch --dry-run 2>/dev/null | tail -1)
-    modular_output=$(./dev-bin/bump-version-core patch --dry-run 2>/dev/null | tail -1)
+    original_output=$(./dev-bin/bump-version.sh patch --dry-run 2>/dev/null | tail -1)
+    modular_output=$(./dev-bin/bump-version.sh-core patch --dry-run 2>/dev/null | tail -1)
     
     if [[ "$original_output" == "$modular_output" ]]; then
         test_passed "Output comparison"

@@ -281,7 +281,7 @@ git tag --sort=-version:refname | head -5
 git diff v10.4.0..v10.5.0 --stat
 
 # Analyze changes since a specific version
-./dev-bin/semantic-version-analyzer --since v10.4.0 --verbose
+./dev-bin/semantic-version-analyzer.sh --since v10.4.0 --verbose
 ```
 
 GitHub Releases also provide automatically generated release notes with detailed change information.

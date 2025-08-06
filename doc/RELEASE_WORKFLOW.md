@@ -26,7 +26,7 @@ This guide outlines the automated and manual processes for creating new releases
 `vglog-filter` employs a release process primarily driven by [Semantic Versioning (SemVer)](https://semver.org/) and [Conventional Commits](https://www.conventionalcommits.org/). New releases are typically automated via GitHub Actions based on the type of changes merged into the `main` branch. This ensures that version bumps (MAJOR, MINOR, PATCH) accurately reflect the nature of the changes, and release notes are automatically generated.
 
 Key components of the release process include:
--   **`semantic-version-analyzer`**: A utility script (`./dev-bin/semantic-version-analyzer`) that analyzes commit history to suggest the next semantic version bump using the advanced LOC-based delta system.
+-   **`semantic-version-analyzer`**: A utility script (`./dev-bin/semantic-version-analyzer.sh`) that analyzes commit history to suggest the next semantic version bump using the advanced LOC-based delta system.
 -   **GitHub Actions Workflow (`version-bump.yml`)**: This workflow automates the version bumping, tag creation, and GitHub Release generation based on detected changes.
 -   **LOC-Based Delta System**: Advanced versioning that always increases only the patch version with calculated increments based on change magnitude.
 -   **Configuration System**: YAML-based configuration (`dev-config/versioning.yml`) for customizing bonus points, multipliers, and thresholds.
@@ -43,19 +43,19 @@ Before initiating a release, it's good practice to analyze the changes since the
 
 ```bash
 # Analyze changes since the last official release
-./dev-bin/semantic-version-analyzer --verbose
+./dev-bin/semantic-version-analyzer.sh --verbose
 
 # Alternatively, analyze changes since a specific Git tag (e.g., v10.4.0)
-./dev-bin/semantic-version-analyzer --since v10.4.0 --verbose
+./dev-bin/semantic-version-analyzer.sh --since v10.4.0 --verbose
 
 # Get machine-readable JSON output for automation
-./dev-bin/semantic-version-analyzer --json
+./dev-bin/semantic-version-analyzer.sh --json
 
 # Restrict analysis to specific paths
-./dev-bin/semantic-version-analyzer --only-paths "src/**,include/**" --verbose
+./dev-bin/semantic-version-analyzer.sh --only-paths "src/**,include/**" --verbose
 
 # Show only the suggested bump type
-./dev-bin/semantic-version-analyzer --suggest-only
+./dev-bin/semantic-version-analyzer.sh --suggest-only
 ```
 
 ### 2. Review Suggested Version Bump
@@ -135,16 +135,16 @@ Use the semantic version analyzer to understand the impact of your changes:
 ./dev-bin/semantic-version-analyzer
 
 # Detailed analysis with file changes
-./dev-bin/semantic-version-analyzer --verbose
+./dev-bin/semantic-version-analyzer.sh --verbose
 
 # Machine-readable output for automation
-./dev-bin/semantic-version-analyzer --json | jq '.suggestion'
+./dev-bin/semantic-version-analyzer.sh --json | jq '.suggestion'
 
 # Analyze specific time period
-./dev-bin/semantic-version-analyzer --since-date 2025-01-01 --verbose
+./dev-bin/semantic-version-analyzer.sh --since-date 2025-01-01 --verbose
 
 # Show configuration values
-./dev-bin/semantic-version-analyzer --print-base
+./dev-bin/semantic-version-analyzer.sh --print-base
 ```
 
 The analyzer will provide:
@@ -212,13 +212,13 @@ For maintenance releases, you may want to clean up old tags:
 
 ```bash
 # List all tags
-./dev-bin/tag-manager list
+./dev-bin/tag-manager.sh list
 
 # Clean up old tags (interactive)
-./dev-bin/tag-manager cleanup
+./dev-bin/tag-manager.sh cleanup
 
 # Or keep only the 10 most recent tags
-./dev-bin/tag-manager cleanup 10
+./dev-bin/tag-manager.sh cleanup 10
 ```
 
 [↑ Back to top](#release-workflow-guide)
@@ -231,7 +231,7 @@ For maintenance releases, you may want to clean up old tags:
 
 **Analysis**:
 ```bash
-./dev-bin/semantic-version-analyzer --verbose
+./dev-bin/semantic-version-analyzer.sh --verbose
 # Output: SUGGESTION=patch
 # LOC: 50, Base PATCH: 1, Final PATCH: 1
 ```
@@ -244,7 +244,7 @@ For maintenance releases, you may want to clean up old tags:
 
 **Analysis**:
 ```bash
-./dev-bin/semantic-version-analyzer --verbose
+./dev-bin/semantic-version-analyzer.sh --verbose
 # Output: SUGGESTION=minor
 # LOC: 200, Base MINOR: 5, Bonus: CLI changes (+2), Final MINOR: 7
 ```
@@ -257,7 +257,7 @@ For maintenance releases, you may want to clean up old tags:
 
 **Analysis**:
 ```bash
-./dev-bin/semantic-version-analyzer --verbose
+./dev-bin/semantic-version-analyzer.sh --verbose
 # Output: SUGGESTION=major
 # LOC: 100, Base MAJOR: 10, Bonus: Breaking CLI (+2), Final MAJOR: 12
 ```
@@ -270,7 +270,7 @@ For maintenance releases, you may want to clean up old tags:
 
 **Analysis**:
 ```bash
-./dev-bin/semantic-version-analyzer --verbose
+./dev-bin/semantic-version-analyzer.sh --verbose
 # Output: SUGGESTION=patch
 # LOC: 150, Base PATCH: 1, Bonus: Security keywords (3×+2), Final PATCH: 7
 ```
@@ -283,7 +283,7 @@ For maintenance releases, you may want to clean up old tags:
 
 **Analysis**:
 ```bash
-./dev-bin/semantic-version-analyzer --verbose
+./dev-bin/semantic-version-analyzer.sh --verbose
 # Output: SUGGESTION=major
 # LOC: 2000, Base MAJOR: 30, Final MAJOR: 30
 ```
@@ -296,7 +296,7 @@ For maintenance releases, you may want to clean up old tags:
 
 **Analysis**:
 ```bash
-./dev-bin/semantic-version-analyzer --verbose
+./dev-bin/semantic-version-analyzer.sh --verbose
 # Output: SUGGESTION=minor
 # LOC: 300, Base MINOR: 5, Bonus: Performance 20-50% (+2), Final MINOR: 7
 ```
@@ -321,7 +321,7 @@ For maintenance releases, you may want to clean up old tags:
 #### Issue: Incorrect Version Bump
 **Symptoms**: Version bump doesn't match expected change type
 **Solutions**:
-- Run `./dev-bin/semantic-version-analyzer --verbose` to understand the analysis
+- Run `./dev-bin/semantic-version-analyzer.sh --verbose` to understand the analysis
 - Check LOC calculations and bonus point assignments
 - Review the LOC-based delta system configuration
 - Consider manual release with specific bump type
@@ -331,7 +331,7 @@ For maintenance releases, you may want to clean up old tags:
 **Symptoms**: Workflow fails due to existing tag
 **Solutions**:
 - Check for existing tags with the same version
-- Use `./dev-bin/tag-manager list` to see all tags
+- Use `./dev-bin/tag-manager.sh list` to see all tags
 - Clean up conflicting tags if necessary
 - Ensure no manual tags conflict with automated releases
 
@@ -359,13 +359,13 @@ cat VERSION
 git tag --sort=-version:refname | head -5
 
 # Analyze changes in detail
-./dev-bin/semantic-version-analyzer --verbose --json | jq '.'
+./dev-bin/semantic-version-analyzer.sh --verbose --json | jq '.'
 
 # Check workflow configuration
 cat .github/workflows/version-bump.yml
 
 # Validate configuration
-./dev-bin/semantic-version-analyzer --print-base
+./dev-bin/semantic-version-analyzer.sh --print-base
 
 # Test rollover logic
 ./test-workflows/core-tests/test_rollover_logic.sh
@@ -480,7 +480,7 @@ bonuses:
 To adjust the versioning behavior for your project:
 
 1. **Edit Configuration**: Modify `dev-config/versioning.yml`
-2. **Test Changes**: Use `./dev-bin/semantic-version-analyzer --print-base` to verify
+2. **Test Changes**: Use `./dev-bin/semantic-version-analyzer.sh --print-base` to verify
 3. **Run Tests**: Execute `./test-workflows/test_semantic_version_analyzer_comprehensive.sh`
 4. **Commit Changes**: Include configuration updates in your release
 
@@ -499,7 +499,7 @@ Before applying configuration changes to production:
 
 ```bash
 # Test with current configuration
-./dev-bin/semantic-version-analyzer --verbose
+./dev-bin/semantic-version-analyzer.sh --verbose
 
 # Test with modified configuration
 ./test-workflows/core-tests/test_version_logic.sh

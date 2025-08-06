@@ -17,10 +17,10 @@ export LC_ALL=C
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # shellcheck disable=SC1091
-if [[ -f "$SCRIPT_DIR/version-utils" ]]; then
+if [[ -f "$SCRIPT_DIR/version-utils.sh" ]]; then
     # Expected to provide: init_colors, die, etc.
     # shellcheck source=/dev/null
-    source "$SCRIPT_DIR/version-utils"
+    source "$SCRIPT_DIR/version-utils.sh"
 fi
 
 # Fallbacks if version-utils is unavailable/incomplete
@@ -71,9 +71,9 @@ find_semantic_analyzer() {
     # 2) common repo locations
     local cand
     for cand in \
-        "$original_project_root/dev-bin/semantic-version-analyzer" \
-        "$current_dir/dev-bin/semantic-version-analyzer" \
-        "$SCRIPT_DIR/semantic-version-analyzer"; do
+        "$original_project_root/dev-bin/semantic-version-analyzer.sh" \
+        "$current_dir/dev-bin/semantic-version-analyzer.sh" \
+        "$SCRIPT_DIR/semantic-version-analyzer.sh"; do
         [[ -x "$cand" ]] && { printf '%s' "$cand"; return 0; }
     done
     

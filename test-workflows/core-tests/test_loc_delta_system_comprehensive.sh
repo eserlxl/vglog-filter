@@ -58,7 +58,7 @@ extract_json_value() {
     grep -A 10 '"loc_delta"' | grep -o "\"$key\":[[:space:]]*[0-9]*" | cut -d: -f2 | tr -d ' ' || echo "0"
 }
 
-SEMANTIC_ANALYZER_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer"
+SEMANTIC_ANALYZER_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer.sh"
 
 # Test 1: Basic LOC delta functionality
 printf '%s\n' "${CYAN}=== Test 1: Basic LOC delta functionality ===${NC}"

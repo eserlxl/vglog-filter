@@ -339,10 +339,10 @@ build_tests() {
     add_test "invalid bump type" "\"$DEV_BIN/version-calculator\" --current-version 1.2.3 --bump-type invalid" "" "succeeds" 1
 
     # Additional tools from o3 version (if they exist)
-    if [[ -x "$DEV_BIN/version-utils" ]]; then
-        add_test "version-utils last-tag" "\"$DEV_BIN/version-utils\" last-tag v" "" "succeeds"
-        add_test "version-utils hash-file VERSION" "\"$DEV_BIN/version-utils\" hash-file VERSION" "" "succeeds"
-        add_test "version-utils read-version" "\"$DEV_BIN/version-utils\" read-version VERSION" "$EXPECT_VERSION" "contains"
+    if [[ -x "$DEV_BIN/version-utils.sh" ]]; then
+    add_test "version-utils last-tag" "\"$DEV_BIN/version-utils.sh\" last-tag v" "" "succeeds"
+    add_test "version-utils hash-file VERSION" "\"$DEV_BIN/version-utils.sh\" hash-file VERSION" "" "succeeds"
+    add_test "version-utils read-version" "\"$DEV_BIN/version-utils.sh\" read-version VERSION" "$EXPECT_VERSION" "contains"
     fi
 
     if [[ -x "$DEV_BIN/version-validator" ]]; then
@@ -357,13 +357,13 @@ build_tests() {
         add_test "version-calculator-loc help" "\"$DEV_BIN/version-calculator-loc\" --help" "Usage:" "contains"
     fi
 
-    if [[ -x "$DEV_BIN/cmake-updater" ]]; then
-        add_test "cmake-updater detect CMakeLists.txt" "\"$DEV_BIN/cmake-updater\" detect CMakeLists.txt" "$EXPECT_CMAKE_DETECT" "contains"
-        add_test "cmake-updater help" "\"$DEV_BIN/cmake-updater\"" "Usage:" "contains"
+    if [[ -x "$DEV_BIN/cmake-updater.sh" ]]; then
+    add_test "cmake-updater detect CMakeLists.txt" "\"$DEV_BIN/cmake-updater.sh\" detect CMakeLists.txt" "$EXPECT_CMAKE_DETECT" "contains"
+    add_test "cmake-updater help" "\"$DEV_BIN/cmake-updater.sh\"" "Usage:" "contains"
     fi
 
-    if [[ -x "$DEV_BIN/git-operations" ]]; then
-        add_test "git-operations help" "\"$DEV_BIN/git-operations\"" "Usage:" "contains"
+    if [[ -x "$DEV_BIN/git-operations.sh" ]]; then
+    add_test "git-operations help" "\"$DEV_BIN/git-operations.sh\"" "Usage:" "contains"
     fi
 
     if [[ -x "$DEV_BIN/cli-parser" ]]; then
@@ -371,9 +371,9 @@ build_tests() {
         add_test "cli-parser validate patch --commit" "\"$DEV_BIN/cli-parser\" validate patch --commit" "valid" "contains"
     fi
 
-    if [[ -x "$DEV_BIN/bump-version" ]]; then
-        add_test "bump-version help" "\"$DEV_BIN/bump-version\" --help" "Usage:" "contains"
-        add_test "bump-version dry-run" "\"$DEV_BIN/bump-version\" patch --dry-run" "$expect_next" "contains"
+    if [[ -x "$DEV_BIN/bump-version.sh" ]]; then
+    add_test "bump-version help" "\"$DEV_BIN/bump-version.sh\" --help" "Usage:" "contains"
+    add_test "bump-version dry-run" "\"$DEV_BIN/bump-version.sh\" patch --dry-run" "$expect_next" "contains"
     fi
 }
 

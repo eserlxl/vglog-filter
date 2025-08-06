@@ -18,7 +18,7 @@ The original monolithic semantic-version-analyzer \(1782 lines\) has been refact
   - Auto-detects base references \(last tag, parent commit, etc.\)
   - Manages merge-base detection for disjoint branches
   - Validates git references
-- **Usage**: ./dev-bin/ref-resolver --since v1.0.0 --target HEAD
+- **Usage**: ./dev-bin/ref-resolver.sh --since v1.0.0 --target HEAD
 
 #### 2. version-config-loader
 - **Purpose**: Loads and validates versioning configuration from YAML files and environment variables
@@ -27,7 +27,7 @@ The original monolithic semantic-version-analyzer \(1782 lines\) has been refact
   - Falls back to environment variables
   - Validates configuration values
   - Supports multiple output formats \(JSON, machine-readable\)
-- **Usage**: ./dev-bin/version-config-loader --validate-only
+- **Usage**: ./dev-bin/version-config-loader.sh --validate-only
 
 #### 3. file-change-analyzer
 - **Purpose**: Analyzes file changes and classifies them by type
@@ -36,7 +36,7 @@ The original monolithic semantic-version-analyzer \(1782 lines\) has been refact
   - Classifies files as source, test, documentation
   - Calculates diff size
   - Handles rename/copy detection
-- **Usage**: ./dev-bin/file-change-analyzer --base v1.0.0 --target HEAD
+- **Usage**: ./dev-bin/file-change-analyzer.sh --base v1.0.0 --target HEAD
 
 #### 4. cli-options-analyzer
 - **Purpose**: Detects and analyzes CLI option changes in C/C++ source files
@@ -45,7 +45,7 @@ The original monolithic semantic-version-analyzer \(1782 lines\) has been refact
   - Detects breaking CLI changes
   - Identifies API breaking changes
   - Manual CLI pattern detection
-- **Usage**: ./dev-bin/cli-options-analyzer --base v1.0.0 --target HEAD
+- **Usage**: ./dev-bin/cli-options-analyzer.sh --base v1.0.0 --target HEAD
 
 #### 5. security-keyword-analyzer
 - **Purpose**: Detects security-related keywords in commit messages and code changes
@@ -54,7 +54,7 @@ The original monolithic semantic-version-analyzer \(1782 lines\) has been refact
   - Detects CVE references
   - Identifies memory safety issues
   - Counts crash fixes
-- **Usage**: ./dev-bin/security-keyword-analyzer --base v1.0.0 --target HEAD
+- **Usage**: ./dev-bin/security-keyword-analyzer.sh --base v1.0.0 --target HEAD
 
 #### 6. version-calculator
 - **Purpose**: Calculates next version based on LOC-based delta system and bonus points
@@ -63,7 +63,7 @@ The original monolithic semantic-version-analyzer \(1782 lines\) has been refact
   - Handles version rollover logic
   - Applies bonus points to version increments
   - Supports custom delta formulas
-- **Usage**: ./dev-bin/version-calculator --current-version 1.2.3 --bump-type minor --loc 500
+- **Usage**: ./dev-bin/version-calculator.sh --current-version 1.2.3 --bump-type minor --loc 500
 
 ### Orchestrator
 
@@ -74,7 +74,7 @@ The original monolithic semantic-version-analyzer \(1782 lines\) has been refact
   - Calculates total bonus points
   - Determines version bump suggestions
   - Maintains compatibility with original interface
-- **Usage**: ./dev-bin/semantic-version-analyzer-v2 --since v1.0.0
+- **Usage**: ./dev-bin/semantic-version-analyzer.sh-v2 --since v1.0.0
 
 ## Benefits of Modular Architecture
 
@@ -117,27 +117,27 @@ The original semantic-version-analyzer is still available for backward compatibi
 
 **Original**:
 ```bash
-./dev-bin/semantic-version-analyzer --since v1.0.0 --verbose
+./dev-bin/semantic-version-analyzer.sh --since v1.0.0 --verbose
 ```
 
 **New Modular**:
 ```bash
-./dev-bin/semantic-version-analyzer-v2 --since v1.0.0 --verbose
+./dev-bin/semantic-version-analyzer.sh-v2.sh --since v1.0.0 --verbose
 ```
 
 **Component-based**:
 ```bash
 # Get base reference
-BASE_REF="$(./dev-bin/ref-resolver --since v1.0.0 --print-base)"
+BASE_REF="$(./dev-bin/ref-resolver.sh --since v1.0.0 --print-base)"
 
 # Analyze file changes
-./dev-bin/file-change-analyzer --base "$BASE_REF" --target HEAD --json
+./dev-bin/file-change-analyzer.sh --base "$BASE_REF" --target HEAD --json
 
 # Analyze CLI options
-./dev-bin/cli-options-analyzer --base "$BASE_REF" --target HEAD --json
+./dev-bin/cli-options-analyzer.sh --base "$BASE_REF" --target HEAD --json
 
 # Calculate version
-./dev-bin/version-calculator --current-version 1.2.3 --bump-type minor --loc 500
+./dev-bin/version-calculator.sh --current-version 1.2.3 --bump-type minor --loc 500
 ```
 
 ## Configuration

@@ -14,7 +14,7 @@ export LC_ALL=C
 
 # Source utilities
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-source "$SCRIPT_DIR/version-utils"
+source "$SCRIPT_DIR/version-utils.sh"
 
 # --- Config / Flags ----------------------------------------------------------
 : "${ALLOW_PRERELEASE_IN_CMAKE:=false}"

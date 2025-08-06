@@ -17,7 +17,7 @@ export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
 # Source utilities
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-source "$SCRIPT_DIR/version-utils"
+source "$SCRIPT_DIR/version-utils.sh"
 
 # --- Helper functions --------------------------------------------------------
 is_true() {
@@ -203,10 +203,10 @@ create_commit() {
         fi
         
         # Add explanation if semantic analyzer is available and we're in CI
-        if [[ -n "${GITHUB_ACTIONS:-}" && -x "$original_project_root/dev-bin/semantic-version-analyzer" ]]; then
+        if [[ -n "${GITHUB_ACTIONS:-}" && -x "$original_project_root/dev-bin/semantic-version-analyzer.sh" ]]; then
             local explanation=""
             local analyzer_output
-            analyzer_output="$("$original_project_root/dev-bin/semantic-version-analyzer" --verbose 2>/dev/null || true)"
+            analyzer_output="$("$original_project_root/dev-bin/semantic-version-analyzer.sh" --verbose 2>/dev/null || true)"
             
             if [[ -n "$analyzer_output" ]]; then
                 # Extract reason from verbose output
@@ -340,7 +340,7 @@ check_version_order() {
     fi
     
     local last_tag last_version
-    last_tag="$("$SCRIPT_DIR/version-utils" last-tag "$tag_prefix" 2>/dev/null || true)"
+    last_tag="$("$SCRIPT_DIR/version-utils.sh" last-tag "$tag_prefix" 2>/dev/null || true)"
     [[ -z "$last_tag" ]] && return 0
     
     last_version="${last_tag:${#tag_prefix}}"

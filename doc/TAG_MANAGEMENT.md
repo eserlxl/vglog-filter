@@ -101,13 +101,13 @@ The cleanup strategy prioritizes:
 
 ## Manual Tag Management with `tag-manager`
 
-The `dev-bin/tag-manager` script provides comprehensive command-line utilities for local and manual management of Git tags. This advanced tool includes numerous configuration options and safety features.
+The `dev-bin/tag-manager.sh` script provides comprehensive command-line utilities for local and manual management of Git tags. This advanced tool includes numerous configuration options and safety features.
 
 ### Basic Commands
 
--   **`./dev-bin/tag-manager list`**: Lists all Git tags in the repository, sorted by version (newest first).
+-   **`./dev-bin/tag-manager.sh list`**: Lists all Git tags in the repository, sorted by version (newest first).
     ```bash
-    ./dev-bin/tag-manager list
+          ./dev-bin/tag-manager.sh list
     # Example output:
     # v10.5.0
     # v10.4.0
@@ -116,28 +116,28 @@ The `dev-bin/tag-manager` script provides comprehensive command-line utilities f
     # v10.1.0
     ```
 
--   **`./dev-bin/tag-manager cleanup [count]`**: Interactively cleans up old tags. If `count` is provided, it will keep only the specified number of most recent tags. Otherwise, it will prompt for confirmation for each tag.
+-   **`./dev-bin/tag-manager.sh cleanup [count]`**: Interactively cleans up old tags. If `count` is provided, it will keep only the specified number of most recent tags. Otherwise, it will prompt for confirmation for each tag.
     ```bash
     # Interactively clean up tags
-    ./dev-bin/tag-manager cleanup
+    ./dev-bin/tag-manager.sh cleanup
 
     # Keep only the 5 most recent tags
-    ./dev-bin/tag-manager cleanup 5
+    ./dev-bin/tag-manager.sh cleanup 5
     ```
 
--   **`./dev-bin/tag-manager create <version> [commit]`**: Creates a new tag with the specified version at the given commit (defaults to HEAD). Use with caution, as this bypasses the automated release workflow.
+-   **`./dev-bin/tag-manager.sh create <version> [commit]`**: Creates a new tag with the specified version at the given commit (defaults to HEAD). Use with caution, as this bypasses the automated release workflow.
     ```bash
     # Create a tag for version 10.5.1 at HEAD
-    ./dev-bin/tag-manager create 10.5.1
+    ./dev-bin/tag-manager.sh create 10.5.1
 
     # Create a tag for version 10.5.1 at specific commit
-    ./dev-bin/tag-manager create 10.5.1 3f2c1d2
+    ./dev-bin/tag-manager.sh create 10.5.1 3f2c1d2
     ```
 
--   **`./dev-bin/tag-manager info <tag>`**: Shows detailed information about a specific tag, including commit hash, author, date, and message.
+-   **`./dev-bin/tag-manager.sh info <tag>`**: Shows detailed information about a specific tag, including commit hash, author, date, and message.
     ```bash
     # Get information about a specific tag
-    ./dev-bin/tag-manager info v10.5.0
+    ./dev-bin/tag-manager.sh info v10.5.0
     ```
 
 ### Advanced Configuration Options
@@ -171,34 +171,34 @@ The `tag-manager` script supports numerous environment variables for fine-graine
 #### Batch Operations with Safety
 ```bash
 # Clean up with protection for major versions
-PROTECT_GLOB="v10.0.* v11.0.*" ./dev-bin/tag-manager cleanup 8
+PROTECT_GLOB="v10.0.* v11.0.*" ./dev-bin/tag-manager.sh cleanup 8
 
 # Dry run cleanup to see what would be deleted
-DRY_RUN=1 ./dev-bin/tag-manager cleanup 5
+DRY_RUN=1 ./dev-bin/tag-manager.sh cleanup 5
 
 # Clean up only remote tags (keep local for backup)
-REMOTE_ONLY=1 ./dev-bin/tag-manager cleanup 10
+REMOTE_ONLY=1 ./dev-bin/tag-manager.sh cleanup 10
 ```
 
 #### Tag Creation with Advanced Options
 ```bash
 # Create and immediately push a signed tag
-TAG_SIGN=1 PUSH_AFTER_CREATE=1 ./dev-bin/tag-manager create 10.5.1
+TAG_SIGN=1 PUSH_AFTER_CREATE=1 ./dev-bin/tag-manager.sh create 10.5.1
 
 # Create tag with custom message prefix
-TAG_MSG_PREFIX="Release" ./dev-bin/tag-manager create 10.5.1
+TAG_MSG_PREFIX="Release" ./dev-bin/tag-manager.sh create 10.5.1
 
 # Create tag even with uncommitted changes
-ALLOW_DIRTY_TAG=1 ./dev-bin/tag-manager create 10.5.1
+ALLOW_DIRTY_TAG=1 ./dev-bin/tag-manager.sh create 10.5.1
 ```
 
 #### Non-Interactive Operations
 ```bash
 # Automated cleanup in CI/CD
-ASSUME_YES=1 ./dev-bin/tag-manager cleanup 10
+ASSUME_YES=1 ./dev-bin/tag-manager.sh cleanup 10
 
 # List tags with custom pattern
-TAG_GLOB="v10.*" ./dev-bin/tag-manager list
+TAG_GLOB="v10.*" ./dev-bin/tag-manager.sh list
 ```
 
 ### Direct Git Commands
@@ -260,7 +260,7 @@ git tag --sort=-version:refname | head -10
 - Use version-aware sorting: `git tag --sort=-version:refname`
 - Check tag format consistency
 - Ensure all tags follow `vX.Y.Z` format
-- Use `./dev-bin/tag-manager list` for proper sorting
+- Use `./dev-bin/tag-manager.sh list` for proper sorting
 
 #### Issue: Cleanup Not Working
 **Symptoms**: Tag cleanup workflow fails or doesn't work as expected
@@ -275,9 +275,9 @@ git tag --sort=-version:refname | head -10
 **Symptoms**: `tag-manager` script fails or behaves unexpectedly
 **Solutions**:
 - Check Bash version (requires ≥ 4): `bash --version`
-- Verify environment variables: `./dev-bin/tag-manager --help`
+- Verify environment variables: `./dev-bin/tag-manager.sh --help`
 - Check Git repository status: `git status`
-- Ensure proper permissions: `ls -la dev-bin/tag-manager`
+- Ensure proper permissions: `ls -la dev-bin/tag-manager.sh`
 
 ### Debugging Commands
 
@@ -295,7 +295,7 @@ git ls-remote --tags origin
 git for-each-ref --format='%(refname:short) %(creatordate)' refs/tags | sort -k2
 
 # Check tag-manager configuration
-./dev-bin/tag-manager --help
+./dev-bin/tag-manager.sh --help
 
 # Verify Git configuration
 git config --list | grep -E "(user\.name|user\.email|remote\.origin)"
@@ -348,7 +348,7 @@ git config --list | grep -E "(user\.name|user\.email|remote\.origin)"
 2.  **Release Notes**: Ensure release notes are generated and attached to tags.
 3.  **Testing**: Test releases locally before pushing tags to remote.
 4.  **Documentation**: Keep tag management documentation up-to-date.
-5.  **Validation**: Use `./dev-bin/tag-manager info` to verify tag contents and metadata.
+5.  **Validation**: Use `./dev-bin/tag-manager.sh info` to verify tag contents and metadata.
 
 ### Security Considerations
 

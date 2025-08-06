@@ -72,12 +72,12 @@ bump-version-core
 
 ```bash
 # Basic usage (same as original)
-./dev-bin/bump-version-core patch --dry-run
-./dev-bin/bump-version-core minor --commit --tag
-./dev-bin/bump-version-core --set 1.0.0 --allow-prerelease
+./dev-bin/bump-version.sh patch --dry-run
+./dev-bin/bump-version.sh minor --commit --tag
+./dev-bin/bump-version.sh --set 1.0.0 --allow-prerelease
 
 # Backward compatibility (original script still works)
-./dev-bin/bump-version patch --dry-run
+./dev-bin/bump-version.sh patch --dry-run
 ```
 
 ### Using Individual Modules
@@ -86,23 +86,23 @@ Each module can be used independently for specific tasks:
 
 ```bash
 # Validate version format
-./dev-bin/version-validator validate 1.0.0
-./dev-bin/version-validator validate 1.0.0-rc.1 true
+./dev-bin/version-validator.sh validate 1.0.0
+./dev-bin/version-validator.sh validate 1.0.0-rc.1 true
 
 # Compare versions
-./dev-bin/version-validator compare 1.0.0 1.0.1
+./dev-bin/version-validator.sh compare 1.0.0 1.0.1
 
 # Calculate new version
-./dev-bin/version-calculator-loc --current-version 1.0.0 --bump-type patch
+./dev-bin/version-calculator.sh-loc.sh --current-version 1.0.0 --bump-type patch
 
 # Update CMakeLists.txt
-./dev-bin/cmake-updater update CMakeLists.txt 1.0.1
+./dev-bin/cmake-updater.sh update CMakeLists.txt 1.0.1
 
 # Check git operations
-./dev-bin/git-operations check-dirty
+./dev-bin/git-operations.sh check-dirty
 
 # Parse CLI arguments
-./dev-bin/cli-parser parse patch --commit --tag
+./dev-bin/cli-parser.sh parse patch --commit --tag
 ```
 
 ## Benefits of Modular Architecture
@@ -199,19 +199,19 @@ Each module includes standalone usage for testing:
 
 ```bash
 # Test version validation
-./dev-bin/version-validator validate 1.0.0
+./dev-bin/version-validator.sh validate 1.0.0
 
 # Test version calculation
-./dev-bin/version-calculator-loc --current-version 1.0.0 --bump-type patch
+./dev-bin/version-calculator.sh-loc.sh --current-version 1.0.0 --bump-type patch
 
 # Test CMake updates
-./dev-bin/cmake-updater detect CMakeLists.txt
+./dev-bin/cmake-updater.sh detect CMakeLists.txt
 
 # Test git operations
-./dev-bin/git-operations check-dirty
+./dev-bin/git-operations.sh check-dirty
 
 # Test CLI parsing
-./dev-bin/cli-parser validate patch --commit
+./dev-bin/cli-parser.sh validate patch --commit
 ```
 
 ## Future Enhancements

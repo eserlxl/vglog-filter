@@ -37,7 +37,7 @@ x_new = x + delta_x
 
 ## Implementation Details
 
-### Version Calculator (`dev-bin/version-calculator`)
+### Version Calculator (`dev-bin/version-calculator.sh`)
 
 The version calculator has been completely rewritten to implement these rules:
 
@@ -46,7 +46,7 @@ The version calculator has been completely rewritten to implement these rules:
 3. **Total Delta**: `base_delta + (bonus * bonus_multiplier)`
 4. **Mathematical Rollover**: Implements the exact rollover formula specified
 
-### Semantic Version Analyzer (`dev-bin/semantic-version-analyzer`)
+### Semantic Version Analyzer (`dev-bin/semantic-version-analyzer.sh`)
 
 The semantic version analyzer correctly:
 - Uses **only** the bonus mechanism to determine version bump types

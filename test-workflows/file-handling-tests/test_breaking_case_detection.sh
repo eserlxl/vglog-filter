@@ -96,7 +96,7 @@ first_commit=$(git rev-parse HEAD~1)
 second_commit=$(git rev-parse HEAD)
 
 # Run semantic version analyzer from the original project directory
-result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
 
 
 # Extract suggestion

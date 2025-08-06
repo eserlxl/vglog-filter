@@ -181,26 +181,26 @@ The system uses a LOC-based delta system to calculate the actual version increme
 
 ### Semantic Version Analyzer Tool
 
-A dedicated script, `dev-bin/semantic-version-analyzer`, is used to analyze the Git history and suggest the next appropriate version bump. This tool is the core of our automated versioning system.
+A dedicated script, `dev-bin/semantic-version-analyzer.sh`, is used to analyze the Git history and suggest the next appropriate version bump. This tool is the core of our automated versioning system.
 
 ```bash
 # Analyze changes since the last Git tag (default behavior)
-./dev-bin/semantic-version-analyzer
+./dev-bin/semantic-version-analyzer.sh
 
 # Analyze changes since a specific Git tag (e.g., v10.4.0)
-./dev-bin/semantic-version-analyzer --since v10.4.0
+./dev-bin/semantic-version-analyzer.sh --since v10.4.0
 
 # Show a detailed analysis, including file changes and commit messages
-./dev-bin/semantic-version-analyzer --verbose
+./dev-bin/semantic-version-analyzer.sh --verbose
 
 # Analyze changes since a specific date (e.g., all changes since January 1, 2025)
-./dev-bin/semantic-version-analyzer --since-date 2025-01-01
+./dev-bin/semantic-version-analyzer.sh --since-date 2025-01-01
 
 # Get machine-readable JSON output
-./dev-bin/semantic-version-analyzer --json
+./dev-bin/semantic-version-analyzer.sh --json
 
 # Restrict analysis to specific paths
-./dev-bin/semantic-version-analyzer --only-paths "src/**,include/**"
+./dev-bin/semantic-version-analyzer.sh --only-paths "src/**,include/**"
 ```
 
 #### What the Analyzer Checks
@@ -224,7 +224,7 @@ The analyzer supports both YAML configuration and environment variables:
 **YAML Configuration (Recommended)**:
 ```bash
 # Loads from dev-config/versioning.yml
-./dev-bin/semantic-version-analyzer
+./dev-bin/semantic-version-analyzer.sh
 ```
 
 **Environment Variables (Fallback)**:
@@ -232,7 +232,7 @@ The analyzer supports both YAML configuration and environment variables:
 export VERSION_PATCH_DELTA="1*(1+LOC/250)"
 export VERSION_MINOR_DELTA="5*(1+LOC/500)"
 export VERSION_MAJOR_DELTA="10*(1+LOC/1000)"
-./dev-bin/semantic-version-analyzer
+./dev-bin/semantic-version-analyzer.sh
 ```
 
 [↑ Back to top](#versioning-strategy)
@@ -267,38 +267,38 @@ As described above, this script analyzes changes and suggests version bumps. It'
 
 ### `bump-version`
 
-The `dev-bin/bump-version` script allows for manual incrementing of the project's version and updating the `VERSION` file. This is primarily used by the automated workflows but can be run locally for specific needs.
+The `dev-bin/bump-version.sh` script allows for manual incrementing of the project's version and updating the `VERSION` file. This is primarily used by the automated workflows but can be run locally for specific needs.
 
 ```bash
 # Bump the patch version
-./dev-bin/bump-version patch
+./dev-bin/bump-version.sh patch
 
 # Bump the minor version
-./dev-bin/bump-version minor
+./dev-bin/bump-version.sh minor
 
 # Bump the major version
-./dev-bin/bump-version major
+./dev-bin/bump-version.sh major
 
 # Auto-detect and bump version (similar to CI behavior)
-./dev-bin/bump-version auto
+./dev-bin/bump-version.sh auto
 ```
 
 ### `tag-manager`
 
-The `dev-bin/tag-manager` script provides functionalities for listing, creating, and cleaning up Git tags. This is essential for maintaining a tidy and accurate tag history.
+The `dev-bin/tag-manager.sh` script provides functionalities for listing, creating, and cleaning up Git tags. This is essential for maintaining a tidy and accurate tag history.
 
 ```bash
 # List all Git tags (sorted by version)
-./dev-bin/tag-manager list
+./dev-bin/tag-manager.sh list
 
 # Clean up old tags (interactively or by keeping a specific count)
-./dev-bin/tag-manager cleanup [count]
+./dev-bin/tag-manager.sh cleanup [count]
 
 # Create a new tag (use with caution, prefer automated releases)
-./dev-bin/tag-manager create <version>
+./dev-bin/tag-manager.sh create <version>
 
 # Show detailed information about a specific tag
-./dev-bin/tag-manager info <tag>
+./dev-bin/tag-manager.sh info <tag>
 ```
 
 For more details on tag management, refer to the [Git Tag Management Guide](TAG_MANAGEMENT.md).

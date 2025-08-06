@@ -50,7 +50,7 @@ run_test() {
     return 0
 }
 
-BUMP_VERSION_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/bump-version"
+BUMP_VERSION_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/bump-version.sh"
 
 # Test 1: Early --print behavior (should exit before validations)
 printf '%s\n' "${CYAN}=== Test 1: Early --print behavior ===${RESET}"

@@ -108,7 +108,7 @@ run_test_with_version() {
     printf '%s\n' ""
 }
 
-SEMANTIC_ANALYZER_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../dev-bin/semantic-version-analyzer"
+SEMANTIC_ANALYZER_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../dev-bin/semantic-version-analyzer.sh"
 
 # Test 1: Basic functionality
 printf '%s\n' "${CYAN}=== Test 1: Basic functionality ===${RESET}"
