@@ -37,6 +37,55 @@ W_CRASH=1             # crash/robustness fixes
 # ------------- helpers -------------
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found"; }
+is_true() { [[ "${1,,}" =~ ^(1|y|yes|true)$ ]]; }
+
+# Sanitize integer
+int_or_zero() { printf '%s' "${1:-0}" | tr -cd '0-9'; }
+
+# Sanitize JSON integer emission
+emit_json_kv_num() { printf '  "%s": %s' "$1" "$(int_or_zero "$2")"; }
+
+# GREP engine selection (prefer PCRE for \b, \s, \w, etc.)
+grep_supports_pcre() {
+    # Busybox grep has no -P; GNU grep usually does. Test once.
+    printf 'test' | grep -P '^\w+$' >/dev/null 2>&1
+}
+
+# Count occurrences of a regex in stdin (engine-aware)
+# $1: pattern
+# $2: engine ("pcre" or "ere")
+count_occurrences() {
+    local pattern="$1" engine="${2:-pcre}"
+    if [[ "$engine" == "pcre" ]]; then
+        LC_ALL=C grep -Pio "$pattern" 2>/dev/null | wc -l | tr -cd '0-9'
+    else
+        # ERE fallback (pattern must be ERE-compatible)
+        LC_ALL=C grep -Eio "$pattern" 2>/dev/null | wc -l | tr -cd '0-9'
+    fi
+}
+
+# Build a git pathspec array from comma-separated globs (supports "!exclude")
+# Example: "src,include,!vendor/**"
+build_pathspec_array() {
+    local spec="${1:-}"
+    local -a out=()
+    [[ -z "$spec" ]] && { printf '%s\0' ""; return 0; }
+
+    local IFS=,
+    read -r -a items <<< "$spec"
+    for raw in "${items[@]}"; do
+        # trim spaces
+        local g="${raw#"${raw%%[![:space:]]*}"}"
+        g="${g%"${g##*[![:space:]]}"}"
+        [[ -z "$g" ]] && continue
+        if [[ "$g" == !* ]]; then
+            out+=(":(exclude)${g:1}")
+        else
+            out+=("$g")
+        fi
+    done
+    ((${#out[@]})) && printf '%s\0' "${out[@]}" || printf '%s\0' ""
+}
 
 show_help() {
     cat << EOF
@@ -72,78 +121,26 @@ Examples:
 EOF
 }
 
-# Build pathspec array from ONLY_PATHS (supports excludes via :(!) and :/ syntax)
-build_pathspec() {
-    local spec="$1"
-    local -a out=()
-    [[ -z "$spec" ]] && { printf '%s\0' ""; return 0; }
-    IFS=',' read -r -a _items <<<"$spec"
-    for raw in "${_items[@]}"; do
-        # trim spaces
-        local g="${raw#"${raw%%[![:space:]]*}"}"
-        g="${g%"${g##*[![:space:]]}"}"
-        [[ -z "$g" ]] && continue
-        if [[ "$g" == !* ]]; then
-            g="${g#!}"
-            out+=(":(exclude)$g")
-        else
-            out+=("$g")
-        fi
-    done
-    printf '%s\0' "${out[@]}"
-}
-
-# Count occurrences of a regex in the given text (case-insensitive)
-# Uses grep -Eo to count matches rather than matching lines.
-count_occurrences() {
-    local pattern="$1"
-    # stdin required
-    LC_ALL=C grep -Eio "$pattern" 2>/dev/null | wc -l | tr -cd '0-9'
-}
-
-# Sanitize integer
-int_or_zero() { printf '%s' "${1:-0}" | tr -cd '0-9'; }
-
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --base)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --base requires a value\n' >&2; exit 1; }
-            BASE_REF="$2"; shift 2;;
-        --target)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --target requires a value\n' >&2; exit 1; }
-            TARGET_REF="$2"; shift 2;;
-        --repo-root)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --repo-root requires a value\n' >&2; exit 1; }
-            REPO_ROOT="$2"; shift 2;;
-        --only-paths)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --only-paths requires a comma-separated globs list\n' >&2; exit 1; }
-            ONLY_PATHS="$2"; shift 2;;
-        --ignore-whitespace) IGNORE_WHITESPACE=true; shift;;
-        --added-only) ADDED_ONLY=true; shift;;
-        --no-merges) NO_MERGES=true; shift;;
-        --top)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --top requires a number\n' >&2; exit 1; }
-            TOP_COMMITS="$2"; shift 2;;
-        --machine) MACHINE_OUTPUT=true; shift;;
-        --json) JSON_OUTPUT=true; shift;;
-        --w-commits)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --w-commits requires a number\n' >&2; exit 1; }
-            W_COMMITS="$2"; shift 2;;
-        --w-diff-sec)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --w-diff-sec requires a number\n' >&2; exit 1; }
-            W_DIFF_SEC="$2"; shift 2;;
-        --w-cve)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --w-cve requires a number\n' >&2; exit 1; }
-            W_CVE="$2"; shift 2;;
-        --w-mem)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --w-mem requires a number\n' >&2; exit 1; }
-            W_MEM="$2"; shift 2;;
-        --w-crash)
-            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --w-crash requires a number\n' >&2; exit 1; }
-            W_CRASH="$2"; shift 2;;
-        --help|-h) show_help; exit 0;;
-        *) printf 'Error: Unknown option: %s\n' "$1" >&2; show_help; exit 1;;
+        --base)           BASE_REF="${2:?}"; shift 2 ;;
+        --target)         TARGET_REF="${2:?}"; shift 2 ;;
+        --repo-root)      REPO_ROOT="${2:?}"; shift 2 ;;
+        --only-paths)     ONLY_PATHS="${2:?}"; shift 2 ;;
+        --ignore-whitespace) IGNORE_WHITESPACE=true; shift ;;
+        --added-only)     ADDED_ONLY=true; shift ;;
+        --no-merges)      NO_MERGES=true; shift ;;
+        --top)            TOP_COMMITS="${2:?}"; shift 2 ;;
+        --machine)        MACHINE_OUTPUT=true; shift ;;
+        --json)           JSON_OUTPUT=true; shift ;;
+        --w-commits)      W_COMMITS="${2:?}"; shift 2 ;;
+        --w-diff-sec)     W_DIFF_SEC="${2:?}"; shift 2 ;;
+        --w-cve)          W_CVE="${2:?}"; shift 2 ;;
+        --w-mem)          W_MEM="${2:?}"; shift 2 ;;
+        --w-crash)        W_CRASH="${2:?}"; shift 2 ;;
+        --help|-h)        show_help; exit 0 ;;
+        *) die "Unknown option: $1" ;;
     esac
 done
 
@@ -153,29 +150,25 @@ if [[ -z "$BASE_REF" ]]; then
     exit 1
 fi
 
-# Check git command
+# Check required commands
 need git
+need grep
+need wc
+need tr
 
 # Change to repo root if specified
 if [[ -n "$REPO_ROOT" ]]; then
     cd "$REPO_ROOT"
-    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
-        printf 'Error: Not in a git repository at %s\n' "$REPO_ROOT" >&2
-        exit 1
-    }
 fi
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not inside a git repository"
 
-# Build PATH_ARGS array from --only-paths
+# Build PATH_ARGS for git commands
 PATH_ARGS=()
-if [[ -n "$ONLY_PATHS" ]]; then
-    IFS=',' read -r -a tmp <<< "$ONLY_PATHS"
-    PATH_ARGS+=(--)
-    for g in "${tmp[@]}"; do
-        # Trim surrounding spaces
-        g="${g##+([[:space:]])}"
-        g="${g%%+([[:space:]])}"
-        [[ -n "$g" ]] && PATH_ARGS+=("$g")
-    done
+# read -d '' stops at NUL; mapfile/readarray required for safe parsing
+if mapfile -d '' _pspec < <(build_pathspec_array "$ONLY_PATHS"); then
+    if ((${#_pspec[@]})) && [[ -n "${_pspec[0]}" ]]; then
+        PATH_ARGS=(-- "${_pspec[@]}")
+    fi
 fi
 
 # Validate git references
@@ -191,112 +184,137 @@ verify_ref "$BASE_REF"
 verify_ref "$TARGET_REF"
 
 # ------------- patterns (regex) -------------
-# Notes:
-# - Use \b word boundaries to avoid substrings.
-# - Avoid "dos" matching "windows" (use \bdo[sz]\b).
-# - CVE strictness: CVE-YYYY-NNNN... (4–7 digits for the sequence).
-SEC_REGEX='
-\b(
-  security|vuln(?:erab\w*)?|exploit|breach|attack|threat
- |malware|virus|trojan|backdoor|rootkit|phishing|spam
- |ddos|\bdo[sz]\b
- |overflow|injection|xss|csrf|sqli|rce|ssrf|xxe
- |privilege|escalation|bypass|circumvent
- |mitigation|hardening|sandbox|policy
- |auth(?:entication|orization)?|session(?:\s*hijack\w*)?
- |crypto(?:graphy)?|encryption|decryption|tls|ssl|x\.509|certificate(?:\s*pinning)?
- |secret|token|leak|expos(?:e|ure)
- |path\s*traversal|directory\s*traversal
-)\b'
+# Prefer PCRE (-P) for accurate word boundaries (\b) and whitespace (\s*)
+USE_PCRE=false
+if grep_supports_pcre; then USE_PCRE=true; fi
 
-CVE_REGEX='\bCVE-[0-9]{4}-[0-9]{4,7}\b'
-
-MEM_REGEX='
-\b(
-  buffer[- _]?overflow|stack[- _]?overflow|heap[- _]?overflow
- |use[- _]?after[- _]?free|double[- _]?free
- |null[- _]?pointer|dangling[- _]?pointer|out[- _]?of[- _]?bounds|\boob\b
- |memory[- _]?leak|format[- _]?string|integer[- _]?overflow|signedness
- |race[- _]?condition|data[- _]?race|deadlock
-)\b'
-
-CRASH_REGEX='
-\b(
-  segfault|segmentation\s+fault|crash|abort|assert|panic
- |fatal(?:\s+error)?|core\s+dump|stack\s+trace
-)\b'
+if $USE_PCRE; then
+    # PCRE patterns
+    SEC_REGEX='(?ix)
+        \b(
+          security | vuln(?:erab\w*)? | exploit | breach | attack | threat
+          | malware | virus | trojan | backdoor | rootkit | phishing | spam
+          | ddos | \bdo[sz]\b
+          | overflow | injection | xss | csrf | sqli | rce | ssrf | xxe
+          | privilege | escalation | bypass | circumvent
+          | mitigation | hardening | sandbox | policy
+          | auth(?:entication|orization)? | session(?:\s*hijack\w*)?
+          | crypto(?:graphy)? | encryption | decryption | tls | ssl | x\.509 | certificate(?:\s*pinning)?
+          | secret | token | leak | expos(?:e|ure)
+          | path\s*traversal | directory\s*traversal
+        )\b
+    '
+    CVE_REGEX='(?i)\bCVE-[0-9]{4}-[0-9]{4,7}\b'
+    MEM_REGEX='(?ix)
+        \b(
+          buffer[- _]?overflow | stack[- _]?overflow | heap[- _]?overflow
+          | use[- _]?after[- _]?free | double[- _]?free
+          | null[- _]?pointer | dangling[- _]?pointer
+          | out[- _]?of[- _]?bounds | oob
+          | memory[- _]?leak | format[- _]?string | integer[- _]?overflow | signedness
+          | race[- _]?condition | data[- _]?race | deadlock
+        )\b
+    '
+    CRASH_REGEX='(?ix)
+        \b(
+          segfault | segmentation\s+fault | crash | abort | assert | panic
+          | fatal(?:\s+error)? | core\s+dump | stack\s+trace
+        )\b
+    '
+    GREP_ENGINE="pcre"
+else
+    # ERE fallback (approximate \b with (^|non-word) ... (non-word|$), \s with [[:space:]])
+    SEC_REGEX='((^|[^[:alnum:]_])(security|vuln(ererab[^[:space:]]*)?|exploit|breach|attack|threat|malware|virus|trojan|backdoor|rootkit|phishing|spam|ddos|do[sz]|overflow|injection|xss|csrf|sqli|rce|ssrf|xxe|privilege|escalation|bypass|circumvent|mitigation|hardening|sandbox|policy|auth(entication|orization)?|session([[:space:]]*hijack[^[:space:]]*)?|crypto(graphy)?|encryption|decryption|tls|ssl|x\.509|certificate([[:space:]]*pinning)?|secret|token|leak|expos(e|ure)|path[[:space:]]*traversal|directory[[:space:]]*traversal))([^[:alnum:]_]|$))'
+    CVE_REGEX='CVE-[0-9]{4}-[0-9]{4,7}'
+    MEM_REGEX='((^|[^[:alnum:]_])(buffer[- _]?overflow|stack[- _]?overflow|heap[- _]?overflow|use[- _]?after[- _]?free|double[- _]?free|null[- _]?pointer|dangling[- _]?pointer|out[- _]?of[- _]?bounds|oob|memory[- _]?leak|format[- _]?string|integer[- _]?overflow|signedness|race[- _]?condition|data[- _]?race|deadlock)([^[:alnum:]_]|$))'
+    CRASH_REGEX='((^|[^[:alnum:]_])(segfault|segmentation[[:space:]]+fault|crash|abort|assert|panic|fatal([[:space:]]+error)?|core[[:space:]]+dump|stack[[:space:]]+trace)([^[:alnum:]_]|$))'
+    GREP_ENGINE="ere"
+fi
 
 # Analyze security keywords
 analyze_security_keywords() {
     local base_ref="$1"
     local target_ref="$2"
     
-    # Build git log command with options
-    local log_cmd_array=("git" "-c" "color.ui=false" "log")
-    if [[ "$NO_MERGES" = "true" ]]; then
-        log_cmd_array+=("--no-merges")
-    fi
-    log_cmd_array+=("--format=%s %b")
+    # Commit message scan (subjects + bodies to catch CVEs etc.)
+    local -a log_args=(log --format=%s%n%b)
+    $NO_MERGES && log_args=(--no-merges "${log_args[@]}")
+    local commits_text
+    commits_text="$(git -c color.ui=false "${log_args[@]}" "$base_ref..$target_ref" 2>/dev/null || true)"
+
+    local security_keywords=0
+    [[ -n "$commits_text" ]] && security_keywords="$(printf '%s' "$commits_text" | count_occurrences "$SEC_REGEX" "$GREP_ENGINE")"
+    security_keywords="$(int_or_zero "$security_keywords")"
     
-    # Quick security keyword detection (fast path) - include commit bodies for CVEs
-    local security_keywords
-    security_keywords=$("${log_cmd_array[@]}" "$base_ref".."$target_ref" 2>/dev/null | \
-        count_occurrences "$SEC_REGEX")
-    
-    # Ensure it's a valid integer
-    security_keywords=$(int_or_zero "$security_keywords")
-    
-    # Check for specific security patterns in code changes
-    local security_patterns=0
-    local cve_patterns=0
-    local memory_safety_issues=0
-    local crash_fixes=0
-    
-    # Get diff for security pattern analysis
-    local diff_cmd="git -c color.ui=false diff -M -C"
-    if [[ "$IGNORE_WHITESPACE" = "true" ]]; then
-        diff_cmd="$diff_cmd -w"
-    fi
-    if [[ "$ADDED_ONLY" = "true" ]]; then
-        diff_cmd="$diff_cmd --diff-filter=A"
-    fi
-    
+    # Diff scan (with options)
+    local -a diff_args=(diff -M -C "$base_ref..$target_ref")
+    $IGNORE_WHITESPACE && diff_args+=( -w )
+    # Narrow context when only added lines requested
+    $ADDED_ONLY && diff_args+=( -U0 )
+
+    # fetch diff
     local diff_content
-    diff_content=$($diff_cmd "$base_ref".."$target_ref" "${PATH_ARGS[@]}" 2>/dev/null || true)
-    
-    # Count specific security patterns
-    if [[ -n "$diff_content" ]]; then
-        security_patterns=$(printf '%s' "$diff_content" | count_occurrences "$SEC_REGEX")
-        cve_patterns=$(printf '%s' "$diff_content" | count_occurrences "$CVE_REGEX")
-        memory_safety_issues=$(printf '%s' "$diff_content" | count_occurrences "$MEM_REGEX")
-        crash_fixes=$(printf '%s' "$diff_content" | count_occurrences "$CRASH_REGEX")
+    if ((${#PATH_ARGS[@]})); then
+        diff_content="$(git -c color.ui=false "${diff_args[@]}" "${PATH_ARGS[@]}" 2>/dev/null || true)"
+    else
+        diff_content="$(git -c color.ui=false "${diff_args[@]}" 2>/dev/null || true)"
     fi
-    
-    # Sanitize all counts to be integers
-    security_patterns=$(int_or_zero "$security_patterns")
-    cve_patterns=$(int_or_zero "$cve_patterns")
-    memory_safety_issues=$(int_or_zero "$memory_safety_issues")
-    crash_fixes=$(int_or_zero "$crash_fixes")
+
+    # Keep only added lines if requested (+ but not +++ header)
+    if $ADDED_ONLY && [[ -n "$diff_content" ]]; then
+        # remove file headers and hunk markers; keep lines beginning with single '+'
+        diff_content="$(printf '%s\n' "$diff_content" \
+            | grep -Ev '^(--- |\+\+\+ |@@ )' \
+            | grep -E '^\+[^+]' \
+            | sed 's/^+//')"
+    fi
+
+    local security_patterns=0 cve_patterns=0 memory_safety_issues=0 crash_fixes=0
+    if [[ -n "$diff_content" ]]; then
+        security_patterns="$(printf '%s' "$diff_content" | count_occurrences "$SEC_REGEX" "$GREP_ENGINE")"
+        cve_patterns="$(printf '%s' "$diff_content" | count_occurrences "$CVE_REGEX" "$GREP_ENGINE")"
+        memory_safety_issues="$(printf '%s' "$diff_content" | count_occurrences "$MEM_REGEX" "$GREP_ENGINE")"
+        crash_fixes="$(printf '%s' "$diff_content" | count_occurrences "$CRASH_REGEX" "$GREP_ENGINE")"
+    fi
+
+    security_patterns="$(int_or_zero "$security_patterns")"
+    cve_patterns="$(int_or_zero "$cve_patterns")"
+    memory_safety_issues="$(int_or_zero "$memory_safety_issues")"
+    crash_fixes="$(int_or_zero "$crash_fixes")"
     
     # Calculate weighted total security score
-    local total_security_score=$((security_keywords * W_COMMITS + security_patterns * W_DIFF_SEC + cve_patterns * W_CVE + memory_safety_issues * W_MEM + crash_fixes * W_CRASH))
+    local total_security_score=$(( security_keywords * W_COMMITS \
+                                   + security_patterns * W_DIFF_SEC \
+                                   + cve_patterns * W_CVE \
+                                   + memory_safety_issues * W_MEM \
+                                   + crash_fixes * W_CRASH ))
+
+    # Simple normalized risk band (heuristic, stable across repos)
+    # 0 => none, 1-4 low, 5-14 medium, 15+ high (you can tune later)
+    local risk="none"
+    if   (( total_security_score >= 15 )); then risk="high"
+    elif (( total_security_score >= 5  )); then risk="medium"
+    elif (( total_security_score >= 1  )); then risk="low"
+    fi
     
     # Output results
     if [[ "$JSON_OUTPUT" = "true" ]]; then
         printf '{\n'
-        printf '  "security_keywords": %s,\n' "$security_keywords"
-        printf '  "security_patterns": %s,\n' "$security_patterns"
-        printf '  "cve_patterns": %s,\n' "$cve_patterns"
-        printf '  "memory_safety_issues": %s,\n' "$memory_safety_issues"
-        printf '  "crash_fixes": %s,\n' "$crash_fixes"
-        printf '  "total_security_score": %s,\n' "$total_security_score"
+        emit_json_kv_num "security_keywords" "$security_keywords"; printf ',\n'
+        emit_json_kv_num "security_patterns" "$security_patterns"; printf ',\n'
+        emit_json_kv_num "cve_patterns" "$cve_patterns"; printf ',\n'
+        emit_json_kv_num "memory_safety_issues" "$memory_safety_issues"; printf ',\n'
+        emit_json_kv_num "crash_fixes" "$crash_fixes"; printf ',\n'
+        emit_json_kv_num "total_security_score" "$total_security_score"; printf ',\n'
+        printf '  "risk": "%s",\n' "$risk"
         printf '  "weights": {\n'
-        printf '    "commits": %s,\n' "$W_COMMITS"
-        printf '    "diff_security": %s,\n' "$W_DIFF_SEC"
-        printf '    "cve": %s,\n' "$W_CVE"
-        printf '    "memory": %s,\n' "$W_MEM"
-        printf '    "crash": %s\n' "$W_CRASH"
-        printf '  }\n'
+        emit_json_kv_num "commits" "$W_COMMITS";          printf ',\n'
+        emit_json_kv_num "diff_security" "$W_DIFF_SEC";   printf ',\n'
+        emit_json_kv_num "cve" "$W_CVE";                  printf ',\n'
+        emit_json_kv_num "memory" "$W_MEM";               printf ',\n'
+        emit_json_kv_num "crash" "$W_CRASH";              printf '\n'
+        printf '  },\n'
+        printf '  "engine": "%s"\n' "$GREP_ENGINE"
         printf '}\n'
     elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
         printf 'SECURITY_KEYWORDS=%s\n' "$security_keywords"
@@ -305,32 +323,44 @@ analyze_security_keywords() {
         printf 'MEMORY_SAFETY_ISSUES=%s\n' "$memory_safety_issues"
         printf 'CRASH_FIXES=%s\n' "$crash_fixes"
         printf 'TOTAL_SECURITY_SCORE=%s\n' "$total_security_score"
+        printf 'RISK=%s\n' "$risk"
         printf 'WEIGHT_COMMITS=%s\n' "$W_COMMITS"
         printf 'WEIGHT_DIFF_SEC=%s\n' "$W_DIFF_SEC"
         printf 'WEIGHT_CVE=%s\n' "$W_CVE"
         printf 'WEIGHT_MEMORY=%s\n' "$W_MEM"
         printf 'WEIGHT_CRASH=%s\n' "$W_CRASH"
+        printf 'ENGINE=%s\n' "$GREP_ENGINE"
     else
         printf '=== Security Keyword Analysis ===\n'
-        printf 'Base reference: %s\n' "$base_ref"
+        printf 'Base reference : %s\n' "$base_ref"
         printf 'Target reference: %s\n' "$target_ref"
+        printf 'Engine         : %s\n' "$GREP_ENGINE"
         printf '\nSecurity Analysis:\n'
-        printf '  Security keywords in commits: %s (weight: %s)\n' "$security_keywords" "$W_COMMITS"
-        printf '  Security patterns in code: %s (weight: %s)\n' "$security_patterns" "$W_DIFF_SEC"
-        printf '  CVE references: %s (weight: %s)\n' "$cve_patterns" "$W_CVE"
-        printf '  Memory safety issues: %s (weight: %s)\n' "$memory_safety_issues" "$W_MEM"
-        printf '  Crash fixes: %s (weight: %s)\n' "$crash_fixes" "$W_CRASH"
-        printf '  Total security score: %s\n' "$total_security_score"
+        printf '  Security keywords in commits: %s (w=%s)\n' "$security_keywords" "$W_COMMITS"
+        printf '  Security patterns in code   : %s (w=%s)\n' "$security_patterns" "$W_DIFF_SEC"
+        printf '  CVE references              : %s (w=%s)\n' "$cve_patterns" "$W_CVE"
+        printf '  Memory safety issues        : %s (w=%s)\n' "$memory_safety_issues" "$W_MEM"
+        printf '  Crash fixes                 : %s (w=%s)\n' "$crash_fixes" "$W_CRASH"
+        printf '  -------------------------------------\n'
+        printf '  Total security score        : %s\n' "$total_security_score"
+        printf '  Risk level                  : %s\n' "$risk"
         
         if [[ "$total_security_score" -gt 0 ]]; then
-            printf '\nSecurity Keywords Detected:\n'
-            local log_cmd_short_array=("git" "-c" "color.ui=false" "log" "--format=%s")
-            if [[ "$NO_MERGES" = "true" ]]; then
-                log_cmd_short_array+=("--no-merges")
+            printf '\nMatching commit subjects (top %d):\n' "$TOP_COMMITS"
+            # show only subjects, filtered by security regex
+            local -a log_subject_args=(log --format=%s)
+            $NO_MERGES && log_subject_args=(--no-merges "${log_subject_args[@]}")
+            
+            # Use engine explicitly for filtering:
+            if [[ "$GREP_ENGINE" == "pcre" ]]; then
+                git -c color.ui=false "${log_subject_args[@]}" "$base_ref..$target_ref" \
+                    | grep -Pi "$SEC_REGEX" \
+                    | head -n "$TOP_COMMITS" || printf '  (none)\n'
+            else
+                git -c color.ui=false "${log_subject_args[@]}" "$base_ref..$target_ref" \
+                    | grep -Ei "$SEC_REGEX" \
+                    | head -n "$TOP_COMMITS" || printf '  (none)\n'
             fi
-            "${log_cmd_short_array[@]}" "$base_ref".."$target_ref" 2>/dev/null | \
-                grep -i -E "$(printf '%s' "$SEC_REGEX" | tr -d '\n')" | \
-                head -"$TOP_COMMITS" || printf '  None found in commit messages\n'
         fi
     fi
 }
