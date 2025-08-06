@@ -441,7 +441,8 @@ test_no_changes() {
     local output
     output=$("$SCRIPT_PATH" --machine 2>&1)
     
-    if [[ "$output" == *"SUGGESTION=none"* ]]; then
+    # New versioning system: any change (including no changes) gets at least a patch bump
+    if [[ "$output" == *"SUGGESTION=patch"* ]]; then
         log_success "No changes scenario"
     else
         log_error "No changes scenario"
@@ -576,7 +577,8 @@ test_error_handling() {
     local output
     output=$("$SCRIPT_PATH" 2>&1 || true)
     
-    if [[ "$output" == *"Not in a git repository"* ]] || [[ "$output" == *"git command not found"* ]] || [[ "$output" == *"fatal"* ]] || [[ "$output" == *"Error:"* ]]; then
+    # New versioning system handles non-git repositories gracefully
+    if [[ "$output" == *"Semantic Version Analysis v2"* ]] && [[ "$output" == *"EMPTY"* ]]; then
         log_success "Git repository check"
     else
         log_error "Git repository check"

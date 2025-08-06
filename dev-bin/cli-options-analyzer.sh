@@ -311,7 +311,7 @@ SRC_DIFF=$(git -c color.ui=false diff "${DIFF_FLAGS[@]}" "$BASE_REF".."$TARGET_R
 CPP_DIFF=$(git -c color.ui=false diff "${DIFF_FLAGS[@]}" "$BASE_REF".."$TARGET_REF" -- "${PATHSPEC[@]}" || true)
 
 # Header-only diff subset for API analysis
-HDR_DIFF=$(printf '%s' "$SRC_DIFF" | grep -E '^\+|^\-|^diff --git|^index|^@@|/.*\.(h|hh|hpp)$' -n --color=never | sed -n 'p' || true)
+HDR_DIFF=$(printf '%s' "$SRC_DIFF" | grep -E '^\+|^-|^diff --git|^index|^@@|/.*\.(h|hh|hpp)$' -n --color=never | sed -n 'p' || true)
 
 # --- extract option sets -----------------------------------------------------
 
