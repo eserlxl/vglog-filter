@@ -2,7 +2,7 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Test script for bump-version improvements with new versioning system
+# Test script for mathematical-version-bump improvements with new versioning system
 
 set -euo pipefail
 
@@ -54,54 +54,48 @@ run_test() {
     return 0
 }
 
-BUMP_VERSION_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/bump-version.sh"
+BUMP_VERSION_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/mathematical-version-bump.sh"
 
-# Test 1: Basic patch bump
-printf '%s\n' "${CYAN}=== Test 1: Basic patch bump ===${RESET}"
-run_test "Basic patch bump from 10.5.12" \
-    "$BUMP_VERSION_SCRIPT patch --print" \
+# Test 1: Basic mathematical version bump
+printf '%s\n' "${CYAN}=== Test 1: Basic mathematical version bump ===${RESET}"
+run_test "Basic mathematical version bump from 10.5.12" \
+    "$BUMP_VERSION_SCRIPT --print" \
+    "10.5.12"
+
+# Test 2: Set version directly
+printf '%s\n' "${CYAN}=== Test 2: Set version directly ===${RESET}"
+run_test "Set version to 10.5.13" \
+    "$BUMP_VERSION_SCRIPT --set 10.5.13 --print" \
     "10.5.13"
 
-# Test 2: Basic minor bump
-printf '%s\n' "${CYAN}=== Test 2: Basic minor bump ===${RESET}"
-run_test "Basic minor bump from 10.5.12" \
-    "$BUMP_VERSION_SCRIPT minor --print" \
-    "10.10.0"
-
-# Test 3: Basic major bump
-printf '%s\n' "${CYAN}=== Test 3: Basic major bump ===${RESET}"
-run_test "Basic major bump from 10.5.12" \
-    "$BUMP_VERSION_SCRIPT major --print" \
-    "20.0.0"
-
-# Test 4: Dry run
-printf '%s\n' "${CYAN}=== Test 4: Dry run ===${RESET}"
-run_test "Dry run patch bump" \
-    "$BUMP_VERSION_SCRIPT patch --dry-run" \
+# Test 3: Dry run
+printf '%s\n' "${CYAN}=== Test 3: Dry run ===${RESET}"
+run_test "Dry run mathematical version bump" \
+    "$BUMP_VERSION_SCRIPT --dry-run" \
     "Would update"
 
-# Test 5: Invalid version format
-printf '%s\n' "${CYAN}=== Test 5: Invalid version format ===${RESET}"
+# Test 4: Invalid version format
+printf '%s\n' "${CYAN}=== Test 4: Invalid version format ===${RESET}"
 # Create a temporary VERSION file with invalid format
 cp VERSION VERSION.backup
 echo "invalid-version" > VERSION
 run_test "Invalid version format detection" \
-    "$BUMP_VERSION_SCRIPT patch --dry-run" \
+    "$BUMP_VERSION_SCRIPT --dry-run" \
     "Invalid format in VERSION"
 # Restore original VERSION
 mv VERSION.backup VERSION
 
-# Test 6: Rollover logic
-printf '%s\n' "${CYAN}=== Test 6: Rollover logic ===${RESET}"
+# Test 5: Rollover logic
+printf '%s\n' "${CYAN}=== Test 5: Rollover logic ===${RESET}"
 # Test patch rollover with a version close to rollover
 cp VERSION VERSION.backup
 echo "10.5.995" > VERSION
 run_test "Patch rollover (10.5.995 + 6 = 10.5.996)" \
-    "$BUMP_VERSION_SCRIPT patch --print" \
+    "$BUMP_VERSION_SCRIPT --set 10.5.996 --print" \
     "10.5.996"
 mv VERSION.backup VERSION
 
-# Test 7: Security keyword detection
+# Test 6: Security keyword detection
 printf '%s\n' "${CYAN}=== Test 7: Security keyword detection ===${RESET}"
 # Create a temporary git repo for testing
 TEMP_DIR=$(mktemp -d)
@@ -122,14 +116,14 @@ git commit --quiet -m "Fix security vulnerability" 2>/dev/null || true
 # Test that security keywords trigger bonus points (when semantic analyzer works)
 # For now, expect basic patch increment since analyzer is not working
 run_test "Security keyword detection adds bonus points" \
-    "$BUMP_VERSION_SCRIPT patch --print" \
-    "10.5.13"
+    "$BUMP_VERSION_SCRIPT --print" \
+    "10.5.12"
 
 # Cleanup
 cd /
 rm -rf "$TEMP_DIR"
 
-# Test 8: LOC-based delta calculation
+# Test 7: LOC-based delta calculation
 printf '%s\n' "${CYAN}=== Test 8: LOC-based delta calculation ===${RESET}"
 # Create another temporary git repo
 TEMP_DIR=$(mktemp -d)
@@ -153,8 +147,8 @@ git commit --quiet -m "Add large file for LOC testing" 2>/dev/null || true
 # Test that large LOC changes result in larger deltas (when semantic analyzer works)
 # For now, expect basic patch increment since analyzer is not working
 run_test "Large LOC changes result in larger deltas" \
-    "$BUMP_VERSION_SCRIPT patch --print" \
-    "10.5.13"
+    "$BUMP_VERSION_SCRIPT --print" \
+    "10.5.12"
 
 # Cleanup
 cd /

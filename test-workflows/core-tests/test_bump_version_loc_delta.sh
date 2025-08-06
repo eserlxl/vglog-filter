@@ -2,7 +2,7 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Test script for bump-version with LOC delta system
+# Test script for mathematical-version-bump with LOC delta system
 
 set -euo pipefail
 
@@ -52,7 +52,7 @@ run_test() {
 }
 
 # Get script paths from project root
-BUMP_VERSION_SCRIPT="$PROJECT_ROOT/dev-bin/bump-version.sh"
+BUMP_VERSION_SCRIPT="$PROJECT_ROOT/dev-bin/mathematical-version-bump.sh"
 SEMANTIC_ANALYZER_SCRIPT="$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh"
 
 # Test 1: LOC delta system with patch bump

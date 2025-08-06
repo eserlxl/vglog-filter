@@ -133,7 +133,7 @@ git add README.md
 git commit -m "Add test change" -q
 
 # Test patch rollover
-result_rollover=$("$PROJECT_ROOT/dev-bin/bump-version.sh" patch --dry-run --repo-root "$(pwd)" 2>/dev/null | tail -1)
+result_rollover=$("$PROJECT_ROOT/dev-bin/mathematical-version-bump.sh" --dry-run --repo-root "$(pwd)" 2>/dev/null | tail -1)
 echo "  Patch rollover test: 1.2.99 -> $result_rollover"
 
 if [[ "$result_rollover" =~ ^1\.2\.[0-9]+$ ]]; then

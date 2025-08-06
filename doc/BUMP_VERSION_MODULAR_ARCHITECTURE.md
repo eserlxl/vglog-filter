@@ -8,8 +8,8 @@ The modular architecture consists of the following components:
 
 ### Core Scripts
 
-- **`bump-version-core`** - Main orchestrator script that coordinates all modules
-- **`bump-version`** - Original monolithic script (preserved for backward compatibility)
+- **`mathematical-version-bump`** - Main mathematical version bumper that coordinates all modules
+- **`semantic-version-analyzer`** - Analyzes changes and determines appropriate bump type
 
 ### Utility Modules
 
@@ -55,28 +55,28 @@ The modular architecture consists of the following components:
 ## Module Dependencies
 
 ```
-bump-version-core
+mathematical-version-bump
 ├── version-utils
-├── cli-parser
-├── version-validator
+├── semantic-version-analyzer
 ├── version-calculator-loc
-└── git-operations
+├── git-operations
+└── version-validator
     ├── version-utils
     └── version-validator
 ```
 
 ## Usage
 
-### Using the Modular Script
+### Using the Mathematical Version Bumper
 
 ```bash
-# Basic usage (same as original)
-./dev-bin/bump-version.sh patch --dry-run
-./dev-bin/bump-version.sh minor --commit --tag
-./dev-bin/bump-version.sh --set 1.0.0 --allow-prerelease
+# Basic usage (purely mathematical)
+./dev-bin/mathematical-version-bump.sh --dry-run
+./dev-bin/mathematical-version-bump.sh --commit --tag
+./dev-bin/mathematical-version-bump.sh --set 1.0.0 --allow-prerelease
 
-# Backward compatibility (original script still works)
-./dev-bin/bump-version.sh patch --dry-run
+# Analyze changes since specific reference
+./dev-bin/mathematical-version-bump.sh --since v1.0.0 --commit
 ```
 
 ### Using Individual Modules

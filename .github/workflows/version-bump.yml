@@ -143,11 +143,11 @@ jobs:
         if: steps.version-analysis.outputs.bump_type != 'skip'
         run: |
           set -euo pipefail
-          echo "Bumping version type: ${{ steps.version-analysis.outputs.bump_type }}"
+          echo "Bumping version using mathematical analysis"
 
-          # Ensure bump-version exists early
-          if [[ ! -x ./dev-bin/bump-version ]]; then
-            echo "bump-version not found or not executable at ./dev-bin/bump-version" >&2
+          # Ensure mathematical-version-bump exists early
+          if [[ ! -x ./dev-bin/mathematical-version-bump.sh ]]; then
+            echo "mathematical-version-bump.sh not found or not executable at ./dev-bin/mathematical-version-bump.sh" >&2
             exit 1
           fi
 
@@ -164,7 +164,7 @@ jobs:
 
           # Add [skip ci] to prevent triggering other workflows
           ANALYSIS_MESSAGE="[skip ci] Auto version bump triggered by ${{ github.event_name }}" \
-            ./dev-bin/bump-version "${{ steps.version-analysis.outputs.bump_type }}" --commit --no-verify
+            ./dev-bin/mathematical-version-bump.sh --commit --no-verify
 
           # Ensure [skip ci] present even if the script didn't include it
           if ! git log -1 --pretty=%B | grep -q '\[skip ci\]'; then

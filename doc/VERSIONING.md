@@ -265,22 +265,25 @@ Several utility scripts are provided in the `dev-bin/` directory to assist with 
 
 As described above, this script analyzes changes and suggests version bumps. It's a crucial tool for understanding the impact of your commits.
 
-### `bump-version`
+### `mathematical-version-bump`
 
-The `dev-bin/bump-version.sh` script allows for manual incrementing of the project's version and updating the `VERSION` file. This is primarily used by the automated workflows but can be run locally for specific needs.
+The `dev-bin/mathematical-version-bump.sh` script provides purely mathematical versioning - no manual bump types needed. The system automatically determines the appropriate version bump based on semantic analysis of changes.
 
 ```bash
-# Bump the patch version
-./dev-bin/bump-version.sh patch
+# Automatically determine and apply version bump
+./dev-bin/mathematical-version-bump.sh --commit
 
-# Bump the minor version
-./dev-bin/bump-version.sh minor
+# Dry run to see what would happen
+./dev-bin/mathematical-version-bump.sh --dry-run
 
-# Bump the major version
-./dev-bin/bump-version.sh major
+# Set version directly
+./dev-bin/mathematical-version-bump.sh --set 1.0.0
 
-# Auto-detect and bump version (similar to CI behavior)
-./dev-bin/bump-version.sh auto
+# Analyze changes since specific tag
+./dev-bin/mathematical-version-bump.sh --since v1.0.0 --commit
+
+# Print computed version without making changes
+./dev-bin/mathematical-version-bump.sh --print
 ```
 
 ### `tag-manager`

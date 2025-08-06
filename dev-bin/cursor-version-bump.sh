@@ -6,18 +6,18 @@
 # the GNU General Public License v3.0 or later.
 # See the LICENSE file in the project root for details.
 #
-# cursor-version-bump: Interactive wrapper for bump-version
+# cursor-version-bump: Interactive wrapper for mathematical-version-bump
 # ------------------------------------------------------------
 # Purpose:
 # - Provide a friendly interactive menu for Cursor IDE users.
-# - Delegate all real work to the existing bump-version script.
+# - Delegate all real work to the mathematical-version-bump script.
 #
 # Behavior:
-# - If arguments are given, forward them verbatim to bump-version.
+# - If arguments are given, forward them verbatim to mathematical-version-bump.
 # - If no arguments are given, show a menu and build a simple command,
 #   optionally appending extra args you type (e.g., --sign --push).
 #
-# It does NOT validate or reinterpret flags; bump-version stays the single
+# It does NOT validate or reinterpret flags; mathematical-version-bump stays the single
 # source of truth for versioning logic and options.
 
 set -euo pipefail
@@ -88,8 +88,8 @@ fmt_next_versions() {
     fi
 }
 
-# --------------- locate bump-version ---------------
-# Optional override: export BUMP_VERSION_BIN=/custom/path/bump-version
+# --------------- locate mathematical-version-bump ---------------
+# Optional override: export BUMP_VERSION_BIN=/custom/path/mathematical-version-bump
 BUMP_VERSION_BIN="${BUMP_VERSION_BIN:-}"
 
 resolve_bump_bin() {
@@ -99,35 +99,35 @@ resolve_bump_bin() {
     fi
     # Try project dev-bin then script dev-bin
     for cand in \
-            "$PROJECT_ROOT/dev-bin/bump-version.sh" \
-    "$SCRIPT_DIR/dev-bin/bump-version.sh"
+            "$PROJECT_ROOT/dev-bin/mathematical-version-bump.sh" \
+    "$SCRIPT_DIR/dev-bin/mathematical-version-bump.sh"
     do
         if [[ -x "$cand" ]]; then printf '%s\n' "$cand"; return; fi
     done
-    if command -v bump-version >/dev/null 2>&1; then
-        command -v bump-version; return
+    if command -v mathematical-version-bump >/dev/null 2>&1; then
+        command -v mathematical-version-bump; return
     fi
-    die "Could not find 'bump-version'. Set BUMP_VERSION_BIN or place it at \
-'$PROJECT_ROOT/dev-bin/bump-version.sh' (or in PATH)."
+    die "Could not find 'mathematical-version-bump'. Set BUMP_VERSION_BIN or place it at \
+'$PROJECT_ROOT/dev-bin/mathematical-version-bump.sh' (or in PATH)."
 }
 
 print_help() {
     cat <<'EOF'
-cursor-version-bump — interactive wrapper for bump-version
+cursor-version-bump — interactive wrapper for mathematical-version-bump
 
 Usage:
   cursor-version-bump                # interactive menu (requires TTY)
-  cursor-version-bump -- ...         # forward everything after -- to bump-version
-  cursor-version-bump [args...]      # forward args verbatim to bump-version
+  cursor-version-bump -- ...         # forward everything after -- to mathematical-version-bump
+  cursor-version-bump [args...]      # forward args verbatim to mathematical-version-bump
 
 Notes:
-- This wrapper does not reinterpret flags. Whatever you pass goes to bump-version.
+- This wrapper does not reinterpret flags. Whatever you pass goes to mathematical-version-bump.
 - Interactive mode builds a simple command (major|minor|patch|auto|set X.Y.Z),
   then optionally appends any extra text you type (e.g., "--sign --push").
 - For non-TTY (CI, scripts), pass arguments explicitly.
 
 Env:
-  BUMP_VERSION_BIN=/path/to/bump-version  # optional override
+  BUMP_VERSION_BIN=/path/to/mathematical-version-bump  # optional override
   NO_COLOR=1                               # disable colored output
 EOF
 }
@@ -155,7 +155,7 @@ interactive_menu() {
     echo "1) Patch (bug fixes)       - $CURRENT_VERSION → $p"
     echo "2) Minor (new features)    - $CURRENT_VERSION → $m"
     echo "3) Major (breaking change) - $CURRENT_VERSION → $j"
-    echo "4) Auto (let bump-version decide)"
+            echo "4) Auto (let mathematical-version-bump decide)"
     echo "5) Set exact version (X.Y.Z)"
     echo "6) Cancel"
     echo ""
@@ -201,8 +201,8 @@ interactive_menu() {
     esac
 
     echo ""
-    echo "Optionally type extra args for bump-version (or press Enter):"
-    echo "  e.g., --commit --tag --sign --push   (or any flags your bump-version supports)"
+            echo "Optionally type extra args for mathematical-version-bump (or press Enter):"
+        echo "  e.g., --commit --tag --sign --push   (or any flags your mathematical-version-bump supports)"
     local extra=""
     read -r -p "Extra args: " extra || true
 
@@ -214,7 +214,7 @@ interactive_menu() {
     fi
 
     echo ""
-    printf 'Will run: %sbump-version %s%s\n' "$BOLD" "${final_cmd[*]}" "$RESET"
+    printf 'Will run: %smathematical-version-bump %s%s\n' "$BOLD" "${final_cmd[*]}" "$RESET"
     if confirm "Run now?"; then
         local bin; bin="$(resolve_bump_bin)"
         exec "$bin" "${final_cmd[@]}"
