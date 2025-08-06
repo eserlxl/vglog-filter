@@ -2,8 +2,8 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Test script for pure mathematical versioning system
-# Tests bonus point calculations and version bump decisions
+# Test script for semantic versioning system v2
+# Tests bonus point calculations and version bump decisions based on mathematical thresholds
 
 set -Euo pipefail
 IFS=
@@ -77,9 +77,9 @@ run_test() {
     fi
 }
 
-# Test pure mathematical versioning system
-test_pure_mathematical_versioning() {
-    log_info "Testing pure mathematical versioning system..."
+# Test semantic versioning system v2
+test_semantic_versioning_v2() {
+    log_info "Testing semantic versioning system v2..."
     
     local test_dir
     test_dir=$(create_temp_test_env "pure-math-bonus")
@@ -145,34 +145,34 @@ test_pure_mathematical_versioning() {
     local verbose_output
     verbose_output=$("$SCRIPT_PATH" --verbose --repo-root "$test_dir" 2>&1)
     
-    if [[ "$verbose_output" == *"PURE MATHEMATICAL VERSIONING SYSTEM"* ]]; then
-        log_success "Pure mathematical versioning system detected in verbose output"
+    if [[ "$verbose_output" == *"Semantic Version Analysis v2"* ]]; then
+        log_success "Semantic Version Analysis v2 detected in verbose output"
     else
-        log_error "Pure mathematical versioning system not detected in verbose output"
+        log_error "Semantic Version Analysis v2 not detected in verbose output"
     fi
     
-    if [[ "$verbose_output" == *"Major: Total bonus >="* ]]; then
-        log_success "Major bonus threshold displayed"
+    if [[ "$verbose_output" == *"Total bonus points:"* ]]; then
+        log_success "Total bonus points displayed"
     else
-        log_error "Major bonus threshold not displayed"
+        log_error "Total bonus points not displayed"
     fi
     
-    if [[ "$verbose_output" == *"Minor: Total bonus >="* ]]; then
-        log_success "Minor bonus threshold displayed"
+    if [[ "$verbose_output" == *"Suggested bump:"* ]]; then
+        log_success "Suggested bump displayed"
     else
-        log_error "Minor bonus threshold not displayed"
+        log_error "Suggested bump not displayed"
     fi
     
-    if [[ "$verbose_output" == *"Patch: Total bonus >="* ]]; then
-        log_success "Patch bonus threshold displayed"
+    if [[ "$verbose_output" == *"Next version:"* ]]; then
+        log_success "Next version displayed"
     else
-        log_error "Patch bonus threshold not displayed"
+        log_error "Next version not displayed"
     fi
     
-    if [[ "$verbose_output" == *"No minimum thresholds or extra rules"* ]]; then
-        log_success "No extra rules message displayed"
+    if [[ "$verbose_output" == *"SUGGESTION="* ]]; then
+        log_success "SUGGESTION output displayed"
     else
-        log_error "No extra rules message not displayed"
+        log_error "SUGGESTION output not displayed"
     fi
     
     # Test 5: Test JSON output with bonus information
@@ -185,10 +185,10 @@ test_pure_mathematical_versioning() {
         log_error "JSON output missing suggestion field"
     fi
     
-    if [[ "$json_output" == *'"reason"'* ]]; then
-        log_success "JSON output contains reason field"
+    if [[ "$json_output" == *'"total_bonus"'* ]]; then
+        log_success "JSON output contains total_bonus field"
     else
-        log_error "JSON output missing reason field"
+        log_error "JSON output missing total_bonus field"
     fi
     
     # Cleanup
@@ -305,9 +305,9 @@ test_mathematical_consistency() {
 
 # Main test execution
 main() {
-    printf '%s=== Pure Mathematical Versioning System Tests ===%s\n' "${YELLOW}" "${NC}"
+    printf '%s=== Semantic Versioning System v2 Tests ===%s\n' "${YELLOW}" "${NC}"
     
-    test_pure_mathematical_versioning
+    test_semantic_versioning_v2
     test_bonus_point_calculations
     test_mathematical_consistency
     
