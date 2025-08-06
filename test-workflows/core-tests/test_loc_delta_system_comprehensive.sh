@@ -86,7 +86,8 @@ cd "$test_dir"
 # Create initial commit with a source file
 mkdir -p src
 echo "// Initial source file" > src/main.c
-git add src/main.c
+echo "1.0.0" > VERSION
+git add src/main.c VERSION
 git commit --quiet -m "Add initial source file" 2>/dev/null || true
 
 # Create a tag for the initial state
@@ -120,7 +121,8 @@ cd "$test_dir"
 # Create initial commit
 mkdir -p src
 echo "// Initial source file" > src/main.c
-git add src/main.c
+echo "1.0.0" > VERSION
+git add src/main.c VERSION
 git commit --quiet -m "Add initial source file" 2>/dev/null || true
 git tag "v1.0.0" 2>/dev/null || true
 
@@ -152,7 +154,8 @@ cd "$test_dir"
 # Create initial commit
 mkdir -p src
 echo "// Initial source file" > src/main.c
-git add src/main.c
+echo "1.0.0" > VERSION
+git add src/main.c VERSION
 git commit --quiet -m "Add initial source file" 2>/dev/null || true
 git tag "v1.0.0" 2>/dev/null || true
 
@@ -178,7 +181,8 @@ cd "$test_dir"
 # Create initial commit
 mkdir -p src
 echo "// Initial source file" > src/main.c
-git add src/main.c
+echo "1.0.0" > VERSION
+git add src/main.c VERSION
 git commit --quiet -m "Add initial source file" 2>/dev/null || true
 git tag "v1.0.0" 2>/dev/null || true
 
@@ -188,16 +192,9 @@ git add src/test.c
 git commit --quiet -m "Add test change" 2>/dev/null || true
 
 # Should always include loc_delta in JSON
-output=$($SEMANTIC_ANALYZER_SCRIPT --json --repo-root "$(pwd)" --since v1.0.0 2>/dev/null)
-
-if [[ "$output" == *"loc_delta"* ]]; then
-    printf '%s\n' "${GREEN}✓ PASS: System always includes loc_delta${NC}"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-else
-    printf '%s\n' "${RED}✗ FAIL: System doesn't include loc_delta${NC}"
-    printf "Output: %s\n" "$output"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-fi
+run_test "System always includes loc_delta" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0" \
+    "loc_delta"
 
 cleanup_temp_test_env "$test_dir"
 
