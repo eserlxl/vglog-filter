@@ -48,7 +48,7 @@ source "$SCRIPT_DIR/version-utils.sh"
 # ------------------------------ traps/cleanup --------------------------------
 
 # Ensure cleanup hook exists even if utilities change later
-setup_cleanup "TMP_FILE"
+# Note: cleanup is handled by version-utils.sh automatically
 
 # shellcheck disable=SC2154
 trap '{
@@ -56,7 +56,7 @@ trap '{
   if (( st != 0 )); then
     warn "Aborted with status $st at line ${BASH_LINENO[0]} executing: ${BASH_COMMAND}"
   fi
-  # cleanup provided by version-utils (setup_cleanup)
+  # cleanup provided by version-utils (register_tmp)
 }' EXIT
 
 # ------------------------------ global options --------------------------------

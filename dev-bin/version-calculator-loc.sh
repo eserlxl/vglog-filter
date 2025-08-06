@@ -141,7 +141,8 @@ get_analysis_explanation() {
     else
         out="$("$analyzer" --verbose 2>/dev/null || true)"
     fi
-    grep -E '^Reason:' <<<"$out" | head -1 | sed -E 's/^Reason:[[:space:]]*//'
+    # Try to extract reason line, but don't fail if not found
+    grep -E '^Reason:' <<<"$out" | head -1 | sed -E 's/^Reason:[[:space:]]*//' || printf ''
 }
 
 # ---------- version checks ----------------------------------------------------
@@ -179,15 +180,24 @@ calculate_version_bump() {
     ensure_semver "$current"
     is_uint "$delta" || die "Non-integer delta: $delta"
     local MAJOR MINOR PATCH
-    read -r MAJOR MINOR PATCH < <(split_semver "$current")
+    MAJOR=$(split_semver "$current" | sed -n '1p')
+    MINOR=$(split_semver "$current" | sed -n '2p')
+    PATCH=$(split_semver "$current" | sed -n '3p')
 
     case "$type" in
         patch)
-            read -r PATCH MINOR MAJOR < <(roll_patch "$PATCH" "$MINOR" "$MAJOR" "$delta")
+            local roll_result
+            roll_result=$(roll_patch "$PATCH" "$MINOR" "$MAJOR" "$delta")
+            PATCH=$(echo "$roll_result" | awk '{print $1}')
+            MINOR=$(echo "$roll_result" | awk '{print $2}')
+            MAJOR=$(echo "$roll_result" | awk '{print $3}')
             ;;
         minor)
             [[ "${PRESERVE_PATCH_ON_MINOR,,}" == "true" ]] || PATCH=0
-            read -r MINOR MAJOR < <(roll_minor "$MINOR" "$MAJOR" "$delta")
+            local roll_result
+            roll_result=$(roll_minor "$MINOR" "$MAJOR" "$delta")
+            MINOR=$(echo "$roll_result" | awk '{print $1}')
+            MAJOR=$(echo "$roll_result" | awk '{print $2}')
             ;;
         major)
             [[ "${PRESERVE_LOWER_ON_MAJOR,,}" == "true" ]] || { MINOR=0; PATCH=0; }

@@ -464,9 +464,9 @@ main() {
     printf '  "base_ref": "%s",\n' "$(json_escape "$BASE_REF")"
     printf '  "target_ref": "%s",\n' "$(json_escape "$TARGET_REF")"
     printf '  "loc_delta": {\n'
-    printf '    "patch_delta": %s,\n' "$(int_or_default "${PD[total_delta]}" 1)"
-    printf '    "minor_delta": %s,\n' "$(int_or_default "${MD[total_delta]}" 5)"
-    printf '    "major_delta": %s\n'   "$(int_or_default "${JD[total_delta]}" 10)"
+    printf '    "patch_delta": %s,\n' "$(int_or_default "${PD[TOTAL_DELTA]}" 1)"
+    printf '    "minor_delta": %s,\n' "$(int_or_default "${MD[TOTAL_DELTA]}" 5)"
+    printf '    "major_delta": %s\n'   "$(int_or_default "${JD[TOTAL_DELTA]}" 10)"
     printf '  }\n'
     printf '}\n'
   elif [[ "$MACHINE_OUTPUT" == "true" ]]; then
