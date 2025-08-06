@@ -34,6 +34,44 @@ PRINT_SECRETS=0
 WRITE_B64=1        # also produce single-line base64 exports
 PASSPHRASE=""      # generated if empty
 UMASK_SET=077
+WITH_SUBKEY=0      # create signing subkey with cert-only primary (recommended)
+MAKE_REVOKE=0      # write revocation-cert.asc
+
+# ---------- utilities ----------
+require_cmd() { command -v "$1" >/dev/null 2>&1 || die "'$1' is not installed"; }
+
+abs_path() {
+  # Portable absolute path (macOS lacks readlink -f, sometimes no realpath)
+  if command -v realpath >/dev/null 2>&1; then realpath "$1" && return; fi
+  if readlink -f / >/dev/null 2>&1; then readlink -f "$1" && return; fi
+  # Fallback: prepend PWD if relative
+  case "$1" in
+    /*) printf '%s\n' "$1";;
+    *)  printf '%s/%s\n' "$(pwd -P)" "$1";;
+  esac
+}
+
+gen_passphrase() {
+  if [[ -n "$PASSPHRASE" ]]; then return; fi
+  if command -v openssl >/dev/null 2>&1; then
+    PASSPHRASE="$(openssl rand -base64 32)"
+  else
+    PASSPHRASE="$(head -c 32 /dev/urandom | base64)"
+  fi
+}
+
+supports_ed25519() {
+  gpg --version 2>/dev/null | grep -qi 'ed25519' && return 0 || return 1
+}
+
+to_oneline_b64() {
+  # GNU base64 has -w/--wrap; BSD base64 doesn't.
+  if base64 --help 2>&1 | grep -qE -- '(-w|--wrap)'; then
+    base64 -w 0
+  else
+    base64 | tr -d '\n'
+  fi
+}
 
 # ---------- usage ----------
 usage() {
@@ -46,6 +84,8 @@ Options:
   --comment STR        Comment (default: "$COMMENT")
   --expire STR         Expire date (default: "$EXPIRE", e.g. 1y, 0 for never)
   --algo ALG           Key algorithm: ed25519 | rsa4096 (default: $ALGO)
+  --with-subkey        Create a signing subkey; primary is certification-only
+  --revoke-cert        Also generate revocation-cert.asc
   --out-dir PATH       Output directory (default: $OUT_DIR)
   --no-b64             Do not create base64 single-line copies
   --print-secrets      Also print secret key & passphrase to stdout (NOT default)
@@ -58,6 +98,7 @@ Outputs (in --out-dir):
   passphrase.txt       Passphrase (mode 600)
   public.asc.b64       Base64 (single-line) of public.asc      [optional]
   secret.asc.b64       Base64 (single-line) of secret.asc      [optional]
+  revocation-cert.asc  Revocation certificate                   [optional]
 
 Recommended CI usage:
   - Put secret.asc (or secret.asc.b64) into GitHub Secret GPG_PRIVATE_KEY
@@ -74,6 +115,8 @@ while (( $# )); do
     --comment)     COMMENT=${2:?}; shift 2;;
     --expire)      EXPIRE=${2:?}; shift 2;;
     --algo)        ALGO=${2:?}; shift 2;;
+    --with-subkey) WITH_SUBKEY=1; shift;;
+    --revoke-cert) MAKE_REVOKE=1; shift;;
     --out-dir)     OUT_DIR=${2:?}; shift 2;;
     --no-b64)      WRITE_B64=0; shift;;
     --print-secrets) PRINT_SECRETS=1; shift;;
@@ -86,14 +129,13 @@ done
 
 # ---------- preflight ----------
 umask "$UMASK_SET"
-command -v gpg >/dev/null 2>&1 || die "gpg is not installed"
-if [[ -z "${PASSPHRASE}" ]]; then
-  if command -v openssl >/dev/null 2>&1; then
-    PASSPHRASE="$(openssl rand -base64 32)"
-  else
-    # Fallback: read from /dev/urandom, base64
-    PASSPHRASE="$(head -c 32 /dev/urandom | base64)"
-  fi
+require_cmd gpg
+gen_passphrase
+
+# Prefer ed25519; fall back to RSA if unsupported
+if [[ "$ALGO" == "ed25519" ]] && ! supports_ed25519; then
+  warn "This GnuPG build seems to lack Ed25519 support; falling back to RSA-4096."
+  ALGO="rsa4096"
 fi
 
 mkdir -p "$OUT_DIR"
@@ -117,14 +159,32 @@ mkdir -p "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
 
 # Enable loopback pinentry for non-interactive export
 printf 'allow-loopback-pinentry\nmax-cache-ttl 1\n' > "$GNUPGHOME/gpg-agent.conf"
-printf 'batch\npinentry-mode loopback\n' > "$GNUPGHOME/gpg.conf"
+printf 'batch\npinentry-mode loopback\nno-tty\n' > "$GNUPGHOME/gpg.conf"
 
 # ---------- build batch file ----------
 BATCH="$(mktemp "$TMP_ROOT/gpg-batch.XXXX")"
 case "$ALGO" in
   ed25519)
-    cat >"$BATCH" <<EOF
-%echo Generating CI GPG key
+    if (( WITH_SUBKEY )); then
+      cat >"$BATCH" <<EOF
+%echo Generating CI GPG key (primary cert-only + signing subkey)
+Key-Type: eddsa
+Key-Curve: ed25519
+Key-Usage: cert
+Name-Real: ${NAME}
+Name-Email: ${EMAIL}
+Name-Comment: ${COMMENT}
+Expire-Date: ${EXPIRE}
+Passphrase: ${PASSPHRASE}
+Subkey-Type: eddsa
+Subkey-Curve: ed25519
+Subkey-Usage: sign
+%commit
+%echo Done
+EOF
+    else
+      cat >"$BATCH" <<EOF
+%echo Generating CI GPG key (primary sign-only)
 Key-Type: eddsa
 Key-Curve: ed25519
 Key-Usage: sign
@@ -136,10 +196,29 @@ Passphrase: ${PASSPHRASE}
 %commit
 %echo Done
 EOF
+    fi
     ;;
   rsa4096)
-    cat >"$BATCH" <<EOF
-%echo Generating CI GPG key
+    if (( WITH_SUBKEY )); then
+      cat >"$BATCH" <<EOF
+%echo Generating CI GPG key (primary cert-only + signing subkey)
+Key-Type: RSA
+Key-Length: 4096
+Key-Usage: cert
+Name-Real: ${NAME}
+Name-Email: ${EMAIL}
+Name-Comment: ${COMMENT}
+Expire-Date: ${EXPIRE}
+Passphrase: ${PASSPHRASE}
+Subkey-Type: RSA
+Subkey-Length: 4096
+Subkey-Usage: sign
+%commit
+%echo Done
+EOF
+    else
+      cat >"$BATCH" <<EOF
+%echo Generating CI GPG key (primary sign-only)
 Key-Type: RSA
 Key-Length: 4096
 Key-Usage: sign
@@ -151,6 +230,7 @@ Passphrase: ${PASSPHRASE}
 %commit
 %echo Done
 EOF
+    fi
     ;;
   *)
     die "Unsupported --algo '$ALGO'. Use ed25519 or rsa4096."
@@ -183,30 +263,36 @@ gpg --batch --pinentry-mode loopback --passphrase "$PASSPHRASE" --armor --export
 printf '%s\n' "$PASSPHRASE" > "$PASS_TXT"
 chmod 600 "$PASS_TXT" || true
 
-to_oneline_b64() {
-  if base64 --help 2>&1 | grep -qE -- '(-w|--wrap)'; then
-    base64 -w 0
-  else
-    base64 | tr -d '\n'
-  fi
-}
-
 if (( WRITE_B64 )); then
   say "Creating single-line base64 copies…"
   <"$PUB_ASC" to_oneline_b64 > "$OUT_DIR/public.asc.b64"
   <"$SEC_ASC" to_oneline_b64 > "$OUT_DIR/secret.asc.b64"
 fi
 
+# ---------- optional: revocation cert ----------
+if (( MAKE_REVOKE )); then
+  say "Generating revocation certificate…"
+  REVOKE="$OUT_DIR/revocation-cert.asc"
+  # Use --command-fd to answer prompts non-interactively
+  # Sequence: confirm=y, reason=0 (no reason), description='', confirm=y
+  { printf 'y\n0\n\n' ; printf 'y\n'; } | \
+    gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" \
+        --command-fd 0 --status-fd 2 \
+        --output "$REVOKE" --gen-revoke "$FPR" >/dev/null 2>&1 || warn "Revocation cert generation failed; you can create it later with gpg --gen-revoke"
+  [[ -s "$REVOKE" ]] && ok "Revocation certificate written: $(abs_path "$REVOKE")"
+fi
+
 # ---------- summary ----------
 ok "GPG Key Setup Complete"
 cat <<EOF
-Outputs written to: $OUT_DIR
+Outputs written to: $(abs_path "$OUT_DIR")
 
-  - Public key  : $(realpath "$PUB_ASC")
-  - Private key : $(realpath "$SEC_ASC")
-  - Passphrase  : $(realpath "$PASS_TXT")
-$( (( WRITE_B64 )) && printf '  - Public (b64): %s\n' "$(realpath "$OUT_DIR/public.asc.b64")" )
-$( (( WRITE_B64 )) && printf '  - Secret (b64): %s\n' "$(realpath "$OUT_DIR/secret.asc.b64")" )
+  - Public key  : $(abs_path "$PUB_ASC")
+  - Private key : $(abs_path "$SEC_ASC")
+  - Passphrase  : $(abs_path "$PASS_TXT")
+$( (( WRITE_B64 )) && printf '  - Public (b64): %s\n' "$(abs_path "$OUT_DIR/public.asc.b64")" )
+$( (( WRITE_B64 )) && printf '  - Secret (b64): %s\n' "$(abs_path "$OUT_DIR/secret.asc.b64")" )
+$( (( MAKE_REVOKE )) && [[ -f "$OUT_DIR/revocation-cert.asc" ]] && printf '  - Revocation : %s\n' "$(abs_path "$OUT_DIR/revocation-cert.asc")" )
 
 GitHub setup (recommended):
   • Secrets:
