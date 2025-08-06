@@ -51,11 +51,13 @@ log_error() {
     ((TESTS_FAILED++))
 }
 
+# shellcheck disable=SC2329
 log_warning() {
     printf "%s[WARN]%s %s\n" "${YELLOW}" "${NC}" "$1"
 }
 
 # Test function
+# shellcheck disable=SC2329
 run_test() {
     local test_name="$1"
     local test_command="$2"
