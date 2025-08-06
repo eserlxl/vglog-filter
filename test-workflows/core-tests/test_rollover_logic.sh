@@ -33,19 +33,26 @@ test_new_rollover_logic() {
 
     # New versioning system: always increase only the last identifier (patch)
     # Uses MAIN_VERSION_MOD=1000 for rollover logic
+    # This matches the actual implementation in dev-bin/version-calculator.sh
     local MAIN_VERSION_MOD=1000
     
-    local new_patch=$((current_patch + delta))
-    local delta_y=$(((new_patch - (new_patch % MAIN_VERSION_MOD)) / MAIN_VERSION_MOD))
-    local final_patch=$((new_patch % MAIN_VERSION_MOD))
+    # Rollover math (matches actual implementation):
+    # z_new = (patch + TOTAL_DELTA)
+    # delta_y = floor(z_new / MAIN_VERSION_MOD)
+    # y_new = minor + delta_y
+    # delta_x = floor(y_new / MAIN_VERSION_MOD)
+    # final = (major + delta_x).(y_new % mod).(z_new % mod)
+    local z_new=$((current_patch + delta))
+    local delta_y=$((z_new / MAIN_VERSION_MOD))
+    local final_z=$((z_new % MAIN_VERSION_MOD))
     
-    local new_minor=$((current_minor + delta_y))
-    local delta_x=$(((new_minor - (new_minor % MAIN_VERSION_MOD)) / MAIN_VERSION_MOD))
-    local final_minor=$((new_minor % MAIN_VERSION_MOD))
+    local y_new=$((current_minor + delta_y))
+    local delta_x=$((y_new / MAIN_VERSION_MOD))
+    local final_y=$((y_new % MAIN_VERSION_MOD))
     
-    local final_major=$((current_major + delta_x))
+    local final_x=$((current_major + delta_x))
 
-    printf '%s.%s.%s' "$final_major" "$final_minor" "$final_patch"
+    printf '%s.%s.%s' "$final_x" "$final_y" "$final_z"
 }
 
 # ─── Helper to run a single test ───────────────────────────────────────────────
