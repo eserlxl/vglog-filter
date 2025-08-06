@@ -62,7 +62,7 @@ run_test() {
 
 BUMP_VERSION_SCRIPT="$PROJECT_ROOT/dev-bin/mathematical-version-bump.sh"
 
-# Create temporary test environment
+# Create temporary test environment in /tmp
 test_dir=$(create_temp_test_env "bump_version_test")
 cd "$test_dir"
 
@@ -86,24 +86,47 @@ run_test "Dry run mathematical version bump" \
 
 # Test 4: Invalid version format
 printf '%s\n' "${CYAN}=== Test 4: Invalid version format ===${RESET}"
-# Create a temporary VERSION file with invalid format
-cp VERSION VERSION.backup
+# Create a temporary git repo for testing invalid version
+TEMP_DIR=$(mktemp -d)
+cd "$TEMP_DIR"
+git init --quiet
+git config user.name "Test User"
+git config user.email "test@example.com"
+
+# Create VERSION file with invalid format
 echo "invalid-version" > VERSION
+git add VERSION
+git commit --quiet -m "Add invalid version" 2>/dev/null || true
+
 run_test "Invalid version format detection" \
-    "$BUMP_VERSION_SCRIPT --dry-run" \
+    "$BUMP_VERSION_SCRIPT --dry-run --repo-root $(pwd)" \
     "Invalid format in VERSION"
-# Restore original VERSION
-mv VERSION.backup VERSION
+
+# Cleanup
+cd /
+rm -rf "$TEMP_DIR"
 
 # Test 5: Rollover logic
 printf '%s\n' "${CYAN}=== Test 5: Rollover logic ===${RESET}"
+# Create a temporary git repo for testing rollover
+TEMP_DIR=$(mktemp -d)
+cd "$TEMP_DIR"
+git init --quiet
+git config user.name "Test User"
+git config user.email "test@example.com"
+
 # Test patch rollover with a version close to rollover
-cp VERSION VERSION.backup
 echo "10.5.995" > VERSION
+git add VERSION
+git commit --quiet -m "Set version to 10.5.995" 2>/dev/null || true
+
 run_test "Patch rollover (10.5.995 + 6 = 10.5.996)" \
     "$BUMP_VERSION_SCRIPT --set 10.5.996 --print" \
     "10.5.996"
-mv VERSION.backup VERSION
+
+# Cleanup
+cd /
+rm -rf "$TEMP_DIR"
 
 # Test 6: Security keyword detection
 printf '%s\n' "${CYAN}=== Test 6: Security keyword detection ===${RESET}"
