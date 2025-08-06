@@ -7,23 +7,22 @@
 
 #pragma once
 
-#include <string>
-#include <string_view>
 #include <filesystem>
 #include <fstream>
+#include <string_view>
+#include <string>
 
 namespace path_validation {
 
-// Validates a given file path to ensure it is safe to use.
-// A path is considered safe if it is within the current working directory.
-// Returns the absolute, canonical path if valid.
+// Validates a given path is *relative* and resolves within CWD (no traversal).
+// Returns the resolved (weakly_canonical) absolute path.
+// The literal "-" is treated as stdin sentinel and returned as-is.
 [[nodiscard]] std::filesystem::path validate_and_canonicalize(std::string_view input_path);
 
-// Sanitizes and validates a path string, returning a safe path string for file operations.
-// This function avoids MSAN issues by using string-based validation instead of filesystem::path.
+// Sanitizes and validates a path string, returning a path string safe to open.
 [[nodiscard]] std::string sanitize_path_for_file_access(std::string_view input_path);
 
-// Safely opens a file stream (ifstream) after validating the path.
+// Safely opens an ifstream after validating the path (exceptions enabled).
 [[nodiscard]] std::ifstream safe_ifstream(std::string_view filename);
 
 } // namespace path_validation

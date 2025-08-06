@@ -7,29 +7,28 @@
 
 #pragma once
 
+#include "options.h"
+
+#include <cstddef>
+#include <iosfwd>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <iosfwd>
-#include "options.h"
 
-// Helper function to create detailed error messages
-[[nodiscard]] std::string create_error_message(std::string_view operation, std::string_view filename, std::string_view details = "");
+// Formatted error text
+[[nodiscard]] std::string create_error_message(std::string_view operation,
+                                               std::string_view filename,
+                                               std::string_view details = {}) noexcept;
 
-// Helper function to report progress for large files
-void report_progress(size_t bytes_processed, size_t total_bytes, std::string_view filename);
+// Progress helpers
+void report_progress(std::size_t bytes_processed, std::size_t total_bytes, std::string_view filename);
+[[nodiscard]] std::size_t get_memory_usage_mb() noexcept;
+void report_memory_usage(std::string_view operation, std::string_view filename = {});
 
-// Helper function to get current memory usage in MB
-[[nodiscard]] size_t get_memory_usage_mb();
-
-// Helper function to report memory usage
-void report_memory_usage(std::string_view operation, std::string_view filename = "");
-
-// Read all lines from a file
+// File helpers
 [[nodiscard]] std::vector<std::string> read_file_lines(std::string_view fname);
-
-// Check if a file is large
 [[nodiscard]] bool is_large_file(std::string_view fname);
 
-// Process a file as a stream
+// Stream processing wrapper
 void process_file_stream(std::string_view fname, const Options& opt);

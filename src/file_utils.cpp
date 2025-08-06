@@ -7,237 +7,121 @@
 
 #include "file_utils.h"
 #include "log_processor.h"
-#include <path_validation.h>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <sys/resource.h>
-#include <filesystem>
-#include <stdexcept>
-#include <limits>
-#include <sys/stat.h> // Required for stat()
-#include <cstdio> // Required for fopen, fclose, getline
-#include <cstdlib> // Required for free
+#include "path_validation.h"
 
-using Str = std::string;
-using VecS = std::vector<Str>;
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <limits>
+#include <optional>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <sys/resource.h> // Linux
+#include <vector>
 
 namespace {
-    constexpr size_t INITIAL_LINE_CAPACITY = 1024;
-    constexpr size_t MB_TO_BYTES = 1024 * 1024;
-    constexpr size_t MAX_FILE_SIZE = 1024ULL * 1024 * 1024 * 1024; // 1TB
-    constexpr size_t MAX_LINES = 1000000; // 1 million lines
-    
-    // Helper function to format file size in MB
-    std::string format_file_size_mb(size_t bytes) {
-        return std::to_string(bytes / MB_TO_BYTES);
+
+constinit inline std::size_t MB_TO_BYTES = 1024u * 1024u;
+constinit inline std::size_t MAX_FILE_SIZE_BYTES = 1024ull * 1024ull * 1024ull * 1024ull; // 1 TB
+constinit inline std::size_t INITIAL_LINE_CAPACITY = 1024;
+constinit inline std::size_t MAX_LINES = 1'000'000;
+
+[[nodiscard]] std::string to_mb(std::size_t bytes) {
+    return std::to_string(bytes / MB_TO_BYTES);
+}
+
+[[nodiscard]] std::string pct(std::size_t done, std::size_t total) {
+    if (total == 0) return "0";
+    return std::to_string(static_cast<int>((done * 100) / total));
+}
+
+void validate_file_size(std::size_t s) {
+    if (s > MAX_FILE_SIZE_BYTES) {
+        throw std::runtime_error("File too large (max " + to_mb(MAX_FILE_SIZE_BYTES) + " MB)");
     }
-    
-    // Helper function to format percentage
-    std::string format_percentage(size_t bytes_processed, size_t total_bytes) {
-        if (total_bytes == 0) return "0";
-        return std::to_string(static_cast<int>((bytes_processed * 100) / total_bytes));
-    }
-    
-    // Validate file size for security
-    void validate_file_size(size_t file_size) {
-        if (file_size > MAX_FILE_SIZE) {
-            throw std::runtime_error("File too large (max " + std::to_string(MAX_FILE_SIZE / MB_TO_BYTES) + " MB)");
-        }
-    }
-    
-    // Validate line count for security
-    void validate_line_count(size_t line_count) {
-        if (line_count > MAX_LINES) {
-            throw std::runtime_error("Too many lines (max " + std::to_string(MAX_LINES) + ")");
-        }
-    }
-    
-    // Validate input parameters for security
-    void validate_input_parameters(std::string_view operation, std::string_view filename) {
-        if (operation.empty()) {
-            throw std::invalid_argument("Operation cannot be empty");
-        }
-        
-        if (filename.empty() && operation != "processing") {
-            throw std::invalid_argument("Filename cannot be empty for operation: " + std::string(operation));
-        }
+}
+void validate_line_count(std::size_t n) {
+    if (n > MAX_LINES) {
+        throw std::runtime_error("Too many lines (max " + std::to_string(MAX_LINES) + ")");
     }
 }
 
-// Helper function to create detailed error messages
-Str create_error_message(std::string_view operation, std::string_view filename, std::string_view details) {
-    validate_input_parameters(operation, filename);
-    
-    Str message = "Error during ";
-    message += operation;
-    
+} // namespace
+
+std::string create_error_message(std::string_view operation,
+                                 std::string_view filename,
+                                 std::string_view details) noexcept {
+    std::string m = "Error during ";
+    m.append(operation);
     if (!filename.empty()) {
-        message += " for file '";
-        message += filename;
-        message += "'";
+        m.append(" for file '").append(filename).append("'");
     }
-    
     if (!details.empty()) {
-        message += ": ";
-        message += details;
+        m.append(": ").append(details);
     }
-    
-    return message;
+    return m;
 }
 
-// Helper function to report progress for large files
-void report_progress(size_t bytes_processed, size_t total_bytes, std::string_view filename) {
-    if (total_bytes == 0) {
-        return;
-    }
-    
-    // Validate input parameters
-    if (bytes_processed > total_bytes) {
-        std::cerr << "Warning: Progress reporting inconsistency detected\n";
-        return;
-    }
-    
-    const std::string percentage = format_percentage(bytes_processed, total_bytes);
-    const std::string processed_mb = format_file_size_mb(bytes_processed);
-    const std::string total_mb = format_file_size_mb(total_bytes);
-    
-    std::cerr << "\rProcessing " << filename << ": " << percentage << "% (" 
-              << processed_mb << "/" << total_mb << " MB)" << std::flush;
-    
-    if (bytes_processed >= total_bytes) {
-        std::cerr << std::endl;  // New line when complete
-    }
+void report_progress(std::size_t bytes_processed, std::size_t total_bytes, std::string_view filename) {
+    if (total_bytes == 0 || bytes_processed > total_bytes) return;
+    std::cerr << "\rProcessing " << filename << ": " << pct(bytes_processed, total_bytes)
+              << "% (" << to_mb(bytes_processed) << "/" << to_mb(total_bytes) << " MB)" << std::flush;
+    if (bytes_processed >= total_bytes) std::cerr << '\n';
 }
 
-// Helper function to get current memory usage in MB
-size_t get_memory_usage_mb() {
-    struct rusage usage;
-    if (getrusage(RUSAGE_SELF, &usage) == 0) {
-        // ru_maxrss is in KB on Linux, convert to MB
-        return static_cast<size_t>(usage.ru_maxrss) / 1024;
+std::size_t get_memory_usage_mb() noexcept {
+#if defined(__linux__)
+    rusage u{};
+    if (getrusage(RUSAGE_SELF, &u) == 0) {
+        return static_cast<std::size_t>(u.ru_maxrss) / 1024u; // KB → MB
     }
-    return 0; // Return 0 if unable to get memory usage
+#endif
+    return 0;
 }
 
-// Helper function to report memory usage
 void report_memory_usage(std::string_view operation, std::string_view filename) {
-    validate_input_parameters(operation, filename);
-    
-    const size_t memory_mb = get_memory_usage_mb();
-    if (memory_mb > 0) {
+    const auto mb = get_memory_usage_mb();
+    if (mb > 0) {
         std::cerr << "Memory usage during " << operation;
-        if (!filename.empty()) {
-            std::cerr << " for " << filename;
-        }
-        std::cerr << ": " << memory_mb << " MB" << std::endl;
+        if (!filename.empty()) std::cerr << " for " << filename;
+        std::cerr << ": " << mb << " MB\n";
     }
 }
 
-VecS read_file_lines(std::string_view fname) {
-    if (fname.empty()) {
-        throw std::invalid_argument("Filename cannot be empty");
-    }
-    
-    // Create explicit string copy to avoid uninitialized memory
-    const std::string filename_str(fname);
-    
-    // Use C-style file operations to avoid MSAN issues with std::ifstream
-    FILE* file = fopen(filename_str.c_str(), "r");
-    if (!file) {
-        throw std::runtime_error(create_error_message("opening file", fname, ""));
-    }
+std::vector<std::string> read_file_lines(std::string_view fname) {
+    if (fname.empty()) throw std::invalid_argument("Filename cannot be empty");
 
-    VecS lines;
-    lines.reserve(INITIAL_LINE_CAPACITY); // Reserve capacity for better performance
+    auto ifs = path_validation::safe_ifstream(fname);
+    ifs.exceptions(std::ios::badbit); // keep it cheap; avoid throw on eof
 
-    // Read file line by line using C-style operations
-    char* line_buffer = nullptr;
-    size_t line_buffer_size = 0;
-    ssize_t line_length;
-    
-    size_t line_count = 0;
-    while ((line_length = getline(&line_buffer, &line_buffer_size, file)) != -1) {
-        // Security validation
-        validate_line_count(++line_count);
-        
-        // Remove newline character if present
-        if (line_length > 0 && line_buffer[line_length - 1] == '\n') {
-            line_buffer[line_length - 1] = '\0';
-            line_length--;
-        }
-        
-        lines.emplace_back(line_buffer, static_cast<size_t>(line_length));
+    std::vector<std::string> lines;
+    lines.reserve(INITIAL_LINE_CAPACITY);
+
+    std::string line;
+    std::size_t count = 0;
+    while (std::getline(ifs, line)) {
+        validate_line_count(++count);
+        lines.push_back(line);
     }
-    
-    // Clean up
-    free(line_buffer);
-    fclose(file);
-
     return lines;
 }
 
-// Check if file is large enough to warrant stream processing
 bool is_large_file(std::string_view fname) {
-    if (fname.empty()) {
-        return false;
-    }
-    
+    if (fname.empty()) return false;
     try {
-        // Use explicit string conversion to avoid MSAN issues with string_view data access
-        const std::string filename_str(fname);
-        
-        // Use stat() instead of std::ifstream to avoid MSAN issues
-        // This is more efficient and avoids the standard library MSAN problems
-        struct stat file_stat;
-        if (stat(filename_str.c_str(), &file_stat) != 0) {
-            return false;
-        }
-        
-        const size_t file_size = static_cast<size_t>(file_stat.st_size);
-        
-        // Security validation
-        validate_file_size(file_size);
-        
-        return file_size >= (LARGE_FILE_THRESHOLD_MB * MB_TO_BYTES);
-    } catch (const std::exception&) {
+        const auto p = path_validation::validate_and_canonicalize(fname);
+        const auto s = std::filesystem::file_size(p);
+        validate_file_size(static_cast<std::size_t>(s));
+        return s >= static_cast<std::uintmax_t>(LARGE_FILE_THRESHOLD_MB) * MB_TO_BYTES;
+    } catch (...) {
         return false;
     }
 }
 
-// Stream wrapper for files
 void process_file_stream(std::string_view fname, const Options& opt) {
-    if (fname.empty()) {
-        throw std::invalid_argument("Filename cannot be empty");
-    }
-    
-    // Create explicit string copy to avoid uninitialized memory
-    const std::string filename_str(fname);
-    
-    // Use C-style file operations to avoid MSAN issues with std::ifstream
-    FILE* file = fopen(filename_str.c_str(), "r");
-    if (!file) {
-        throw std::runtime_error(create_error_message("opening file", fname, ""));
-    }
-    
-    // Create a custom stream wrapper to avoid MSAN issues
-    // This is a simplified approach that works with the LogProcessor
-    std::stringstream buffer;
-    char* line_buffer = nullptr;
-    size_t line_buffer_size = 0;
-    ssize_t line_length;
-    
-    while ((line_length = getline(&line_buffer, &line_buffer_size, file)) != -1) {
-        buffer.write(line_buffer, line_length);
-        buffer.put('\n'); // Ensure newline is present
-    }
-    
-    // Clean up
-    free(line_buffer);
-    fclose(file);
-    
-    // Reset buffer position and process
-    buffer.seekg(0);
+    if (fname.empty()) throw std::invalid_argument("Filename cannot be empty");
+    auto ifs = path_validation::safe_ifstream(fname);
     LogProcessor processor(opt);
-    processor.process_stream(buffer);
+    processor.process_stream(ifs);
 }

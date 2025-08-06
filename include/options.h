@@ -11,20 +11,20 @@
 #include <string_view>
 #include <iostream>
 
-constexpr int         DEFAULT_DEPTH  = 1;
-constexpr const char* DEFAULT_MARKER = "Successfully downloaded debug";
-constexpr size_t      LARGE_FILE_THRESHOLD_MB = 5;
+inline constexpr int   DEFAULT_DEPTH               = 1;
+inline constexpr auto  DEFAULT_MARKER              = std::string_view{"Successfully downloaded debug"};
+inline constexpr size_t LARGE_FILE_THRESHOLD_MB    = 5;
 
 struct Options {
-    int   depth           = DEFAULT_DEPTH;
-    bool  trim            = true;
-    bool  scrub_raw       = true;
-    bool  stream_mode     = false;
-    bool  show_progress   = false;
-    bool  monitor_memory  = false;
-    std::string marker    = DEFAULT_MARKER;
+    int         depth          = DEFAULT_DEPTH;
+    bool        trim           = true;
+    bool        scrub_raw      = true;
+    bool        stream_mode    = false;
+    bool        show_progress  = false;
+    bool        monitor_memory = false;
+    std::string marker         = std::string(DEFAULT_MARKER);
     std::string filename;
-    bool  use_stdin       = false;
+    bool        use_stdin      = false;
 };
 
 void usage(std::string_view prog);
