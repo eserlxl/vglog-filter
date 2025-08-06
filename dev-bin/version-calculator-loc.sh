@@ -32,15 +32,7 @@ fi
 if ! command -v init_colors >/dev/null 2>&1; then
     init_colors() { :; }
 fi
-if ! command -v split_semver >/dev/null 2>&1; then
-    # shellcheck disable=SC2329
-    split_semver() {
-        local version="$1"
-        local major minor patch
-        IFS='.' read -r major minor patch <<< "$version"
-        printf '%s %s %s' "$major" "$minor" "$patch"
-    }
-fi
+# Note: split_semver is defined later in the script
 
 # --- Utility functions -------------------------------------------------------
 has_cmd() { command -v "$1" >/dev/null 2>&1; }
@@ -144,12 +136,7 @@ ensure_semver() {
     [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Invalid version format: $v (expected MAJOR.MINOR.PATCH)"
 }
 
-split_semver() {
-    local v="$1"
-    local major minor patch
-    IFS='.' read -r major minor patch <<<"$v"
-    printf '%s %s %s' "$major" "$minor" "$patch"
-}
+# split_semver is provided by version-utils.sh
 
 # --- Mathematical rollover system --------------------------------------------
 # Implements sophisticated multi-level rollover with proper carry propagation
@@ -201,16 +188,25 @@ calculate_version_bump() {
     is_uint "$delta" || die "Non-integer delta: $delta"
     
     local MAJOR MINOR PATCH
-    read -r MAJOR MINOR PATCH < <(split_semver "$current_version")
+    # Temporarily set IFS to include space for proper splitting
+    local old_ifs="$IFS"
+    IFS=' ' read -r MAJOR MINOR PATCH < <(split_semver "$current_version")
+    IFS="$old_ifs"
     
     case "$bump_type" in
         patch)
-            read -r PATCH MINOR MAJOR < <(roll_patch "$PATCH" "$MINOR" "$MAJOR" "$delta")
+            # Temporarily set IFS to include space for proper splitting
+            local old_ifs="$IFS"
+            IFS=' ' read -r PATCH MINOR MAJOR < <(roll_patch "$PATCH" "$MINOR" "$MAJOR" "$delta")
+            IFS="$old_ifs"
             ;;
         
         minor)
             [[ "${PRESERVE_PATCH_ON_MINOR,,}" == "true" ]] || PATCH=0
-            read -r MINOR MAJOR < <(roll_minor "$MINOR" "$MAJOR" "$delta")
+            # Temporarily set IFS to include space for proper splitting
+            local old_ifs="$IFS"
+            IFS=' ' read -r MINOR MAJOR < <(roll_minor "$MINOR" "$MAJOR" "$delta")
+            IFS="$old_ifs"
             ;;
         
         major)
@@ -329,7 +325,8 @@ Usage: version-calculator-loc [options]
 
 Options:
   --current-version <ver>    Current version (MAJOR.MINOR.PATCH) [required]
-  --bump-type <type>         One of: major | minor | patch       [required]
+  --bump-type <type>         One of: major | minor | patch       [required unless --set]
+  --set <version>            Set version directly (X.Y.Z format) [required unless --bump-type]
   --original-project-root <p>Directory to run analyzer from (improves relative paths)
   --repo-root <p>            Repository root to pass to analyzer (auto-detected if possible)
   --config <file>            Source additional configuration
@@ -354,6 +351,7 @@ Examples:
   version-calculator-loc --current-version 1.2.3 --bump-type minor --repo-root ~/proj
   version-calculator-loc --current-version 9.99.99 --bump-type patch \
                         PRESERVE_LOWER_ON_MAJOR=true VERSION_MINOR_LIMIT=100
+  version-calculator-loc --current-version 1.2.3 --set 2.0.0
 EOF
 }
 
@@ -362,7 +360,7 @@ main() {
     init_colors "${NO_COLOR:-false}"
     
     # Parse command line arguments
-    local current_version="" bump_type=""
+    local current_version="" bump_type="" set_version=""
     local original_project_root="" repo_root="" config_file="" analyzer_path_override=""
     local out_json=false out_machine=false verbose=false
     
@@ -374,6 +372,9 @@ main() {
             --bump-type)
                 [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--bump-type requires a value"
                 bump_type="$2"; shift 2 ;;
+            --set)
+                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--set requires a value"
+                set_version="$2"; shift 2 ;;
             --original-project-root)
                 [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--original-project-root requires a value"
                 original_project_root="$2"; shift 2 ;;
@@ -409,7 +410,36 @@ main() {
     
     # Validate required arguments
     [[ -n "$current_version" ]] || die "--current-version is required"
-    [[ -n "$bump_type" ]] || die "--bump-type is required"
+    
+    # Must specify either a bump type or --set
+    if [[ -z "$bump_type" && -z "$set_version" ]]; then
+        die "No bump type specified (choose major|minor|patch) or provide --set"
+    fi
+    if [[ -n "$bump_type" && -n "$set_version" ]]; then
+        die "Cannot specify both a bump type and --set"
+    fi
+    
+    # Handle --set case
+    if [[ -n "$set_version" ]]; then
+        # Validate set version format
+        ensure_semver "$set_version"
+        
+        if $verbose; then
+            printf 'Set: %s  Old: %s  New: %s\n' \
+                "direct" "$current_version" "$set_version" >&2
+        fi
+        
+        if $out_json; then
+            emit_json "$set_version" "$current_version" "set" "0" "direct" "Version set directly"
+        elif $out_machine; then
+            emit_machine "$set_version" "$current_version" "set" "0" "direct"
+        else
+            printf '%s\n' "$set_version"
+        fi
+        exit 0
+    fi
+    
+    # Validate bump type
     case "$bump_type" in major|minor|patch) ;; *) die "Invalid --bump-type: $bump_type" ;; esac
     
     # Analyzer lookup and delta resolution
