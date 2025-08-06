@@ -79,13 +79,9 @@ run_cli_extraction_test() {
     local target_ref
     target_ref=$(git rev-parse HEAD)
     
-    # Run semantic version analyzer
+    # Run semantic version analyzer from the temporary directory
     local cli_analysis
-    if cd "$PROJECT_ROOT"; then
-        cli_analysis=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --base "$base_ref" --target "$target_ref" --json --repo-root "$temp_dir" 2>/dev/null || true)
-    else
-        cli_analysis=""
-    fi
+    cli_analysis=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --base "$base_ref" --target "$target_ref" --json --repo-root "$temp_dir" 2>/dev/null || true)
     
     echo "CLI analysis output:"
     echo "$cli_analysis"

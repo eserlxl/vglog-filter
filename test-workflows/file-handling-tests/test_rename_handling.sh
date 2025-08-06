@@ -25,24 +25,20 @@ echo "=== Testing Rename Handling ==="
 temp_dir=$(create_temp_test_env "rename-handling")
 cd "$temp_dir"
 
-# Create a test file (use a unique name to avoid conflicts)
-echo "test content for rename" > test-workflows/source-fixtures/rename_test_original.txt
+# Create a test file in the temporary directory
+echo "test content for rename" > source-fixtures/rename_test_original.txt
 
 # Add and commit the file
-git add test-workflows/source-fixtures/rename_test_original.txt
+git add source-fixtures/rename_test_original.txt
 git commit -m "Add test file for rename test"
 
 # Rename the file
-git mv test-workflows/source-fixtures/rename_test_original.txt test-workflows/source-fixtures/rename_test_renamed.txt
+git mv source-fixtures/rename_test_original.txt source-fixtures/rename_test_renamed.txt
 git commit -m "Rename test file"
 
-# Run semantic version analyzer from the original project directory
+# Run semantic version analyzer from the temporary directory
 # Note: Using '|| true' to capture output even if command fails (intentional)
-if cd "$PROJECT_ROOT"; then
-    result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
-else
-    result=""
-fi
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" --base HEAD~1 --target HEAD 2>/dev/null || true)
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")

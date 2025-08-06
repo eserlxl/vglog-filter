@@ -9,8 +9,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
-# Note: PROJECT_ROOT is defined but not used in this test
-# PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # Source test helper functions
 # shellcheck disable=SC1091
@@ -22,7 +21,7 @@ echo "Testing debug functionality..."
 temp_dir=$(create_temp_test_env "debug-test")
 cd "$temp_dir"
 
-# Create some test files and commits
+# Create some test files and commits in the temporary directory
 echo "Initial content" > test_file.txt
 git add test_file.txt
 git commit -m "Initial commit" >/dev/null 2>&1

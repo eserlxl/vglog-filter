@@ -264,10 +264,9 @@ echo
 
 # Test 5: --print-base functionality
 echo "Test 5: --print-base functionality"
-cd "$PROJECT_ROOT"
 
-# Run --print-base
-base_ref=$(./dev-bin/semantic-version-analyzer.sh --print-base 2>&1 | tail -1 || echo "unknown")
+# Run --print-base from the temporary directory
+base_ref=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --print-base --repo-root "$temp_dir" 2>&1 | tail -1 || echo "unknown")
 
 if [[ "$base_ref" != "unknown" ]] && [[ "$base_ref" =~ ^[a-f0-9]+$ ]]; then
     echo "✅ PASS: --print-base returned valid SHA: $base_ref"

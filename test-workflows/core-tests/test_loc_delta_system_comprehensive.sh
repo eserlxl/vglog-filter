@@ -80,15 +80,15 @@ git commit --quiet -m "Small change" 2>/dev/null || true
 
 # Test small change deltas
 run_test "Small change patch delta" \
-    "cd '$PROJECT_ROOT' && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
     "3"
 
 run_test "Small change minor delta" \
-    "cd '$PROJECT_ROOT' && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"minor_delta\"" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"minor_delta\"" \
     "7"
 
 run_test "Small change major delta" \
-    "cd '$PROJECT_ROOT' && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"major_delta\"" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"major_delta\"" \
     "12"
 
 cleanup_temp_test_env "$test_dir"
@@ -110,7 +110,7 @@ git add src/cli_breaking.c
 git commit --quiet -m "Add breaking CLI change" 2>/dev/null || true
 
 run_test "Breaking CLI bonus" \
-    "cd '$PROJECT_ROOT' && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
     "5"  # 1 (base) + 2 (CLI breaking) + 2 (new file)
 
 # Test API breaking changes
@@ -119,7 +119,7 @@ git add src/api_breaking.c
 git commit --quiet -m "Add API breaking change" 2>/dev/null || true
 
 run_test "API breaking bonus" \
-    "cd '$PROJECT_ROOT' && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
     "6"  # 1 (base) + 3 (API breaking) + 2 (new file)
 
 cleanup_temp_test_env "$test_dir"
@@ -142,7 +142,7 @@ git add src/security1.c src/security2.c
 git commit --quiet -m "Fix security vulnerabilities" 2>/dev/null || true
 
 run_test "Security keywords bonus" \
-    "cd '$PROJECT_ROOT' && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
+    "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) | extract_json_value \"patch_delta\"" \
     "23"  # 1 (base) + 10 (2 security keywords * 5) + 12 (new files)
 
 cleanup_temp_test_env "$test_dir"
@@ -160,7 +160,7 @@ git add src/test.c
 git commit --quiet -m "Add test change" 2>/dev/null || true
 
 # Should always include loc_delta in JSON
-output=$(cd "$PROJECT_ROOT" && $SEMANTIC_ANALYZER_SCRIPT --json --repo-root "$(pwd)" 2>/dev/null)
+output=$($SEMANTIC_ANALYZER_SCRIPT --json --repo-root "$(pwd)" 2>/dev/null)
 
 if [[ "$output" == *"loc_delta"* ]]; then
     printf '%s\n' "${GREEN}✓ PASS: System always includes loc_delta${NC}"

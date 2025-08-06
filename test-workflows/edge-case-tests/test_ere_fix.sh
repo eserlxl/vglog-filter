@@ -273,7 +273,6 @@ run_test "No tags fallback to HEAD~1" \
     ""
 
 # Cleanup
-cd "$PROJECT_ROOT"
 cleanup_temp_test_env "$TEMP_REPO"
 
 # Test 7: Pure mathematical versioning system

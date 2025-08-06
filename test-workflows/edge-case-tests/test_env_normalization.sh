@@ -35,11 +35,7 @@ git commit -m "Second commit" >/dev/null 2>&1
 
 # Test that the system shows pure mathematical versioning in verbose output
 echo "Testing pure mathematical versioning output..."
-if cd "$PROJECT_ROOT"; then
-    result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --verbose --repo-root "$temp_dir" 2>/dev/null || true)
-else
-    result=""
-fi
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --verbose --repo-root "$temp_dir" 2>/dev/null || true)
 
 # Check for semantic version analysis indicators
 if [[ "$result" == *"Semantic Version Analysis v2"* ]]; then
@@ -79,13 +75,8 @@ fi
 
 # Test that the system produces consistent results
 echo "Testing consistent results..."
-if cd "$PROJECT_ROOT"; then
-    result1=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" 2>/dev/null || true)
+result1=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" 2>/dev/null || true)
 result2=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" 2>/dev/null || true)
-else
-    result1=""
-    result2=""
-fi
 
 suggestion1=$(echo "$result1" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
 suggestion2=$(echo "$result2" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")
