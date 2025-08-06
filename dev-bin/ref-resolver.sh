@@ -29,6 +29,8 @@ Options:
   --base <ref>             Set base reference for comparison (default: auto-detected)
   --target <ref>           Set target reference for comparison (default: HEAD)
   --repo-root <path>       Set repository root directory
+  --tag-match <glob>       Glob for last-tag detection (default: '*'), e.g. 'v*'
+  --first-parent           Count commits using --first-parent
   --no-merge-base          Disable automatic merge-base adjustment for disjoint branches
   --print-base             Output the chosen base reference SHA only
   --machine                Output machine-readable key=value format
@@ -50,6 +52,8 @@ SINCE_DATE=""
 BASE_REF=""
 TARGET_REF="HEAD"
 REPO_ROOT=""
+TAG_MATCH="*"
+FIRST_PARENT=false
 NO_MERGE_BASE=false
 PRINT_BASE=false
 MACHINE_OUTPUT=false
@@ -80,6 +84,10 @@ while [[ $# -gt 0 ]]; do
         --repo-root)
             [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --repo-root requires a value\n' >&2; exit 1; }
             REPO_ROOT=$2; shift 2;;
+        --tag-match)
+            [[ -n "${2-}" && "${2#-}" = "$2" ]] || { printf 'Error: --tag-match requires a value\n' >&2; exit 1; }
+            TAG_MATCH=$2; shift 2;;
+        --first-parent) FIRST_PARENT=true; shift;;
         --no-merge-base) NO_MERGE_BASE=true; shift;;
         --print-base) PRINT_BASE=true; shift;;
         --machine) MACHINE_OUTPUT=true; shift;;
@@ -89,49 +97,130 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# --- helpers ---
+die()  { printf 'Error: %s\n' "$*" >&2; exit 1; }
+warn() { printf 'Warning: %s\n' "$*" >&2; }
+info() { printf 'Info: %s\n' "$*" >&2; }
+
+json_escape() {
+    local s=${1-}
+    s=${s//\\/\\\\}; s=${s//\"/\\\"}; s=${s//$'\n'/\\n}; s=${s//$'\r'/\\r}; s=${s//$'\t'/\\t}
+    printf '%s' "$s"
+}
+
 # Check git command
 if ! command -v git >/dev/null 2>&1; then
-    printf 'Error: git command not found\n' >&2
-    exit 1
+    die "git command not found"
 fi
 
 # Change to repo root if specified
 if [[ -n "$REPO_ROOT" ]]; then
-    cd "$REPO_ROOT"
-    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
-        printf 'Error: Not in a git repository at %s\n' "$REPO_ROOT" >&2
-        exit 1
-    }
+    cd "$REPO_ROOT" || die "Cannot cd to repo root: $REPO_ROOT"
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not in a git repository at $REPO_ROOT"
 fi
+
+# Return 0 if repo has at least one commit; otherwise 1 (unborn HEAD)
+repo_has_commits() {
+    git -c color.ui=false rev-parse -q --verify HEAD^{commit} >/dev/null 2>&1
+}
+
+# Resolve a ref (tag/branch/sha) to a commit SHA (40-hex). Echo empty on failure.
+resolve_sha() {
+    local ref=$1
+    git -c color.ui=false rev-parse -q --verify "${ref}^{commit}" 2>/dev/null || true
+}
 
 # Validate git reference
 verify_ref() {
     local ref="$1"
     if ! git -c color.ui=false rev-parse -q --verify "$ref^{commit}" >/dev/null; then
-        printf 'Error: Invalid reference: %s\n' "$ref" >&2
-        exit 1
+        die "Invalid reference: $ref"
     fi
+}
+
+# Count commits between base..target; echoes integer.
+count_commits() {
+    local base=$1 target=$2
+    local args=(--count)
+    $FIRST_PARENT && args=(--first-parent "${args[@]}")
+    git -c color.ui=false rev-list "${args[@]}" "${base}..${target}" 2>/dev/null || printf '0'
+}
+
+# Get last tag matching pattern; echoes tag name or empty.
+get_last_tag() {
+    # Prefer nearest annotated/lightweight tag reachable from HEAD
+    git -c color.ui=false describe --tags --abbrev=0 --match "$TAG_MATCH" 2>/dev/null || true
+}
+
+# --- output functions ---
+emit_json() {
+    local base_ref=$1 base_sha=$2 base_type=$3 req_base_sha=$4 target_ref=$5 target_sha=$6 commit_count=$7 has_commits=$8 \
+          empty_repo=$9 single_commit=${10} effective_base_sha=${11-}
+
+    printf '{\n'
+    printf '  "base_ref": "%s",\n' "$(json_escape "$base_ref")"
+    printf '  "base_sha": "%s",\n' "$base_sha"
+    printf '  "base_ref_type": "%s",\n' "$base_type"
+    printf '  "requested_base_sha": "%s",\n' "$req_base_sha"
+    printf '  "effective_base_sha": "%s",\n' "${effective_base_sha:-$base_sha}"
+    printf '  "target_ref": "%s",\n' "$(json_escape "$target_ref")"
+    printf '  "target_sha": "%s",\n' "$target_sha"
+    printf '  "commit_count": %s,\n' "$commit_count"
+    printf '  "has_commits": %s,\n' "$has_commits"
+    printf '  "empty_repo": %s,\n' "$empty_repo"
+    printf '  "single_commit_repo": %s\n' "$single_commit"
+    printf '}\n'
+}
+
+emit_machine() {
+    local base_ref=$1 base_sha=$2 base_type=$3 req_base_sha=$4 target_ref=$5 target_sha=$6 commit_count=$7 has_commits=$8 \
+          empty_repo=$9 single_commit=${10} effective_base_sha=${11-}
+
+    printf 'BASE_REF=%s\n' "$base_ref"
+    printf 'BASE_SHA=%s\n' "$base_sha"
+    printf 'BASE_REF_TYPE=%s\n' "$base_type"
+    printf 'REQUESTED_BASE_SHA=%s\n' "$req_base_sha"
+    printf 'EFFECTIVE_BASE_SHA=%s\n' "${effective_base_sha:-$base_sha}"
+    printf 'TARGET_REF=%s\n' "$target_ref"
+    printf 'TARGET_SHA=%s\n' "$target_sha"
+    printf 'COMMIT_COUNT=%s\n' "$commit_count"
+    printf 'HAS_COMMITS=%s\n' "$has_commits"
+    printf 'EMPTY_REPO=%s\n' "$empty_repo"
+    printf 'SINGLE_COMMIT_REPO=%s\n' "$single_commit"
+}
+
+emit_human() {
+    local base_ref=$1 base_sha=$2 base_type=$3 target_ref=$4 target_sha=$5 commit_count=$6 has_commits=$7 effective_base_sha=${8-}
+    printf '=== Reference Resolution ===\n'
+    printf 'Base reference: %s (%s)\n' "$base_ref" "$base_type"
+    [[ -n "${effective_base_sha-}" && "$effective_base_sha" != "$base_sha" ]] && \
+        printf 'Effective merge-base: %s\n' "$effective_base_sha"
+    printf 'Base SHA:   %s\n' "$base_sha"
+    printf 'Target ref: %s\n' "$target_ref"
+    printf 'Target SHA: %s\n' "$target_sha"
+    printf 'Commit count: %s\n' "$commit_count"
+    [[ "$has_commits" == "true" ]] && printf 'Status: Commits found in range\n' || printf 'Status: No commits found in range\n'
 }
 
 # Determine the base for comparison with better error handling
 get_base_reference() {
     # Handle explicit base/target references
     if [[ -n "$BASE_REF" ]]; then
-        verify_ref "$BASE_REF"; printf '%s|explicit_base' "$BASE_REF"; return
+        printf '%s|explicit_base' "$BASE_REF"; return
     fi
 
     if [[ -n "$SINCE_COMMIT" ]]; then
-        verify_ref "$SINCE_COMMIT"; printf '%s|commit' "$SINCE_COMMIT"; return
+        printf '%s|commit' "$SINCE_COMMIT"; return
     elif [[ -n "$SINCE_TAG" ]]; then
-        verify_ref "$SINCE_TAG"; printf '%s|tag' "$SINCE_TAG"; return
+        printf '%s|tag' "$SINCE_TAG"; return
     elif [[ -n "$SINCE_DATE" ]]; then
         # Find the latest commit before the specified date
         local ref
         ref=$(git -c color.ui=false rev-list -1 --before="$SINCE_DATE 23:59:59" HEAD 2>/dev/null || true)
         if [[ -n "$ref" ]]; then
-            verify_ref "$ref"; printf '%s|date' "$ref"
+            printf '%s|date' "$ref"
         else
-            printf 'Warning: No commits found before %s\n' "$SINCE_DATE" >&2
+            warn "No commits found before $SINCE_DATE"
             local first_commit
             first_commit=$(git -c color.ui=false rev-list --max-parents=0 HEAD 2>/dev/null || true)
             if [[ -n "$first_commit" ]]; then
@@ -146,15 +235,14 @@ get_base_reference() {
 
     # Default to last tag, fallback to HEAD~1 if no tags exist
     local last_tag
-    last_tag=$(git -c color.ui=false describe --tags --abbrev=0 2>/dev/null || true)
+    last_tag=$(get_last_tag)
     if [[ -n "$last_tag" ]]; then
-        verify_ref "$last_tag"
         printf '%s|last_tag' "$last_tag"
     else
         # If no tags exist, use HEAD~1 instead of first commit
         local parent_commit
-        parent_commit=$(git -c color.ui=false rev-parse HEAD~1 2>/dev/null || true)
-        if [[ -n "$parent_commit" && "$parent_commit" != "HEAD~1" ]]; then
+        parent_commit=$(git -c color.ui=false rev-parse -q --verify HEAD~1 2>/dev/null || true)
+        if [[ -n "$parent_commit" ]]; then
             printf '%s|parent' "$parent_commit"
         else
             # Only use first commit if HEAD~1 doesn't exist (single-commit repo)
@@ -170,145 +258,108 @@ get_base_reference() {
     fi
 }
 
-# Check if there are commits in the range
-check_commit_range() {
-    local base_ref="$1"
-    local target_ref="$2"
-
-    local commit_count
-    commit_count=$(git -c color.ui=false rev-list --count "$base_ref".."$target_ref" 2>/dev/null || printf '0')
-
-    (( commit_count > 0 )) || { printf 'Warning: No commits found between %s and %s\n' "$base_ref" "$target_ref" >&2; return 1; }
-    return 0
-}
-
 # Main execution
 main() {
+    # Empty repo handling (unborn HEAD)
+    if ! repo_has_commits; then
+        # No commits at all
+        if $PRINT_BASE; then
+            printf 'EMPTY\n'
+            exit 0
+        fi
+        if $JSON_OUTPUT; then
+            emit_json "EMPTY" "EMPTY" "empty" "EMPTY" "$TARGET_REF" "" 0 false true false ""
+        elif $MACHINE_OUTPUT; then
+            emit_machine "EMPTY" "EMPTY" "empty" "EMPTY" "$TARGET_REF" "" 0 false true false ""
+        else
+            printf '=== Reference Resolution ===\n'
+            printf 'Empty repository - no commits yet\n'
+            printf 'Base reference: EMPTY (empty)\n'
+            printf 'Target reference: %s\n' "$TARGET_REF"
+        fi
+        exit 0
+    fi
+
+    # Resolve target SHA
+    local target_sha
+    target_sha=$(resolve_sha "$TARGET_REF")
+    [[ -n "$target_sha" ]] || die "Invalid target reference: $TARGET_REF"
+
+    # Get base reference selection
     local base_ref_info
     base_ref_info=$(get_base_reference)
     local base_ref ref_type
     IFS='|' read -r base_ref ref_type <<< "$base_ref_info"
 
-    # Set target reference (default to HEAD)
-    if [[ -n "$TARGET_REF" ]]; then
-        # Don't verify HEAD for empty repositories
-        if [[ "$base_ref" != "EMPTY" ]]; then
-            verify_ref "$TARGET_REF"
-        fi
+    # Resolve base to SHA (unless special EMPTY)
+    local requested_base_sha=""
+    local base_sha=""
+    if [[ "$base_ref" == "EMPTY" ]]; then
+        # repo_has_commits already true, so this should not happen here, but keep for safety
+        if $PRINT_BASE; then printf 'EMPTY\n'; exit 0; fi
+        die "Internal: EMPTY base in non-empty repository"
+    else
+        requested_base_sha=$(resolve_sha "$base_ref")
+        [[ -n "$requested_base_sha" ]] || die "Invalid base reference: $base_ref"
+        base_sha=$requested_base_sha
     fi
 
     # Check and normalize disjoint branches with merge-base
-    local actual_base
-    actual_base=$(git -c color.ui=false merge-base "$base_ref" "$TARGET_REF" 2>/dev/null || printf '')
-    if [[ -z "$actual_base" ]]; then
-        # Check if this is an empty repository
-        if [[ "$base_ref" = "EMPTY" ]]; then
-            # Empty repository - no commits yet
-            if [[ "$PRINT_BASE" = "true" ]]; then
-                printf 'EMPTY\n'
-            elif [[ "$JSON_OUTPUT" = "true" ]]; then
-                printf '{\n'
-                printf '  "base_ref": "EMPTY",\n'
-                printf '  "base_ref_type": "empty",\n'
-                printf '  "target_ref": "%s",\n' "$TARGET_REF"
-                printf '  "commit_count": 0,\n'
-                printf '  "empty_repo": true\n'
-                printf '}\n'
-            elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
-                printf 'BASE_REF=EMPTY\n'
-                printf 'BASE_REF_TYPE=empty\n'
-                printf 'TARGET_REF=%s\n' "$TARGET_REF"
-                printf 'COMMIT_COUNT=0\n'
-                printf 'EMPTY_REPO=true\n'
-            else
-                printf '=== Reference Resolution ===\n'
-                printf 'Empty repository - no commits yet\n'
-                printf 'Base reference: EMPTY (empty)\n'
-                printf 'Target reference: %s\n' "$TARGET_REF"
-            fi
-            exit 0
-        fi
-        
+    local effective_base_sha
+    effective_base_sha=$(git -c color.ui=false merge-base "$base_sha" "$target_sha" 2>/dev/null || true)
+    if [[ -z "$effective_base_sha" ]]; then
         # Check if this is a single-commit repository
-        local commit_count
-        commit_count=$(git -c color.ui=false rev-list --count HEAD 2>/dev/null || printf '0')
-        if [[ "$commit_count" = "1" ]]; then
+        local total_count
+        total_count=$(git -c color.ui=false rev-list --count HEAD 2>/dev/null || printf '0')
+        if [[ "$total_count" = "1" ]]; then
             # Single commit repository - no changes to analyze
-            if [[ "$PRINT_BASE" = "true" ]]; then
-                printf '%s\n' "$base_ref"
-            elif [[ "$JSON_OUTPUT" = "true" ]]; then
-                printf '{\n'
-                printf '  "base_ref": "%s",\n' "$base_ref"
-                printf '  "base_ref_type": "%s",\n' "$ref_type"
-                printf '  "target_ref": "%s",\n' "$TARGET_REF"
-                printf '  "commit_count": 0,\n'
-                printf '  "single_commit_repo": true\n'
-                printf '}\n'
-            elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
-                printf 'BASE_REF=%s\n' "$base_ref"
-                printf 'BASE_REF_TYPE=%s\n' "$ref_type"
-                printf 'TARGET_REF=%s\n' "$TARGET_REF"
-                printf 'COMMIT_COUNT=0\n'
-                printf 'SINGLE_COMMIT_REPO=true\n'
+            if $PRINT_BASE; then
+                printf '%s\n' "$base_sha"
+                exit 0
+            fi
+            if $JSON_OUTPUT; then
+                emit_json "$base_ref" "$base_sha" "$ref_type" "$requested_base_sha" "$TARGET_REF" "$target_sha" 0 false false true ""
+            elif $MACHINE_OUTPUT; then
+                emit_machine "$base_ref" "$base_sha" "$ref_type" "$requested_base_sha" "$TARGET_REF" "$target_sha" 0 false false true ""
             else
                 printf '=== Reference Resolution ===\n'
                 printf 'Single commit repository - no changes to analyze\n'
                 printf 'Base reference: %s (%s)\n' "$base_ref" "$ref_type"
+                printf 'Base SHA: %s\n' "$base_sha"
                 printf 'Target reference: %s\n' "$TARGET_REF"
+                printf 'Target SHA: %s\n' "$target_sha"
             fi
             exit 0
         else
-            printf 'Error: No common ancestor found between %s and %s. Exiting.\n' "$base_ref" "$TARGET_REF" >&2
-            exit 1
+            die "No common ancestor found between $base_ref and $TARGET_REF"
         fi
     fi
-    if [[ "$actual_base" != "$base_ref" ]] && [[ "$NO_MERGE_BASE" != "true" ]]; then
-        if [[ "$MACHINE_OUTPUT" != "true" ]]; then
-            printf 'Info: Using merge-base %s instead of %s for disjoint branches\n' "$actual_base" "$base_ref" >&2
-        fi
-        base_ref="$actual_base"
+
+    # Optionally replace base with merge-base
+    if [[ "$effective_base_sha" != "$base_sha" && "$NO_MERGE_BASE" != "true" ]]; then
+        info "Using merge-base $effective_base_sha instead of requested $base_sha"
+        base_sha="$effective_base_sha"
         ref_type="merge_base"
     fi
 
     # Handle --print-base option
-    if [[ "$PRINT_BASE" = "true" ]]; then
-        printf '%s\n' "$base_ref"
+    if $PRINT_BASE; then
+        printf '%s\n' "$base_sha"
         exit 0
     fi
 
-    # Check commit range
-    local commit_count=0
-    local has_commits=false
-    if check_commit_range "$base_ref" "$TARGET_REF"; then
-        commit_count=$(git -c color.ui=false rev-list --count "$base_ref".."$TARGET_REF" 2>/dev/null || printf '0')
-        has_commits=true
-    fi
+    # Count commits in range
+    local commit_count has_commits=false
+    commit_count=$(count_commits "$base_sha" "$target_sha")
+    [[ "$commit_count" != "0" ]] && has_commits=true
 
     # Output results
-    if [[ "$JSON_OUTPUT" = "true" ]]; then
-        printf '{\n'
-        printf '  "base_ref": "%s",\n' "$base_ref"
-        printf '  "base_ref_type": "%s",\n' "$ref_type"
-        printf '  "target_ref": "%s",\n' "$TARGET_REF"
-        printf '  "commit_count": %s,\n' "$commit_count"
-        printf '  "has_commits": %s\n' "$has_commits"
-        printf '}\n'
-    elif [[ "$MACHINE_OUTPUT" = "true" ]]; then
-        printf 'BASE_REF=%s\n' "$base_ref"
-        printf 'BASE_REF_TYPE=%s\n' "$ref_type"
-        printf 'TARGET_REF=%s\n' "$TARGET_REF"
-        printf 'COMMIT_COUNT=%s\n' "$commit_count"
-        printf 'HAS_COMMITS=%s\n' "$has_commits"
+    if $JSON_OUTPUT; then
+        emit_json "$base_ref" "$base_sha" "$ref_type" "$requested_base_sha" "$TARGET_REF" "$target_sha" "$commit_count" "$has_commits" false false "$effective_base_sha"
+    elif $MACHINE_OUTPUT; then
+        emit_machine "$base_ref" "$base_sha" "$ref_type" "$requested_base_sha" "$TARGET_REF" "$target_sha" "$commit_count" "$has_commits" false false "$effective_base_sha"
     else
-        printf '=== Reference Resolution ===\n'
-        printf 'Base reference: %s (%s)\n' "$base_ref" "$ref_type"
-        printf 'Target reference: %s\n' "$TARGET_REF"
-        printf 'Commit count: %s\n' "$commit_count"
-        if [[ "$has_commits" = "true" ]]; then
-            printf 'Status: Commits found in range\n'
-        else
-            printf 'Status: No commits found in range\n'
-        fi
+        emit_human "$base_ref" "$base_sha" "$ref_type" "$TARGET_REF" "$target_sha" "$commit_count" "$has_commits" "$effective_base_sha"
     fi
 }
 
