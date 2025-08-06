@@ -12,21 +12,20 @@
 
 namespace canonicalization {
 
-using Str = std::string;
+using Str     = std::string;
 using StrView = std::string_view;
 
 namespace { // Anonymous namespace for internal linkage
 
-    StrView ltrim_view(StrView s) {
-        auto start = std::find_if(s.begin(), s.end(),
-                                [](int ch){ return !std::isspace(ch); });
-        return StrView(start, static_cast<size_t>(s.end() - start));
+    // Safe wrappers for ctype (non-constexpr versions for implementation)
+    bool is_space_impl(char c) noexcept {
+        return std::isspace(static_cast<unsigned char>(c)) != 0;
     }
-
-    StrView rtrim_view_internal(StrView s) {
-        auto end = std::find_if(s.rbegin(), s.rend(),
-                                [](int ch){ return !std::isspace(ch); }).base();
-        return StrView(s.begin(), static_cast<size_t>(end - s.begin()));
+    bool is_digit(char c) noexcept {
+        return std::isdigit(static_cast<unsigned char>(c)) != 0;
+    }
+    bool is_xdigit(char c) noexcept {
+        return std::isxdigit(static_cast<unsigned char>(c)) != 0;
     }
 
     // Simple string replacement functions to replace regex
@@ -34,15 +33,16 @@ namespace { // Anonymous namespace for internal linkage
         // Replace 0x[0-9a-fA-F]+ with 0xADDR
         size_t pos = 0;
         while ((pos = s.find("0x", pos)) != std::string::npos) {
-            size_t start = pos;
+            const size_t start = pos;
             pos += 2; // Skip "0x"
             
             // Find end of hex digits
-            while (pos < s.size() && std::isxdigit(s[pos])) pos++;
+            size_t j = pos;
+            while (j < s.size() && is_xdigit(s[j])) ++j;
             
             // Replace if we found hex digits
-            if (pos > start + 2) {
-                s.replace(start, pos - start, "0xADDR");
+            if (j > pos) {
+                s.replace(start, j - start, "0xADDR");
                 pos = start + 6; // Skip the replacement
             }
         }
@@ -53,15 +53,15 @@ namespace { // Anonymous namespace for internal linkage
         // Replace :[0-9]+ with :LINE
         size_t pos = 0;
         while ((pos = s.find(':', pos)) != std::string::npos) {
-            size_t start = pos;
-            pos++; // Skip ':'
+            const size_t start = pos++;
             
             // Find end of digits
-            while (pos < s.size() && std::isdigit(s[pos])) pos++;
+            size_t j = pos;
+            while (j < s.size() && is_digit(s[j])) ++j;
             
             // Replace if we found digits
-            if (pos > start + 1) {
-                s.replace(start, pos - start, ":LINE");
+            if (j > pos) {
+                s.replace(start, j - start, ":LINE");
                 pos = start + 5; // Skip the replacement
             }
         }
@@ -72,15 +72,15 @@ namespace { // Anonymous namespace for internal linkage
         // Replace [0-9]+ with []
         size_t pos = 0;
         while ((pos = s.find('[', pos)) != std::string::npos) {
-            size_t start = pos;
-            pos++; // Skip '['
+            const size_t start = pos++;
             
             // Find end of digits
-            while (pos < s.size() && std::isdigit(s[pos])) pos++;
+            size_t j = pos;
+            while (j < s.size() && is_digit(s[j])) ++j;
             
             // Check if next char is ']'
-            if (pos < s.size() && s[pos] == ']') {
-                s.replace(start, pos - start + 1, "[]");
+            if (j < s.size() && s[j] == ']') {
+                s.replace(start, j - start + 1, "[]");
                 pos = start + 2; // Skip the replacement
             }
         }
@@ -91,15 +91,15 @@ namespace { // Anonymous namespace for internal linkage
         // Replace <[^>]*> with <T>
         size_t pos = 0;
         while ((pos = s.find('<', pos)) != std::string::npos) {
-            size_t start = pos;
-            pos++; // Skip '<'
+            const size_t start = pos++;
             
             // Find closing '>'
-            while (pos < s.size() && s[pos] != '>') pos++;
+            size_t j = pos;
+            while (j < s.size() && s[j] != '>') ++j;
             
             // Replace if we found closing '>'
-            if (pos < s.size()) {
-                s.replace(start, pos - start + 1, "<T>");
+            if (j < s.size()) {
+                s.replace(start, j - start + 1, "<T>");
                 pos = start + 3; // Skip the replacement
             }
         }
@@ -107,36 +107,29 @@ namespace { // Anonymous namespace for internal linkage
     }
     
     Str replace_ws_pattern(Str s) {
-        // Replace multiple whitespace with single space
-        size_t pos = 0;
-        while (pos < s.size()) {
-            if (std::isspace(s[pos])) {
-                size_t start = pos;
-                // Find end of whitespace sequence
-                while (pos < s.size() && std::isspace(s[pos])) pos++;
-                
-                // Replace with single space if multiple whitespace
-                if (pos > start + 1) {
-                    s.replace(start, pos - start, " ");
-                    pos = start + 1; // Skip the replacement
+        // Collapse runs of whitespace to a single space
+        Str out;
+        out.reserve(s.size());
+        bool in_ws = false;
+        for (char c : s) {
+            if (is_space_impl(c)) {
+                if (!in_ws) {
+                    out.push_back(' ');
+                    in_ws = true;
                 }
             } else {
-                pos++;
+                out.push_back(c);
+                in_ws = false;
             }
         }
-        return s;
+        return out;
     }
 
 } // anonymous namespace
 
-StrView trim_view(StrView s) {
-    return rtrim_view_internal(ltrim_view(s));
-}
-
 Str rtrim(Str s) {
-    s.erase(std::find_if(s.rbegin(), s.rend(),
-                         [](int ch){ return !std::isspace(ch); }).base(),
-            s.end());
+    auto it = std::find_if(s.rbegin(), s.rend(), [](char ch) { return !is_space_impl(ch); });
+    s.erase(it.base(), s.end());
     return s;
 }
 
@@ -153,8 +146,7 @@ Str canon(Str s) {
 }
 
 Str canon(StrView s) {
-    Str tmp(s);
-    return canon(std::move(tmp));
+    return canon(std::string{s});
 }
 
 } // namespace canonicalization
