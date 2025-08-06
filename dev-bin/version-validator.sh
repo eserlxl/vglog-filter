@@ -32,6 +32,56 @@ strip_build_meta() {
     printf '%s' "${v%%+*}"
 }
 
+# Check if identifier is numeric (no leading zeros unless value is 0)
+_is_numeric_ident() {
+    [[ "$1" =~ ^(0|[1-9][0-9]*)$ ]]
+}
+
+# Compare two pre-release identifier lists (SemVer §11).
+# echo -1|0|1
+_compare_prerelease() {
+    local pr1="$1" pr2="$2"
+    # This function is only called when BOTH are non-empty pre-releases
+    local IFS='.'
+    read -r -a A <<< "$pr1"
+    read -r -a B <<< "$pr2"
+
+    local i maxlen=$(( ${#A[@]} > ${#B[@]} ? ${#A[@]} : ${#B[@]} ))
+    for (( i=0; i<maxlen; i++ )); do
+        local a="${A[i]:-__MISSING__}"
+        local b="${B[i]:-__MISSING__}"
+        if [[ "$a" == "__MISSING__" && "$b" == "__MISSING__" ]]; then
+            printf '0'; return 0
+        elif [[ "$a" == "__MISSING__" ]]; then
+            # fewer identifiers => lower precedence
+            printf '%s' "-1"; return 0
+        elif [[ "$b" == "__MISSING__" ]]; then
+            printf '%s' "1"; return 0
+        fi
+
+        local a_num=0 b_num=0
+        _is_numeric_ident "$a" && a_num=1
+        _is_numeric_ident "$b" && b_num=1
+
+        if (( a_num == 1 && b_num == 1 )); then
+            # numeric vs numeric: numeric compare
+            if (( 10#$a < 10#$b )); then printf '%s' "-1"; return 0; fi
+            if (( 10#$a > 10#$b )); then printf '%s' "1";  return 0; fi
+        elif (( a_num == 1 && b_num == 0 )); then
+            # numeric < non-numeric
+            printf '%s' "-1"; return 0
+        elif (( a_num == 0 && b_num == 1 )); then
+            printf '%s' "1"; return 0
+        else
+            # alpha vs alpha: ASCII lexical
+            if [[ "$a" < "$b" ]]; then printf '%s' "-1"; return 0; fi
+            if [[ "$a" > "$b" ]]; then printf '%s' "1";  return 0; fi
+        fi
+        # else equal at this field; continue
+    done
+    printf '0'
+}
+
 # --- Version validation -------------------------------------------------------
 validate_version_format() {
     local version="$1"
@@ -40,7 +90,7 @@ validate_version_format() {
     if [[ "$allow_prerelease" == "true" ]]; then
         if ! _is_semver_with_prerelease "$version"; then
             _die "Invalid version format: $version"
-            printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-PRERELEASE (e.g., 1.0.0 or 1.0.0-rc.1)${RESET}" >&2
+            printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD] (e.g., 1.0.0, 1.0.0-rc.1)${RESET}" >&2
             printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed${RESET}" >&2
         fi
     else
@@ -78,7 +128,6 @@ validate_version_file() {
 compare_versions() {
     local v1="$1" v2="$2"
     
-    # For now, use a simpler approach that works with the existing validation
     # Strip any build metadata first
     local clean_v1="${v1%%+*}" clean_v2="${v2%%+*}"
     
@@ -96,22 +145,22 @@ compare_versions() {
     IFS='.' read -r v1_major v1_minor v1_patch <<< "$m1"
     IFS='.' read -r v2_major v2_minor v2_patch <<< "$m2"
     
-    # Compare major
-    if (( v1_major < v2_major )); then
+    # Compare major (using proper numeric comparison)
+    if (( 10#$v1_major < 10#$v2_major )); then
         printf '%s' "-1"
-    elif (( v1_major > v2_major )); then
+    elif (( 10#$v1_major > 10#$v2_major )); then
         printf '%s' "1"
     else
         # Compare minor
-        if (( v1_minor < v2_minor )); then
+        if (( 10#$v1_minor < 10#$v2_minor )); then
             printf '%s' "-1"
-        elif (( v1_minor > v2_minor )); then
+        elif (( 10#$v1_minor > 10#$v2_minor )); then
             printf '%s' "1"
         else
             # Compare patch
-            if (( v1_patch < v2_patch )); then
+            if (( 10#$v1_patch < 10#$v2_patch )); then
                 printf '%s' "-1"
-            elif (( v1_patch > v2_patch )); then
+            elif (( 10#$v1_patch > 10#$v2_patch )); then
                 printf '%s' "1"
             else
                 # Versions are equal, compare prereleases
@@ -122,14 +171,8 @@ compare_versions() {
                 elif [[ -n "$pr1" && -z "$pr2" ]]; then
                     printf '%s' "-1"
                 else
-                    # Both have prereleases, compare lexicographically for now
-                    if [[ "$pr1" < "$pr2" ]]; then
-                        printf '%s' "-1"
-                    elif [[ "$pr1" > "$pr2" ]]; then
-                        printf '%s' "1"
-                    else
-                        printf '%s' "0"
-                    fi
+                    # Both have prereleases, use proper SemVer precedence
+                    _compare_prerelease "$pr1" "$pr2"
                 fi
             fi
         fi
