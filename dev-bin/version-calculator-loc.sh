@@ -13,252 +13,211 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
 
-# Source utilities
+# ---------- traps & ids -------------------------------------------------------
+readonly PROG="${0##*/}"
+trap 'echo "[${PROG}] Error at line $LINENO: $BASH_COMMAND" >&2' ERR
+
+# ---------- script dir & optional utilities ----------------------------------
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # shellcheck disable=SC1091
 if [[ -f "$SCRIPT_DIR/version-utils.sh" ]]; then
-    # Expected to provide: init_colors, die, etc.
+    # Expected to provide: init_colors, die, split_semver (optional)
     # shellcheck source=/dev/null
     # shellcheck disable=SC1091
     source "$SCRIPT_DIR/version-utils.sh"
 fi
 
-# Fallbacks if version-utils is unavailable/incomplete
+# ---------- fallbacks (standalone) -------------------------------------------
 : "${NO_COLOR:=false}"
-if ! command -v die >/dev/null 2>&1; then
-    die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
-fi
-if ! command -v init_colors >/dev/null 2>&1; then
-    init_colors() { :; }
-fi
-# Note: split_semver is defined later in the script
 
-# --- Utility functions -------------------------------------------------------
 has_cmd() { command -v "$1" >/dev/null 2>&1; }
 
-is_uint() { [[ "${1-}" =~ ^[0-9]+$ ]]; }
+if ! has_cmd die; then
+    die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+fi
 
-# --- Default configuration ----------------------------------------------------
+if ! has_cmd init_colors; then
+    init_colors() { :; }
+fi
+
+# Provide split_semver if not sourced from version-utils.sh
+if ! has_cmd split_semver 2>/dev/null; then
+    split_semver() {
+        local v="${1-}"
+        [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Invalid version format: $v (expected MAJOR.MINOR.PATCH)"
+        IFS='.' read -r maj min pat <<<"$v"
+        printf '%s %s %s' "$maj" "$min" "$pat"
+    }
+fi
+
+# ---------- tiny helpers ------------------------------------------------------
+is_uint() { [[ "${1-}" =~ ^[0-9]+$ ]]; }
+need_val() { [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "$1 requires a value"; }
+json_escape() {
+    local s=${1-}
+    s=${s//\\/\\\\}; s=${s//\"/\\\"}; s=${s//$'\n'/\\n}; s=${s//$'\r'/\\r}; s=${s//$'\t'/\\t}
+    printf '%s' "$s"
+}
+
+# ---------- defaults (env-overridable) ---------------------------------------
 : "${VERSION_PATCH_LIMIT:=1000}"
 : "${VERSION_MINOR_LIMIT:=1000}"
 : "${VERSION_PATCH_DELTA:=1}"
 : "${VERSION_MINOR_DELTA:=5}"
 : "${VERSION_MAJOR_DELTA:=10}"
+: "${PRESERVE_PATCH_ON_MINOR:=false}"   # keep patch when minor bump
+: "${PRESERVE_LOWER_ON_MAJOR:=false}"   # keep minor+patch when major bump
 
-# Semver reset policy on higher-level bumps
-: "${PRESERVE_PATCH_ON_MINOR:=false}"   # if "true", keep patch when bumping minor
-: "${PRESERVE_LOWER_ON_MAJOR:=false}"   # if "true", keep minor+patch when bumping major
-
-# --- Semantic analyzer integration -------------------------------------------
-find_semantic_analyzer() {
-    local original_project_root="$1"
-    local current_dir="$2"
-    local explicit_path="${3-}"
-    
-    # 1) explicit path wins
-    if [[ -n "${explicit_path-}" && -x "$explicit_path" ]]; then
-        printf '%s' "$explicit_path"
-        return 0
-    fi
-    
-    # 2) common repo locations
-    local cand
-    for cand in \
-        "$original_project_root/dev-bin/semantic-version-analyzer.sh" \
-        "$current_dir/dev-bin/semantic-version-analyzer.sh" \
-        "$SCRIPT_DIR/semantic-version-analyzer.sh"; do
-        [[ -x "$cand" ]] && { printf '%s' "$cand"; return 0; }
+check_env_sanity() {
+    local k v
+    for k in VERSION_PATCH_LIMIT VERSION_MINOR_LIMIT VERSION_PATCH_DELTA VERSION_MINOR_DELTA VERSION_MAJOR_DELTA; do
+        v="${!k}"
+        is_uint "$v" || die "Environment $k must be an unsigned integer (got '$v')"
     done
-    
-    # 3) PATH
-    if has_cmd semantic-version-analyzer; then
-        printf '%s' "$(command -v semantic-version-analyzer)"
-        return 0
-    fi
-    
-    printf '' # not found
+    case "${PRESERVE_PATCH_ON_MINOR,,}" in true|false) ;; *) die "PRESERVE_PATCH_ON_MINOR must be true|false";; esac
+    case "${PRESERVE_LOWER_ON_MAJOR,,}" in true|false) ;; *) die "PRESERVE_LOWER_ON_MAJOR must be true|false";; esac
 }
 
-# Extract number from JSON: prefer jq, fallback to regex.
+# ---------- semantic analyzer integration ------------------------------------
+find_semantic_analyzer() {
+    local original_project_root="${1-}" current_dir="${2-}" explicit="${3-}"
+    if [[ -n "$explicit" && -x "$explicit" ]]; then printf '%s' "$explicit"; return; fi
+    local c
+    for c in \
+        "$original_project_root/dev-bin/semantic-version-analyzer.sh" \
+        "$current_dir/dev-bin/semantic-version-analyzer.sh" \
+        "$SCRIPT_DIR/semantic-version-analyzer.sh"
+    do
+        [[ -x "$c" ]] && { printf '%s' "$c"; return; }
+    done
+    if has_cmd semantic-version-analyzer; then
+        command -v semantic-version-analyzer
+        return
+    fi
+    printf ''  # not found
+}
+
 json_number_or_empty() {
     local key="$1" json="$2"
     if has_cmd jq; then
-        # Try deep search for key to tolerate nesting like .loc_delta.patch_delta
         jq -r ".. | objects | .\"$key\"? // empty" <<<"$json" | awk 'NR==1'
     else
-        # Fallback: first "<key>": <digits>
         grep -Eo "\"$key\"[[:space:]]*:[[:space:]]*[0-9]+" <<<"$json" \
             | head -1 | awk -F: '{gsub(/[[:space:]]/,"",$2); print $2}'
     fi
 }
 
 get_semantic_delta() {
-    # Prints the chosen delta (or empty if analyzer unusable)
-    local analyzer_path="$1" bump_type="$2" repo_root="$3" original_project_root="$4"
-    
-    [[ -x "$analyzer_path" ]] || { printf ''; return 1; }
-    
-    local args=(--json)
+    local analyzer="$1" bump="$2" repo_root="${3-}" cwd_base="${4-}"
+    [[ -x "$analyzer" ]] || { printf ''; return 1; }
+    local out args=(--json)
     [[ -n "$repo_root" ]] && args+=(--repo-root "$repo_root")
-    
-    local out=''
-    # Run from original project root so the analyzer can resolve relatives
-    if [[ -d "$original_project_root" ]]; then
-        pushd "$original_project_root" >/dev/null || true
-        out="$("$analyzer_path" "${args[@]}" 2>/dev/null || true)"
-        popd >/dev/null || true
+    if [[ -d "$cwd_base" ]]; then
+        out="$( (cd "$cwd_base" && "$analyzer" "${args[@]}") 2>/dev/null || true)"
     else
-        out="$("$analyzer_path" "${args[@]}" 2>/dev/null || true)"
+        out="$("$analyzer" "${args[@]}" 2>/dev/null || true)"
     fi
-    
     [[ -n "$out" ]] || { printf ''; return 1; }
-    
-    local key=''
-    case "$bump_type" in
-        patch) key='patch_delta' ;;
-        minor) key='minor_delta' ;;
-        major) key='major_delta' ;;
+    local key
+    case "$bump" in
+        patch) key=patch_delta ;;
+        minor) key=minor_delta ;;
+        major) key=major_delta ;;
         *)     printf ''; return 1 ;;
     esac
-    
-    local val
-    val="$(json_number_or_empty "$key" "$out" | head -1 || true)"
-    [[ -n "$val" && "$val" =~ ^[0-9]+$ ]] && { printf '%s' "$val"; return 0; }
-    printf ''
-    return 1
+    local v
+    v="$(json_number_or_empty "$key" "$out" | head -1 || true)"
+    [[ -n "$v" && "$v" =~ ^[0-9]+$ ]] && { printf '%s' "$v"; return 0; }
+    printf ''; return 1
 }
 
-# --- Version parsing & validation -------------------------------------------
+get_analysis_explanation() {
+    local analyzer="$1" cwd_base="${2-}"
+    [[ -x "$analyzer" ]] || { printf ''; return 0; }
+    local out
+    if [[ -d "$cwd_base" ]]; then
+        out="$( (cd "$cwd_base" && "$analyzer" --verbose) 2>/dev/null || true)"
+    else
+        out="$("$analyzer" --verbose 2>/dev/null || true)"
+    fi
+    grep -E '^Reason:' <<<"$out" | head -1 | sed -E 's/^Reason:[[:space:]]*//'
+}
+
+# ---------- version checks ----------------------------------------------------
 ensure_semver() {
     local v="$1"
-    # basic MAJOR.MINOR.PATCH validation
     [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Invalid version format: $v (expected MAJOR.MINOR.PATCH)"
 }
 
-# split_semver is provided by version-utils.sh
-
-# --- Mathematical rollover system --------------------------------------------
-# Implements sophisticated multi-level rollover with proper carry propagation
-# Formula: z_new = (z + delta_z) % MAIN_VERSION_MOD
-#          delta_y = ((z + delta_z) - (z + delta_z) % MAIN_VERSION_MOD) / MAIN_VERSION_MOD
-#          y_new = (y + delta_y) % MAIN_VERSION_MOD
-#          delta_x = ((y + delta_y) - (y + delta_y) % MAIN_VERSION_MOD) / MAIN_VERSION_MOD
-#          x_new = x + delta_x
-
+# ---------- rollover math -----------------------------------------------------
+# Returns: "<patch> <minor> <major>"
 roll_patch() {
-    local patch="$1" minor="$2" major="$3" delta="$4"
-    local main_version_mod="${VERSION_PATCH_LIMIT:-1000}"
-    
-    # Apply mathematical rollover system
-    local new_patch=$((patch + delta))
-    local delta_minor=$(((new_patch - (new_patch % main_version_mod)) / main_version_mod))
-    local final_patch=$((new_patch % main_version_mod))
-    
-    local new_minor=$((minor + delta_minor))
-    local delta_major=$(((new_minor - (new_minor % main_version_mod)) / main_version_mod))
-    local final_minor=$((new_minor % main_version_mod))
-    
-    local final_major=$((major + delta_major))
-    
-    printf '%s %s %s' "$final_patch" "$final_minor" "$final_major"
+    local patch="$1" minor="$2" major="$3" delta="$4" m="$VERSION_PATCH_LIMIT"
+    local np=$((patch + delta))
+    local carry_minor=$(( np / m ))
+    local fp=$(( np % m ))
+    local nm=$(( minor + carry_minor ))
+    local carry_major=$(( nm / m ))
+    local fm=$(( nm % m ))
+    local fmj=$(( major + carry_major ))
+    printf '%s %s %s' "$fp" "$fm" "$fmj"
 }
 
+# Returns: "<minor> <major>"
 roll_minor() {
-    local minor="$1" major="$2" delta="$3"
-    local main_version_mod="${VERSION_MINOR_LIMIT:-1000}"
-    
-    # Apply mathematical rollover system
-    local new_minor=$((minor + delta))
-    local delta_major=$(((new_minor - (new_minor % main_version_mod)) / main_version_mod))
-    local final_minor=$((new_minor % main_version_mod))
-    
-    local final_major=$((major + delta_major))
-    
-    printf '%s %s' "$final_minor" "$final_major"
+    local minor="$1" major="$2" delta="$3" m="$VERSION_MINOR_LIMIT"
+    local nm=$(( minor + delta ))
+    local carry_major=$(( nm / m ))
+    local fm=$(( nm % m ))
+    local fmj=$(( major + carry_major ))
+    printf '%s %s' "$fm" "$fmj"
 }
 
-# --- Version calculation with rollover logic ---------------------------------
 calculate_version_bump() {
-    local current_version="$1"
-    local bump_type="$2"
-    local delta="$3"
-    
-    ensure_semver "$current_version"
+    local current="$1" type="$2" delta="$3"
+    ensure_semver "$current"
     is_uint "$delta" || die "Non-integer delta: $delta"
-    
     local MAJOR MINOR PATCH
-    # Temporarily set IFS to include space for proper splitting
-    local old_ifs="$IFS"
-    IFS=' ' read -r MAJOR MINOR PATCH < <(split_semver "$current_version")
-    IFS="$old_ifs"
-    
-    case "$bump_type" in
+    read -r MAJOR MINOR PATCH < <(split_semver "$current")
+
+    case "$type" in
         patch)
-            # Temporarily set IFS to include space for proper splitting
-            local old_ifs="$IFS"
-            IFS=' ' read -r PATCH MINOR MAJOR < <(roll_patch "$PATCH" "$MINOR" "$MAJOR" "$delta")
-            IFS="$old_ifs"
+            read -r PATCH MINOR MAJOR < <(roll_patch "$PATCH" "$MINOR" "$MAJOR" "$delta")
             ;;
-        
         minor)
             [[ "${PRESERVE_PATCH_ON_MINOR,,}" == "true" ]] || PATCH=0
-            # Temporarily set IFS to include space for proper splitting
-            local old_ifs="$IFS"
-            IFS=' ' read -r MINOR MAJOR < <(roll_minor "$MINOR" "$MAJOR" "$delta")
-            IFS="$old_ifs"
+            read -r MINOR MAJOR < <(roll_minor "$MINOR" "$MAJOR" "$delta")
             ;;
-        
         major)
             [[ "${PRESERVE_LOWER_ON_MAJOR,,}" == "true" ]] || { MINOR=0; PATCH=0; }
             MAJOR=$(( MAJOR + delta ))
             ;;
-        
         *)
-            die "Invalid bump type '$bump_type' (must be: major|minor|patch)"
+            die "Invalid bump type '$type' (must be: major|minor|patch)"
             ;;
     esac
-    
     printf '%s.%s.%s' "$MAJOR" "$MINOR" "$PATCH"
 }
 
-# --- Configuration management -------------------------------------------------
+# ---------- config & output ---------------------------------------------------
 load_version_config() {
-    local file="$1"
+    local file="${1-}"
     [[ -z "$file" ]] && return 0
     [[ -f "$file" ]] || die "Config file not found: $file"
     # shellcheck source=/dev/null
     source "$file"
 }
 
-# --- Analysis explanation ----------------------------------------------------
-get_analysis_explanation() {
-    local analyzer_path="$1" original_project_root="$2"
-    [[ -x "$analyzer_path" ]] || { printf ''; return 0; }
-    
-    local out=''
-    if [[ -d "$original_project_root" ]]; then
-        pushd "$original_project_root" >/dev/null || true
-        out="$("$analyzer_path" --verbose 2>/dev/null || true)"
-        popd >/dev/null || true
-    else
-        out="$("$analyzer_path" --verbose 2>/dev/null || true)"
-    fi
-    
-    # Extract a "Reason:" line if present
-    grep -E '^Reason:' <<<"$out" | head -1 | sed -E 's/^Reason:[[:space:]]*//'
-}
-
-# --- Output helpers ----------------------------------------------------------
 emit_json() {
     local new="$1" old="$2" type="$3" delta="$4" source="$5" reason="$6"
     printf '{'
-    printf '"old":"%s",'  "$old"
-    printf '"new":"%s",'  "$new"
-    printf '"bump_type":"%s",' "$type"
+    printf '"old":"%s",'  "$(json_escape "$old")"
+    printf '"new":"%s",'  "$(json_escape "$new")"
+    printf '"bump_type":"%s",' "$(json_escape "$type")"
     printf '"delta":%s,'  "${delta:-0}"
-    printf '"delta_source":"%s",' "${source:-default}"
-    printf '"reason":"%s"' "${reason//\"/\\\"}"
+    printf '"delta_source":"%s",' "$(json_escape "${source:-default}")"
+    printf '"reason":"%s"' "$(json_escape "${reason-}")"
     printf '}\n'
 }
 
@@ -268,41 +227,19 @@ emit_machine() {
         "$old" "$new" "$type" "${delta:-0}" "${source:-default}"
 }
 
-# --- Main calculation function -----------------------------------------------
+# ---------- main bump logic ---------------------------------------------------
 bump_version_with_loc() {
-    local current_version="$1"
-    local bump_type="$2"
-    local original_project_root="$3"
-    local repo_root="$4"
-    
-    # Validate inputs
-    if [[ -z "$current_version" ]]; then
-        die "Current version is required"
-    fi
-    
-    if [[ -z "$bump_type" ]]; then
-        die "Bump type is required"
-    fi
-    
-    case "$bump_type" in
-        major|minor|patch) ;;
-        *) die "Bump type must be major, minor, or patch" ;;
-    esac
-    
-    # Use semantic analyzer to calculate LOC-based delta
-    local delta=1
-    local analyzer_path
-    analyzer_path=$(find_semantic_analyzer "$original_project_root" "$(pwd)")
-    
+    local current_version="$1" bump_type="$2" original_project_root="$3" repo_root="$4"
+    [[ -n "$current_version" ]] || die "Current version is required"
+    [[ "$bump_type" =~ ^(major|minor|patch)$ ]] || die "Bump type must be major|minor|patch"
+    local delta=1 analyzer_path semantic_delta
+    analyzer_path="$(find_semantic_analyzer "$original_project_root" "$(pwd)")"
     if [[ -n "$analyzer_path" ]]; then
-        local semantic_delta
-        semantic_delta=$(get_semantic_delta "$analyzer_path" "$bump_type" "$repo_root" "$original_project_root")
+        semantic_delta="$(get_semantic_delta "$analyzer_path" "$bump_type" "$repo_root" "$original_project_root" || true)"
         if [[ -n "$semantic_delta" && "$semantic_delta" =~ ^[0-9]+$ ]]; then
             delta="$semantic_delta"
         fi
     fi
-    
-    # Fallback to defaults if analyzer not available or returned nothing
     if [[ -z "${delta-}" ]]; then
         case "$bump_type" in
             patch) delta="$VERSION_PATCH_DELTA" ;;
@@ -310,12 +247,7 @@ bump_version_with_loc() {
             major) delta="$VERSION_MAJOR_DELTA" ;;
         esac
     fi
-    
-    # Calculate new version
-    local new_version
-    new_version=$(calculate_version_bump "$current_version" "$bump_type" "$delta")
-    
-    printf '%s' "$new_version"
+    calculate_version_bump "$current_version" "$bump_type" "$delta"
 }
 
 # --- Standalone usage --------------------------------------------------------
@@ -326,31 +258,30 @@ Usage: version-calculator-loc [options]
 Options:
   --current-version <ver>    Current version (MAJOR.MINOR.PATCH) [required]
   --bump-type <type>         One of: major | minor | patch       [required unless --set]
-  --set <version>            Set version directly (X.Y.Z format) [required unless --bump-type]
-  --original-project-root <p>Directory to run analyzer from (improves relative paths)
-  --repo-root <p>            Repository root to pass to analyzer (auto-detected if possible)
-  --config <file>            Source additional configuration
+  --set <version>            Set version directly (X.Y.Z format) [mutually exclusive with --bump-type]
+  --original-project-root <p>Directory to run analyzer from
+  --repo-root <p>            Repository root to pass to analyzer
+  --config <file>            Source additional configuration (bash)
   --analyzer-path <file>     Explicit path to semantic-version-analyzer
   --json                     Output JSON {old,new,bump_type,delta,delta_source,reason}
-  --machine                  Output machine key=value lines
+  --machine                  Output machine-readable key=value lines
   --verbose                  Print a short explanation to stderr
   --help, -h                 Show this help
 
 Environment:
-  VERSION_PATCH_LIMIT        [default: 1000]
-  VERSION_MINOR_LIMIT        [default: 1000]
-  VERSION_PATCH_DELTA        [default: 1]
-  VERSION_MINOR_DELTA        [default: 5]
-  VERSION_MAJOR_DELTA        [default: 10]
-  PRESERVE_PATCH_ON_MINOR    [default: false] (true to keep patch on minor bumps)
-  PRESERVE_LOWER_ON_MAJOR    [default: false] (true to keep minor+patch on major bumps)
-  NO_COLOR                   [default: false]
+  VERSION_PATCH_LIMIT   [default: 1000]
+  VERSION_MINOR_LIMIT   [default: 1000]
+  VERSION_PATCH_DELTA   [default: 1]
+  VERSION_MINOR_DELTA   [default: 5]
+  VERSION_MAJOR_DELTA   [default: 10]
+  PRESERVE_PATCH_ON_MINOR [default: false]
+  PRESERVE_LOWER_ON_MAJOR [default: false]
+  NO_COLOR               [default: false]
 
 Examples:
   version-calculator-loc --current-version 1.2.3 --bump-type patch
   version-calculator-loc --current-version 1.2.3 --bump-type minor --repo-root ~/proj
-  version-calculator-loc --current-version 9.99.99 --bump-type patch \
-                        PRESERVE_LOWER_ON_MAJOR=true VERSION_MINOR_LIMIT=100
+  version-calculator-loc --current-version 9.99.99 --bump-type patch VERSION_MINOR_LIMIT=100
   version-calculator-loc --current-version 1.2.3 --set 2.0.0
 EOF
 }
@@ -358,6 +289,7 @@ EOF
 main() {
     # Initialize colors
     init_colors "${NO_COLOR:-false}"
+    check_env_sanity
     
     # Parse command line arguments
     local current_version="" bump_type="" set_version=""
@@ -367,26 +299,19 @@ main() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --current-version)
-                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--current-version requires a value"
-                current_version="$2"; shift 2 ;;
+                need_val "$1" "${2-}"; current_version="$2"; shift 2 ;;
             --bump-type)
-                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--bump-type requires a value"
-                bump_type="$2"; shift 2 ;;
+                need_val "$1" "${2-}"; bump_type="$2"; shift 2 ;;
             --set)
-                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--set requires a value"
-                set_version="$2"; shift 2 ;;
+                need_val "$1" "${2-}"; set_version="$2"; shift 2 ;;
             --original-project-root)
-                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--original-project-root requires a value"
-                original_project_root="$2"; shift 2 ;;
+                need_val "$1" "${2-}"; original_project_root="$2"; shift 2 ;;
             --repo-root)
-                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--repo-root requires a value"
-                repo_root="$2"; shift 2 ;;
+                need_val "$1" "${2-}"; repo_root="$2"; shift 2 ;;
             --config)
-                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--config requires a value"
-                config_file="$2"; shift 2 ;;
+                need_val "$1" "${2-}"; config_file="$2"; shift 2 ;;
             --analyzer-path)
-                [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "--analyzer-path requires a value"
-                analyzer_path_override="$2"; shift 2 ;;
+                need_val "$1" "${2-}"; analyzer_path_override="$2"; shift 2 ;;
             --json)
                 out_json=true; shift ;;
             --machine)
@@ -412,11 +337,11 @@ main() {
     [[ -n "$current_version" ]] || die "--current-version is required"
     
     # Must specify either a bump type or --set
-    if [[ -z "$bump_type" && -z "$set_version" ]]; then
-        die "No bump type specified (choose major|minor|patch) or provide --set"
+    if [[ -n "$set_version" && -n "$bump_type" ]]; then
+        die "Cannot specify both --set and --bump-type"
     fi
-    if [[ -n "$bump_type" && -n "$set_version" ]]; then
-        die "Cannot specify both a bump type and --set"
+    if [[ -z "$set_version" && -z "$bump_type" ]]; then
+        die "Specify --set <X.Y.Z> or --bump-type {major|minor|patch}"
     fi
     
     # Handle --set case
@@ -425,8 +350,7 @@ main() {
         ensure_semver "$set_version"
         
         if $verbose; then
-            printf 'Set: %s  Old: %s  New: %s\n' \
-                "direct" "$current_version" "$set_version" >&2
+            printf 'Set: direct  Old: %s  New: %s\n' "$current_version" "$set_version" >&2
         fi
         
         if $out_json; then
@@ -440,7 +364,7 @@ main() {
     fi
     
     # Validate bump type
-    case "$bump_type" in major|minor|patch) ;; *) die "Invalid --bump-type: $bump_type" ;; esac
+    case "$bump_type" in major|minor|patch) ;; *) die "Invalid --bump-type: $bump_type";; esac
     
     # Analyzer lookup and delta resolution
     local analyzer_path delta delta_source="default" reason=""
