@@ -232,15 +232,15 @@ analyze_security_keywords() {
     local target_ref="$2"
     
     # Build git log command with options
-    local log_cmd="git -c color.ui=false log"
+    local log_cmd_array=("git" "-c" "color.ui=false" "log")
     if [[ "$NO_MERGES" = "true" ]]; then
-        log_cmd="$log_cmd --no-merges"
+        log_cmd_array+=("--no-merges")
     fi
-    log_cmd="$log_cmd --format=\"%s %b\""
+    log_cmd_array+=("--format=%s %b")
     
     # Quick security keyword detection (fast path) - include commit bodies for CVEs
     local security_keywords
-    security_keywords=$($log_cmd "$base_ref".."$target_ref" 2>/dev/null | \
+    security_keywords=$("${log_cmd_array[@]}" "$base_ref".."$target_ref" 2>/dev/null | \
         count_occurrences "$SEC_REGEX")
     
     # Ensure it's a valid integer
@@ -324,11 +324,11 @@ analyze_security_keywords() {
         
         if [[ "$total_security_score" -gt 0 ]]; then
             printf '\nSecurity Keywords Detected:\n'
-            local log_cmd_short="git -c color.ui=false log --format=\"%s\""
+            local log_cmd_short_array=("git" "-c" "color.ui=false" "log" "--format=%s")
             if [[ "$NO_MERGES" = "true" ]]; then
-                log_cmd_short="$log_cmd_short --no-merges"
+                log_cmd_short_array+=("--no-merges")
             fi
-            $log_cmd_short "$base_ref".."$target_ref" 2>/dev/null | \
+            "${log_cmd_short_array[@]}" "$base_ref".."$target_ref" 2>/dev/null | \
                 grep -i -E "$(printf '%s' "$SEC_REGEX" | tr -d '\n')" | \
                 head -"$TOP_COMMITS" || printf '  None found in commit messages\n'
         fi

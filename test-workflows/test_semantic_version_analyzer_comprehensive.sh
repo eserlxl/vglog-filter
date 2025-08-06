@@ -325,7 +325,6 @@ run_test_with_version "Verbose output" \
     "=== Detailed Analysis ==="
 
 # Test verbose output contains specific sections
-local verbose_output
 verbose_output=$("$SEMANTIC_ANALYZER_SCRIPT" --verbose 2>&1)
 
 if echo "$verbose_output" | grep -q "=== Detailed Analysis ==="; then

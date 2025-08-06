@@ -311,7 +311,8 @@ backup_cmake_file() {
     fi
     
     mkdir -p "$backup_dir"
-    local backup_file="$backup_dir/CMakeLists.txt.backup.$(date +%Y%m%d_%H%M%S)"
+    local backup_file
+    backup_file="$backup_dir/CMakeLists.txt.backup.$(date +%Y%m%d_%H%M%S)"
     cp "$cmake_file" "$backup_file"
     printf '%s' "$backup_file"
 }

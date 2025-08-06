@@ -19,7 +19,7 @@ source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 # Create a temporary clean environment for testing
 test_dir=$(create_temp_test_env "loc_delta_system_test")
-cd "$test_dir"
+cd "$test_dir" || exit 1
 
 echo "=== Testing LOC-based Delta System with New Versioning System ==="
 

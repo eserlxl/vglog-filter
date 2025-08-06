@@ -23,7 +23,7 @@ info()   { _info "$@"; }
 ok()     { _ok "$@"; }
 
 # Trap to show failing line for unexpected errors.
-trap 'rc=$?; [[ $rc -ne 0 ]] && printf "Error on line %s: %s (exit %s)\n" "$LINENO" "$BASH_COMMAND" "$rc" >&2' ERR
+trap '[[ $? -ne 0 ]] && printf "Error on line %s: %s (exit %s)\n" "$LINENO" "$BASH_COMMAND" "$?" >&2' ERR
 
 # ------------------- color utilities -------------------
 init_colors() {
@@ -36,7 +36,7 @@ init_colors() {
     CYAN=$'\033[0;36m'
     RESET=$'\033[0m'
   else
-    RED= GREEN= YELLOW= CYAN= RESET=
+    RED='' GREEN='' YELLOW='' CYAN='' RESET=''
   fi
 }
 

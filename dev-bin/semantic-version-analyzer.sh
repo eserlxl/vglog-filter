@@ -161,7 +161,9 @@ build_common_argv() {
 
 # Build ref-resolver argv (array via nameref)
 build_ref_argv() {
-  local -n _out="$1"; _out=()
+  # shellcheck disable=SC2178
+  local -n _out="$1"
+  _out=()
   [[ -n "$SINCE_TAG"    ]] && _out+=(--since "$SINCE_TAG")
   [[ -n "$SINCE_COMMIT" ]] && _out+=(--since-commit "$SINCE_COMMIT")
   [[ -n "$SINCE_DATE"   ]] && _out+=(--since-date "$SINCE_DATE")
@@ -282,8 +284,10 @@ main() {
   fi
 
   # Security keywords (both sources)
-  local security_keywords=$(int_or_default "${SEC[SECURITY_KEYWORDS]}" 0)
-  local keyword_security=$(int_or_default "${KW[TOTAL_SECURITY]}" 0)
+  local security_keywords
+  security_keywords=$(int_or_default "${SEC[SECURITY_KEYWORDS]}" 0)
+  local keyword_security
+  keyword_security=$(int_or_default "${KW[TOTAL_SECURITY]}" 0)
   local total_security=$(( security_keywords + keyword_security ))
   if (( total_security > 0 )); then
     TOTAL_BONUS=$(( TOTAL_BONUS + total_security * $(int_or_default "${CFG[VERSION_SECURITY_BONUS]}" 2) ))
@@ -308,7 +312,8 @@ main() {
 
   # Removed options (both sources)
   local cli_removed=$(( $(int_or_default "${CLI[REMOVED_SHORT_COUNT]}" 0) + $(int_or_default "${CLI[REMOVED_LONG_COUNT]}" 0) ))
-  local kw_removed=$(int_or_default "${KW[REMOVED_OPTIONS_KEYWORDS]}" 0)
+  local kw_removed
+  kw_removed=$(int_or_default "${KW[REMOVED_OPTIONS_KEYWORDS]}" 0)
   local total_removed=$(( cli_removed + kw_removed ))
   if (( total_removed > 0 )); then
     TOTAL_BONUS=$(( TOTAL_BONUS + $(int_or_default "${CFG[VERSION_REMOVED_OPTION_BONUS]}" 1) ))
@@ -317,9 +322,12 @@ main() {
   debug "Final TOTAL_BONUS=$TOTAL_BONUS"
 
   # 8) Suggestion thresholds
-  local major_th=$(int_or_default "${CFG[MAJOR_BONUS_THRESHOLD]}" 8)
-  local minor_th=$(int_or_default "${CFG[MINOR_BONUS_THRESHOLD]}" 4)
-  local patch_th=$(int_or_default "${CFG[PATCH_BONUS_THRESHOLD]}" 0)
+  local major_th
+  major_th=$(int_or_default "${CFG[MAJOR_BONUS_THRESHOLD]}" 8)
+  local minor_th
+  minor_th=$(int_or_default "${CFG[MINOR_BONUS_THRESHOLD]}" 4)
+  local patch_th
+  patch_th=$(int_or_default "${CFG[PATCH_BONUS_THRESHOLD]}" 0)
 
   local suggestion="none"
   if   (( TOTAL_BONUS >= major_th )); then suggestion="major"
@@ -352,7 +360,8 @@ main() {
     echo "$suggestion"
   elif [[ "$JSON_OUTPUT" == "true" ]]; then
     # Ask calculator for deltas (patch/minor/major) with machine, convert totals
-    local loc="$(int_or_default "${FILE[DIFF_SIZE]}" 0)"
+    local loc
+    loc="$(int_or_default "${FILE[DIFF_SIZE]}" 0)"
 
     local pd_raw; run_cmd_capture pd_raw "$SCRIPT_DIR/version-calculator" --current-version "$current_version" --bump-type patch --loc "$loc" --bonus "$TOTAL_BONUS" --machine
     declare -A PD=(); parse_kv_into PD <<<"$pd_raw"

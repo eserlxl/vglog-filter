@@ -36,8 +36,8 @@ have_git() { command -v git >/dev/null 2>&1; }
 set_diff_counts() {
   # args: before_list after_list; outputs: REM= count, ADD= count to named vars
   local before="$1" after="$2" _rem _add
-  _rem=$(comm -23 <(printf '%s\n' $before | LC_ALL=C sort -u) <(printf '%s\n' $after | LC_ALL=C sort -u) | wc -l | tr -d ' ')
-  _add=$(comm -13 <(printf '%s\n' $before | LC_ALL=C sort -u) <(printf '%s\n' $after | LC_ALL=C sort -u) | wc -l | tr -d ' ')
+  _rem=$(comm -23 <(printf '%s\n' "$before" | LC_ALL=C sort -u) <(printf '%s\n' "$after" | LC_ALL=C sort -u) | wc -l | tr -d ' ')
+  _add=$(comm -13 <(printf '%s\n' "$before" | LC_ALL=C sort -u) <(printf '%s\n' "$after" | LC_ALL=C sort -u) | wc -l | tr -d ' ')
   printf '%s %s\n' "$_rem" "$_add"
 }
 
@@ -122,7 +122,7 @@ declare -a PATHSPEC
 if [[ -n "$ONLY_PATHS" ]]; then
   IFS=',' read -r -a _paths <<< "$ONLY_PATHS"
   for p in "${!_paths[@]}"; do
-    _paths[$p]=$(trim_spaces "${_paths[$p]}")
+    _paths[p]=$(trim_spaces "${_paths[$p]}")
   done
   # pass through verbatim; caller can use :(glob) or plain
   for p in "${_paths[@]}"; do [[ -n "$p" ]] && PATHSPEC+=("$p"); done
@@ -215,10 +215,10 @@ long_before_list=$(  printf '%s' "$long_before" | tr ',' '\n' | sed '/^$/d' | LC
 long_after_list=$(   printf '%s' "$long_after"  | tr ',' '\n' | sed '/^$/d' | LC_ALL=C sort -u)
 
 # Compute removed/added lists
-removed_short_list=$(comm -23 <(printf '%s\n' $short_before_list) <(printf '%s\n' $short_after_list) || true)
-added_short_list=$(  comm -13 <(printf '%s\n' $short_before_list) <(printf '%s\n' $short_after_list) || true)
-removed_long_list=$( comm -23 <(printf '%s\n' $long_before_list)  <(printf '%s\n' $long_after_list)  || true)
-added_long_list=$(   comm -13 <(printf '%s\n' $long_before_list)  <(printf '%s\n' $long_after_list)  || true)
+removed_short_list=$(comm -23 <(printf '%s\n' "$short_before_list") <(printf '%s\n' "$short_after_list") || true)
+added_short_list=$(  comm -13 <(printf '%s\n' "$short_before_list") <(printf '%s\n' "$short_after_list") || true)
+removed_long_list=$( comm -23 <(printf '%s\n' "$long_before_list")  <(printf '%s\n' "$long_after_list")  || true)
+added_long_list=$(   comm -13 <(printf '%s\n' "$long_before_list")  <(printf '%s\n' "$long_after_list")  || true)
 
 # Counts
 read -r removed_short_count added_short_count < <(set_diff_counts "$short_before_list" "$short_after_list")
@@ -352,8 +352,8 @@ else
     printf '  Manual removed long:   %d\n' "$manual_removed_long_count"
     if [[ -n "$removed_short_list$added_short_list$removed_long_list$added_long_list" ]]; then
         printf '\nOption Lists:\n'
-        [[ -n "$removed_short_list" ]] && printf '  - Removed short: %s\n' "$(join_by ' ' $removed_short_list)"
-        [[ -n "$added_short_list"   ]] && printf '  - Added short:   %s\n' "$(join_by ' ' $added_short_list)"
+        [[ -n "$removed_short_list" ]] && printf '  - Removed short: %s\n' "$(join_by ' ' "$removed_short_list")"
+        [[ -n "$added_short_list"   ]] && printf '  - Added short:   %s\n' "$(join_by ' ' "$added_short_list")"
         [[ -n "$removed_long_list"  ]] && printf '  - Removed long:  %s\n' "$(echo "$removed_long_list" | paste -sd' ' -)"
         [[ -n "$added_long_list"    ]] && printf '  - Added long:    %s\n' "$(echo "$added_long_list" | paste -sd' ' -)"
     fi

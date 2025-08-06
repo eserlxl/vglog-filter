@@ -337,6 +337,7 @@ export_parsed_options() {
     # Export all parsed options as environment variables
     for key in "${!DEFAULT_OPTIONS[@]}"; do
         if [[ -n "${!key:-}" ]]; then
+            # shellcheck disable=SC2163
             export "$key"
         fi
     done

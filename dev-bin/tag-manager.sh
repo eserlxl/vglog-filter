@@ -209,7 +209,7 @@ cleanup_tags() {
       protected=0
       for pat in "${protect_pats[@]}"; do
         # [[ str == glob ]] performs glob matching; this is desired
-        if [[ "$tag" == $pat ]]; then
+        if [[ "$tag" == "$pat" ]]; then
           protected=1; break
         fi
       done
@@ -294,7 +294,7 @@ create_tag() {
   same_commit_tags="$(git tag --points-at "$commit" || true)"
   if [[ -n "$same_commit_tags" ]]; then
     warn "Other tag(s) already point to this commit:"
-    printf '  %s\n' $same_commit_tags
+    printf '  %s\n' "$same_commit_tags"
   fi
 
   local msg="${TAG_MSG_PREFIX} ${tag_name}"
