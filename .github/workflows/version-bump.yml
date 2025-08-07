@@ -89,14 +89,14 @@ jobs:
           fi
 
           if [[ "$BUMP_TYPE" == "auto" ]]; then
-            if [[ ! -x ./dev-bin/semantic-version-analyzer ]]; then
-              echo "semantic-version-analyzer not found or not executable at ./dev-bin/semantic-version-analyzer" >&2
+            if [[ ! -x ./dev-bin/semantic-version-analyzer.sh ]]; then
+              echo "semantic-version-analyzer.sh not found or not executable at ./dev-bin/semantic-version-analyzer.sh" >&2
               exit 1
             fi
             # Run analyzer and capture only stdout, redirect stderr to /dev/null
             # Add debug output to help troubleshoot analyzer issues
-            echo "DEBUG: Running semantic-version-analyzer..." >&2
-            BUMP_TYPE_OUTPUT="$(./dev-bin/semantic-version-analyzer --suggest-only 2>/dev/null || true)"
+            echo "DEBUG: Running semantic-version-analyzer.sh..." >&2
+            BUMP_TYPE_OUTPUT="$(./dev-bin/semantic-version-analyzer.sh --suggest-only 2>/dev/null || true)"
             echo "DEBUG: Analyzer exit code: $?" >&2
             if [[ -n "$BUMP_TYPE_OUTPUT" ]]; then
               BUMP_TYPE="$(printf '%s' "$BUMP_TYPE_OUTPUT" | tr -d '\n' | tr -d '\r')"
