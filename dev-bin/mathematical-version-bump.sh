@@ -318,7 +318,7 @@ perform_git_operations() {
   fi
 
   if [[ "$eff_do_commit" == "true" || "$eff_do_tag" == "true" || "$OPT_DO_PUSH" == "true" || "$OPT_PUSH_TAGS" == "true" ]]; then
-    "$SCRIPT_DIR/git-operations.sh" perform_git_operations \
+    "$SCRIPT_DIR/git-operations.sh" perform-git-operations \
       "$VERSION_FILE" \
       "false" \
       "$new_version" \

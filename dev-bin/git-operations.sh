@@ -542,6 +542,12 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             fi
             push_all_tags "$2"
             ;;
+        "perform-git-operations")
+            if [[ $# -lt 19 ]]; then
+                die "Usage: $(basename "$0") perform-git-operations <version_file> <update_cmake> <new_version> <current_version> <do_commit> <do_tag> <do_push> <push_tags> <commit_msg> <no_verify> <commit_sign> <tag_prefix> <annotated_tag> <signed_tag> <allow_dirty> <project_root> <original_project_root> [remote] [allow_nonmonotonic]"
+            fi
+            perform_git_operations "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11}" "${12}" "${13}" "${14}" "${15}" "${16}" "${17}" "${18:-origin}" "${19:-false}"
+            ;;
         *)
             cat <<'EOF'
 Usage: git-operations.sh <command> [args...]
@@ -552,6 +558,7 @@ Commands:
   create-tag <args...>                           Create a tag for the new version (pre-releases are rejected)
   push-changes <remote> <do_tag> <new_ver> <pfx> Push current branch; if do_tag=true, performs an --atomic push of branch+tag
   push-tags <remote>                             Push all tags
+  perform-git-operations <args...>               Perform all git operations (commit, tag, push) in sequence
 
 Examples:
   git-operations.sh check-dirty
@@ -559,6 +566,7 @@ Examples:
   git-operations.sh create-tag 1.0.1 v true false
   git-operations.sh push-changes origin true 1.0.1 v
   git-operations.sh push-tags origin
+  git-operations.sh perform-git-operations VERSION false 1.0.1 1.0.0 true true true false "" false false v false false false /path/to/project /path/to/project origin false
 EOF
             exit 1
             ;;
