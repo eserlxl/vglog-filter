@@ -134,17 +134,17 @@ vglog-filter --progress very_large_valgrind.log > filtered.log
 ```
 
 ### How can I monitor memory usage during processing?
-Use the `-M` or `--monitor-memory` option. This will enable tracking and reporting of peak memory usage at different stages of the processing (e.g., during file reading, processing, and deduplication phases). This is invaluable for performance analysis and debugging memory-related issues.
+Use the `-M` or `--memory` option. This will enable tracking and reporting of peak memory usage at different stages of the processing (e.g., during file reading, processing, and deduplication phases). This is invaluable for performance analysis and debugging memory-related issues.
 
 ```sh
-vglog-filter --monitor-memory valgrind.log > filtered.log
+vglog-filter --memory valgrind.log > filtered.log
 ```
 
 ### Can I combine progress and memory monitoring?
-Absolutely! You can use both the `--progress` and `--monitor-memory` options simultaneously for comprehensive real-time monitoring of large file processing.
+Absolutely! You can use both the `--progress` and `--memory` options simultaneously for comprehensive real-time monitoring of large file processing.
 
 ```sh
-vglog-filter --progress --monitor-memory extremely_large_valgrind.log > filtered.log
+vglog-filter --progress --memory extremely_large_valgrind.log > filtered.log
 ```
 
 ### What performance optimizations have been implemented?
@@ -233,7 +233,7 @@ For a complete overview, see the [CI/CD Guide](CI_CD_GUIDE.md).
 ## Versioning and Releases
 
 ### What version is currently available?
-You can check the current version by running `vglog-filter --version`.
+You can check the current version by running `vglog-filter --version`. The current version is **10.5.12**.
 
 ### How does the versioning system work?
 `vglog-filter` follows [Semantic Versioning (SemVer)](https://semver.org/) with an advanced LOC-based delta system. Version bumps are automated based on [Conventional Commits](https://www.conventionalcommits.org/) and the magnitude of code changes:
@@ -278,10 +278,10 @@ vglog-filter --version
 git tag --sort=-version:refname | head -5
 
 # Compare two versions
-git diff v10.4.0..v10.5.12 --stat
+git diff v10.5.0..v10.5.12 --stat
 
 # Analyze changes since a specific version
-./dev-bin/semantic-version-analyzer.sh --since v10.4.0 --verbose
+./dev-bin/semantic-version-analyzer.sh --since v10.5.0 --verbose
 ```
 
 GitHub Releases also provide automatically generated release notes with detailed change information.
