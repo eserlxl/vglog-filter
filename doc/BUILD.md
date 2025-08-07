@@ -80,7 +80,7 @@ The `build.sh` script accepts several arguments to customize the build process:
 -   `tests`: Builds and runs the test suite.
 -   `clean`: Removes the build directory before building.
 -   `--build-dir <dir>`: Specifies a custom build directory.
--   `-j <N>`: Sets the number of parallel jobs for compilation.
+-   `-j <N>`: Sets the number of parallel jobs for compilation (default: 20).
 
 **Examples:**
 
@@ -104,7 +104,7 @@ For more details, run `./build.sh --help`.
 
 ## Build Types
 
-CMake supports different build types, each optimized for specific purposes (e.g., debugging, performance). You can specify the build type using the `-DCMAKE_BUILD_TYPE` flag during the CMake configuration step.
+The build system supports different build types, each optimized for specific purposes (e.g., debugging, performance). You can specify the build type using the `build.sh` script options.
 
 ### Debug Build
 
@@ -175,24 +175,24 @@ For more control, you can create sanitized builds manually:
     ```sh
     mkdir -p build-asan
     cd build-asan
-    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON
-    cmake --build . -j$(nproc)
+    cmake .. -DDEBUG_MODE=ON -DENABLE_SANITIZERS=ON
+    cmake --build . -j20
     ```
 
 -   **MemorySanitizer (MSan)**: Detects uses of uninitialized memory. Requires Clang.
     ```sh
     mkdir -p build-msan
     cd build-msan
-    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON -DCMAKE_CXX_COMPILER=clang++
-    cmake --build . -j$(nproc)
+    cmake .. -DDEBUG_MODE=ON -DENABLE_SANITIZERS=ON -DCMAKE_CXX_COMPILER=clang++
+    cmake --build . -j20
     ```
 
 -   **UndefinedBehaviorSanitizer (UBSan)**: Detects various kinds of undefined behavior.
     ```sh
     mkdir -p build-ubsan
     cd build-ubsan
-    cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON
-    cmake --build . -j$(nproc)
+    cmake .. -DDEBUG_MODE=ON -DENABLE_SANITIZERS=ON
+    cmake --build . -j20
     ```
 
 **Note**: Sanitized builds should typically be `Debug` builds to ensure all checks are active and debugging symbols are available. Running tests with sanitized builds is highly recommended to catch issues early. The CI/CD pipeline includes dedicated jobs for sanitized builds.
@@ -205,10 +205,12 @@ For more control, you can create sanitized builds manually:
 
 The build system supports several advanced configuration options:
 
+-   `DEBUG_MODE`: Enable debug build flags (mutually exclusive with `PERFORMANCE_BUILD`)
+-   `PERFORMANCE_BUILD`: Enable performance-optimized flags (default: ON, mutually exclusive with `DEBUG_MODE`)
+-   `WARNING_MODE`: Enable extra compiler warnings (default: ON)
+-   `BUILD_TESTING`: Enable test suite compilation (default: ON)
 -   `ENABLE_NATIVE_OPTIMIZATION`: Use `-march=native` and `-mtune=native` for CPU-specific optimizations
 -   `ENABLE_SANITIZERS`: Enable AddressSanitizer and UndefinedBehaviorSanitizer in debug builds
--   `BUILD_TESTING`: Enable test suite compilation (default: ON)
--   `WARNING_MODE`: Enable extra compiler warnings (default: ON)
 
 **Example with advanced options:**
 
@@ -216,11 +218,10 @@ The build system supports several advanced configuration options:
 mkdir -p build-advanced
 cd build-advanced
 cmake .. \
-  -DCMAKE_BUILD_TYPE=Release \
   -DPERFORMANCE_BUILD=ON \
   -DENABLE_NATIVE_OPTIMIZATION=ON \
   -DWARNING_MODE=ON
-cmake --build . -j$(nproc)
+cmake --build . -j20
 ```
 
 ### Environment Variables
@@ -228,7 +229,7 @@ cmake --build . -j$(nproc)
 You can control the build process using environment variables:
 
 -   `BUILD_DIR`: Set the build directory (default: `build`)
--   `JOBS`: Set the number of parallel build jobs (default: auto-detected)
+-   `JOBS`: Set the number of parallel build jobs (default: 20)
 -   `CMAKE_GENERATOR`: Specify the CMake generator (e.g., `Ninja`, `Unix Makefiles`)
 
 **Example:**
@@ -270,8 +271,8 @@ Cross-compilation allows you to build `vglog-filter` for a different target plat
     ```sh
     mkdir -p build-cross
     cd build-cross
-    cmake .. -DCMAKE_TOOLCHAIN_FILE=/path/to/toolchain.cmake -DCMAKE_BUILD_TYPE=Release
-    cmake --build .
+    cmake .. -DCMAKE_TOOLCHAIN_FILE=/path/to/toolchain.cmake -DPERFORMANCE_BUILD=ON
+    cmake --build . -j20
     ```
 
 Cross-compilation can be complex and depends heavily on your specific target environment. Refer to CMake's official documentation on [toolchain files](https://cmake.org/cmake/help/latest/manual/cmake-toolchains.7.html) for more in-depth information.
