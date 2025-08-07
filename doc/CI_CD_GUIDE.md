@@ -52,6 +52,7 @@ These workflows focus on building the project and running various levels of test
     -   Verifies basic application functionality and correct help output.
     -   Checks binary characteristics (e.g., presence of debug symbols).
     -   Executes tests with sample input data.
+    -   Validates build artifacts and binary integrity.
 
 #### 2. Comprehensive Test (`comprehensive-test.yml`)
 -   **Purpose**: Executes the full test suite across a wide array of build configuration combinations.
@@ -62,6 +63,7 @@ These workflows focus on building the project and running various levels of test
     -   Includes binary characteristic verification for each configuration.
     -   Runs the entire test suite when the build configuration includes testing.
     -   Validates both performance-optimized and debug builds.
+    -   Ensures cross-platform compatibility across different Linux distributions.
 
 #### 3. Debug Build Test (`debug-build-test.yml`)
 -   **Purpose**: Specifically tests the integrity and usability of debug builds.
@@ -71,6 +73,7 @@ These workflows focus on building the project and running various levels of test
     -   Includes basic GDB (GNU Debugger) integration testing.
     -   Validates debug section integrity within the compiled binary.
     -   Analyzes binary size to ensure debug symbols are correctly included.
+    -   Tests debug-specific code paths and assertions.
 
 [↑ Back to top](#ci/cd-and-testing-guide)
 
@@ -84,6 +87,8 @@ These workflows focus on static analysis, memory safety, and security.
     -   Identifies common programming errors and anti-patterns.
     -   Validates adherence to coding standards and style guides.
     -   Suggests optimizations and modern C++ idioms.
+    -   Enforces consistent code formatting and naming conventions.
+    -   Detects potential undefined behavior and portability issues.
 
 #### 5. Memory Sanitizer (`memory-sanitizer.yml`)
 -   **Purpose**: Detects various memory errors at runtime using MemorySanitizer (MSan).
@@ -91,7 +96,8 @@ These workflows focus on static analysis, memory safety, and security.
     -   Detects uses of uninitialized memory.
     -   Identifies memory leaks, use-after-free, and double-free errors.
     -   Helps prevent buffer overflows and other memory corruption issues.
-    -   *Note: Requires Clang compiler.*
+    -   Validates proper memory management patterns.
+    -   *Note: Requires Clang compiler and specific build configuration.*
 
 #### 6. CodeQL (`codeql.yml`)
 -   **Purpose**: Conducts deep security analysis to find vulnerabilities and enforce security best practices.
@@ -99,6 +105,8 @@ These workflows focus on static analysis, memory safety, and security.
     -   Scans for common security vulnerabilities (e.g., injection flaws, cross-site scripting).
     -   Detects potential malicious code patterns.
     -   Ensures adherence to secure coding guidelines.
+    -   Provides detailed security reports and recommendations.
+    -   Integrates with GitHub Security features.
 
 #### 7. ShellCheck (`shellcheck.yml`)
 -   **Purpose**: Lints and validates shell scripts within the repository.
@@ -106,6 +114,8 @@ These workflows focus on static analysis, memory safety, and security.
     -   Checks for syntax errors and common pitfalls in shell scripts.
     -   Enforces best practices for shell scripting.
     -   Identifies potential portability issues across different shell environments.
+    -   Validates script security and proper quoting.
+    -   Ensures consistent shell script formatting.
 
 [↑ Back to top](#ci/cd-and-testing-guide)
 
@@ -120,14 +130,17 @@ These workflows ensure the project performs well and is compatible across differ
     -   Runs automated performance benchmarks against various log sizes and patterns.
     -   Verifies the effectiveness of compiler optimizations.
     -   Profiles memory usage and analyzes binary size to ensure efficiency.
+    -   Tracks performance metrics over time to detect regressions.
+    -   Validates optimization flags and build configurations.
 
 #### 9. Cross-Platform Test (`cross-platform.yml`)
 -   **Purpose**: Ensures `vglog-filter` builds and runs correctly on multiple Linux distributions.
 -   **Key Features**:
-    -   Tests compatibility with Ubuntu.
+    -   Tests compatibility with Ubuntu (latest LTS).
     -   Verifies functionality on Arch Linux.
     -   Checks build and runtime on Fedora.
     -   Confirms compatibility with Debian.
+    -   Validates package dependencies and system requirements.
 
 [↑ Back to top](#ci/cd-and-testing-guide)
 
@@ -142,12 +155,17 @@ These workflows automate routine maintenance tasks.
     -   Identifies known vulnerabilities in system packages.
     -   Analyzes binary dependencies for security risks.
     -   Generates security audit reports.
+    -   Monitors dependency updates and security advisories.
+    -   Provides actionable recommendations for dependency updates.
 
 #### 11. Tag Cleanup (`tag-cleanup.yml`)
 -   **Purpose**: Automates the cleanup and maintenance of Git tags.
 -   **Key Features**:
     -   Ensures proper organization of version tags.
     -   Manages release tags to keep the repository clean.
+    -   Validates tag naming conventions.
+    -   Removes obsolete or invalid tags.
+    -   Maintains tag history and release tracking.
 
 #### 12. Version Bump (`version-bump.yml`)
 -   **Purpose**: Automates semantic versioning based on Conventional Commits.
@@ -155,6 +173,8 @@ These workflows automate routine maintenance tasks.
     -   Automatically bumps the project's version number (major, minor, patch).
     -   Parses conventional commit messages to determine the appropriate version increment.
     -   Integrates with automated release management processes.
+    -   Updates version files and generates release notes.
+    -   Creates Git tags for releases.
 
 [↑ Back to top](#ci/cd-and-testing-guide)
 
@@ -191,17 +211,38 @@ Each configuration involves specific compiler flags and CMake definitions:
 -   **LTO**: Link Time Optimization is enabled for whole-program optimization.
 -   **Defines**: `NDEBUG` is defined to disable assertions and debug-only code.
 -   **Verification**: CI checks confirm the presence of `-O3` flags and LTO in the compiled binary.
+-   **Optimizations**: Enables aggressive optimizations for maximum performance.
 
 #### Debug Build Details
 -   **Compiler Flags**: `-g -O0` (generate debug symbols, no optimization).
 -   **Debug Symbols**: Verified to be present and correctly linked.
 -   **Defines**: `DEBUG` is defined to enable debug-specific code paths.
 -   **GDB Integration**: Tested to ensure the binary is debuggable with GDB.
+-   **Assertions**: Debug assertions are enabled for runtime validation.
 
 #### Warnings Build Details
 -   **Compiler Flags**: `-Wall -pedantic -Wextra` (enables all common warnings, strict ISO C++ compliance, and extra warnings).
 -   **Code Quality**: Aims to catch a wide range of potential issues and enforce high code quality standards.
 -   **Best Practices**: Encourages adherence to C++ best practices through compiler warnings.
+-   **Portability**: Ensures code compatibility across different compilers and platforms.
+
+### Build Script Usage
+
+The project uses a custom build script (`build.sh`) that provides a unified interface for all build configurations:
+
+```sh
+# Basic usage
+./build.sh [performance] [warnings] [debug] [clean] [tests] [-j N] [--build-dir DIR]
+
+# Examples
+./build.sh                    # Default build
+./build.sh performance        # Performance-optimized build
+./build.sh debug              # Debug build
+./build.sh warnings           # Build with extra warnings
+./build.sh debug tests        # Debug build with tests
+./build.sh performance warnings tests  # Performance build with warnings and tests
+./build.sh clean debug        # Clean rebuild in debug mode
+```
 
 [↑ Back to top](#ci/cd-and-testing-guide)
 
@@ -230,11 +271,20 @@ Unit tests are located in the `test/` directory and focus on testing individual 
 # Run all unit tests
 ./test/run_unit_tests.sh
 
-# Run specific test categories
-./test/run_unit_tests.sh --basic
-./test/run_unit_tests.sh --memory
-./test/run_unit_tests.sh --edge-cases
+# Run tests with specific build configuration
+./build.sh debug tests
+
+# Run tests with verbose output
+./test/run_unit_tests.sh --verbose
+
+# Run specific test categories (if supported)
+./test/run_unit_tests.sh --help
 ```
+
+**Test Results:**
+-   Test results are stored in `test_results/` directory
+-   Detailed logs include build configuration, test execution, and failure details
+-   Summary reports provide pass/fail statistics and coverage information
 
 ### Integration Testing
 
@@ -245,19 +295,21 @@ Integration tests verify that multiple components work together correctly.
 -   Validates end-to-end functionality
 -   Ensures proper error handling across components
 -   Verifies performance characteristics under realistic conditions
+-   Tests file system operations and path handling
 
 ### Workflow Testing
 
 Workflow tests are located in the `test-workflows/` directory and test the complete development and deployment workflows.
 
 **Test Categories:**
--   **Core Tests** (`core-tests/`): Fundamental workflow functionality
--   **CLI Tests** (`cli-tests/`): Command-line interface workflows
+-   **Core Tests** (`core-tests/`): Fundamental workflow functionality, versioning, and semantic analysis
+-   **CLI Tests** (`cli-tests/`): Command-line interface workflows and user interactions
 -   **Debug Tests** (`debug-tests/`): Debugging and development workflows
 -   **Edge Case Tests** (`edge-case-tests/`): Unusual scenarios and error conditions
 -   **ERE Tests** (`ere-tests/`): Extended Regular Expression handling
--   **File Handling Tests** (`file-handling-tests/`): File system operations
+-   **File Handling Tests** (`file-handling-tests/`): File system operations and content processing
 -   **Utility Tests** (`utility-tests/`): Helper functions and utilities
+-   **Fixture Tests** (`fixture-tests/`): Test data and sample files
 
 **Running Workflow Tests:**
 ```sh
@@ -265,10 +317,20 @@ Workflow tests are located in the `test-workflows/` directory and test the compl
 ./test-workflows/run_workflow_tests.sh
 
 # Run specific test categories
-./test-workflows/run_workflow_tests.sh --core
-./test-workflows/run_workflow_tests.sh --cli
-./test-workflows/run_workflow_tests.sh --debug
+./test-workflows/run_workflow_tests.sh --help
+
+# Run tests with specific configuration
+./test-workflows/run_loc_delta_tests.sh
+
+# Run comprehensive semantic version analyzer tests
+./test-workflows/test_semantic_version_analyzer_comprehensive.sh
 ```
+
+**Test Infrastructure:**
+-   Uses `test_helper.sh` for common test utilities and setup
+-   Includes source fixtures for realistic testing scenarios
+-   Provides MSan suppressions for known false positives
+-   Supports parallel test execution for faster feedback
 
 ### Memory Safety Testing
 
@@ -278,14 +340,32 @@ Memory safety is a critical concern for `vglog-filter`, and multiple testing app
 -   Detects uninitialized memory usage
 -   Identifies memory leaks and use-after-free errors
 -   Validates proper memory management patterns
+-   Requires specific build configuration with Clang compiler
 
 **Dedicated Memory Tests:**
 -   `test_memory_leaks.cpp`: Comprehensive memory leak detection
 -   `test-workflows/simple_msan_test.sh`: MSan integration testing
 -   `test-workflows/test_msan_fix.sh`: MSan issue resolution testing
+-   `test-workflows/test_msan_simulation.sh`: MSan simulation and validation
 
 **MSan Suppressions:**
 -   `test-workflows/msan_suppressions.txt`: Known false positives and intentional suppressions
+-   `test-workflows/test-msan-fix.txt`: MSan fix validation and testing
+
+**Running Memory Tests:**
+```sh
+# Run MSan tests (requires Clang)
+./test-workflows/simple_msan_test.sh
+
+# Run memory leak tests
+./test/run_unit_tests.sh --memory
+
+# Run MSan fix validation
+./test-workflows/test_msan_fix.sh
+
+# Run MSan simulation
+./test-workflows/test_msan_simulation.sh
+```
 
 [↑ Back to top](#ci/cd-and-testing-guide)
 
@@ -320,7 +400,10 @@ gdb build/bin/vglog-filter # Then run your program within gdb
 ./test/smoke_test.sh
 
 # Example: Run comprehensive workflow tests
-./test-workflows/run_workflow_tests.sh --all
+./test-workflows/run_workflow_tests.sh
+
+# Example: Test specific workflow components
+./test-workflows/test-modular-components.sh
 ```
 
 ### Quality Checks
@@ -478,8 +561,11 @@ git config user.email "your.email@example.com"
 # Run all unit tests
 ./test/run_unit_tests.sh
 
-# Run specific test categories
-./test/run_unit_tests.sh --help
+# Run tests with specific build configuration
+./build.sh debug tests
+
+# Check test results
+ls -la test_results/
 ```
 
 **Workflow Tests:**
@@ -488,7 +574,10 @@ git config user.email "your.email@example.com"
 ./test-workflows/run_workflow_tests.sh
 
 # Run specific test categories
-./test-workflows/run_workflow_tests.sh --help
+./test-workflows/run_loc_delta_tests.sh
+
+# Run comprehensive tests
+./test-workflows/test_semantic_version_analyzer_comprehensive.sh
 ```
 
 **Memory Safety Testing:**
@@ -498,6 +587,9 @@ git config user.email "your.email@example.com"
 
 # Run memory leak tests
 ./test/run_unit_tests.sh --memory
+
+# Run MSan fix validation
+./test-workflows/test_msan_fix.sh
 ```
 
 ### Development Tools
@@ -509,6 +601,9 @@ clang-tidy src/*.cpp -- -Iinclude
 
 # Run ShellCheck on scripts
 shellcheck *.sh test/*.sh test-workflows/*.sh
+
+# Check for code style issues
+./build.sh warnings
 ```
 
 **Debugging:**
@@ -521,6 +616,23 @@ gdb build/bin/vglog-filter
 
 # Run with Valgrind (if available)
 valgrind --leak-check=full build/bin/vglog-filter
+
+# Run with AddressSanitizer
+./build.sh debug
+ASAN_OPTIONS=detect_leaks=1 build/bin/vglog-filter
+```
+
+**Performance Analysis:**
+```sh
+# Build performance version
+./build.sh performance
+
+# Profile with perf (if available)
+perf record build/bin/vglog-filter
+perf report
+
+# Check binary optimizations
+objdump -d build/bin/vglog-filter | grep -i "-O3"
 ```
 
 [↑ Back to top](#ci/cd-and-testing-guide)
@@ -554,6 +666,9 @@ clang --version
 
 # Verify CMake configuration
 cmake --version
+
+# Check build configuration
+./build.sh --help
 ```
 
 **Test Issues:**
@@ -566,6 +681,9 @@ cmake --version
 
 # Check test environment
 ./test/smoke_test.sh
+
+# Run workflow tests individually
+./test-workflows/run_workflow_tests.sh
 ```
 
 **Memory Issues:**
@@ -578,6 +696,23 @@ valgrind --leak-check=full build/bin/vglog-filter
 
 # Run memory-specific tests
 ./test/run_unit_tests.sh --memory
+
+# Run MSan fix validation
+./test-workflows/test_msan_fix.sh
+```
+
+**Performance Issues:**
+```sh
+# Verify optimization flags
+./build.sh performance
+objdump -d build/bin/vglog-filter | grep -i "-O3"
+
+# Run performance benchmarks
+./build.sh performance tests
+
+# Profile with perf
+perf record build/bin/vglog-filter
+perf report
 ```
 
 ### Seeking Support
