@@ -84,6 +84,48 @@ For focused debugging or development, you can run individual test executables or
 
     # Example: Run canonicalization tests
     ./build-test/bin/test_canonicalization
+
+    # Example: Run integration tests
+    ./build-test/bin/test_integration
+
+    # Example: Run comprehensive tests
+    ./build-test/bin/test_comprehensive
+
+    # Example: Run edge cases tests
+    ./build-test/bin/test_edge_cases
+
+    # Example: Run memory leak tests
+    ./build-test/bin/test_memory_leaks
+
+    # Example: Run path validation tests
+    ./build-test/bin/test_path_validation
+
+    # Example: Run regex pattern tests
+    ./build-test/bin/test_regex_patterns
+
+    # Example: Run UTF-8 permutation tests
+    ./build-test/bin/test_edge_utf8_perm
+
+    # Example: Run integration tests
+    ./build-test/bin/test_integration
+
+    # Example: Run comprehensive tests
+    ./build-test/bin/test_comprehensive
+
+    # Example: Run edge cases tests
+    ./build-test/bin/test_edge_cases
+
+    # Example: Run memory leak tests
+    ./build-test/bin/test_memory_leaks
+
+    # Example: Run path validation tests
+    ./build-test/bin/test_path_validation
+
+    # Example: Run regex pattern tests
+    ./build-test/bin/test_regex_patterns
+
+    # Example: Run UTF-8 permutation tests
+    ./build-test/bin/test_edge_utf8_perm
     ```
 
 -   **Individual Workflow Test Script**: Navigate to the `test-workflows/` directory and execute the specific shell script:
@@ -96,6 +138,18 @@ For focused debugging or development, you can run individual test executables or
 
     # Example: Run MemorySanitizer tests
     ./test-workflows/test_msan_fix.sh
+
+    # Example: Run LOC delta system tests
+    ./test-workflows/core-tests/test_loc_delta_system.sh
+
+    # Example: Run semantic version analyzer tests
+    ./test-workflows/core-tests/test_semantic_version_analyzer.sh
+
+    # Example: Run LOC delta system tests
+    ./test-workflows/core-tests/test_loc_delta_system.sh
+
+    # Example: Run semantic version analyzer tests
+    ./test-workflows/core-tests/test_semantic_version_analyzer.sh
     ```
 
 ### Building with Tests
@@ -145,60 +199,215 @@ vglog-filter/
     ├── test_msan_fix.sh
     ├── test_msan_simulation.sh
     ├── simple_msan_test.sh
+    ├── test-modular-components.sh
     ├── msan_suppressions.txt
     ├── test-msan-fix.txt
     ├── cli-tests/
-    │   └── ...
+    │   ├── test_extract.sh
+    │   └── test_fixes.sh
     ├── core-tests/
-    │   └── ...
+    │   ├── test_bump_version.sh
+    │   ├── test_bump_version_loc_delta.sh
+    │   ├── test_loc_delta_system.sh
+    │   ├── test_loc_delta_system_comprehensive.sh
+    │   ├── test_minimal_repo_test_mode.sh
+    │   ├── test_pure_mathematical_bonus.sh
+    │   ├── test_realistic_repositories.sh
+    │   ├── test_rollover_logic.sh
+    │   ├── test_semantic_analyzer_realistic_repos.sh
+    │   ├── test_semantic_version_analyzer.sh
+    │   ├── test_semantic_version_analyzer_fixes.sh
+    │   ├── test_semantic_version_analyzer_simple.sh
+    │   ├── test_version_calculation.sh
+    │   ├── test_version_logic.sh
+    │   ├── test_versioning_rules.sh
+    │   └── test_versioning_system_integration.sh
     ├── debug-tests/
-    │   └── ...
+    │   └── test_debug.sh
     ├── edge-case-tests/
-    │   └── ...
+    │   ├── test_cli_detection_fix.sh
+    │   ├── test_env_normalization.sh
+    │   └── test_ere_fix.sh
     ├── ere-tests/
-    │   └── ...
+    │   ├── test_ere_fix.c
+    │   └── test_ere.c
     ├── file-handling-tests/
-    │   └── ...
+    │   ├── test_breaking_case_detection.sh
+    │   ├── test_header_removal.sh
+    │   ├── test_nul_safety.sh
+    │   ├── test_rename_handling.sh
+    │   └── test_whitespace_ignore.sh
     ├── fixture-tests/
-    │   └── ...
+    │   └── test_whitespace.txt
     ├── source-fixtures/
-    │   └── ...
+    │   ├── cli/
+    │   │   ├── main.c
+    │   │   └── simple_cli_test.c
+    │   ├── debug_log_with_marker.txt
+    │   ├── internal/
+    │   │   └── header.hh
+    │   ├── test_content_renamed.txt
+    │   ├── test_content_simple.txt
+    │   └── test_header.h
     └── utility-tests/
-        └── ...
+        ├── debug_test.sh
+        ├── test_case.sh
+        ├── test_classify.sh
+        ├── test_classify_consolidated.sh
+        ├── test_classify_debug.sh
+        ├── test_classify_fixed.sh
+        ├── test_classify_inline.sh
+        ├── test_classify_inline2.sh
+        ├── test_classify_simple.sh
+        ├── test_func.sh
+        └── test_func2.sh
+```
+    ├── README.md
+    ├── run_workflow_tests.sh
+    ├── run_loc_delta_tests.sh
+    ├── test_helper.sh
+    ├── test_semantic_version_analyzer_comprehensive.sh
+    ├── test_msan_fix.sh
+    ├── test_msan_simulation.sh
+    ├── simple_msan_test.sh
+    ├── test-modular-components.sh
+    ├── msan_suppressions.txt
+    ├── test-msan-fix.txt
+    ├── cli-tests/
+    │   ├── test_extract.sh
+    │   └── test_fixes.sh
+    ├── core-tests/
+    │   ├── test_bump_version.sh
+    │   ├── test_bump_version_loc_delta.sh
+    │   ├── test_loc_delta_system.sh
+    │   ├── test_loc_delta_system_comprehensive.sh
+    │   ├── test_minimal_repo_test_mode.sh
+    │   ├── test_pure_mathematical_bonus.sh
+    │   ├── test_realistic_repositories.sh
+    │   ├── test_rollover_logic.sh
+    │   ├── test_semantic_analyzer_realistic_repos.sh
+    │   ├── test_semantic_version_analyzer.sh
+    │   ├── test_semantic_version_analyzer_fixes.sh
+    │   ├── test_semantic_version_analyzer_simple.sh
+    │   ├── test_version_calculation.sh
+    │   ├── test_version_logic.sh
+    │   ├── test_versioning_rules.sh
+    │   └── test_versioning_system_integration.sh
+    ├── debug-tests/
+    │   └── test_debug.sh
+    ├── edge-case-tests/
+    │   ├── test_cli_detection_fix.sh
+    │   ├── test_env_normalization.sh
+    │   └── test_ere_fix.sh
+    ├── ere-tests/
+    │   ├── test_ere.c
+    │   └── test_ere_fix.c
+    ├── file-handling-tests/
+    │   ├── test_breaking_case_detection.sh
+    │   ├── test_header_removal.sh
+    │   ├── test_nul_safety.sh
+    │   ├── test_rename_handling.sh
+    │   └── test_whitespace_ignore.sh
+    ├── fixture-tests/
+    │   └── test_whitespace.txt
+    ├── source-fixtures/
+    │   ├── cli/
+    │   │   ├── main.c
+    │   │   └── simple_cli_test.c
+    │   ├── debug_log_with_marker.txt
+    │   ├── internal/
+    │   │   └── header.hh
+    │   ├── test_content_renamed.txt
+    │   ├── test_content_simple.txt
+    │   └── test_header.h
+    └── utility-tests/
+        ├── debug_test.sh
+        ├── test_case.sh
+        ├── test_classify.sh
+        ├── test_classify_consolidated.sh
+        ├── test_classify_debug.sh
+        ├── test_classify_fixed.sh
+        ├── test_classify_inline.sh
+        ├── test_classify_inline2.sh
+        ├── test_classify_simple.sh
+        ├── test_func.sh
+        └── test_func2.sh
 ```
 
 ### C++ Unit and Integration Tests (`test/`)
 
-This directory contains C++ source files for unit and integration tests. These tests are compiled into separate executables and use a lightweight testing framework (often custom or a simple assertion-based one).
+This directory contains C++ source files for unit and integration tests. These tests are compiled into separate executables and use a lightweight testing framework with custom assertion macros.
 
 -   **`test_basic.cpp`**: Covers fundamental functionalities and core logic of `vglog-filter`.
 -   **`test_canonicalization.cpp`**: Tests path canonicalization and normalization logic, ensuring proper handling of relative paths, symbolic links, and path resolution.
 -   **`test_cli_options.cpp`**: Validates the parsing and correct behavior of all command-line arguments.
 -   **`test_comprehensive.cpp`**: Provides extensive feature testing, covering various scenarios and combinations of inputs.
 -   **`test_edge_cases.cpp`**: Focuses on boundary conditions, invalid inputs, and other tricky scenarios to ensure robustness.
--   **`test_edge_utf8_perm.cpp`**: Specifically tests edge cases related to UTF-8 character handling and permutations.
--   **`test_helpers.h`**: Contains common helper functions and macros used across multiple C++ test files.
--   **`test_integration.cpp`**: Verifies the correct interaction and data flow between different modules and components of `vglog-filter`.
+-   **`test_edge_utf8_perm.cpp`**: Specifically tests edge cases related to UTF-8 character handling and permutations, including invalid UTF-8 sequences, control characters, and mixed line endings.
+-   **`test_helpers.h`**: Contains common helper functions and macros used across multiple C++ test files, including assertion macros and temporary file utilities.
+-   **`test_integration.cpp`**: Verifies the correct interaction and data flow between different modules and components of `vglog-filter`, including Valgrind log processing, deduplication logic, and marker trimming.
 -   **`test_memory_leaks.cpp`**: Designed to detect memory leaks and other memory-related issues, often run with Valgrind or sanitizers.
 -   **`test_path_validation.cpp`**: Ensures the security and correctness of file path handling and validation logic.
 -   **`test_regex_patterns.cpp`**: Tests the accuracy and performance of regular expression matching and replacement operations.
 -   **`smoke_test.sh`**: Quick smoke test script for basic functionality verification.
+-   **`run_unit_tests.sh`**: Main script for building and running all C++ unit tests with CMake and CTest.
 
 ### Workflow Tests (`test-workflows/`)
 
-This directory contains shell scripts that perform end-to-end testing of the `vglog-filter` executable. These tests simulate real-world usage scenarios, often involving piping output, file I/O, and checking exit codes.
+This directory contains shell scripts that perform end-to-end testing of the `vglog-filter` executable and related utility scripts. These tests simulate real-world usage scenarios, often involving piping output, file I/O, and checking exit codes.
 
 -   **`cli-tests/`**: Tests the command-line interface, including various option combinations and input/output redirection.
--   **`core-tests/`**: Tests core functionalities and the behavior of utility scripts like `bump-version` and `semantic-version-analyzer`.
+  - `test_extract.sh`: Tests log extraction functionality
+  - `test_fixes.sh`: Tests bug fixes and improvements
+-   **`core-tests/`**: Tests core functionalities and the behavior of utility scripts like version management and semantic analysis.
+  - `test_bump_version.sh`: Tests version bumping functionality
+  - `test_bump_version_loc_delta.sh`: Tests LOC-based delta versioning
+  - `test_loc_delta_system.sh`: Tests the LOC delta system
+  - `test_loc_delta_system_comprehensive.sh`: Comprehensive LOC delta testing
+  - `test_minimal_repo_test_mode.sh`: Tests minimal repository scenarios
+  - `test_pure_mathematical_bonus.sh`: Tests mathematical bonus calculations
+  - `test_realistic_repositories.sh`: Tests with realistic repository data
+  - `test_rollover_logic.sh`: Tests version rollover logic
+  - `test_semantic_analyzer_realistic_repos.sh`: Tests semantic analysis with realistic data
+  - `test_semantic_version_analyzer.sh`: Tests semantic version analysis
+  - `test_semantic_version_analyzer_fixes.sh`: Tests semantic version analyzer fixes
+  - `test_semantic_version_analyzer_simple.sh`: Simple semantic version analyzer tests
+  - `test_version_calculation.sh`: Tests version calculation logic
+  - `test_version_logic.sh`: Tests version logic and rules
+  - `test_versioning_rules.sh`: Tests versioning rule implementation
+  - `test_versioning_system_integration.sh`: Tests versioning system integration
 -   **`debug-tests/`**: Scripts used for debugging and manual verification of debug builds.
+  - `test_debug.sh`: Debug-specific tests
 -   **`edge-case-tests/`**: Workflow-level tests for specific tricky scenarios that might not be fully covered by unit tests.
+  - `test_cli_detection_fix.sh`: Tests CLI detection fixes
+  - `test_env_normalization.sh`: Tests environment normalization
+  - `test_ere_fix.sh`: Tests extended regular expression fixes
 -   **`ere-tests/`**: Tests related to extended regular expression (ERE) functionality.
+  - `test_ere.c`: Basic ERE tests
+  - `test_ere_fix.c`: ERE fix tests
 -   **`file-handling-tests/`**: Tests how `vglog-filter` interacts with files, including reading, writing, and handling different file properties.
+  - `test_breaking_case_detection.sh`: Tests breaking case detection
+  - `test_header_removal.sh`: Tests header removal functionality
+  - `test_nul_safety.sh`: Tests null byte safety
+  - `test_rename_handling.sh`: Tests file rename handling
+  - `test_whitespace_ignore.sh`: Tests whitespace handling
 -   **`utility-tests/`**: Tests various utility scripts and helper functions used within the project.
+  - `debug_test.sh`: Debug utility tests
+  - `test_case.sh`: Case testing utilities
+  - `test_classify.sh`: Classification utility tests
+  - `test_classify_consolidated.sh`: Consolidated classification tests
+  - `test_classify_debug.sh`: Debug classification tests
+  - `test_classify_fixed.sh`: Fixed classification tests
+  - `test_classify_inline.sh`: Inline classification tests
+  - `test_classify_inline2.sh`: Additional inline classification tests
+  - `test_classify_simple.sh`: Simple classification tests
+  - `test_func.sh`: Function testing utilities
+  - `test_func2.sh`: Additional function testing utilities
 -   **`test_semantic_version_analyzer_comprehensive.sh`**: Comprehensive testing of the semantic versioning system.
 -   **`test_msan_fix.sh`**: MemorySanitizer-specific tests for detecting undefined behavior.
 -   **`test_msan_simulation.sh`**: Simulates MemorySanitizer conditions for testing.
 -   **`simple_msan_test.sh`**: Basic MemorySanitizer test setup and execution.
+-   **`test-modular-components.sh`**: Tests for modular component architecture.
 -   **`run_loc_delta_tests.sh`**: Tests for the LOC-based delta versioning system.
 -   **`msan_suppressions.txt`**: MemorySanitizer suppressions for known false positives.
 
@@ -207,7 +416,17 @@ This directory contains shell scripts that perform end-to-end testing of the `vg
 These directories contain sample input files, expected output files, and other data used by the workflow tests. They provide consistent and reproducible test environments.
 
 -   **`fixture-tests/`**: Contains general test data, such as sample log files with specific patterns or expected filtered outputs.
+  - `test_whitespace.txt`: Test data for whitespace handling
 -   **`source-fixtures/`**: Contains sample source code files or snippets used to generate Valgrind logs for testing specific scenarios.
+  - `cli/`: Command-line interface test fixtures
+    - `main.c`: Main CLI test fixture
+    - `simple_cli_test.c`: Simple CLI test fixture
+  - `debug_log_with_marker.txt`: Debug log with marker test data
+  - `internal/`: Internal component test fixtures
+    - `header.hh`: Header file test fixture
+  - `test_content_renamed.txt`: Renamed content test fixture
+  - `test_content_simple.txt`: Simple content test fixture
+  - `test_header.h`: Header file test fixture
 
 [↑ Back to top](#test-suite-guide)
 
@@ -219,13 +438,13 @@ Contributions of new tests are highly encouraged! When adding new features or fi
 
 1.  **Choose the Right File**: If your test relates to an existing module, add it to the corresponding `test_*.cpp` file. Otherwise, create a new `test_your_feature.cpp` file.
 2.  **Include `test_helpers.h`**: This header provides common assertion macros and utility functions.
-3.  **Structure Your Test**: Use the existing test patterns. Typically, tests are functions that perform operations and use assertion macros (e.g., `ASSERT_TRUE`, `ASSERT_EQ`) to verify results.
+3.  **Structure Your Test**: Use the existing test patterns. Typically, tests are functions that perform operations and use assertion macros (e.g., `TEST_ASSERT`, `TEST_PASS`) to verify results.
     ```cpp
     #include "test_helpers.h"
     #include "path_to_your_module.h"
 
     // Example test function
-    void test_new_feature_scenario_1() {
+    bool test_new_feature_scenario_1() {
         // Arrange: Set up test data
         std::string input = "...";
         std::string expected_output = "...";
@@ -234,13 +453,21 @@ Contributions of new tests are highly encouraged! When adding new features or fi
         std::string actual_output = your_module::process(input);
 
         // Assert: Verify the results
-        ASSERT_EQ(actual_output, expected_output, "Test scenario 1 failed");
+        TEST_ASSERT(actual_output == expected_output, "Test scenario 1 failed");
+        TEST_PASS("New feature scenario 1 works correctly");
+        return true;
     }
 
-    // Register your test (if using a custom runner)
-    // For our CMake setup, simply adding the .cpp file to CMakeLists.txt is usually enough.
+    // Main test runner function
+    int main() {
+        bool all_passed = true;
+        all_passed &= test_new_feature_scenario_1();
+        // Add more test functions here
+        
+        return all_passed ? 0 : 1;
+    }
     ```
-4.  **Add to `CMakeLists.txt`**: Ensure your new `.cpp` file is added to the `add_executable` or `add_library` command in `test/CMakeLists.txt` so it gets compiled.
+4.  **Add to `CMakeLists.txt`**: Ensure your new `.cpp` file is added to the `add_test_exe` function calls in the main `CMakeLists.txt` so it gets compiled.
 5.  **Run Locally**: Execute `./test/run_unit_tests.sh` to verify your new test passes.
 
 ### Writing Workflow Tests
