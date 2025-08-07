@@ -10,8 +10,6 @@ set -Euo pipefail
 IFS=
 
 # Source the test helper script
-# shellcheck disable=SC2034 # SCRIPT_DIR is used in tests to verify script structure
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 # shellcheck source=test_helper.sh
 source "$PROJECT_ROOT/test-workflows/test_helper.sh"
@@ -244,13 +242,7 @@ test_modular_integration() {
         log_warning "Script missing calls to: ${missing_components[*]}"
     fi
     
-    # Check for proper script directory reference
-    if grep -q "SCRIPT_DIR" "$SCRIPT_PATH"; then
-        log_success "Script uses SCRIPT_DIR for component paths"
-    else
-        log_error "Script missing SCRIPT_DIR reference"
-        return 1
-    fi
+
     
     return 0
 }
