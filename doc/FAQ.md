@@ -15,7 +15,7 @@ This document provides answers to common questions about `vglog-filter`, coverin
 ## General Information
 
 ### What is `vglog-filter`?
-`vglog-filter` is a fast and flexible command-line tool designed to process and clean up Valgrind log files. Its primary purpose is to help developers analyze Valgrind output more efficiently by removing redundant information, deduplicating stack traces, and normalizing dynamic data (like memory addresses) for easier comparison. Currently at version 10.5.0, it features advanced LOC-based versioning and comprehensive testing.
+`vglog-filter` is a fast and flexible command-line tool designed to process and clean up Valgrind log files. Its primary purpose is to help developers analyze Valgrind output more efficiently by removing redundant information, deduplicating stack traces, and normalizing dynamic data (like memory addresses) for easier comparison. It features advanced LOC-based versioning and comprehensive testing.
 
 ### Why should I use `vglog-filter`?
 Valgrind logs can be very verbose, especially in large projects or during automated testing. `vglog-filter` addresses common pain points:
@@ -233,7 +233,7 @@ For a complete overview, see the [CI/CD Guide](CI_CD_GUIDE.md).
 ## Versioning and Releases
 
 ### What version is currently available?
-The current stable version of `vglog-filter` is **10.5.0**. You can check the exact version by running `vglog-filter --version`.
+You can check the current version by running `vglog-filter --version`.
 
 ### How does the versioning system work?
 `vglog-filter` follows [Semantic Versioning (SemVer)](https://semver.org/) with an advanced LOC-based delta system. Version bumps are automated based on [Conventional Commits](https://www.conventionalcommits.org/) and the magnitude of code changes:
@@ -248,7 +248,7 @@ The current stable version of `vglog-filter` is **10.5.0**. You can check the ex
 - Uses intelligent rollover logic (mod 100) for patch and minor versions
 - Every change results in at least a patch bump
 
-**Example**: A 500 LOC change with CLI additions might result in `10.5.0` → `10.5.6` (patch bump with calculated delta).
+**Example**: A 500 LOC change with CLI additions might result in `10.5.12` → `10.5.18` (patch bump with calculated delta).
 
 For more details, see the [Versioning Guide](VERSIONING.md) and [LOC Delta System Documentation](LOC_DELTA_SYSTEM.md).
 
@@ -278,7 +278,7 @@ vglog-filter --version
 git tag --sort=-version:refname | head -5
 
 # Compare two versions
-git diff v10.4.0..v10.5.0 --stat
+git diff v10.4.0..v10.5.12 --stat
 
 # Analyze changes since a specific version
 ./dev-bin/semantic-version-analyzer.sh --since v10.4.0 --verbose

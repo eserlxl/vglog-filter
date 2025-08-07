@@ -31,7 +31,7 @@ This document details the versioning strategy employed by `vglog-filter`, which 
 -   `1.0.1` → `1.1.0`: A new feature was added, but existing functionality remains compatible.
 -   `1.1.0` → `2.0.0`: A breaking change was introduced, requiring users to update their integration.
 
-**Note**: The current versioning system (v10.5.0) uses an advanced LOC-based delta system that always increases only the last identifier (patch) with calculated increments based on change magnitude.
+**Note**: The current versioning system uses an advanced LOC-based delta system that always increases only the last identifier (patch) with calculated increments based on change magnitude.
 
 [↑ Back to top](#versioning-strategy)
 
@@ -83,7 +83,7 @@ Base PATCH: 1 * (1 + 50/250) = 1.2 → 1
 Base MINOR: 5 * (1 + 50/500) = 5.5 → 5
 Base MAJOR: 10 * (1 + 50/1000) = 10.5 → 10
 
-Result: 10.5.0 → 10.5.1 (patch)
+Result: 10.5.12 → 10.5.13 (patch)
 ```
 
 #### Medium Change (500 LOC) with CLI Additions
@@ -92,7 +92,7 @@ Base PATCH: 1 * (1 + 500/250) = 3
 Bonus: CLI changes (+2) + Added options (+1) = +3
 Final PATCH: 3 + 3 = 6
 
-Result: 10.5.0 → 10.5.6 (patch)
+Result: 10.5.12 → 10.5.18 (patch)
 ```
 
 #### Large Change (2000 LOC) with Breaking Changes
@@ -101,7 +101,7 @@ Base MAJOR: 10 * (1 + 2000/1000) = 30
 Bonus: Breaking CLI (+2) + API breaking (+3) + Removed options (+2) = +7
 Final MAJOR: 30 + 7 = 37
 
-Result: 10.5.0 → 10.5.37 (patch with major-level delta)
+Result: 10.5.12 → 10.5.49 (patch with major-level delta)
 ```
 
 #### Security Fix (100 LOC) with Security Keywords
@@ -110,7 +110,7 @@ Base PATCH: 1 * (1 + 100/250) = 1.4 → 1
 Bonus: Security keywords (3 × +2) = +6
 Final PATCH: 1 + 6 = 7
 
-Result: 10.5.0 → 10.5.7 (patch)
+Result: 10.5.12 → 10.5.19 (patch)
 ```
 
 #### Rollover Examples
@@ -146,7 +146,7 @@ Users can retrieve the current version of the `vglog-filter` executable at runti
 
 ```bash
 vglog-filter --version
-# Expected Output: vglog-filter version 10.5.0
+# Expected Output: vglog-filter version 10.5.12
 ```
 
 ### Version Resolution Order

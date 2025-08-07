@@ -91,11 +91,11 @@ The `build.sh` script simplifies the process of configuring and compiling `vglog
 
 ### Current Version Retrieval
 
-The current version of `vglog-filter` is **10.5.0**, stored in the `VERSION` file at the project root. You can retrieve the version at runtime using the `--version` or `-V` command-line options:
+The current version of `vglog-filter` is stored in the `VERSION` file at the project root. You can retrieve the version at runtime using the `--version` or `-V` command-line options:
 
 ```sh
 vglog-filter --version
-# Expected output: vglog-filter version 10.5.0
+# Expected output: vglog-filter version [current version]
 # or
 vglog-filter -V
 ```
@@ -121,7 +121,7 @@ The versioning system uses advanced algorithms to calculate version increments b
 - **Rollover Logic**: Uses mod 100 for patch and minor version limits with automatic rollover
 - **Universal Patch Detection**: Every change results in at least a patch bump
 
-**Example**: A 500 LOC change with CLI additions might result in `10.5.0` → `10.5.6` (patch bump with calculated delta).
+**Example**: A 500 LOC change with CLI additions might result in `10.5.12` → `10.5.18` (patch bump with calculated delta).
 
 ### Automated Version Bumping
 
@@ -158,7 +158,7 @@ While automated versioning is preferred, tools are available for manual inspecti
 ./dev-bin/tag-manager.sh cleanup [count]
 
 # Get detailed information about a specific tag
-./dev-bin/tag-manager.sh info v10.5.0
+./dev-bin/tag-manager.sh info v10.5.12
 
 # Update alpha version for development releases
 ./dev-bin/update_alpha.sh

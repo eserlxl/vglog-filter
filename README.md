@@ -8,7 +8,7 @@
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://isocpp.org/std/status)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 
-**vglog-filter** is a fast, secure, and flexible command-line tool designed to process and clean up Valgrind log files. It helps developers focus on relevant information by removing noise, deduplicating stack traces, and normalizing logs for easier inspection and comparison. Currently at version 10.5.0, it features advanced LOC-based versioning and comprehensive testing.
+**vglog-filter** is a fast, secure, and flexible command-line tool designed to process and clean up Valgrind log files. It helps developers focus on relevant information by removing noise, deduplicating stack traces, and normalizing logs for easier inspection and comparison. It features advanced LOC-based versioning and comprehensive testing.
 
 ## Table of Contents
 
@@ -233,6 +233,7 @@ Typical performance characteristics:
 - **Small files (< 1MB)**: < 100ms processing time
 - **Medium files (1-100MB)**: Linear scaling with file size
 - **Large files (> 100MB)**: Stream processing with constant memory usage
+- **Memory usage**: Automatic stream mode for files >5MB to prevent OOM errors
 
 [↑ Back to top](#vglog-filter)
 

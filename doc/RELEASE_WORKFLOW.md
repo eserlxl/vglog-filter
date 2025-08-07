@@ -120,7 +120,7 @@ git status
 
 # Verify the current version
 cat VERSION
-# Expected output: 10.5.0
+# Expected output: 10.5.12
 
 # Run tests to ensure everything is working
 ./run_tests.sh
@@ -236,7 +236,7 @@ For maintenance releases, you may want to clean up old tags:
 # LOC: 50, Base PATCH: 1, Final PATCH: 1
 ```
 
-**Result**: `10.5.0` → `10.5.1` (patch bump)
+**Result**: 10.5.12 → 10.5.13 (patch bump)
 
 ### Scenario 2: Feature Addition
 
@@ -249,7 +249,7 @@ For maintenance releases, you may want to clean up old tags:
 # LOC: 200, Base MINOR: 5, Bonus: CLI changes (+2), Final MINOR: 7
 ```
 
-**Result**: `10.5.0` → `10.5.7` (patch bump with minor-level delta)
+**Result**: 10.5.12 → 10.5.19 (patch bump with minor-level delta)
 
 ### Scenario 3: Breaking Change
 
@@ -262,7 +262,7 @@ For maintenance releases, you may want to clean up old tags:
 # LOC: 100, Base MAJOR: 10, Bonus: Breaking CLI (+2), Final MAJOR: 12
 ```
 
-**Result**: `10.5.0` → `10.5.12` (patch bump with major-level delta)
+**Result**: 10.5.12 → 10.5.24 (patch bump with major-level delta)
 
 ### Scenario 4: Security Fix
 
@@ -275,7 +275,7 @@ For maintenance releases, you may want to clean up old tags:
 # LOC: 150, Base PATCH: 1, Bonus: Security keywords (3×+2), Final PATCH: 7
 ```
 
-**Result**: `10.5.0` → `10.5.7` (patch bump)
+**Result**: 10.5.12 → 10.5.19 (patch bump)
 
 ### Scenario 5: Large Refactoring
 
@@ -288,7 +288,7 @@ For maintenance releases, you may want to clean up old tags:
 # LOC: 2000, Base MAJOR: 30, Final MAJOR: 30
 ```
 
-**Result**: `10.5.0` → `10.5.30` (patch bump with major-level delta)
+**Result**: 10.5.12 → 10.5.42 (patch bump with major-level delta)
 
 ### Scenario 6: Performance Improvement
 
@@ -301,7 +301,7 @@ For maintenance releases, you may want to clean up old tags:
 # LOC: 300, Base MINOR: 5, Bonus: Performance 20-50% (+2), Final MINOR: 7
 ```
 
-**Result**: `10.5.0` → `10.5.7` (patch bump with minor-level delta)
+**Result**: 10.5.12 → 10.5.19 (patch bump with minor-level delta)
 
 [↑ Back to top](#release-workflow-guide)
 

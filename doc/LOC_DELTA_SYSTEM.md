@@ -169,7 +169,7 @@ Base MAJOR: 10 * (1 + 50/1000) = 10.5 → 10
 
 Total bonus: 0 points
 Decision: PATCH (bonus ≥ 0)
-Result: 10.5.0 → 10.5.1 (patch)
+Result: 10.5.12 → 10.5.13 (patch)
 ```
 
 #### Medium Change (500 LOC) with CLI Additions
@@ -180,7 +180,7 @@ Total bonus: 3 points
 Decision: PATCH (bonus < 4)
 Final PATCH: 3 + 3 = 6
 
-Result: 10.5.0 → 10.5.6 (patch)
+Result: 10.5.12 → 10.5.18 (patch)
 ```
 
 #### Large Change (2000 LOC) with Breaking Changes
@@ -191,7 +191,7 @@ Total bonus: 7 points
 Decision: MINOR (bonus ≥ 4 but < 8)
 Final MINOR: 5 * (1 + 2000/500) + 7 = 25 + 7 = 32
 
-Result: 10.5.0 → 10.5.32 (patch with minor-level delta)
+Result: 10.5.12 → 10.5.44 (patch with minor-level delta)
 ```
 
 #### Security Fix (100 LOC) with Security Keywords
@@ -202,7 +202,7 @@ Total bonus: 6 points
 Decision: MINOR (bonus ≥ 4)
 Final MINOR: 5 * (1 + 100/500) + 6 = 6 + 6 = 12
 
-Result: 10.5.0 → 10.5.12 (patch with minor-level delta)
+Result: 10.5.12 → 10.5.24 (patch with minor-level delta)
 ```
 
 #### Critical Security Fix with Multiplier
@@ -214,7 +214,7 @@ Total bonus: 14 points
 Decision: MAJOR (bonus ≥ 8)
 Final MAJOR: 10 * (1 + 200/1000) + 14 = 12 + 14 = 26
 
-Result: 10.5.0 → 10.5.26 (patch with major-level delta)
+Result: 10.5.12 → 10.5.38 (patch with major-level delta)
 ```
 
 #### Rollover Examples

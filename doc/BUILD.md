@@ -46,6 +46,8 @@ sudo pacman -S base-devel cmake gcc
 brew install cmake gcc
 ```
 
+> **Note**: This project is primarily designed for Linux systems. While macOS support is available, some features may have limitations.
+
 **For Windows (using MSYS2 or WSL):**
 
 It is recommended to use Windows Subsystem for Linux (WSL) or MSYS2 to build `vglog-filter` on Windows, as the build process is designed for a Unix-like environment. Follow the Linux instructions within your WSL environment or install `mingw-w64-x86_64-toolchain` and `cmake` in MSYS2.

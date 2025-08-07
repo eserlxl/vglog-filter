@@ -56,7 +56,7 @@ This consistent format ensures easy parsing and sorting of tags.
 
 ### Current Version Context
 
-The project is currently at version `10.5.0`, using the LOC-based delta system. This means:
+The project uses the LOC-based delta system. This means:
 - All version changes increment only the patch version (the last number)
 - The increment amount is calculated based on Lines of Code (LOC) changed plus bonus additions
 - Rollover logic uses mod 100 for patch and minor version limits
@@ -109,7 +109,7 @@ The `dev-bin/tag-manager.sh` script provides comprehensive command-line utilitie
     ```bash
           ./dev-bin/tag-manager.sh list
     # Example output:
-    # v10.5.0
+    # v10.5.12
     # v10.4.0
     # v10.3.0
     # v10.2.0
@@ -137,7 +137,7 @@ The `dev-bin/tag-manager.sh` script provides comprehensive command-line utilitie
 -   **`./dev-bin/tag-manager.sh info <tag>`**: Shows detailed information about a specific tag, including commit hash, author, date, and message.
     ```bash
     # Get information about a specific tag
-    ./dev-bin/tag-manager.sh info v10.5.0
+    ./dev-bin/tag-manager.sh info v10.5.12
     ```
 
 ### Advanced Configuration Options
@@ -223,10 +223,10 @@ git push origin --delete v10.1.0 v10.2.0 v10.3.0
 git log --tags --oneline --decorate --max-count=10
 
 # Compare two tags
-git diff v10.4.0..v10.5.0 --stat
+git diff v10.4.0..v10.5.12 --stat
 
 # Show files changed between tags
-git diff v10.4.0..v10.5.0 --name-only
+git diff v10.4.0..v10.5.12 --name-only
 
 # Show tag details with version-aware sorting
 git tag --sort=-version:refname | head -10
