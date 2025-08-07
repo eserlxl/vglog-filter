@@ -426,7 +426,7 @@ If you encounter problems related to versioning, consider the following troubles
 -   **GitHub Actions Logs**: The most valuable resource for troubleshooting automated versioning issues are the detailed logs of the `version-bump.yml` workflow runs.
 -   **`semantic-version-analyzer` Output**: Use the verbose output of this tool to understand the analysis of your changes.
 -   **Project Documentation**: Refer to the [FAQ](FAQ.md), [Developer Guide](DEVELOPER_GUIDE.md), [Release Workflow Guide](RELEASE_WORKFLOW.md), and [Git Tag Management Guide](TAG_MANAGEMENT.md) for more context.
--   **Version Rules Implementation**: See [VERSIONING_RULES_IMPLEMENTATION.md](VERSIONING_RULES_IMPLEMENTATION.md) for detailed technical implementation.
+-   **Version Algorithm**: See [VERSIONING_ALGORITHM.md](VERSIONING_ALGORITHM.md) for detailed technical implementation.
 -   **GitHub Issues**: If you suspect a bug in the versioning tooling or the workflow itself, please [open an issue](https://github.com/eserlxl/vglog-filter/issues) on the GitHub repository.
 
 [↑ Back to top](#versioning-strategy)
