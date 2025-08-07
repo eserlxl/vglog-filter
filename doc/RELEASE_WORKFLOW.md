@@ -28,6 +28,7 @@ This guide outlines the automated and manual processes for creating new releases
 Key components of the release process include:
 -   **`semantic-version-analyzer`**: A utility script (`./dev-bin/semantic-version-analyzer.sh`) that analyzes commit history to suggest the next semantic version bump using the advanced LOC-based delta system.
 -   **GitHub Actions Workflow (`version-bump.yml`)**: This workflow automates the version bumping, tag creation, and GitHub Release generation based on detected changes.
+-   **Mathematical Version Bumper**: A script (`./dev-bin/mathematical-version-bump.sh`) that handles the actual version increment using the LOC-based delta system.
 -   **LOC-Based Delta System**: Advanced versioning that always increases only the patch version with calculated increments based on change magnitude.
 -   **Configuration System**: YAML-based configuration (`dev-config/versioning.yml`) for customizing bonus points, multipliers, and thresholds.
 
@@ -45,8 +46,8 @@ Before initiating a release, it's good practice to analyze the changes since the
 # Analyze changes since the last official release
 ./dev-bin/semantic-version-analyzer.sh --verbose
 
-# Alternatively, analyze changes since a specific Git tag (e.g., v10.4.0)
-./dev-bin/semantic-version-analyzer.sh --since v10.4.0 --verbose
+# Alternatively, analyze changes since a specific Git tag (e.g., v10.5.10)
+./dev-bin/semantic-version-analyzer.sh --since v10.5.10 --verbose
 
 # Get machine-readable JSON output for automation
 ./dev-bin/semantic-version-analyzer.sh --json
@@ -85,6 +86,7 @@ For most feature additions, bug fixes, or breaking changes, simply push your fin
 - `doc/VERSIONING.md`
 - `doc/TAG_MANAGEMENT.md`
 - `doc/RELEASE_WORKFLOW.md`
+- `.shellcheckrc`
 
 #### Option B: Manual Release (For specific control or overriding automation)
 
@@ -97,7 +99,7 @@ If you need to manually trigger a release (e.g., for a hotfix, a specific prerel
 5.  Fill in the form:
     -   **Bump type**: Choose `auto` for automatic detection, or explicitly select `major`, `minor`, or `patch`.
     -   **Release notes**: Optionally add custom release notes that will be prepended to the automatically generated notes.
-    -   **Prerelease**: Check this box if you are creating a prerelease (e.g., `v10.5.1-beta.1`).
+    -   **Prerelease**: Check this box if you are creating a prerelease (e.g., `v10.5.11-beta.1`).
 6.  Click **"Run workflow"** to start the release process.
 
 [↑ Back to top](#release-workflow-guide)
@@ -132,7 +134,7 @@ Use the semantic version analyzer to understand the impact of your changes:
 
 ```bash
 # Basic analysis
-./dev-bin/semantic-version-analyzer
+./dev-bin/semantic-version-analyzer.sh
 
 # Detailed analysis with file changes
 ./dev-bin/semantic-version-analyzer.sh --verbose
@@ -145,6 +147,9 @@ Use the semantic version analyzer to understand the impact of your changes:
 
 # Show configuration values
 ./dev-bin/semantic-version-analyzer.sh --print-base
+
+# Analyze changes since a specific commit
+./dev-bin/semantic-version-analyzer.sh --since-commit abc123 --verbose
 ```
 
 The analyzer will provide:
@@ -172,7 +177,7 @@ The system uses the LOC-based delta system to calculate the actual version incre
 1. **Push to Main**: Push your changes to the `main` branch
 2. **Workflow Trigger**: The `version-bump.yml` workflow automatically triggers
 3. **Analysis**: The workflow runs `semantic-version-analyzer` to determine the appropriate version bump
-4. **Version Update**: If a bump is warranted, the `VERSION` file is updated
+4. **Version Update**: If a bump is warranted, the `mathematical-version-bump.sh` script updates the `VERSION` file
 5. **Tag Creation**: A new Git tag is created with the new version
 6. **Release Generation**: A GitHub Release is created with automatically compiled release notes
 7. **CI/CD Verification**: Comprehensive tests run on the new tag
@@ -316,7 +321,7 @@ For maintenance releases, you may want to clean up old tags:
 - Verify commit messages follow Conventional Commits format
 - Review GitHub Actions workflow configuration
 - Check workflow logs for errors
-- Ensure changes are not to ignored files (VERSION, doc files)
+- Ensure changes are not to ignored files (VERSION, doc files, .shellcheckrc)
 
 #### Issue: Incorrect Version Bump
 **Symptoms**: Version bump doesn't match expected change type
@@ -351,6 +356,14 @@ For maintenance releases, you may want to clean up old tags:
 - Wait for the current workflow to complete
 - Review workflow logs for concurrency issues
 
+#### Issue: Mathematical Version Bump Script Not Found
+**Symptoms**: Workflow fails with "mathematical-version-bump.sh not found"
+**Solutions**:
+- Ensure the script exists at `./dev-bin/mathematical-version-bump.sh`
+- Check script permissions (should be executable)
+- Verify the script is committed to the repository
+- Check for any path issues in the workflow
+
 ### Debugging Commands
 
 ```bash
@@ -375,6 +388,13 @@ cat .github/workflows/version-bump.yml
 
 # Check for ignored files in workflow
 git log --oneline --since="1 day ago" --name-only
+
+# Test mathematical version bump locally
+./dev-bin/mathematical-version-bump.sh --help
+
+# Check script permissions
+ls -la ./dev-bin/semantic-version-analyzer.sh
+ls -la ./dev-bin/mathematical-version-bump.sh
 ```
 
 [↑ Back to top](#release-workflow-guide)
@@ -506,6 +526,9 @@ Before applying configuration changes to production:
 
 # Run comprehensive tests
 ./test-workflows/run_workflow_tests.sh
+
+# Test mathematical version bump
+./dev-bin/mathematical-version-bump.sh --help
 ```
 
 [↑ Back to top](#release-workflow-guide)

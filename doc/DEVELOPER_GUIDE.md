@@ -7,6 +7,7 @@ This guide provides comprehensive information for developers contributing to `vg
 - [Build Options](#build-options)
   - [Using `build.sh`](#using-buildsh)
   - [Build Configurations](#build-configurations)
+  - [Build Directory Structure](#build-directory-structure)
 - [Versioning System](#versioning-system)
   - [Current Version Retrieval](#current-version-retrieval)
   - [LOC-Based Delta System](#loc-based-delta-system)
@@ -75,7 +76,9 @@ The `build.sh` script simplifies the process of configuring and compiling `vglog
 
 **Note**: If both `debug` and `performance` options are provided, `debug` mode will take precedence. The `clean` and `tests` options can be combined with any other build configuration options.
 
-**Build Directory Structure**: The script creates build directories with descriptive names:
+#### Build Directory Structure
+
+The script creates build directories with descriptive names:
 - `build/` - Default release build
 - `build-debug/` - Debug build
 - `build-performance/` - Performance-optimized build
@@ -149,7 +152,7 @@ While automated versioning is preferred, tools are available for manual inspecti
 ./dev-bin/semantic-version-analyzer.sh --since v10.4.0 --verbose
 
 # Manually bump the version (e.g., to major, minor, or patch)
-./dev-bin/bump-version.sh [major|minor|patch]
+./dev-bin/mathematical-version-bump.sh [major|minor|patch]
 
 # List existing Git tags
 ./dev-bin/tag-manager.sh list
@@ -161,7 +164,7 @@ While automated versioning is preferred, tools are available for manual inspecti
 ./dev-bin/tag-manager.sh info v10.5.12
 
 # Update alpha version for development releases
-./dev-bin/update_alpha.sh
+./dev-bin/sync_alpha.sh
 ```
 
 ### Configuration Management
@@ -171,7 +174,7 @@ The versioning system supports both YAML configuration and environment variables
 **YAML Configuration (Recommended)**:
 ```sh
 # Loads from dev-config/versioning.yml
-./dev-bin/semantic-version-analyzer
+./dev-bin/semantic-version-analyzer.sh
 ```
 
 **Environment Variables (Fallback)**:
@@ -179,7 +182,7 @@ The versioning system supports both YAML configuration and environment variables
 export VERSION_PATCH_DELTA="1*(1+LOC/250)"
 export VERSION_MINOR_DELTA="5*(1+LOC/500)"
 export VERSION_MAJOR_DELTA="10*(1+LOC/1000)"
-./dev-bin/semantic-version-analyzer
+./dev-bin/semantic-version-analyzer.sh
 ```
 
 For a more in-depth understanding of the versioning strategy and release process, refer to the [Versioning Guide](VERSIONING.md), [LOC Delta System Documentation](LOC_DELTA_SYSTEM.md), and [Release Workflow Guide](RELEASE_WORKFLOW.md).
@@ -230,7 +233,7 @@ The project includes specialized tests for memory safety:
 
 ### GitHub Actions Workflows
 
-The project utilizes 12 comprehensive GitHub Actions workflows to automate testing, quality checks, and release processes. These are detailed in the [CI/CD Guide](CI_CD_GUIDE.md).
+The project utilizes comprehensive GitHub Actions workflows to automate testing, quality checks, and release processes. These are detailed in the [CI/CD Guide](CI_CD_GUIDE.md).
 
 ### Local Testing
 
@@ -302,11 +305,24 @@ Use the `build.sh` script to build with specific configurations and then run tes
 Several utility scripts and tools are provided in the `dev-bin/` directory to assist with development tasks.
 
 #### Version Management Tools
--   **`semantic-version-analyzer`**: Analyzes Git history and commit messages to suggest the next appropriate semantic version bump.
--   **`bump-version`**: A script to manually increment the project's version (major, minor, or patch) and update the `VERSION` file.
--   **`tag-manager`**: Helps manage Git tags, including listing and cleaning up old tags.
--   **`cursor-version-bump`**: A utility specifically for integration with the Cursor IDE for version bumping.
--   **`update_alpha.sh`**: Updates alpha version numbers for development releases.
+-   **`semantic-version-analyzer.sh`**: Analyzes Git history and commit messages to suggest the next appropriate semantic version bump.
+-   **`mathematical-version-bump.sh`**: A script to manually increment the project's version (major, minor, or patch) and update the `VERSION` file.
+-   **`tag-manager.sh`**: Helps manage Git tags, including listing and cleaning up old tags.
+-   **`sync_alpha.sh`**: Updates alpha version numbers for development releases.
+-   **`version-calculator.sh`**: Calculates version increments based on LOC changes.
+-   **`version-calculator-loc.sh`**: Advanced LOC-based version calculation.
+-   **`version-config-loader.sh`**: Loads and validates versioning configuration.
+-   **`version-validator.sh`**: Validates version format and consistency.
+-   **`version-utils.sh`**: Common versioning utility functions.
+
+#### Analysis and Development Tools
+-   **`cli-options-analyzer.sh`**: Analyzes CLI options and their usage patterns.
+-   **`file-change-analyzer.sh`**: Analyzes file changes and their impact on versioning.
+-   **`keyword-analyzer.sh`**: Analyzes commit messages for keywords and patterns.
+-   **`security-keyword-analyzer.sh`**: Identifies security-related changes in commits.
+-   **`git-operations.sh`**: Git operation utilities for versioning workflows.
+-   **`ref-resolver.sh`**: Resolves Git references and commit information.
+-   **`generate-ci-gpg-key.sh`**: Generates GPG keys for CI/CD signing.
 
 #### Testing Tools
 -   **`run_tests.sh`**: The primary script to execute all C++ unit tests and workflow tests.
