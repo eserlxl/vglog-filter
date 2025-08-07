@@ -63,9 +63,9 @@ create_temp_test_env() {
         return 1
     fi
     
-    # Get the project root (use environment variable if available, otherwise calculate from script location)
+    # Get the project root (use environment variable if available, otherwise use current directory)
     local project_root
-    project_root="${PROJECT_ROOT:-$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")}"
+    project_root="${PROJECT_ROOT:-$(pwd)}"
     
     # Validate project root exists
     if [[ ! -d "$project_root" ]]; then
@@ -126,7 +126,7 @@ create_realistic_test_repo() {
     
     # Get the project root
     local project_root
-    project_root="${PROJECT_ROOT:-$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")}"
+    project_root="${PROJECT_ROOT:-$(pwd)}"
     
     # Validate project root exists
     if [[ ! -d "$project_root" ]]; then

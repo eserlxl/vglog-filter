@@ -9,13 +9,13 @@
 # Test whitespace ignore functionality in semantic-version-analyzer
 # This test verifies that whitespace-only changes don't trigger major version bumps
 
-SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
-PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+# Get project root (assume we're running from project root)
+PROJECT_ROOT="$(pwd)"
 
 # Source test helper functions
 # shellcheck disable=SC1091
 # shellcheck source=test_helper.sh
-source "$SCRIPT_DIR/../test_helper.sh"
+source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 echo "=== Testing Whitespace Ignore ==="
 

@@ -7,8 +7,7 @@
 set -euo pipefail
 
 # Source the test helper
-SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+PROJECT_ROOT="$(pwd)"
 # shellcheck disable=SC1091
 source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
@@ -22,7 +21,7 @@ test_dir=$(create_temp_test_env "version_calculation_test")
 cd "$test_dir"
 
 # Get project root and script path without changing directory
-PROJECT_ROOT="$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")"
+PROJECT_ROOT="$(pwd)"
 SCRIPT_PATH="$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh"
 
 # Test 1: Basic version calculation

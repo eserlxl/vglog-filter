@@ -15,13 +15,14 @@ set -Euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 # shellcheck source=test_helper.sh
-source "$SCRIPT_DIR/../test_helper.sh"
+source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 # Script path
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../dev-bin/semantic-version-analyzer.sh"
 
 # Change to project root for tests
-cd "$(dirname "$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")")" || exit 1
+# Change to project root (assume we're running from project root)
+cd "$(pwd)" || exit 1
 
 echo "Testing semantic version analyzer minimal repository support..."
 

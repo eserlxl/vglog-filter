@@ -10,14 +10,15 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+# Get project root (assume we're running from project root)
+PROJECT_ROOT="$(pwd)"
 # Note: PROJECT_ROOT is defined but not used in this test
 # PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Source test helper functions
 # shellcheck disable=SC1091
 # shellcheck source=test_helper.sh
-source "$SCRIPT_DIR/../test_helper.sh"
+source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 echo "Testing manual CLI detection..."
 

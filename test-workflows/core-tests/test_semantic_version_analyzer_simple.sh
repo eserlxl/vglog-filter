@@ -8,8 +8,8 @@
 #
 set -euo pipefail
 
-# Get project root without changing directory
-PROJECT_ROOT="$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")"
+# Get project root - assume we're running from project root
+PROJECT_ROOT="$(pwd)"
 SCRIPT_PATH="$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh"
 
 echo "Testing semantic version analyzer v2 modular architecture..."

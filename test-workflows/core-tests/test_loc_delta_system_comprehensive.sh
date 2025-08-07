@@ -76,7 +76,7 @@ create_simple_test_env() {
     echo "$temp_dir"
 }
 
-SEMANTIC_ANALYZER_SCRIPT="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../dev-bin/semantic-version-analyzer.sh"
+SEMANTIC_ANALYZER_SCRIPT="$(pwd)/dev-bin/semantic-version-analyzer.sh"
 
 # Test 1: Basic LOC delta functionality
 printf '%s\n' "${CYAN}=== Test 1: Basic LOC delta functionality ===${NC}"
