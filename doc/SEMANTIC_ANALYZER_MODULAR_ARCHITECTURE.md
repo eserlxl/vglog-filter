@@ -5,31 +5,31 @@ This directory contains the refactored semantic version analyzer split into focu
 
 ## Overview
 
-The original monolithic semantic-version-analyzer \(1782 lines\) has been refactored into smaller, focused binaries that each handle a specific aspect of version analysis.
+The original monolithic semantic-version-analyzer has been refactored into smaller, focused binaries that each handle a specific aspect of version analysis. The main semantic-version-analyzer.sh now orchestrates these modular components.
 
 ## Components
 
 ### Core Components
 
-#### 1. ref-resolver
+#### 1. ref-resolver.sh
 - **Purpose**: Resolves git references and determines base references for comparison
 - **Key Features**:
   - Handles --since, --since-tag, --since-commit, --since-date options
-  - Auto-detects base references \(last tag, parent commit, etc.\)
+  - Auto-detects base references (last tag, parent commit, etc.)
   - Manages merge-base detection for disjoint branches
   - Validates git references
 - **Usage**: ./dev-bin/ref-resolver.sh --since v1.0.0 --target HEAD
 
-#### 2. version-config-loader
+#### 2. version-config-loader.sh
 - **Purpose**: Loads and validates versioning configuration from YAML files and environment variables
 - **Key Features**:
   - Loads configuration from dev-config/versioning.yml
   - Falls back to environment variables
   - Validates configuration values
-  - Supports multiple output formats \(JSON, machine-readable\)
+  - Supports multiple output formats (JSON, machine-readable)
 - **Usage**: ./dev-bin/version-config-loader.sh --validate-only
 
-#### 3. file-change-analyzer
+#### 3. file-change-analyzer.sh
 - **Purpose**: Analyzes file changes and classifies them by type
 - **Key Features**:
   - Tracks added, modified, deleted files
@@ -38,7 +38,7 @@ The original monolithic semantic-version-analyzer \(1782 lines\) has been refact
   - Handles rename/copy detection
 - **Usage**: ./dev-bin/file-change-analyzer.sh --base v1.0.0 --target HEAD
 
-#### 4. cli-options-analyzer
+#### 4. cli-options-analyzer.sh
 - **Purpose**: Detects and analyzes CLI option changes in C/C++ source files
 - **Key Features**:
   - Extracts getopt/getopt_long options
@@ -47,7 +47,7 @@ The original monolithic semantic-version-analyzer \(1782 lines\) has been refact
   - Manual CLI pattern detection
 - **Usage**: ./dev-bin/cli-options-analyzer.sh --base v1.0.0 --target HEAD
 
-#### 5. security-keyword-analyzer
+#### 5. security-keyword-analyzer.sh
 - **Purpose**: Detects security-related keywords in commit messages and code changes
 - **Key Features**:
   - Scans commit messages for security keywords
@@ -56,25 +56,89 @@ The original monolithic semantic-version-analyzer \(1782 lines\) has been refact
   - Counts crash fixes
 - **Usage**: ./dev-bin/security-keyword-analyzer.sh --base v1.0.0 --target HEAD
 
-#### 6. version-calculator
-- **Purpose**: Calculates next version based on LOC-based delta system and bonus points
+#### 6. keyword-analyzer.sh
+- **Purpose**: Detects breaking change keywords and other bonus indicators in code comments and commit messages
+- **Key Features**:
+  - Scans for breaking change keywords
+  - Identifies feature additions
+  - Detects bug fixes and improvements
+  - Analyzes commit message patterns
+- **Usage**: ./dev-bin/keyword-analyzer.sh --base v1.0.0 --target HEAD
+
+#### 7. version-calculator.sh
+- **Purpose**: Calculates next version based on traditional semantic versioning rules
+- **Key Features**:
+  - Implements semantic versioning logic
+  - Handles major, minor, patch bumps
+  - Applies bonus points to version increments
+  - Supports custom bump types
+- **Usage**: ./dev-bin/version-calculator.sh --current-version 1.2.3 --bump-type minor
+
+#### 8. version-calculator-loc.sh
+- **Purpose**: Calculates version bumps based on lines of code changes and semantic analysis
 - **Key Features**:
   - Implements LOC-based delta formulas
   - Handles version rollover logic
   - Applies bonus points to version increments
   - Supports custom delta formulas
-- **Usage**: ./dev-bin/version-calculator.sh --current-version 1.2.3 --bump-type minor --loc 500
+- **Usage**: ./dev-bin/version-calculator-loc.sh --current-version 1.2.3 --loc 500
+
+#### 9. mathematical-version-bump.sh
+- **Purpose**: Purely mathematical versioning system - no manual bump types needed
+- **Key Features**:
+  - Automatic version calculation based on changes
+  - Mathematical formulas for version increments
+  - No human intervention required
+  - Deterministic versioning
+- **Usage**: ./dev-bin/mathematical-version-bump.sh --since v1.0.0
+
+#### 10. version-validator.sh
+- **Purpose**: Validates version numbers and versioning rules
+- **Key Features**:
+  - Validates semantic version format
+  - Checks version increment rules
+  - Ensures version consistency
+  - Provides validation feedback
+- **Usage**: ./dev-bin/version-validator.sh --version 1.2.3
+
+#### 11. version-utils.sh
+- **Purpose**: Common utility functions for version operations
+- **Key Features**:
+  - Version parsing and formatting
+  - Common version operations
+  - Shared helper functions
+  - Version comparison utilities
+- **Usage**: Source this file for utility functions
+
+#### 12. tag-manager.sh
+- **Purpose**: Manages git tags and version tags
+- **Key Features**:
+  - Creates and manages version tags
+  - Handles tag validation
+  - Manages tag history
+  - Supports tag operations
+- **Usage**: ./dev-bin/tag-manager.sh --create-tag v1.2.3
+
+#### 13. git-operations.sh
+- **Purpose**: Common git operations for version analysis
+- **Key Features**:
+  - Git diff operations
+  - Commit analysis
+  - Branch management
+  - Repository operations
+- **Usage**: Source this file for git operations
 
 ### Orchestrator
 
-#### 7. semantic-version-analyzer-v2
-- **Purpose**: Orchestrates all modular components for complete version analysis
+#### 14. semantic-version-analyzer.sh
+- **Purpose**: Orchestrates all modular components for complete version analysis (v2)
 - **Key Features**:
   - Coordinates all analysis components
   - Calculates total bonus points
   - Determines version bump suggestions
   - Maintains compatibility with original interface
-- **Usage**: ./dev-bin/semantic-version-analyzer.sh-v2 --since v1.0.0
+  - Supports both traditional and LOC-based versioning
+- **Usage**: ./dev-bin/semantic-version-analyzer.sh --since v1.0.0
 
 ## Benefits of Modular Architecture
 
@@ -103,29 +167,15 @@ The original monolithic semantic-version-analyzer \(1782 lines\) has been refact
 - Existing components can be enhanced without affecting others
 - Plugin-like architecture for custom analyzers
 
-## Migration Guide
+## Usage Examples
 
-### From Original to v2
-
-The original semantic-version-analyzer is still available for backward compatibility. To migrate to the new modular version:
-
-1. **Direct Replacement**: Use semantic-version-analyzer-v2 as a drop-in replacement
-2. **Component Usage**: Use individual components for specific analysis needs
-3. **Custom Integration**: Combine components for custom workflows
-
-### Example Migration
-
-**Original**:
+### Complete Analysis
 ```bash
+# Full semantic version analysis
 ./dev-bin/semantic-version-analyzer.sh --since v1.0.0 --verbose
 ```
 
-**New Modular**:
-```bash
-./dev-bin/semantic-version-analyzer.sh-v2.sh --since v1.0.0 --verbose
-```
-
-**Component-based**:
+### Component-based Analysis
 ```bash
 # Get base reference
 BASE_REF="$(./dev-bin/ref-resolver.sh --since v1.0.0 --print-base)"
@@ -136,8 +186,20 @@ BASE_REF="$(./dev-bin/ref-resolver.sh --since v1.0.0 --print-base)"
 # Analyze CLI options
 ./dev-bin/cli-options-analyzer.sh --base "$BASE_REF" --target HEAD --json
 
-# Calculate version
-./dev-bin/version-calculator.sh --current-version 1.2.3 --bump-type minor --loc 500
+# Analyze security keywords
+./dev-bin/security-keyword-analyzer.sh --base "$BASE_REF" --target HEAD --json
+
+# Calculate version using LOC-based system
+./dev-bin/version-calculator-loc.sh --current-version 1.2.3 --loc 500
+
+# Calculate version using traditional system
+./dev-bin/version-calculator.sh --current-version 1.2.3 --bump-type minor
+```
+
+### Mathematical Versioning
+```bash
+# Pure mathematical versioning
+./dev-bin/mathematical-version-bump.sh --since v1.0.0
 ```
 
 ## Configuration
@@ -164,6 +226,25 @@ Each component includes:
 - Appropriate exit codes
 - Graceful fallbacks
 
+## Versioning Systems
+
+The modular architecture supports multiple versioning approaches:
+
+### 1. **Traditional Semantic Versioning**
+- Uses version-calculator.sh
+- Manual bump type specification
+- Standard major.minor.patch format
+
+### 2. **LOC-based Versioning**
+- Uses version-calculator-loc.sh
+- Automatic calculation based on code changes
+- Mathematical formulas for increments
+
+### 3. **Pure Mathematical Versioning**
+- Uses mathematical-version-bump.sh
+- No manual intervention required
+- Deterministic version calculation
+
 ## Future Enhancements
 
 The modular architecture enables several future enhancements:
@@ -173,12 +254,14 @@ The modular architecture enables several future enhancements:
 3. **Plugin System**: Load analysis components dynamically
 4. **Caching**: Cache analysis results for performance
 5. **Distributed Analysis**: Run analyses across multiple machines
+6. **Additional Analyzers**: Add more specialized analysis components
 
 ## Contributing
 
 When adding new functionality:
 
 1. **Create New Component**: Add a focused binary for new analysis type
-2. **Update Orchestrator**: Integrate new component into v2 analyzer
-3. **Maintain Compatibility**: Ensure original interface remains functional
-4. **Add Documentation**: Update this README with new component details 
+2. **Update Orchestrator**: Integrate new component into semantic-version-analyzer.sh
+3. **Maintain Compatibility**: Ensure existing interfaces remain functional
+4. **Add Documentation**: Update this README with new component details
+5. **Add Tests**: Include comprehensive tests for new components 
