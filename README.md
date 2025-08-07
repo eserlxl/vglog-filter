@@ -64,9 +64,10 @@ Valgrind is an indispensable tool for detecting memory errors and leaks in C/C++
 - **Flexible input**: Supports both file input and stdin streaming
 
 ### Development & Quality Assurance
-- **Automated semantic versioning**: Version bumps are automatically managed with universal patch detection (every change gets a version bump) and LOC-based delta increments
-- **Comprehensive CI/CD pipeline**: Features 12 distinct GitHub Actions workflows covering extensive testing, static analysis, memory sanitization, and security scanning
-- **Extensive Test Suite**: Includes unit, integration, and workflow tests to ensure high reliability and correctness
+- **Advanced semantic versioning**: Enhanced versioning system with improved breaking change detection, universal patch detection (every change gets a version bump), and LOC-based delta increments
+- **Comprehensive CI/CD pipeline**: Features 12 distinct GitHub Actions workflows covering extensive testing, static analysis, memory sanitization, security scanning, and cross-platform validation
+- **Extensive Test Suite**: Includes unit, integration, and workflow tests with improved isolation and comprehensive coverage to ensure high reliability and correctness
+- **Version-agnostic documentation**: All documentation is maintained to be version-independent, reducing maintenance overhead and ensuring accuracy
 
 [↑ Back to top](#vglog-filter)
 
@@ -242,10 +243,12 @@ Typical performance characteristics:
 Comprehensive documentation is available in the `doc/` directory:
 
 - [Build Guide](doc/BUILD.md) - Detailed build instructions and configuration options
-- [Usage Guide](doc/USAGE.md) - Complete usage documentation with examples
-- [Developer Guide](doc/DEVELOPER_GUIDE.md) - Information for contributors
-- [Test Suite Guide](doc/TEST_SUITE.md) - Testing framework and test execution
-- [CI/CD Guide](doc/CI_CD_GUIDE.md) - Continuous integration and deployment
+- [Usage Guide](doc/USAGE.md) - Complete usage documentation with examples and improved clarity
+- [Developer Guide](doc/DEVELOPER_GUIDE.md) - Information for contributors and development setup
+- [Test Suite Guide](doc/TEST_SUITE.md) - Testing framework and test execution with enhanced coverage
+- [CI/CD Guide](doc/CI_CD_GUIDE.md) - Comprehensive continuous integration and deployment workflows
+- [Advanced Usage](doc/ADVANCED.md) - Advanced features and command-line reference
+- [Versioning System](doc/VERSIONING.md) - Detailed versioning rules and implementation
 - [FAQ](doc/FAQ.md) - Frequently asked questions and troubleshooting
 
 [↑ Back to top](#vglog-filter)
