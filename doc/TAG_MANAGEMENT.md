@@ -24,7 +24,7 @@ This is achieved through:
 -   **Automated Release Workflow**: New release tags are automatically created by GitHub Actions as part of the [Release Workflow](RELEASE_WORKFLOW.md).
 -   **Automated Tag Cleanup**: A dedicated GitHub Actions workflow periodically cleans up old tags.
 -   **`tag-manager` Script**: A command-line utility for local and manual tag operations with advanced features.
--   **LOC-Based Delta System**: Advanced versioning that ensures consistent tag progression.
+-   **LOC-Based Delta System**: Advanced versioning that ensures consistent tag progression with mathematical bonus calculations.
 
 [↑ Back to top](#git-tag-management-guide)
 
@@ -36,11 +36,11 @@ Our tagging strategy is tightly integrated with our [Semantic Versioning](VERSIO
 
 Tags are created exclusively for official releases. They are **not** created for every commit. A new tag is generated when:
 
--   A **MAJOR** release occurs (e.g., `v10.0.0` to `v11.0.0`): Signifies breaking changes or large-scale refactoring.
--   A **MINOR** release occurs (e.g., `v10.5.0` to `v10.6.0`): Signifies new backward-compatible features.
--   A **PATCH** release occurs (e.g., `v10.5.0` to `v10.5.1`): Signifies backward-compatible bug fixes or minor improvements.
+-   A **MAJOR** release occurs (e.g., `v10.5.12` to `v11.0.0`): Signifies breaking changes or large-scale refactoring.
+-   A **MINOR** release occurs (e.g., `v10.5.12` to `v10.6.0`): Signifies new backward-compatible features.
+-   A **PATCH** release occurs (e.g., `v10.5.12` to `v10.5.13`): Signifies backward-compatible bug fixes or minor improvements.
 
-These version bumps are primarily determined by the [Conventional Commits](https://www.conventionalcommits.org/) in the Git history and automated by the `version-bump.yml` GitHub Actions workflow, using the advanced LOC-based delta system.
+These version bumps are determined by the advanced LOC-based delta system with mathematical bonus calculations, automated by the `version-bump.yml` GitHub Actions workflow.
 
 ### Tag Naming Convention
 
@@ -50,17 +50,18 @@ All release tags must follow the `vX.Y.Z` format, where:
 -   `Y`: The minor version number.
 -   `Z`: The patch version number.
 
-**Examples:** `v10.5.0`, `v10.5.1`, `v10.6.0`, `v11.0.0-beta.1` (for prereleases).
+**Examples:** `v10.5.12`, `v10.5.13`, `v10.6.0`, `v11.0.0-beta.1` (for prereleases).
 
 This consistent format ensures easy parsing and sorting of tags.
 
 ### Current Version Context
 
-The project uses the LOC-based delta system. This means:
-- All version changes increment only the patch version (the last number)
-- The increment amount is calculated based on Lines of Code (LOC) changed plus bonus additions
-- Rollover logic uses mod 100 for patch and minor version limits
-- Example progression: `10.5.0` → `10.5.1` → `10.5.2` → ... → `10.6.0` (patch rollover)
+The project uses the advanced LOC-based delta system with mathematical bonus calculations. This means:
+- Version changes are calculated based on Lines of Code (LOC) changed plus bonus additions from 7 categories
+- The system uses mathematical thresholds (major: 8+, minor: 4+, patch: 0+) to determine bump type
+- Rollover logic uses mod 1000 for patch and minor version limits
+- Example progression: `10.5.12` → `10.5.13` → `10.5.14` → ... → `10.6.0` (patch rollover)
+- Bonus categories include: breaking changes, security/stability, performance, features, code quality, infrastructure, and user experience
 
 [↑ Back to top](#git-tag-management-guide)
 
@@ -105,36 +106,44 @@ The `dev-bin/tag-manager.sh` script provides comprehensive command-line utilitie
 
 ### Basic Commands
 
--   **`./dev-bin/tag-manager.sh list`**: Lists all Git tags in the repository, sorted by version (newest first).
+-   **`./dev-bin/tag-manager.sh list [glob]`**: Lists all Git tags in the repository, sorted by version (newest first). Optional glob pattern for filtering.
     ```bash
-          ./dev-bin/tag-manager.sh list
+    # List all tags
+    ./dev-bin/tag-manager.sh list
+    
+    # List tags matching pattern
+    ./dev-bin/tag-manager.sh list 'v10.*'
+    
     # Example output:
     # v10.5.12
+    # v10.5.10
+    # v10.5.0
     # v10.4.0
     # v10.3.0
-    # v10.2.0
-    # v10.1.0
     ```
 
--   **`./dev-bin/tag-manager.sh cleanup [count]`**: Interactively cleans up old tags. If `count` is provided, it will keep only the specified number of most recent tags. Otherwise, it will prompt for confirmation for each tag.
+-   **`./dev-bin/tag-manager.sh cleanup [keep] [glob]`**: Interactively cleans up old tags. If `keep` is provided, it will keep only the specified number of most recent tags. Optional glob pattern for filtering.
     ```bash
     # Interactively clean up tags
     ./dev-bin/tag-manager.sh cleanup
 
     # Keep only the 5 most recent tags
     ./dev-bin/tag-manager.sh cleanup 5
+    
+    # Keep 20 tags matching pattern
+    ./dev-bin/tag-manager.sh cleanup 20 'v10.*'
     ```
 
--   **`./dev-bin/tag-manager.sh create <version> [commit]`**: Creates a new tag with the specified version at the given commit (defaults to HEAD). Use with caution, as this bypasses the automated release workflow.
+-   **`./dev-bin/tag-manager.sh create <version> [commit]`**: Creates a new tag with the specified version at the given commit (defaults to HEAD). Accepts both "1.2.3" and "v1.2.3" formats.
     ```bash
-    # Create a tag for version 10.5.1 at HEAD
-    ./dev-bin/tag-manager.sh create 10.5.1
+    # Create a tag for version 10.5.13 at HEAD
+    ./dev-bin/tag-manager.sh create 10.5.13
 
-    # Create a tag for version 10.5.1 at specific commit
-    ./dev-bin/tag-manager.sh create 10.5.1 3f2c1d2
+    # Create a tag for version 10.5.13 at specific commit
+    ./dev-bin/tag-manager.sh create v10.5.13 3f2c1d2
     ```
 
--   **`./dev-bin/tag-manager.sh info <tag>`**: Shows detailed information about a specific tag, including commit hash, author, date, and message.
+-   **`./dev-bin/tag-manager.sh info <tag>`**: Shows detailed information about a specific tag, including commit hash, author, date, and changes since previous release.
     ```bash
     # Get information about a specific tag
     ./dev-bin/tag-manager.sh info v10.5.12
@@ -154,7 +163,7 @@ The `tag-manager` script supports numerous environment variables for fine-graine
 -   **`ASSUME_YES`**: Skip confirmations for non-interactive use (default: `0`)
 -   **`ALLOW_DIRTY_TAG`**: Allow tagging with dirty working tree (default: `0`)
 -   **`PROTECT_CURRENT`**: Never delete tags pointing at HEAD (default: `1`)
--   **`PROTECT_GLOB`**: Space-separated glob patterns never to delete (e.g., `"v1.*.* v2.0.*"`)
+-   **`PROTECT_GLOB`**: Space-separated glob patterns never to delete (e.g., `"v10.*.* v11.0.*"`)
 
 #### Cleanup Behavior
 -   **`DRY_RUN`**: Print actions without executing (cleanup only, default: `0`)
@@ -183,13 +192,13 @@ REMOTE_ONLY=1 ./dev-bin/tag-manager.sh cleanup 10
 #### Tag Creation with Advanced Options
 ```bash
 # Create and immediately push a signed tag
-TAG_SIGN=1 PUSH_AFTER_CREATE=1 ./dev-bin/tag-manager.sh create 10.5.1
+TAG_SIGN=1 PUSH_AFTER_CREATE=1 ./dev-bin/tag-manager.sh create 10.5.13
 
 # Create tag with custom message prefix
-TAG_MSG_PREFIX="Release" ./dev-bin/tag-manager.sh create 10.5.1
+TAG_MSG_PREFIX="Release" ./dev-bin/tag-manager.sh create 10.5.13
 
 # Create tag even with uncommitted changes
-ALLOW_DIRTY_TAG=1 ./dev-bin/tag-manager.sh create 10.5.1
+ALLOW_DIRTY_TAG=1 ./dev-bin/tag-manager.sh create 10.5.13
 ```
 
 #### Non-Interactive Operations
@@ -242,8 +251,8 @@ git tag --sort=-version:refname | head -10
 **Symptoms**: Workflow fails with "tag already exists" error
 **Solutions**:
 - Check for existing tags: `git tag --list "v*"`
-- Delete conflicting tag locally: `git tag -d v10.5.1`
-- Delete conflicting tag remotely: `git push origin --delete v10.5.1`
+- Delete conflicting tag locally: `git tag -d v10.5.13`
+- Delete conflicting tag remotely: `git push origin --delete v10.5.13`
 - Re-run the release workflow
 
 #### Issue: Missing Tags
@@ -337,10 +346,11 @@ git config --list | grep -E "(user\.name|user\.email|remote\.origin)"
 
 ### Integration with LOC-Based Delta System
 
-1.  **Understand Delta Calculations**: Be aware of how the LOC-based delta system affects version increments.
+1.  **Understand Delta Calculations**: Be aware of how the LOC-based delta system with mathematical bonus calculations affects version increments.
 2.  **Monitor Rollovers**: Watch for patch and minor version rollovers in the versioning system.
 3.  **Configuration Management**: Use the YAML configuration system for consistent versioning behavior.
-4.  **Predictable Progression**: The system ensures predictable tag progression with calculated increments.
+4.  **Predictable Progression**: The system ensures predictable tag progression with calculated increments based on 7 bonus categories.
+5.  **Mathematical Thresholds**: Understand the pure mathematical thresholds (major: 8+, minor: 4+, patch: 0+) that determine version bump types.
 
 ### Quality Assurance
 
