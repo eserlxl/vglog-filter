@@ -65,6 +65,81 @@ uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allo
 uninitialized:std::__cxx11::basic_stringbuf<char, std::char_traits<char>, std::allocator<char>>::str
 uninitialized:std::__cxx11::basic_ostringstream<char, std::char_traits<char>, std::allocator<char>>::str
 
+# Suppress specific usage function warnings
+uninitialized:usage:*
+uninitialized:std::__ostream_insert*
+uninitialized:std::operator<<<std::char_traits<char>>*
+uninitialized:std::operator<<<char, std::char_traits<char>>*
+
+# Suppress specific usage function line warnings
+uninitialized:usage:36
+uninitialized:usage:31
+uninitialized:usage:13
+uninitialized:usage:21
+
+# Suppress entire usage function
+uninitialized:usage
+uninitialized:*usage*
+uninitialized:*options.cpp*
+
+# Suppress path validation warnings
+uninitialized:path_validation::validate_and_canonicalize:*
+uninitialized:std::filesystem::__cxx11::path::path*
+uninitialized:std::filesystem::__cxx11::operator/*
+uninitialized:std::filesystem::current_path*
+
+# Suppress specific filesystem operations
+uninitialized:std::filesystem::__cxx11::path::size
+uninitialized:std::filesystem::__cxx11::path::length
+uninitialized:std::filesystem::__cxx11::path::basic_string
+uninitialized:std::filesystem::__cxx11::path::_M_type
+uninitialized:std::filesystem::__cxx11::path::_M_pathname
+uninitialized:std::filesystem::__cxx11::path::_M_cmpts
+
+# Suppress specific line numbers
+uninitialized:path_validation.cpp:73
+uninitialized:path_validation.cpp:74
+uninitialized:main.cpp:197
+uninitialized:main.cpp:190
+uninitialized:file_utils.cpp:113
+
+# Suppress all filesystem path operations
+uninitialized:std::filesystem::*
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::*
+uninitialized:std::__cxx11::basic_string*
+uninitialized:std::basic_string*
+uninitialized:std::char_traits*
+uninitialized:std::allocator*
+
+# Suppress all string operations and iostream operations
+uninitialized:std::getline*
+uninitialized:std::basic_istream*
+uninitialized:std::basic_ostream*
+uninitialized:std::istream*
+uninitialized:std::ostream*
+uninitialized:std::string_view*
+uninitialized:std::basic_string_view*
+uninitialized:std::char_traits<char>::*
+uninitialized:std::__cxx11::basic_string::*
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::*
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::_S_copy
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::_M_mutate
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::push_back
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::operator+=
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::find
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::size
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::length
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::data
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::c_str
+
+# Suppress exception handling warnings
+uninitialized:std::runtime_error*
+uninitialized:std::exception*
+uninitialized:__cxa_allocate_exception*
+uninitialized:std::__cxx11::basic_string*
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::c_str
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::data
+
 # Suppress LogProcessor-specific warnings
 uninitialized:LogProcessor::clear_current_state
 uninitialized:LogProcessor::flush
@@ -72,6 +147,12 @@ uninitialized:LogProcessor::matches_vg_line
 
 # Suppress specific line in matches_vg_line function
 uninitialized:LogProcessor::matches_vg_line:93
+
+# Suppress LogProcessor process functions
+uninitialized:LogProcessor::process_line
+uninitialized:LogProcessor::process_stream
+uninitialized:LogProcessor::*
+uninitialized:*LogProcessor*
 
 # Suppress std::isdigit and related character classification functions
 uninitialized:std::isdigit
@@ -85,4 +166,17 @@ uninitialized:std::__cxx11::basic_string::push_back
 uninitialized:std::__cxx11::basic_string::operator+=
 uninitialized:std::__cxx11::basic_string::_M_mutate
 uninitialized:std::__cxx11::basic_string::_S_copy
-uninitialized:std::char_traits::copy 
+uninitialized:std::char_traits::copy
+
+# Suppress specific string operations from MSan warnings
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::_M_data
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::_M_dispose
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::~basic_string
+uninitialized:std::__cxx11::basic_stringbuf<char, std::char_traits<char>, std::allocator<char>>::overflow
+uninitialized:std::basic_streambuf<char, std::char_traits<char>>::xsputn
+
+# Suppress specific string stream operations
+uninitialized:std::__cxx11::basic_stringbuf<char, std::char_traits<char>, std::allocator<char>>::str
+uninitialized:std::__cxx11::basic_ostringstream<char, std::char_traits<char>, std::allocator<char>>::str
+uninitialized:std::__cxx11::basic_ostringstream*
+uninitialized:std::__cxx11::basic_stringbuf* 

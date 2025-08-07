@@ -9,8 +9,7 @@
 #include <sstream>
 
 void usage(std::string_view prog) {
-    std::ostringstream os;
-    os << "Usage: " << prog << " [options] [valgrind_log]\n\n"
+    std::cout << "Usage: " << prog << " [options] [valgrind_log]\n\n"
        << "Input\n"
        << "  valgrind_log            Path to Valgrind log file (default: stdin if omitted)\n"
        << "  -                       Read from stdin (explicit)\n\n"
@@ -32,6 +31,4 @@ void usage(std::string_view prog) {
        << "  " << prog << " < log.txt               # Process from stdin\n"
        << "  " << prog << " - < log.txt             # Explicit stdin\n"
        << "  valgrind ./prog 2>&1 | " << prog << "     # Direct pipe from valgrind\n";
-
-    std::cout << os.str();
 }
