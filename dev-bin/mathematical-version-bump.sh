@@ -293,7 +293,9 @@ update_files() {
   fi
 
   # If CMakeLists.txt reads from VERSION, nothing to do here.
-  [[ "$OPT_DRY_RUN" == "true" ]] && printf '%s\n' "${YELLOW}DRY RUN: CMakeLists.txt auto-updates from VERSION${RESET}" >&2 || true
+  if [[ "$OPT_DRY_RUN" == "true" ]]; then
+    printf '%s\n' "${YELLOW}DRY RUN: CMakeLists.txt auto-updates from VERSION${RESET}" >&2
+  fi
 }
 
 # ------------------------------ git ops ---------------------------------------

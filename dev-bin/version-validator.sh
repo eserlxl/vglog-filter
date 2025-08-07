@@ -89,16 +89,16 @@ validate_version_format() {
 
     if [[ "$allow_prerelease" == "true" ]]; then
         if ! _is_semver_with_prerelease "$version"; then
-            _die "Invalid version format: $version"
             printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD] (e.g., 1.0.0, 1.0.0-rc.1)${RESET}" >&2
             printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed${RESET}" >&2
+            _die "Invalid version format: $version"
         fi
     else
         if ! _is_semver_core "$version"; then
-            _die "Invalid version format: $version"
             printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH (e.g., 1.0.0)${RESET}" >&2
             printf '%s\n' "${YELLOW}Note: Leading zeros are not allowed${RESET}" >&2
             printf '%s\n' "${YELLOW}Note: Pre-releases require --allow-prerelease with --set${RESET}" >&2
+            _die "Invalid version format: $version"
         fi
     fi
 }
@@ -116,8 +116,8 @@ validate_version_file() {
     local current_version
     current_version=$(read_version_file "$version_file")
     if [[ ! "$current_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-        _die "Invalid version format in VERSION: $current_version"
         printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH${RESET}" >&2
+        _die "Invalid version format in VERSION: $current_version"
     fi
     
     printf '%s' "$current_version"
@@ -210,8 +210,8 @@ check_version_order() {
         if ! is_version_greater "$new_version" "$last_version"; then
             _warn "New version $new_version is not greater than last tag $last_tag"
             if [[ -n "${GITHUB_ACTIONS:-}" && "$allow_nonmonotonic" != "true" ]]; then
-                _die "NEW_VERSION ($new_version) must be greater than last tag ($last_tag)"
                 printf '%s\n' "${YELLOW}Use --allow-nonmonotonic-tag to override in CI.${RESET}" >&2
+                _die "NEW_VERSION ($new_version) must be greater than last tag ($last_tag)"
             fi
         fi
     fi
@@ -240,8 +240,8 @@ validate_prerelease_format() {
     local version="$1"
     if is_prerelease "$version"; then
         if ! _is_semver_with_prerelease "$version"; then
-            _die "Invalid pre-release format: $version"
             printf '%s\n' "${YELLOW}Expected: MAJOR.MINOR.PATCH-PRERELEASE (e.g., 1.0.0-rc.1)${RESET}" >&2
+            _die "Invalid pre-release format: $version"
         fi
     fi
 }

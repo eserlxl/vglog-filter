@@ -58,7 +58,7 @@ log_warning() {
 }
 
 # Test function
-# shellcheck disable=SC2329
+# shellcheck disable=SC2329,SC2317
 run_test() {
     local test_name="$1"
     local test_command="$2"
@@ -83,6 +83,7 @@ run_test() {
 }
 
 # Test minimal repository (should work without test mode)
+# shellcheck disable=SC2317
 test_minimal_repo() {
     log_info "Testing minimal repository..."
     
@@ -114,6 +115,7 @@ test_minimal_repo() {
 }
 
 # Test empty repository (should work)
+# shellcheck disable=SC2317
 test_empty_repo() {
     log_info "Testing empty repository..."
     
@@ -151,6 +153,7 @@ test_empty_repo() {
 }
 
 # Test realistic repository with substantial history
+# shellcheck disable=SC2317
 test_realistic_repo() {
     log_info "Testing realistic repository with substantial history..."
     

@@ -54,13 +54,14 @@ run_test() {
 }
 
 # Function to extract JSON value from loc_delta section
-# shellcheck disable=SC2329
+# shellcheck disable=SC2329,SC2317
 extract_json_value() {
     local key="$1"
     grep -A 10 '"loc_delta"' | grep -o "\"$key\":[[:space:]]*[0-9]*" | cut -d: -f2 | tr -d ' ' || echo "0"
 }
 
 # Function to create a simple test environment
+# shellcheck disable=SC2317
 create_simple_test_env() {
     local test_name="$1"
     local temp_dir="/tmp/vglog-filter-test-${test_name}-$$"

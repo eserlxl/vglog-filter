@@ -116,7 +116,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # shellcheck disable=SC2329
 log()   { printf '%s\n' "$*" >&2; }
-debug() { [[ "$VERBOSE" == "true" ]] && printf 'Debug: %s\n' "$*" >&2 || true; }
+debug() { 
+  if [[ "$VERBOSE" == "true" ]]; then
+    printf 'Debug: %s\n' "$*" >&2
+  fi
+}
 
 require_exec() {
   local path="$1"
@@ -188,7 +192,7 @@ build_ref_argv() {
 # Component runner with tolerant handling for known non-zero semantics.
 run_component() {
   local -n _dst="$1"; shift
-  local cmd="$1"; shift || true
+  local cmd="$1"; shift
   local out="" ec=0 base
   base="$(basename -- "$cmd")"
   if out="$("$cmd" "$@")"; then

@@ -131,7 +131,9 @@ register_tmp() { [[ -n "${1:-}" ]] && _TMP_FILES+=("$1"); }
 _cleanup_tmp() {
   local f
   for f in "${_TMP_FILES[@]:-}"; do
-    [[ -n "$f" && -e "$f" ]] && rm -f -- "$f" || true
+    if [[ -n "$f" && -e "$f" ]]; then
+      rm -f -- "$f"
+    fi
   done
 }
 trap '_cleanup_tmp' EXIT INT TERM
