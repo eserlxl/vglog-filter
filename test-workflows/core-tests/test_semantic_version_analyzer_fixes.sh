@@ -10,6 +10,7 @@ set -Euo pipefail
 IFS=
 
 # Source the test helper script
+# shellcheck disable=SC2034 # SCRIPT_DIR is used in tests to verify script structure
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 # shellcheck source=test_helper.sh
