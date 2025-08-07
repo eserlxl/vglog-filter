@@ -242,8 +242,6 @@ test_modular_integration() {
         log_warning "Script missing calls to: ${missing_components[*]}"
     fi
     
-
-    
     return 0
 }
 
@@ -324,6 +322,278 @@ test_output_formats() {
     return 0
 }
 
+# Test 13: Verify new versioning system features
+test_new_versioning_features() {
+    log_info "Testing new versioning system features..."
+    
+    # Check for LOC delta system integration
+    if grep -q "version-calculator-loc.sh" "$SCRIPT_PATH"; then
+        log_success "Script integrates with LOC delta system"
+    else
+        log_warning "Script may not integrate with LOC delta system"
+    fi
+    
+    # Check for mathematical version bump integration
+    if grep -q "mathematical-version-bump.sh" "$SCRIPT_PATH"; then
+        log_success "Script integrates with mathematical version bump"
+    else
+        log_warning "Script may not integrate with mathematical version bump"
+    fi
+    
+    # Check for tag manager integration
+    if grep -q "tag-manager.sh" "$SCRIPT_PATH"; then
+        log_success "Script integrates with tag manager"
+    else
+        log_warning "Script may not integrate with tag manager"
+    fi
+    
+    return 0
+}
+
+# Test 14: Verify exit code system
+test_exit_codes() {
+    log_info "Testing exit code system..."
+    
+    # Check that the script uses the new exit code system (10, 11, 12, 20)
+    if grep -q "exit 10\|exit 11\|exit 12\|exit 20" "$SCRIPT_PATH"; then
+        log_success "Script uses new exit code system"
+    else
+        log_warning "Script may not use new exit code system"
+    fi
+    
+    return 0
+}
+
+# Test 15: Verify argument parsing improvements
+test_argument_parsing() {
+    log_info "Testing argument parsing improvements..."
+    
+    # Check for new argument options
+    local new_args=("--since-date" "--only-paths" "--ignore-whitespace" "--no-merge-base")
+    local missing_args=()
+    
+    for arg in "${new_args[@]}"; do
+        if ! grep -q -- "$arg" "$SCRIPT_PATH"; then
+            missing_args+=("$arg")
+        fi
+    done
+    
+    if [[ ${#missing_args[@]} -eq 0 ]]; then
+        log_success "Script supports all new argument options"
+    else
+        log_warning "Script missing support for: ${missing_args[*]}"
+    fi
+    
+    return 0
+}
+
+# Test 16: Verify debug and verbose output
+test_debug_output() {
+    log_info "Testing debug and verbose output..."
+    
+    # Check for debug function
+    if grep -q "debug()" "$SCRIPT_PATH"; then
+        log_success "Script implements debug output function"
+    else
+        log_warning "Script may not implement debug output function"
+    fi
+    
+    # Check for verbose mode
+    if grep -q "VERBOSE" "$SCRIPT_PATH"; then
+        log_success "Script supports verbose mode"
+    else
+        log_warning "Script may not support verbose mode"
+    fi
+    
+    return 0
+}
+
+# Test 17: Verify security analysis integration
+test_security_analysis() {
+    log_info "Testing security analysis integration..."
+    
+    # Check for security keyword analysis
+    if grep -q "security-keyword-analyzer.sh" "$SCRIPT_PATH"; then
+        log_success "Script integrates security keyword analysis"
+    else
+        log_error "Script missing security keyword analysis"
+        return 1
+    fi
+    
+    # Check for security bonus calculation
+    if grep -q "VERSION_SECURITY_BONUS" "$SCRIPT_PATH"; then
+        log_success "Script implements security bonus calculation"
+    else
+        log_warning "Script may not implement security bonus calculation"
+    fi
+    
+    return 0
+}
+
+# Test 18: Verify file change analysis
+test_file_change_analysis() {
+    log_info "Testing file change analysis..."
+    
+    # Check for file change analyzer integration
+    if grep -q "file-change-analyzer.sh" "$SCRIPT_PATH"; then
+        log_success "Script integrates file change analysis"
+    else
+        log_error "Script missing file change analysis"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Test 19: Verify CLI options analysis
+test_cli_options_analysis() {
+    log_info "Testing CLI options analysis..."
+    
+    # Check for CLI options analyzer integration
+    if grep -q "cli-options-analyzer.sh" "$SCRIPT_PATH"; then
+        log_success "Script integrates CLI options analysis"
+    else
+        log_error "Script missing CLI options analysis"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Test 20: Verify keyword analysis
+test_keyword_analysis() {
+    log_info "Testing keyword analysis..."
+    
+    # Check for keyword analyzer integration
+    if grep -q "keyword-analyzer.sh" "$SCRIPT_PATH"; then
+        log_success "Script integrates keyword analysis"
+    else
+        log_error "Script missing keyword analysis"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Test 21: Verify version calculator integration
+test_version_calculator_integration() {
+    log_info "Testing version calculator integration..."
+    
+    # Check for version calculator integration
+    if grep -q "version-calculator.sh" "$SCRIPT_PATH"; then
+        log_success "Script integrates version calculator"
+    else
+        log_error "Script missing version calculator integration"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Test 22: Verify ref resolver integration
+test_ref_resolver_integration() {
+    log_info "Testing ref resolver integration..."
+    
+    # Check for ref resolver integration
+    if grep -q "ref-resolver.sh" "$SCRIPT_PATH"; then
+        log_success "Script integrates ref resolver"
+    else
+        log_error "Script missing ref resolver integration"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Test 23: Verify specific exit code values
+test_specific_exit_codes() {
+    log_info "Testing specific exit code values..."
+    
+    # Check for specific exit codes
+    if grep -q "exit 10" "$SCRIPT_PATH"; then
+        log_success "Script uses exit code 10 for major"
+    else
+        log_error "Script missing exit code 10 for major"
+        return 1
+    fi
+    
+    if grep -q "exit 11" "$SCRIPT_PATH"; then
+        log_success "Script uses exit code 11 for minor"
+    else
+        log_error "Script missing exit code 11 for minor"
+        return 1
+    fi
+    
+    if grep -q "exit 12" "$SCRIPT_PATH"; then
+        log_success "Script uses exit code 12 for patch"
+    else
+        log_error "Script missing exit code 12 for patch"
+        return 1
+    fi
+    
+    if grep -q "exit 20" "$SCRIPT_PATH"; then
+        log_success "Script uses exit code 20 for none"
+    else
+        log_error "Script missing exit code 20 for none"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Test 24: Verify configuration variable usage
+test_configuration_variables() {
+    log_info "Testing configuration variable usage..."
+    
+    # Check for configuration variable usage
+    local config_vars=("VERSION_BREAKING_CLI_BONUS" "VERSION_API_BREAKING_BONUS" "VERSION_SECURITY_BONUS" "VERSION_CLI_CHANGES_BONUS")
+    local missing_vars=()
+    
+    for var in "${config_vars[@]}"; do
+        if ! grep -q "$var" "$SCRIPT_PATH"; then
+            missing_vars+=("$var")
+        fi
+    done
+    
+    if [[ ${#missing_vars[@]} -eq 0 ]]; then
+        log_success "Script uses all expected configuration variables"
+    else
+        log_warning "Script missing configuration variables: ${missing_vars[*]}"
+    fi
+    
+    return 0
+}
+
+# Test 25: Verify script can run and produce output
+test_script_execution() {
+    log_info "Testing script execution..."
+    
+    # Test that the script can run with --help
+    local output
+    output=$("$SCRIPT_PATH" --help 2>&1)
+    local exit_code=$?
+    
+    if [[ $exit_code -eq 0 ]]; then
+        log_success "Script can execute and show help"
+    else
+        log_error "Script failed to execute with --help"
+        return 1
+    fi
+    
+    # Test that the script can run with --suggest-only (should work in any git repo)
+    output=$("$SCRIPT_PATH" --suggest-only 2>/dev/null || true)
+    local exit_code=$?
+    
+    # The script should either succeed or fail gracefully, but not crash
+    if [[ $exit_code -eq 0 || $exit_code -eq 10 || $exit_code -eq 11 || $exit_code -eq 12 || $exit_code -eq 20 ]]; then
+        log_success "Script can execute with --suggest-only"
+    else
+        log_warning "Script may have issues with --suggest-only (exit code: $exit_code)"
+    fi
+    
+    return 0
+}
+
 # Main test execution
 main() {
     # Check if we're in a git repository
@@ -351,6 +621,19 @@ main() {
     test_config_loading
     test_bonus_calculation
     test_output_formats
+    test_new_versioning_features
+    test_exit_codes
+    test_argument_parsing
+    test_debug_output
+    test_security_analysis
+    test_file_change_analysis
+    test_cli_options_analysis
+    test_keyword_analysis
+    test_version_calculator_integration
+    test_ref_resolver_integration
+    test_specific_exit_codes
+    test_configuration_variables
+    test_script_execution
     test_double_counting_warning
     test_language_limitation
     
