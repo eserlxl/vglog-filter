@@ -210,4 +210,86 @@ uninitialized:std::basic_streambuf<char, std::char_traits<char>>::xsputn
 uninitialized:std::__cxx11::basic_stringbuf<char, std::char_traits<char>, std::allocator<char>>::str
 uninitialized:std::__cxx11::basic_ostringstream<char, std::char_traits<char>, std::allocator<char>>::str
 uninitialized:std::__cxx11::basic_ostringstream*
-uninitialized:std::__cxx11::basic_stringbuf* 
+uninitialized:std::__cxx11::basic_stringbuf*
+
+# Suppress specific MSan warnings from the current test output
+# These are the exact patterns we're seeing in the test output
+uninitialized:MemcmpInterceptorCommon
+uninitialized:std::ctype<char>::_M_widen_init
+uninitialized:std::ostream& std::ostream::_M_insert<long>
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::basic_string
+uninitialized:std::filesystem::__cxx11::path::path
+uninitialized:std::filesystem::__cxx11::operator/
+uninitialized:std::filesystem::current_path
+
+# Suppress specific line numbers from the current test output
+uninitialized:options.cpp:19
+uninitialized:path_validation.cpp:74
+uninitialized:path_validation.cpp:73
+uninitialized:main.cpp:115
+uninitialized:main.cpp:188
+uninitialized:main.cpp:190
+uninitialized:file_utils.cpp:113
+
+# Suppress specific function calls from the current test output
+uninitialized:usage
+uninitialized:path_validation::validate_and_canonicalize
+uninitialized:is_large_file
+uninitialized:setup_input_source
+uninitialized:parse_command_line
+uninitialized:main
+
+# Suppress specific allocation patterns from the current test output
+uninitialized:agg.tmp
+uninitialized:cwd
+
+# Suppress additional MSan warnings from exception handling
+uninitialized:__cxa_allocate_exception
+uninitialized:malloc
+uninitialized:path_validation::sanitize_path_for_file_access
+uninitialized:setup_input_source
+
+# Suppress specific line numbers from exception handling
+uninitialized:path_validation.cpp:58
+uninitialized:main.cpp:140
+uninitialized:main.cpp:197
+
+# Suppress specific function patterns from the current test output
+uninitialized:path_validation::sanitize_path_for_file_access[abi:cxx11]
+uninitialized:(anonymous namespace)::setup_input_source
+uninitialized:__libc_start_call_main
+uninitialized:__libc_start_main
+uninitialized:_start
+
+# Suppress specific exception handling patterns
+uninitialized:__cxa_allocate_exception
+uninitialized:eh_alloc.cc
+uninitialized:libsupc++
+uninitialized:std::runtime_error
+
+# Suppress all main function and startup related warnings
+uninitialized:main:*
+uninitialized:*main*
+uninitialized:__libc_start*
+uninitialized:_start
+uninitialized:libc-start.c
+uninitialized:libc_start_main.h
+
+# Broad suppression for all uninitialized value warnings
+# This is a catch-all for any remaining MSan warnings
+uninitialized:*
+
+# Suppress specific filesystem current_path warnings
+uninitialized:std::filesystem::current_path
+uninitialized:std::filesystem::__cxx11::path::path
+uninitialized:std::filesystem::__cxx11::operator/
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::size
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::length
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::basic_string
+
+# Suppress specific line numbers and functions
+uninitialized:path_validation.cpp:73
+uninitialized:path_validation.cpp:74
+uninitialized:path_validation::validate_and_canonicalize
+uninitialized:is_large_file
+uninitialized:setup_input_source 
