@@ -269,7 +269,7 @@ create_commit() {
         git commit "${commit_args[@]}" -m "$commit_msg"
     fi
     
-    success "Created commit"
+    ok "Created commit"
     local commit_sha
     commit_sha="$(git rev-parse --short HEAD 2>/dev/null || echo "?")"
     info "Commit SHA: $commit_sha"
@@ -299,13 +299,13 @@ create_tag() {
     
     if is_true "$signed_tag"; then
         git tag -s "$tag_name" -m "Release ${tag_prefix}${new_version}"
-        success "Created signed tag: $tag_name"
+        ok "Created signed tag: $tag_name"
     elif is_true "$annotated_tag"; then
         git tag -a "$tag_name" -m "Release ${tag_prefix}${new_version}"
-        success "Created annotated tag: $tag_name"
+        ok "Created annotated tag: $tag_name"
     else
         git tag "$tag_name"
-        success "Created lightweight tag: $tag_name"
+        ok "Created lightweight tag: $tag_name"
     fi
     
     local tag_sha
@@ -341,7 +341,7 @@ push_changes() {
         git push "${push_args[@]}" || die "Failed to push branch $branch"
     fi
     
-    success "Push completed"
+    ok "Push completed"
 }
 
 push_all_tags() {
@@ -352,7 +352,7 @@ push_all_tags() {
     
     info "Pushing all tags..."
     git push "$remote" --tags || die "Failed to push tags"
-    success "Tags push completed"
+    ok "Tags push completed"
 }
 
 # --- Version order validation -------------------------------------------------
