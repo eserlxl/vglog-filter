@@ -20,9 +20,9 @@ limits:
 bonuses:
   # Breaking Changes (High Impact)
   breaking_changes:
-    api_breaking: 3
-    cli_breaking: 2
-    removed_features: 2
+    api_breaking: 5
+    cli_breaking: 4
+    removed_features: 3
     database_schema: 4
     config_format: 3
     plugin_api: 3
