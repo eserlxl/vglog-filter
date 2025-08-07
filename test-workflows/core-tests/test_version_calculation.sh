@@ -21,6 +21,10 @@ NC='\033[0m' # No Color
 test_dir=$(create_temp_test_env "version_calculation_test")
 cd "$test_dir"
 
+# Get project root and script path without changing directory
+PROJECT_ROOT="$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")"
+SCRIPT_PATH="$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh"
+
 # Test 1: Basic version calculation
 echo ""
 echo "Test 1: Basic version calculation"
@@ -38,9 +42,7 @@ git commit -m "Add test change" -q
 
 # Run semantic analyzer and extract next version
 base_commit=$(git rev-parse HEAD~1)
-cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." || exit 1
-result=$(./dev-bin/semantic-version-analyzer.sh --base "$base_commit" --repo-root "$test_dir" --json 2>/dev/null)
-cd "$test_dir" || exit 1
+result=$("$SCRIPT_PATH" --base "$base_commit" --repo-root "$test_dir" --json 2>/dev/null)
 
 # Parse JSON properly - handle multiline JSON
 if command -v jq >/dev/null 2>&1; then
@@ -75,9 +77,7 @@ git commit -m "Add another test change" -q
 
 # Run semantic analyzer
 base_commit2=$(git rev-parse HEAD~1)
-cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." || exit 1
-result2=$(./dev-bin/semantic-version-analyzer.sh --base "$base_commit2" --repo-root "$test_dir" --json 2>/dev/null)
-cd "$test_dir" || exit 1
+result2=$("$SCRIPT_PATH" --base "$base_commit2" --repo-root "$test_dir" --json 2>/dev/null)
 if command -v jq >/dev/null 2>&1; then
     next_version2=$(echo "$result2" | jq -r '.next_version')
 else
@@ -110,9 +110,7 @@ git commit -m "Add third test change" -q
 
 # Run semantic analyzer
 base_commit3=$(git rev-parse HEAD~1)
-cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." || exit 1
-result3=$(./dev-bin/semantic-version-analyzer.sh --base "$base_commit3" --repo-root "$test_dir" --json 2>/dev/null)
-cd "$test_dir" || exit 1
+result3=$("$SCRIPT_PATH" --base "$base_commit3" --repo-root "$test_dir" --json 2>/dev/null)
 if command -v jq >/dev/null 2>&1; then
     next_version3=$(echo "$result3" | jq -r '.next_version')
 else
