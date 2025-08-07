@@ -146,13 +146,12 @@ run_test() {
     # Execute command and capture output
     local output
     output="$(eval "$cmd" 2>&1)"
-    local status=$?
     
     # Check if output contains expected string
     if echo "$output" | grep -q "$expect"; then
         ((TESTS_PASSED++))
         ((QUIET)) || printf '✓ PASS: %s\n' "$name"
-        if ((KEEP_OUTPUT)); then
+        if ((VERBOSE)) || ((KEEP_OUTPUT)); then
             printf '  Output:\n'
             printf '  %s\n' "$output" | sed 's/^/    /'
         fi
@@ -161,6 +160,10 @@ run_test() {
         color red "✗ FAIL: $name"
         printf '  Expected: %s\n' "$expect"
         printf '  Got: %s\n' "$output"
+        if ((VERBOSE)) || ((KEEP_OUTPUT)); then
+            printf '  Full output:\n'
+            printf '  %s\n' "$output" | sed 's/^/    /'
+        fi
         if ((STOP_ON_FAIL)); then
             exit 1
         fi
