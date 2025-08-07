@@ -150,7 +150,7 @@ if (file) {
 
 ### 6. Comprehensive MSAN Suppressions
 
-We created a comprehensive suppressions file (`test-workflows/msan_suppressions.txt`) with 88 lines of targeted suppressions to handle known C++ standard library limitations:
+We created a comprehensive suppressions file (`test-workflows/msan_suppressions.txt`) with 87 lines of targeted suppressions to handle known C++ standard library limitations:
 
 #### Regex-Related Suppressions
 ```
@@ -299,7 +299,7 @@ export MSAN_OPTIONS="abort_on_error=0:print_stats=1:halt_on_error=0:exit_code=0"
 3. **String-based path validation**: Replaced filesystem path iteration with string pattern matching
 4. **Removed string pre-allocation**: Avoided `reserve()` calls that cause uninitialized memory issues
 5. **C-style file operations**: Replaced `std::ifstream` with C-style file operations
-6. **Comprehensive suppressions**: Created 88 lines of targeted suppressions for known library limitations
+6. **Comprehensive suppressions**: Created 87 lines of targeted suppressions for known library limitations
 7. **Extensive testing**: Multiple test scripts verify MSAN compatibility
 
 **Test Coverage**: The project includes comprehensive test scripts that validate:
