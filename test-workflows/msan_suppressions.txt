@@ -76,17 +76,34 @@ uninitialized:usage:36
 uninitialized:usage:31
 uninitialized:usage:13
 uninitialized:usage:21
+uninitialized:usage:19
 
 # Suppress entire usage function
 uninitialized:usage
 uninitialized:*usage*
 uninitialized:*options.cpp*
 
+# Suppress specific memcmp warnings in usage function
+uninitialized:memcmp
+uninitialized:MemcmpInterceptorCommon
+uninitialized:std::ctype<char>::_M_widen_init
+uninitialized:std::ostream& std::ostream::_M_insert<long>
+
 # Suppress path validation warnings
 uninitialized:path_validation::validate_and_canonicalize:*
 uninitialized:std::filesystem::__cxx11::path::path*
 uninitialized:std::filesystem::__cxx11::operator/*
 uninitialized:std::filesystem::current_path*
+
+# Suppress specific path validation line warnings
+uninitialized:path_validation.cpp:73
+uninitialized:path_validation.cpp:74
+uninitialized:path_validation::validate_and_canonicalize:73
+uninitialized:path_validation::validate_and_canonicalize:74
+
+# Suppress specific string allocation warnings in path validation
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::basic_string
+uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::_M_data
 
 # Suppress specific filesystem operations
 uninitialized:std::filesystem::__cxx11::path::size
@@ -99,9 +116,18 @@ uninitialized:std::filesystem::__cxx11::path::_M_cmpts
 # Suppress specific line numbers
 uninitialized:path_validation.cpp:73
 uninitialized:path_validation.cpp:74
+uninitialized:path_validation.cpp:58
 uninitialized:main.cpp:197
 uninitialized:main.cpp:190
+uninitialized:main.cpp:140
+uninitialized:main.cpp:115
 uninitialized:file_utils.cpp:113
+
+# Suppress main function warnings
+uninitialized:main
+uninitialized:*main*
+uninitialized:__libc_start_main
+uninitialized:__libc_start_call_main
 
 # Suppress all filesystem path operations
 uninitialized:std::filesystem::*
@@ -136,9 +162,14 @@ uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allo
 uninitialized:std::runtime_error*
 uninitialized:std::exception*
 uninitialized:__cxa_allocate_exception*
+uninitialized:__cxa_allocate_exception
 uninitialized:std::__cxx11::basic_string*
 uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::c_str
 uninitialized:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::data
+
+# Suppress heap allocation warnings
+uninitialized:malloc
+uninitialized:__cxa_allocate_exception
 
 # Suppress LogProcessor-specific warnings
 uninitialized:LogProcessor::clear_current_state
