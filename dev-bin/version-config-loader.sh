@@ -110,8 +110,8 @@ yq_v4=false
 
 if has yq; then
     yq_present=true
-    # verify v4+ (we rely on 'yq e')
-    if yq --version 2>/dev/null | grep -Eq 'version 4\.'; then
+    # verify v3+ (we rely on 'yq' command)
+    if yq --version 2>/dev/null | grep -Eq '[34]\.[0-9]'; then
         yq_v4=true
     fi
     if [[ "$CONFIG_FILE" == "-" ]]; then
@@ -124,11 +124,11 @@ fi
 
 # Read from file or stdin depending on CONFIG_FILE
 _yq_base() {
-    # yq v4 syntax compatible
+    # yq v3 syntax compatible
     if [[ "$CONFIG_FILE" == "-" ]]; then
-        yq e "$1" -
+        yq "$1" -
     else
-        yq e "$1" "$CONFIG_FILE"
+        yq "$1" "$CONFIG_FILE"
     fi
 }
 
@@ -195,7 +195,7 @@ load_config() {
         return 1
     fi
     if ! $yq_v4; then
-        warn "yq v4 is required; detected a different version. Using env/hard defaults."
+        warn "yq v3+ is required; detected a different version. Using env/hard defaults."
         return 1
     fi
     if ! $yaml_present; then
@@ -242,6 +242,7 @@ load_config() {
     # bonuses
     BONUS_API_BREAKING="$(yq_get_num '.bonuses.breaking_changes.api_breaking')"
     BONUS_CLI_BREAKING="$(yq_get_num '.bonuses.breaking_changes.cli_breaking')"
+    BONUS_REMOVED_FEATURES="$(yq_get_num '.bonuses.breaking_changes.removed_features')"
     BONUS_SECURITY_VULN="$(yq_get_num '.bonuses.security_stability.security_vuln')"
     BONUS_CVE="$(yq_get_num '.bonuses.security_stability.cve')"
     BONUS_MEMORY_SAFETY="$(yq_get_num '.bonuses.security_stability.memory_safety')"
@@ -295,7 +296,7 @@ fi
 # Bonus values (YAML preferred → fallback to env → hard default)
 VERSION_BREAKING_CLI_BONUS="${BONUS_CLI_BREAKING:-${VERSION_BREAKING_CLI_BONUS:-2}}"
 VERSION_API_BREAKING_BONUS="${BONUS_API_BREAKING:-${VERSION_API_BREAKING_BONUS:-3}}"
-VERSION_REMOVED_OPTION_BONUS="${VERSION_REMOVED_OPTION_BONUS:-1}"
+VERSION_REMOVED_OPTION_BONUS="${BONUS_REMOVED_FEATURES:-${VERSION_REMOVED_OPTION_BONUS:-1}}"
 VERSION_CLI_CHANGES_BONUS="${VERSION_CLI_CHANGES_BONUS:-2}"
 VERSION_MANUAL_CLI_BONUS="${VERSION_MANUAL_CLI_BONUS:-1}"
 VERSION_NEW_SOURCE_BONUS="${BONUS_NEW_SOURCE_FILE:-${VERSION_NEW_SOURCE_BONUS:-1}}"

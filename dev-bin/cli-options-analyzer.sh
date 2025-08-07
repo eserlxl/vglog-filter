@@ -201,11 +201,12 @@ extract_long_opts() {
 # Count removed prototypes in headers as API break indicator.
 count_removed_prototypes() {
   awk '
-    # minus lines only
-    /^-/ {
+    # minus lines only (handle line numbers from grep -n)
+    /^[0-9]+:-/ || /^-/ {
       # crude prototype detector: ret name(args);
-      if ($0 !~ /^-[[:space:]]*(typedef|#)/ &&
-          $0 ~ /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]+[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([^;]*\)[[:space:]]*;[[:space:]]*$/)
+      if ($0 !~ /^[0-9]*:-[[:space:]]*(typedef|#)/ && $0 !~ /^-[[:space:]]*(typedef|#)/ &&
+          ($0 ~ /^[0-9]*:-[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]+[[:space:]]+[A-Za-z_][A-Za-z0-9_]*\([^;]*\)[[:space:]]*;[[:space:]]*$/ ||
+           $0 ~ /^-[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]+[[:space:]]+[A-Za-z_][A-Za-z0-9_]*\([^;]*\)[[:space:]]*;[[:space:]]*$/))
         print
     }
   ' | wc -l | tr -d ' '
@@ -366,6 +367,9 @@ breaking_cli_changes=false
 removed_prototypes=$(printf '%s' "$HDR_DIFF" | count_removed_prototypes || printf '0')
 api_breaking=false
 (( removed_prototypes > 0 )) && api_breaking=true
+
+# Debug: Show HDR_DIFF content (only in verbose mode)
+$VERBOSE && note "Debug: removed_prototypes count: $removed_prototypes"
 
 # Manual/heuristic long option detection limited to C/C++
 added_long_opts=$(printf '%s' "$CPP_DIFF" | scan_manual_long_opts '+')

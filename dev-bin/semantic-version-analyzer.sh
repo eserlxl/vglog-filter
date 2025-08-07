@@ -334,6 +334,13 @@ main() {
     run_component cli_raw "$SCRIPT_DIR/cli-options-analyzer.sh" "${common_argv[@]}"
   fi
   declare -A CLI=(); parse_kv_into CLI <<<"$cli_raw"
+  
+  # Debug CLI analyzer results
+  debug "CLI analyzer results:"
+  debug "  BREAKING_CLI_CHANGES=${CLI[BREAKING_CLI_CHANGES]:-false}"
+  debug "  API_BREAKING=${CLI[API_BREAKING]:-false}"
+  debug "  MANUAL_CLI_CHANGES=${CLI[MANUAL_CLI_CHANGES]:-false}"
+  debug "  MANUAL_REMOVED_LONG_COUNT=${CLI[MANUAL_REMOVED_LONG_COUNT]:-0}"
 
   # 5) Security keywords
   debug "Analyzing security keywords..."
@@ -398,7 +405,7 @@ main() {
   fi
 
   # Removed options (both sources)
-  local cli_removed=$(( $(int_or_default "${CLI[REMOVED_SHORT_COUNT]}" 0) + $(int_or_default "${CLI[REMOVED_LONG_COUNT]}" 0) ))
+  local cli_removed=$(( $(int_or_default "${CLI[REMOVED_SHORT_COUNT]}" 0) + $(int_or_default "${CLI[REMOVED_LONG_COUNT]}" 0) + $(int_or_default "${CLI[MANUAL_REMOVED_LONG_COUNT]}" 0) ))
   local kw_removed
   kw_removed=$(int_or_default "${KW[REMOVED_OPTIONS_KEYWORDS]}" 0)
   local total_removed=$(( cli_removed + kw_removed ))
@@ -415,11 +422,13 @@ main() {
   minor_th=$(int_or_default "${CFG[MINOR_BONUS_THRESHOLD]}" 4)
   local patch_th
   patch_th=$(int_or_default "${CFG[PATCH_BONUS_THRESHOLD]}" 0)
+  
+  debug "Thresholds: major_th=$major_th, minor_th=$minor_th, patch_th=$patch_th"
 
   local suggestion="none"
   if   (( TOTAL_BONUS >= major_th )); then suggestion="major"
   elif (( TOTAL_BONUS >= minor_th )); then suggestion="minor"
-  elif (( TOTAL_BONUS >= patch_th )); then suggestion="patch"
+  elif (( TOTAL_BONUS > patch_th )); then suggestion="patch"
   fi
 
   # 9) Current version (from VERSION file if present)
@@ -461,6 +470,9 @@ main() {
       printf '  "next_version": "%s",\n' "$(json_escape "$next_version")"
     fi
     printf '  "total_bonus": %s,\n' "$TOTAL_BONUS"
+    printf '  "manual_cli_changes": %s,\n' "$(json_escape "${CLI[MANUAL_CLI_CHANGES]:-false}")"
+    printf '  "manual_added_long_count": %s,\n' "$(int_or_default "${CLI[MANUAL_ADDED_LONG_COUNT]}" 0)"
+    printf '  "manual_removed_long_count": %s,\n' "$(int_or_default "${CLI[MANUAL_REMOVED_LONG_COUNT]}" 0)"
     printf '  "base_ref": "%s",\n' "$(json_escape "$BASE_REF")"
     printf '  "target_ref": "%s",\n' "$(json_escape "$TARGET_REF")"
     printf '  "loc_delta": {\n'
