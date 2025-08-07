@@ -282,7 +282,7 @@ main() {
   
   # If a repo root is specified, temporarily cd there to keep relative file reads consistent.
   if [[ -n "$REPO_ROOT" ]]; then
-    pushd "$REPO_ROOT" >/dev/null
+    pushd "$REPO_ROOT" >/dev/null || exit 1
     __did_pushd=true
     trap cleanup EXIT
   else

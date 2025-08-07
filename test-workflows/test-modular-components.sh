@@ -42,6 +42,7 @@ color() {
         *)  printf '%s' "$2" ;;
     esac
 }
+# shellcheck disable=SC2329
 say() { ((QUIET)) || printf '%s\n' "$*"; }
 sayc() { ((QUIET)) || { color "$1" "$2"; printf '\n'; } }
 die() { sayc red "Error: $*"; exit 1; }
