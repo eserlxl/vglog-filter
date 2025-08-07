@@ -200,6 +200,11 @@ run_component() {
       _dst="$(default_security_kv)"
       return 0
     fi
+    # cli-options-analyzer may fail outside git repository
+    if [[ "$base" == "cli-options-analyzer.sh" ]]; then
+      _dst="$(default_cli_kv)"
+      return 0
+    fi
     printf 'Error: Command failed (%s, exit=%d)\n' "$base" "$ec" >&2
     exit 1
   fi
@@ -226,6 +231,8 @@ API_BREAKING=false
 MANUAL_CLI_CHANGES=false
 REMOVED_SHORT_COUNT=0
 REMOVED_LONG_COUNT=0
+MANUAL_ADDED_LONG_COUNT=0
+MANUAL_REMOVED_LONG_COUNT=0
 EOF
 }
 

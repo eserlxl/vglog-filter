@@ -11,12 +11,10 @@
 
 set -Eeuo pipefail
 
-# Get project root (assume we're running from project root)
-PROJECT_ROOT="$(pwd)"
-
-# Source test helper functions
+# Source the test helper
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 # shellcheck disable=SC1091
-# shellcheck source=test_helper.sh
 source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 echo "=== Testing Rename Handling ==="
@@ -26,6 +24,7 @@ temp_dir=$(create_temp_test_env "rename-handling")
 cd "$temp_dir"
 
 # Create a test file in the temporary directory
+mkdir -p source-fixtures
 echo "test content for rename" > source-fixtures/rename_test_original.txt
 
 # Add and commit the file

@@ -45,7 +45,10 @@ sayc() { ((QUIET)) || { color "$1" "$2"; printf '\n'; } }
 die() { sayc red "Error: $*"; exit 1; }
 
 # ---------------------- args ----------------------
-DEV_BIN="./dev-bin"
+# Get project root
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+DEV_BIN="$PROJECT_ROOT/dev-bin"
 BASE_REF=""
 TARGET_REF=""
 

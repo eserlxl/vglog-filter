@@ -9,7 +9,7 @@
 # File Change Analyzer
 # Analyzes file changes and classifies them by type
 
-set -Eeuo pipefail
+set -Euo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
 # Prevent any pager and avoid unnecessary repo locks for better performance.
@@ -122,8 +122,9 @@ verify_ref "$TARGET_REF"
 # --- Pathspec handling ---
 trim_spaces() { local s="$1"; s="${s##+([[:space:]])}"; s="${s%%+([[:space:]])}"; printf '%s' "$s"; }
 
-PATH_ARGS=(--)
+PATH_ARGS=()
 if [[ -n "$ONLY_PATHS" ]]; then
+    PATH_ARGS=(--)
     IFS=',' read -r -a _inc <<< "$ONLY_PATHS"
     for g in "${_inc[@]}"; do
         g="$(trim_spaces "$g")"
@@ -261,8 +262,11 @@ analyze_file_changes() {
     [[ "$IGNORE_WHITESPACE" == true ]] && DIFF_OPTS+=(-w)
 
     # fast path: any changes?
-    if git "${CFG[@]}" diff "${DIFF_OPTS[@]}" --quiet "${base_ref}..${target_ref}" \
-         "${NEG_PATH_ARGS[@]}" -- "${PATH_ARGS[@]:-}" 2>/dev/null; then
+    local git_args=("${CFG[@]}" diff "${DIFF_OPTS[@]}" --quiet "${base_ref}..${target_ref}")
+    [[ ${#NEG_PATH_ARGS[@]} -gt 0 ]] && git_args+=("${NEG_PATH_ARGS[@]}")
+    [[ ${#PATH_ARGS[@]} -gt 0 ]] && git_args+=(-- "${PATH_ARGS[@]}")
+    
+    if git "${git_args[@]}" 2>/dev/null; then
         local msg="No changes detected between ${base_ref} and ${target_ref}"
         [[ "$IGNORE_WHITESPACE" == true ]] && msg+=" (ignoring whitespace)"
         print_empty_results "$msg"
@@ -292,11 +296,11 @@ analyze_file_changes() {
             *)       ((modified++)) ;; # treat unknown as modification
         esac
     done < <(git "${CFG[@]}" diff "${DIFF_OPTS[@]}" --name-status -z \
-              "${base_ref}..${target_ref}" "${NEG_PATH_ARGS[@]}" -- "${PATH_ARGS[@]:-}" 2>/dev/null)
+              "${base_ref}..${target_ref}" "${NEG_PATH_ARGS[@]}" $([[ ${#PATH_ARGS[@]} -gt 0 ]] && echo -- "${PATH_ARGS[@]}") 2>/dev/null)
 
     # insertions/deletions
     read -r ins dels < <(sum_numstat git "${CFG[@]}" diff "${DIFF_OPTS[@]}" --numstat \
-                          "${base_ref}..${target_ref}" "${NEG_PATH_ARGS[@]}" -- "${PATH_ARGS[@]:-}")
+                          "${base_ref}..${target_ref}" "${NEG_PATH_ARGS[@]}" $([[ ${#PATH_ARGS[@]} -gt 0 ]] && echo -- "${PATH_ARGS[@]}"))
 
     print_results "$added" "$modified" "$deleted" "$new_src" "$new_tst" "$new_doc" "$ins" "$dels"
 

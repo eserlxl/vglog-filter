@@ -21,6 +21,10 @@ NC='\033[0m' # No Color
 TESTS_PASSED=0
 TESTS_FAILED=0
 
+# Get project root
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
 # Test function
 test_version_calculation() {
     local test_name="$1"
@@ -38,7 +42,7 @@ test_version_calculation() {
     
     # Run version calculator
     local output
-    if ! output=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type "$bump_type" --loc "$loc" --bonus "$bonus" --machine 2>/dev/null); then
+    if ! output=$("$PROJECT_ROOT/dev-bin/version-calculator.sh" --current-version "$current_version" --bump-type "$bump_type" --loc "$loc" --bonus "$bonus" --machine 2>/dev/null); then
         printf '%bFAILED: Command failed%b\n' "$RED" "$NC"
         TESTS_FAILED=$((TESTS_FAILED + 1))
         return 1
@@ -103,7 +107,7 @@ test_rollover() {
     printf 'Testing Rollover: %s\n' "$test_name"
     
     local output
-    if ! output=$(./dev-bin/version-calculator --current-version "$current_version" --bump-type "$bump_type" --loc "$loc" --bonus "$bonus" --machine 2>/dev/null); then
+    if ! output=$("$PROJECT_ROOT/dev-bin/version-calculator.sh" --current-version "$current_version" --bump-type "$bump_type" --loc "$loc" --bonus "$bonus" --machine 2>/dev/null); then
         printf '%bFAILED: Command failed%b\n' "$RED" "$NC"
         TESTS_FAILED=$((TESTS_FAILED + 1))
         return 1

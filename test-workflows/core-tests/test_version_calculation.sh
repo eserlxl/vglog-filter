@@ -7,7 +7,8 @@
 set -euo pipefail
 
 # Source the test helper
-PROJECT_ROOT="$(pwd)"
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 # shellcheck disable=SC1091
 source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
@@ -21,7 +22,6 @@ test_dir=$(create_temp_test_env "version_calculation_test")
 cd "$test_dir"
 
 # Get project root and script path without changing directory
-PROJECT_ROOT="$(pwd)"
 SCRIPT_PATH="$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh"
 
 # Test 1: Basic version calculation
@@ -34,9 +34,10 @@ echo "9.3.0" > VERSION
 git add VERSION
 git commit -m "Set version to 9.3.0" -q
 
-# Add a small change to a non-source file
-echo "test content" >> README.md
-git add README.md
+# Add a small change to a source file
+mkdir -p src
+echo "int main() { return 0; }" > src/main.c
+git add src/main.c
 git commit -m "Add test change" -q
 
 # Run semantic analyzer and extract next version
@@ -69,9 +70,9 @@ echo "9.3.95" > VERSION
 git add VERSION
 git commit -m "Set version to 9.3.95" -q
 
-# Add another change to a non-source file
-echo "more test content" >> README.md
-git add README.md
+# Add another change to a source file
+echo "// Additional comment" >> src/main.c
+git add src/main.c
 git commit -m "Add another test change" -q
 
 # Run semantic analyzer
@@ -102,9 +103,9 @@ echo "9.99.95" > VERSION
 git add VERSION
 git commit -m "Set version to 9.99.95" -q
 
-# Add another change to a non-source file
-echo "third test content" >> README.md
-git add README.md
+# Add another change to a source file
+echo "// Third comment" >> src/main.c
+git add src/main.c
 git commit -m "Add third test change" -q
 
 # Run semantic analyzer

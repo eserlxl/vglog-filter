@@ -9,13 +9,10 @@
 # Test fixture for CLI detection
 set -euo pipefail
 
-# Get the script directory and project root
-# Get project root (assume we're running from project root)
-PROJECT_ROOT="$(pwd)"
-
-# Source test helper functions
+# Source the test helper
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 # shellcheck disable=SC1091
-# shellcheck source=test_helper.sh
 source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 echo "=== Testing Semantic Version Analyzer Fixes ==="
@@ -266,7 +263,7 @@ echo
 echo "Test 5: --print-base functionality"
 
 # Run --print-base from the temporary directory
-base_ref=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --print-base --repo-root "$temp_dir" 2>&1 | tail -1 || echo "unknown")
+base_ref=$("$PROJECT_ROOT/dev-bin/ref-resolver.sh" --print-base --repo-root "$temp_dir" 2>&1 | tail -1 || echo "unknown")
 
 if [[ "$base_ref" != "unknown" ]] && [[ "$base_ref" =~ ^[a-f0-9]+$ ]]; then
     echo "✅ PASS: --print-base returned valid SHA: $base_ref"

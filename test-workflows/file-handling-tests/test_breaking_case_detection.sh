@@ -11,12 +11,10 @@
 
 set -euo pipefail
 
-# Get project root (assume we're running from project root)
-PROJECT_ROOT="$(pwd)"
-
-# Source test helper functions
+# Source the test helper
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 # shellcheck disable=SC1091
-# shellcheck source=test_helper.sh
 source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 echo "Testing breaking case detection across C file extensions..."
@@ -96,9 +94,17 @@ cat src/test_switch.c
 first_commit=$(git rev-parse HEAD~1)
 second_commit=$(git rev-parse HEAD)
 
-# Run semantic version analyzer from the original project directory
-result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
+# Run CLI analyzer directly to debug
+echo "Debug: Running CLI analyzer directly..."
+cli_result=$("$PROJECT_ROOT/dev-bin/cli-options-analyzer.sh" --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
+echo "CLI analyzer output:"
+echo "$cli_result"
 
+# Run semantic version analyzer from the original project directory
+result=$("$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh" --verbose --machine --repo-root "$temp_dir" --base "$first_commit" --target "$second_commit" 2>&1 || true)
+
+echo "Semantic analyzer output:"
+echo "$result"
 
 # Extract suggestion
 suggestion=$(echo "$result" | grep "SUGGESTION=" | cut -d'=' -f2 || echo "unknown")

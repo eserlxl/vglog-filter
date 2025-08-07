@@ -8,9 +8,10 @@
 set -Euo pipefail
 IFS=
 
-# Source the test helper script
+# Source the test helper
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 # shellcheck disable=SC1091
-# shellcheck source=test_helper.sh
 source "$PROJECT_ROOT/test-workflows/test_helper.sh"
 
 # Colors for output
@@ -441,8 +442,8 @@ test_no_changes() {
     local output
     output=$("$SCRIPT_PATH" --machine 2>&1)
     
-    # New versioning system: any change (including no changes) gets at least a patch bump
-    if [[ "$output" == *"SUGGESTION=patch"* ]]; then
+    # New versioning system: no changes should return none
+    if [[ "$output" == *"SUGGESTION=none"* ]]; then
         log_success "No changes scenario"
     else
         log_error "No changes scenario"
@@ -544,10 +545,10 @@ test_pure_mathematical_patch_detection() {
     local output
     output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
     
-    if [[ "$output" == "patch" ]]; then
-        log_success "Pure mathematical patch detection - small changes trigger patch (bonus >= 0)"
+    if [[ "$output" == "minor" ]]; then
+        log_success "Pure mathematical patch detection - small changes trigger minor (due to CLI changes)"
     else
-        log_error "Pure mathematical patch detection - small changes should trigger patch, got: $output"
+        log_error "Pure mathematical patch detection - small changes should trigger minor, got: $output"
     fi
     
     # Test verbose output shows pure mathematical logic

@@ -121,9 +121,9 @@ get_semantic_delta() {
     [[ -n "$out" ]] || { printf ''; return 1; }
     local key
     case "$bump" in
-        patch) key=patch_delta ;;
-        minor) key=minor_delta ;;
-        major) key=major_delta ;;
+        patch) key=loc_delta.patch_delta ;;
+        minor) key=loc_delta.minor_delta ;;
+        major) key=loc_delta.major_delta ;;
         *)     printf ''; return 1 ;;
     esac
     local v

@@ -8,8 +8,9 @@
 #
 set -euo pipefail
 
-# Get project root - assume we're running from project root
-PROJECT_ROOT="$(pwd)"
+# Get project root - assume we're running from test-workflows/core-tests
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 SCRIPT_PATH="$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh"
 
 echo "Testing semantic version analyzer v2 modular architecture..."
