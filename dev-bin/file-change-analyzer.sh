@@ -296,11 +296,11 @@ analyze_file_changes() {
             *)       ((modified++)) ;; # treat unknown as modification
         esac
     done < <(git "${CFG[@]}" diff "${DIFF_OPTS[@]}" --name-status -z \
-              "${base_ref}..${target_ref}" "${NEG_PATH_ARGS[@]}" $([[ ${#PATH_ARGS[@]} -gt 0 ]] && echo -- "${PATH_ARGS[@]}") 2>/dev/null)
+              "${base_ref}..${target_ref}" "${NEG_PATH_ARGS[@]}" "$([[ ${#PATH_ARGS[@]} -gt 0 ]] && echo -- "${PATH_ARGS[@]}")" 2>/dev/null)
 
     # insertions/deletions
     read -r ins dels < <(sum_numstat git "${CFG[@]}" diff "${DIFF_OPTS[@]}" --numstat \
-                          "${base_ref}..${target_ref}" "${NEG_PATH_ARGS[@]}" $([[ ${#PATH_ARGS[@]} -gt 0 ]] && echo -- "${PATH_ARGS[@]}"))
+                          "${base_ref}..${target_ref}" "${NEG_PATH_ARGS[@]}" "$([[ ${#PATH_ARGS[@]} -gt 0 ]] && echo -- "${PATH_ARGS[@]}")")
 
     print_results "$added" "$modified" "$deleted" "$new_src" "$new_tst" "$new_doc" "$ins" "$dels"
 
