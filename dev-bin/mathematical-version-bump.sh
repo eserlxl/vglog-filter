@@ -443,9 +443,9 @@ main() {
 
   # Success & next steps
   if [[ "$current_version" == "none" ]]; then
-    success "Mathematical version bump completed: created $new_version"
+    ok "Mathematical version bump completed: created $new_version"
   else
-    success "Mathematical version bump completed: $current_version → $new_version"
+    ok "Mathematical version bump completed: $current_version → $new_version"
   fi
 
   if [[ "$OPT_DO_TAG" == "true" ]]; then
