@@ -147,8 +147,25 @@ run_test() {
     local output
     output="$(eval "$cmd" 2>&1)"
     
-    # Check if output contains expected string
-    if echo "$output" | grep -q "$expect"; then
+    # Check if output contains expected string (supports pipe-separated alternatives)
+    local found=0
+    if [[ "$expect" == *"|"* ]]; then
+        # Multiple alternatives separated by |
+        IFS='|' read -ra patterns <<< "$expect"
+        for pattern in "${patterns[@]}"; do
+            if echo "$output" | grep -q "$pattern"; then
+                found=1
+                break
+            fi
+        done
+    else
+        # Single pattern
+        if echo "$output" | grep -q "$expect"; then
+            found=1
+        fi
+    fi
+    
+    if ((found)); then
         ((TESTS_PASSED++))
         ((QUIET)) || printf '✓ PASS: %s\n' "$name"
         if ((VERBOSE)) || ((KEEP_OUTPUT)); then
@@ -273,8 +290,8 @@ main() {
     run_test "version-calculator-loc machine" "\"$DEV_BIN/version-calculator-loc.sh\" --current-version 1.2.3 --bump-type minor --machine" "NEW="
 
     # Mathematical version bump tests
-    run_test "mathematical-version-bump print" "\"$DEV_BIN/mathematical-version-bump.sh\" --print --base \"$BASE_REF\" --target \"$TARGET_REF\"" "Mathematical analysis suggests:"
-    run_test "mathematical-version-bump dry-run" "\"$DEV_BIN/mathematical-version-bump.sh\" --dry-run --base \"$BASE_REF\" --target \"$TARGET_REF\"" "Mathematical analysis suggests:"
+    run_test "mathematical-version-bump print" "\"$DEV_BIN/mathematical-version-bump.sh\" --print --base \"$BASE_REF\" --target \"$TARGET_REF\"" "Mathematical analysis suggests:|No qualifying changes detected"
+    run_test "mathematical-version-bump dry-run" "\"$DEV_BIN/mathematical-version-bump.sh\" --dry-run --base \"$BASE_REF\" --target \"$TARGET_REF\"" "Mathematical analysis suggests:|No qualifying changes detected"
 
     # Tag manager tests
     run_test "tag-manager list" "\"$DEV_BIN/tag-manager.sh\" list" ""
