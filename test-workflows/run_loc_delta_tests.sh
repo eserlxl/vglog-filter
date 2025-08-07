@@ -127,7 +127,7 @@ run_test() {
     else
         log_test_result "$test_name" "FAIL" "exited with code $exit_code"
         echo -e "${YELLOW}Test output:${NC}"
-        echo "$output" | sed 's/^/  /'
+        echo "${output//^/  }"
     fi
 }
 
