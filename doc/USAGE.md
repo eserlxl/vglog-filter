@@ -144,6 +144,10 @@ By default, `vglog-filter` processes log entries after the last occurrence of th
     valgrind --leak-check=full ./my_program 2>&1 | vglog-filter > filtered_output.txt
     ```
     *Note: `2>&1` redirects Valgrind's stderr (where it typically writes logs) to stdout, so it can be piped.*
+3.  **Explicit Stdin**: You can also explicitly specify stdin using the `-` argument:
+    ```bash
+    vglog-filter - < my_valgrind_log.txt
+    ```
 
 ### Output Destination
 
@@ -209,7 +213,7 @@ vglog-filter input.log | less
     -   **Output**: Shows percentage complete, processed size, and total size.
     -   **Example**: `vglog-filter -p large_log.log`
 
--   `-M, --monitor-memory`
+-   `-M, --memory`
     -   **Purpose**: Monitors and reports peak memory usage at different stages of the processing. This helps in understanding the tool's resource consumption and identifying potential memory bottlenecks, especially with very large inputs.
     -   **Use Case**: Performance analysis, debugging memory issues, or optimizing processing workflows.
     -   **Output**: Reports peak memory usage in MB at the end of processing.
@@ -270,7 +274,7 @@ vglog-filter --stream my_large_log.log > output.log
 When dealing with extremely large log files, monitoring progress and memory usage provides valuable feedback:
 
 ```bash
-vglog-filter --progress --monitor-memory very_large_valgrind.log > filtered.log
+vglog-filter --progress --memory very_large_valgrind.log > filtered.log
 ```
 
 This command will display a progress bar and report peak memory usage at the end of processing.
@@ -372,7 +376,7 @@ If you encounter problems while using `vglog-filter`, consider the following:
 
 4.  **Performance Issues / High Memory Usage**:
     -   **Large Files**: For very large files, ensure `vglog-filter` is operating in stream processing mode. It should switch automatically, but you can force it with `-s`.
-    -   **Monitor**: Use `--monitor-memory` (`-M`) to get insights into memory consumption and `--progress` (`-p`) to see if processing is stuck.
+    -   **Monitor**: Use `--memory` (`-M`) to get insights into memory consumption and `--progress` (`-p`) to see if processing is stuck.
 
 5.  **Output Still Contains Dynamic Data**:
     -   If you expect memory addresses or other dynamic elements to be scrubbed but they are still present, ensure you are *not* using the `--verbose` (`-v`) option, as this disables scrubbing.
@@ -383,6 +387,9 @@ If you encounter problems while using `vglog-filter`, consider the following:
 7.  **Deduplication Issues**:
     -   **Too Much Deduplication**: If you're losing important information due to aggressive deduplication, try increasing the `--depth` parameter.
     -   **Not Enough Deduplication**: If you're seeing too many duplicates, try decreasing the `--depth` parameter or use `--depth 0` for maximum precision.
+
+8.  **Stream Processing Behavior**:
+    -   **Note**: In stream mode (including stdin), the tool outputs only the region after the *last* marker encountered (if any). If no marker is found, the entire input is processed. This behavior is different from file mode and is designed for efficiency.
 
 If you're still facing issues, refer to the [FAQ](FAQ.md) or [Developer Guide](DEVELOPER_GUIDE.md) for more in-depth troubleshooting and development information.
 
