@@ -286,9 +286,9 @@ update_files() {
   else
     safe_write_file "$VERSION_FILE" "$new_version"
     if [[ "$current_version" == "none" ]]; then
-      success "Created VERSION: $new_version"
+      ok "Created VERSION: $new_version"
     else
-      success "Updated VERSION: $current_version → $new_version"
+      ok "Updated VERSION: $current_version → $new_version"
     fi
   fi
 
