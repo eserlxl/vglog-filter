@@ -386,6 +386,9 @@ main() {
   if [[ "${KW[HAS_API_BREAKING]:-false}" == "true" || "${CLI[API_BREAKING]:-false}" == "true" ]]; then
     TOTAL_BONUS=$(( TOTAL_BONUS + $(int_or_default "${CFG[VERSION_API_BREAKING_BONUS]}" 3) ))
   fi
+  if [[ "${KW[HAS_GENERAL_BREAKING]:-false}" == "true" ]]; then
+    TOTAL_BONUS=$(( TOTAL_BONUS + $(int_or_default "${CFG[VERSION_API_BREAKING_BONUS]}" 3) ))
+  fi
 
   # Security keywords (both sources)
   local security_keywords

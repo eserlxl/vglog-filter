@@ -274,6 +274,10 @@ analyze_file_changes() {
     fi
 
     # name-status, NUL-delimited
+    local git_cmd_args=("${CFG[@]}" diff "${DIFF_OPTS[@]}" --name-status -z "${base_ref}..${target_ref}")
+    [[ ${#NEG_PATH_ARGS[@]} -gt 0 ]] && git_cmd_args+=("${NEG_PATH_ARGS[@]}")
+    [[ ${#PATH_ARGS[@]} -gt 0 ]] && git_cmd_args+=(-- "${PATH_ARGS[@]}")
+    
     while IFS= read -r -d '' status; do
         local p1 p2 file
         IFS= read -r -d '' p1 || true
@@ -295,12 +299,14 @@ analyze_file_changes() {
             D)       ((deleted++)) ;;
             *)       ((modified++)) ;; # treat unknown as modification
         esac
-    done < <(git "${CFG[@]}" diff "${DIFF_OPTS[@]}" --name-status -z \
-              "${base_ref}..${target_ref}" "${NEG_PATH_ARGS[@]}" "$([[ ${#PATH_ARGS[@]} -gt 0 ]] && echo -- "${PATH_ARGS[@]}")" 2>/dev/null)
+    done < <(git "${git_cmd_args[@]}" 2>/dev/null)
 
     # insertions/deletions
-    read -r ins dels < <(sum_numstat git "${CFG[@]}" diff "${DIFF_OPTS[@]}" --numstat \
-                          "${base_ref}..${target_ref}" "${NEG_PATH_ARGS[@]}" "$([[ ${#PATH_ARGS[@]} -gt 0 ]] && echo -- "${PATH_ARGS[@]}")")
+    local numstat_cmd_args=("${CFG[@]}" diff "${DIFF_OPTS[@]}" --numstat "${base_ref}..${target_ref}")
+    [[ ${#NEG_PATH_ARGS[@]} -gt 0 ]] && numstat_cmd_args+=("${NEG_PATH_ARGS[@]}")
+    [[ ${#PATH_ARGS[@]} -gt 0 ]] && numstat_cmd_args+=(-- "${PATH_ARGS[@]}")
+    
+    read -r ins dels < <(sum_numstat git "${numstat_cmd_args[@]}")
 
     print_results "$added" "$modified" "$deleted" "$new_src" "$new_tst" "$new_doc" "$ins" "$dels"
 

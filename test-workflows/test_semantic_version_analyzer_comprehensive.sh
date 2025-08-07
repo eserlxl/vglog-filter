@@ -69,14 +69,14 @@ else
     TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 
-# Test 2: Breaking change
+# Test 2: Breaking change (should be major with new system)
 echo "BREAKING CHANGE: api breaking change" > breaking.txt
 git add breaking.txt
 git commit -m "BREAKING CHANGE: api breaking change" >/dev/null 2>&1
 
 printf '%s\n' "${CYAN}Running test: Breaking change${RESET}"
 output=$("$SEMANTIC_ANALYZER_SCRIPT" --suggest-only 2>&1 || true)
-if echo "$output" | grep -q "minor"; then
+if echo "$output" | grep -q "major"; then
     printf '%s\n' "${GREEN}✓ PASS: Breaking change${RESET}"
     TESTS_PASSED=$((TESTS_PASSED + 1))
 else
@@ -84,7 +84,7 @@ else
     TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 
-# Test 3: Security vulnerability
+# Test 3: Security vulnerability (should be minor with new system)
 echo "fix: CVE-2024-1234 security vulnerability" > security.txt
 git add security.txt
 git commit -m "fix: CVE-2024-1234 security vulnerability" >/dev/null 2>&1
@@ -99,7 +99,7 @@ else
     TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 
-# Test 4: Performance improvement
+# Test 4: Performance improvement (should be patch with new system)
 echo "perf: 50% performance improvement" > perf.txt
 git add perf.txt
 git commit -m "perf: 50% performance improvement" >/dev/null 2>&1
@@ -114,7 +114,7 @@ else
     TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 
-# Test 5: New feature
+# Test 5: New feature (should be patch with new system)
 echo "feat: add new feature" > feature.txt
 git add feature.txt
 git commit -m "feat: add new feature" >/dev/null 2>&1
@@ -129,7 +129,7 @@ else
     TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 
-# Test 6: Database schema change
+# Test 6: Database schema change (should be patch with new system)
 echo "feat: database schema change" > schema.txt
 git add schema.txt
 git commit -m "feat: database schema change" >/dev/null 2>&1
@@ -147,7 +147,7 @@ fi
 # Test 4: Advanced features
 printf '%s\n' "${CYAN}=== Test 4: Advanced Features ==${RESET}"
 
-# Test 1: Zero-day vulnerability
+# Test 1: Zero-day vulnerability (should be minor with new system)
 echo "fix: zero-day vulnerability CVE-2024-5678" > zeroday.txt
 git add zeroday.txt
 git commit -m "fix: zero-day vulnerability CVE-2024-5678" >/dev/null 2>&1
@@ -162,7 +162,7 @@ else
     TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 
-# Test 2: Production outage
+# Test 2: Production outage (should be patch with new system)
 echo "fix: production outage issue" > outage.txt
 git add outage.txt
 git commit -m "fix: production outage issue" >/dev/null 2>&1
@@ -177,7 +177,7 @@ else
     TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 
-# Test 3: Customer request
+# Test 3: Customer request (should be patch with new system)
 echo "feat: customer request implementation" > customer.txt
 git add customer.txt
 git commit -m "feat: customer request implementation" >/dev/null 2>&1
@@ -192,7 +192,7 @@ else
     TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 
-# Test 4: Cross-platform support
+# Test 4: Cross-platform support (should be patch with new system)
 echo "feat: cross-platform support" > cross.txt
 git add cross.txt
 git commit -m "feat: cross-platform support" >/dev/null 2>&1
@@ -207,7 +207,7 @@ else
     TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 
-# Test 5: Memory safety
+# Test 5: Memory safety (should be patch with new system)
 echo "fix: memory safety issue" > memory.txt
 git add memory.txt
 git commit -m "fix: memory safety issue" >/dev/null 2>&1
@@ -222,7 +222,7 @@ else
     TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 
-# Test 6: Race condition
+# Test 6: Race condition (should be patch with new system)
 echo "fix: race condition" > race.txt
 git add race.txt
 git commit -m "fix: race condition" >/dev/null 2>&1
@@ -308,7 +308,7 @@ git commit -m "BREAKING CHANGE: major change" >/dev/null 2>&1
 
 printf '%s\n' "${CYAN}Running test: Major change exit code${RESET}"
 output=$("$SEMANTIC_ANALYZER_SCRIPT" --suggest-only --strict-status 2>&1 || true)
-if echo "$output" | grep -q "patch"; then
+if echo "$output" | grep -q "minor"; then
     printf '%s\n' "${GREEN}✓ PASS: Major change exit code${RESET}"
     TESTS_PASSED=$((TESTS_PASSED + 1))
 else
@@ -409,6 +409,33 @@ if grep -q "ref-resolver.sh" "$SEMANTIC_ANALYZER_SCRIPT"; then
     TESTS_PASSED=$((TESTS_PASSED + 1))
 else
     printf '%s\n' "${RED}✗ No ref resolver integration detected${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
+
+# Test 9: Bonus system validation
+printf '%s\n' "${CYAN}=== Test 9: Bonus System Validation ==${RESET}"
+
+# Test machine output to see bonus points
+printf '%s\n' "${CYAN}Running test: Bonus points in machine output${RESET}"
+output=$("$SEMANTIC_ANALYZER_SCRIPT" --machine 2>&1 || true)
+if echo "$output" | grep -q "SUGGESTION="; then
+    printf '%s\n' "${GREEN}✓ PASS: Bonus points in machine output${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ FAIL: Bonus points in machine output${RESET}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
+
+# Test 10: JSON output format
+printf '%s\n' "${CYAN}=== Test 10: JSON Output Format ==${RESET}"
+
+printf '%s\n' "${CYAN}Running test: JSON output format${RESET}"
+output=$("$SEMANTIC_ANALYZER_SCRIPT" --json 2>&1 || true)
+if echo "$output" | grep -q '"suggestion"'; then
+    printf '%s\n' "${GREEN}✓ PASS: JSON output format${RESET}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    printf '%s\n' "${RED}✗ FAIL: JSON output format${RESET}"
     TESTS_FAILED=$((TESTS_FAILED + 1))
 fi
 

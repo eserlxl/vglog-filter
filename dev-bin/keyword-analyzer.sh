@@ -233,6 +233,7 @@ PAT_ADDED_OPT_CODE="$(comment_pat_for "$TOKEN_ADDED_OPT")"
 # Commit message patterns (looser)
 readonly PAT_CLI_BREAKING_COMMIT='(CLI[- ]?BREAKING|BREAKING[^[:alnum:]]+.*CLI)'
 readonly PAT_API_BREAKING_COMMIT='(API[- ]?BREAKING|BREAKING[^[:alnum:]]+.*API)'
+readonly PAT_GENERAL_BREAKING_COMMIT='(BREAKING[[:space:]]+CHANGE|BREAKING[^[:alnum:]]+.*(CHANGE|MAJOR))'
 readonly PAT_NEW_FEATURE_COMMIT='(NEW[- ]?FEATURE|FEATURE(S)?[^[:alnum:]]+.*(ADD(ED)?|INTRODUC(ED|ES)))'
 readonly PAT_SECURITY_COMMIT='(SECURITY|VULNERABILIT(Y|IES)|CVE[- ]?[0-9]{4}-[0-9]+)'
 
@@ -246,16 +247,19 @@ added_options_keywords="$(printf '%s' "$DIFF_CONTENT" | count_matches "$PAT_ADDE
 
 commit_cli_breaking="$(printf '%s' "$COMMIT_MESSAGES" | count_matches "$PAT_CLI_BREAKING_COMMIT")"
 commit_api_breaking="$(printf '%s' "$COMMIT_MESSAGES" | count_matches "$PAT_API_BREAKING_COMMIT")"
+commit_general_breaking="$(printf '%s' "$COMMIT_MESSAGES" | count_matches "$PAT_GENERAL_BREAKING_COMMIT")"
 commit_new_feature="$(printf '%s' "$COMMIT_MESSAGES" | count_matches "$PAT_NEW_FEATURE_COMMIT")"
 commit_security="$(printf '%s' "$COMMIT_MESSAGES" | count_matches "$PAT_SECURITY_COMMIT")"
 
 total_cli_breaking=$(( cli_breaking_keywords + commit_cli_breaking ))
 total_api_breaking=$(( api_breaking_keywords + commit_api_breaking ))
+total_general_breaking=$(( commit_general_breaking ))
 total_new_features=$(( new_feature_keywords + commit_new_feature ))
 total_security=$(( security_keywords + commit_security ))
 
 has_cli_breaking=false;   [[ $total_cli_breaking   -gt 0 ]] && has_cli_breaking=true
 has_api_breaking=false;   [[ $total_api_breaking   -gt 0 ]] && has_api_breaking=true
+has_general_breaking=false; [[ $total_general_breaking -gt 0 ]] && has_general_breaking=true
 has_new_features=false;   [[ $total_new_features   -gt 0 ]] && has_new_features=true
 has_security=false;       [[ $total_security       -gt 0 ]] && has_security=true
 has_removed_options=false;[[ $removed_options_keywords -gt 0 ]] && has_removed_options=true
@@ -269,8 +273,10 @@ case "$FORMAT" in
     printf '  "api_breaking_keywords": %s,\n' "$api_breaking_keywords"
     printf '  "commit_cli_breaking": %s,\n' "$commit_cli_breaking"
     printf '  "commit_api_breaking": %s,\n' "$commit_api_breaking"
+    printf '  "commit_general_breaking": %s,\n' "$commit_general_breaking"
     printf '  "total_cli_breaking": %s,\n' "$total_cli_breaking"
     printf '  "total_api_breaking": %s,\n' "$total_api_breaking"
+    printf '  "total_general_breaking": %s,\n' "$total_general_breaking"
     printf '  "new_feature_keywords": %s,\n' "$new_feature_keywords"
     printf '  "commit_new_feature": %s,\n' "$commit_new_feature"
     printf '  "total_new_features": %s,\n' "$total_new_features"
@@ -281,6 +287,7 @@ case "$FORMAT" in
     printf '  "added_options_keywords": %s,\n' "$added_options_keywords"
     printf '  "has_cli_breaking": %s,\n' "$(json_bool "$has_cli_breaking")"
     printf '  "has_api_breaking": %s,\n' "$(json_bool "$has_api_breaking")"
+    printf '  "has_general_breaking": %s,\n' "$(json_bool "$has_general_breaking")"
     printf '  "has_new_features": %s,\n' "$(json_bool "$has_new_features")"
     printf '  "has_security": %s,\n' "$(json_bool "$has_security")"
     printf '  "has_removed_options": %s,\n' "$(json_bool "$has_removed_options")"
@@ -292,8 +299,10 @@ case "$FORMAT" in
     printf 'API_BREAKING_KEYWORDS=%s\n' "$api_breaking_keywords"
     printf 'COMMIT_CLI_BREAKING=%s\n' "$commit_cli_breaking"
     printf 'COMMIT_API_BREAKING=%s\n' "$commit_api_breaking"
+    printf 'COMMIT_GENERAL_BREAKING=%s\n' "$commit_general_breaking"
     printf 'TOTAL_CLI_BREAKING=%s\n' "$total_cli_breaking"
     printf 'TOTAL_API_BREAKING=%s\n' "$total_api_breaking"
+    printf 'TOTAL_GENERAL_BREAKING=%s\n' "$total_general_breaking"
     printf 'NEW_FEATURE_KEYWORDS=%s\n' "$new_feature_keywords"
     printf 'COMMIT_NEW_FEATURE=%s\n' "$commit_new_feature"
     printf 'TOTAL_NEW_FEATURES=%s\n' "$total_new_features"
@@ -304,6 +313,7 @@ case "$FORMAT" in
     printf 'ADDED_OPTIONS_KEYWORDS=%s\n' "$added_options_keywords"
     printf 'HAS_CLI_BREAKING=%s\n' "$has_cli_breaking"
     printf 'HAS_API_BREAKING=%s\n' "$has_api_breaking"
+    printf 'HAS_GENERAL_BREAKING=%s\n' "$has_general_breaking"
     printf 'HAS_NEW_FEATURES=%s\n' "$has_new_features"
     printf 'HAS_SECURITY=%s\n' "$has_security"
     printf 'HAS_REMOVED_OPTIONS=%s\n' "$has_removed_options"
