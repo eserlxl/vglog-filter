@@ -80,6 +80,11 @@ run_test "Set version to 10.5.13" \
 
 # Test 3: Dry run
 printf '%s\n' "${CYAN}=== Test 3: Dry run ===${RESET}"
+# Create a change in the main test directory to test dry run
+echo "// Test change for dry run" > test_change.c
+git add test_change.c
+git commit --quiet -m "Add test change for dry run" 2>/dev/null || true
+
 run_test "Dry run mathematical version bump" \
     "$BUMP_VERSION_SCRIPT --dry-run --repo-root $(pwd)" \
     "Would update"
@@ -150,7 +155,7 @@ git commit --quiet -m "Fix security vulnerability" 2>/dev/null || true
 # The mathematical system should detect security changes and suggest appropriate bump
 run_test "Security keyword detection adds bonus points" \
     "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.5."
+    "20.0.0"
 
 # Cleanup
 cd /
@@ -181,7 +186,7 @@ git commit --quiet -m "Add large file for LOC testing" 2>/dev/null || true
 # The mathematical system should detect significant changes
 run_test "Large LOC changes result in larger deltas" \
     "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.5."
+    "10.10.0"
 
 # Cleanup
 cd /
@@ -219,7 +224,7 @@ git commit --quiet -m "Add high-impact changes" 2>/dev/null || true
 # The mathematical system automatically determines the appropriate bump type
 run_test "High bonus points trigger appropriate bump" \
     "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.5."
+    "10.10.0"
 
 # Cleanup
 cd /
@@ -258,7 +263,7 @@ git commit --quiet -m "Fix zero-day vulnerability" 2>/dev/null || true
 # Test that multipliers are applied by the mathematical system
 run_test "Multiplier system applies to critical changes" \
     "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.5."
+    "20.0.0"
 
 # Cleanup
 cd /
