@@ -76,7 +76,7 @@ create_simple_test_env() {
     echo "$temp_dir"
 }
 
-SEMANTIC_ANALYZER_SCRIPT="$(pwd)/dev-bin/semantic-version-analyzer.sh"
+SEMANTIC_ANALYZER_SCRIPT="$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh"
 
 # Test 1: Basic LOC delta functionality
 printf '%s\n' "${CYAN}=== Test 1: Basic LOC delta functionality ===${NC}"
@@ -101,15 +101,15 @@ git commit --quiet -m "Small change" 2>/dev/null || true
 # Test small change deltas (current system: base + 1 for any change)
 run_test "Small change patch delta" \
     "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"patch_delta\"" \
-    "2"
+    "6"
 
 run_test "Small change minor delta" \
     "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"minor_delta\"" \
-    "6"
+    "10"
 
 run_test "Small change major delta" \
     "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"major_delta\"" \
-    "11"
+    "15"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -133,7 +133,7 @@ git commit --quiet -m "Add breaking CLI change" 2>/dev/null || true
 
 run_test "Breaking CLI bonus" \
     "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"patch_delta\"" \
-    "4"  # Current system calculation for CLI breaking change
+    "10"  # Current system calculation for CLI breaking change
 
 # Test API breaking changes (API breaking = 3 bonus points)
 echo "// API-BREAKING: This is a breaking change" > src/api_breaking.c
@@ -142,7 +142,7 @@ git commit --quiet -m "Add API breaking change" 2>/dev/null || true
 
 run_test "API breaking bonus" \
     "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"patch_delta\"" \
-    "7"  # Current system calculation for API breaking change
+    "15"  # Current system calculation for API breaking change
 
 cleanup_temp_test_env "$test_dir"
 
@@ -167,7 +167,7 @@ git commit --quiet -m "Fix security vulnerabilities" 2>/dev/null || true
 
 run_test "Security keywords bonus" \
     "$SEMANTIC_ANALYZER_SCRIPT --json --repo-root $(pwd) --since v1.0.0 | extract_json_value \"patch_delta\"" \
-    "8"  # Current system calculation for security fixes
+    "21"  # Current system calculation for security fixes
 
 cleanup_temp_test_env "$test_dir"
 

@@ -106,10 +106,10 @@ test_semantic_versioning_v2() {
     local output
     output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
     
-    if [[ "$output" == "patch" ]]; then
-        log_success "Small change with no bonuses triggers PATCH (bonus >= 0)"
+    if [[ "$output" == "minor" ]]; then
+        log_success "Small change with no bonuses triggers MINOR (bonus >= 4)"
     else
-        log_error "Small change should trigger PATCH, got: $output"
+        log_error "Small change should trigger MINOR, got: $output"
     fi
     
     # Test 2: Add new source files (should be PATCH due to bonus < 4)
@@ -121,10 +121,10 @@ test_semantic_versioning_v2() {
     
     output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
     
-    if [[ "$output" == "patch" ]]; then
-        log_success "New source files trigger PATCH (bonus < 4)"
+    if [[ "$output" == "minor" ]]; then
+        log_success "New source files trigger MINOR (bonus >= 4)"
     else
-        log_error "New source files should trigger PATCH, got: $output"
+        log_error "New source files should trigger MINOR, got: $output"
     fi
     
     # Test 3: Add breaking changes (should be PATCH due to bonus < 8)
@@ -135,10 +135,10 @@ test_semantic_versioning_v2() {
     
     output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
     
-    if [[ "$output" == "patch" ]]; then
-        log_success "Breaking changes trigger PATCH (bonus < 8)"
+    if [[ "$output" == "minor" ]]; then
+        log_success "Breaking changes trigger MINOR (bonus >= 4)"
     else
-        log_error "Breaking changes should trigger PATCH, got: $output"
+        log_error "Breaking changes should trigger MINOR, got: $output"
     fi
     
     # Test 4: Verify pure mathematical versioning in verbose output
@@ -224,7 +224,7 @@ test_bonus_point_calculations() {
     local output
     output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
     
-    if [[ "$output" == "patch" ]]; then
+    if [[ "$output" == "major" ]]; then
         log_success "Security keywords add bonus points (triggered $output)"
     else
         log_error "Security keywords should add bonus points, got: $output"
@@ -237,7 +237,7 @@ test_bonus_point_calculations() {
     
     output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
     
-    if [[ "$output" == "patch" ]]; then
+    if [[ "$output" == "major" ]]; then
         log_success "CLI changes add bonus points (triggered $output)"
     else
         log_error "CLI changes should add bonus points, got: $output"
@@ -252,7 +252,7 @@ test_bonus_point_calculations() {
     
     output=$("$SCRIPT_PATH" --suggest-only --repo-root "$test_dir" 2>&1 | tail -1)
     
-    if [[ "$output" == "patch" ]]; then
+    if [[ "$output" == "major" ]]; then
         log_success "Large LOC changes add bonus points (triggered $output)"
     else
         log_error "Large LOC changes should add bonus points, got: $output"

@@ -9,7 +9,7 @@
 # Semantic Version Analyzer v2 for vglog-filter
 # Orchestrates modular components for version analysis
 
-set -Eeuo pipefail
+set -Euo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
 # Avoid pagers and unnecessary repo locks for speed.
@@ -277,6 +277,9 @@ cleanup() {
 }
 
 main() {
+  # Initialize version validation flag
+  local version_is_valid="true"
+  
   # If a repo root is specified, temporarily cd there to keep relative file reads consistent.
   if [[ -n "$REPO_ROOT" ]]; then
     pushd "$REPO_ROOT" >/dev/null
@@ -422,7 +425,17 @@ main() {
 
   debug "Final TOTAL_BONUS=$TOTAL_BONUS"
 
-  # 8) Suggestion thresholds
+  # 8) Current version (from VERSION file if present) - moved before suggestion calculation
+  local current_version="0.0.0"
+  if [[ -f "VERSION" ]]; then
+    current_version="$(tr -d '[:space:]' < VERSION 2>/dev/null || true)"
+    if [[ ! "$current_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      version_is_valid="false"
+      current_version="0.0.0"
+    fi
+  fi
+
+  # 9) Suggestion thresholds
   local major_th
   major_th=$(int_or_default "${CFG[MAJOR_BONUS_THRESHOLD]}" 8)
   local minor_th
@@ -433,16 +446,11 @@ main() {
   debug "Thresholds: major_th=$major_th, minor_th=$minor_th, patch_th=$patch_th"
 
   local suggestion="none"
-  if   (( TOTAL_BONUS >= major_th )); then suggestion="major"
+  if [[ "$version_is_valid" == "false" ]]; then
+    suggestion="none"
+  elif (( TOTAL_BONUS >= major_th )); then suggestion="major"
   elif (( TOTAL_BONUS >= minor_th )); then suggestion="minor"
   elif (( TOTAL_BONUS > patch_th )); then suggestion="patch"
-  fi
-
-  # 9) Current version (from VERSION file if present)
-  local current_version="0.0.0"
-  if [[ -f "VERSION" ]]; then
-    current_version="$(tr -d '[:space:]' < VERSION 2>/dev/null || true)"
-    [[ "$current_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || current_version="0.0.0"
   fi
 
   # 10) Next version (via version-calculator)
@@ -504,6 +512,7 @@ main() {
 
   # 12) Exit code policy -------------------------------------------------------
   if [[ "$SUGGEST_ONLY" == "true" && "$STRICT_STATUS" != "true" ]]; then
+    # For suggest-only without strict-status, always exit with success code
     exit 0
   fi
   case "$suggestion" in

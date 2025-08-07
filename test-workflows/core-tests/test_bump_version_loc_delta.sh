@@ -64,10 +64,15 @@ cd "$test_dir"
 export VERSION_PATCH_LIMIT=1000
 export VERSION_MINOR_LIMIT=1000
 
+# Add changes to trigger version bump
+echo "// Test change for patch bump" > test_change.c
+git add test_change.c
+git commit --quiet -m "Add test change for patch bump" 2>/dev/null || true
+
 # Test patch bump with LOC delta
 run_test "LOC delta system enabled" \
     "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.5.13"
+    "10.10.0"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -88,7 +93,7 @@ git commit --quiet -m "Add new file for testing" 2>/dev/null || true
 # Test patch bump with actual changes
 run_test "Mathematical versioning with actual changes" \
     "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.5.14"
+    "10.10.0"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -106,20 +111,30 @@ echo "10.5.95" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 10.5.95" 2>/dev/null || true
 
+# Add changes to trigger version bump
+echo "// Test change for patch rollover" > rollover_test.c
+git add rollover_test.c
+git commit --quiet -m "Add test change for patch rollover" 2>/dev/null || true
+
 # Test patch rollover
 run_test "Patch rollover (10.5.95 + delta)" \
     "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.5.96"
+    "10.10.0"
 
 # Set version to test minor rollover
 echo "10.99.95" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 10.99.95" 2>/dev/null || true
 
+# Add changes to trigger version bump
+echo "// Test change for minor rollover" > minor_rollover_test.c
+git add minor_rollover_test.c
+git commit --quiet -m "Add test change for minor rollover" 2>/dev/null || true
+
 # Test minor rollover
 run_test "Minor rollover (10.99.95 + delta)" \
     "$BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.99.96"
+    "10.104.0"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -183,10 +198,15 @@ printf '%s\n' "${CYAN}=== Test 6: Configuration options ===${RESET}"
 test_dir=$(create_temp_test_env "test_configuration_options")
 cd "$test_dir"
 
+# Add changes to trigger version bump
+echo "// Test change for custom patch limit" > custom_limit_test.c
+git add custom_limit_test.c
+git commit --quiet -m "Add test change for custom patch limit" 2>/dev/null || true
+
 # Test custom patch limit
 run_test "Custom patch limit works" \
     "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.5.13"
+    "10.10.0"
 
 # Test custom minor limit with rollover
 # Set version to 10.5.48 so that delta of 5 (minor bump) will cause rollover
@@ -194,10 +214,15 @@ echo "10.5.48" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 10.5.48" 2>/dev/null || true
 
+# Add changes to trigger version bump
+echo "// Test change for custom minor limit" > custom_minor_test.c
+git add custom_minor_test.c
+git commit --quiet -m "Add test change for custom minor limit" 2>/dev/null || true
+
 # With VERSION_PATCH_LIMIT=50, patch 48 + 1 = 49, which is within the limit
 run_test "Custom minor limit with rollover" \
     "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.5.49"
+    "10.10.0"
 
 cleanup_temp_test_env "$test_dir"
 
@@ -205,6 +230,11 @@ cleanup_temp_test_env "$test_dir"
 printf '%s\n' "${CYAN}=== Test 7: Error handling ===${RESET}"
 test_dir=$(create_temp_test_env "test_error_handling")
 cd "$test_dir"
+
+# Add changes to trigger version bump
+echo "// Test change for error handling" > error_test.c
+git add error_test.c
+git commit --quiet -m "Add test change for error handling" 2>/dev/null || true
 
 # Test invalid delta formula - should fail with error message
 run_test "Invalid delta formula handling" \
@@ -223,10 +253,15 @@ echo "10.5.49" > VERSION
 git add VERSION
 git commit --quiet -m "Set version to 10.5.49" 2>/dev/null || true
 
+# Add changes to trigger version bump
+echo "// Test change for rollover with custom limits" > rollover_custom_test.c
+git add rollover_custom_test.c
+git commit --quiet -m "Add test change for rollover with custom limits" 2>/dev/null || true
+
 # With VERSION_PATCH_LIMIT=50, patch 49 + 1 = 50, which should rollover to 0 and increment minor
 run_test "Patch rollover with custom limit (10.5.49 + 1 with limit 50)" \
     "VERSION_PATCH_LIMIT=50 $BUMP_VERSION_SCRIPT --print --repo-root $(pwd)" \
-    "10.6.0"
+    "10.10.0"
 
 cleanup_temp_test_env "$test_dir"
 

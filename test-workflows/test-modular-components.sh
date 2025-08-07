@@ -8,7 +8,7 @@
 #
 # Test script for modular semantic version analyzer components
 
-set -Eeuo pipefail
+set -Euo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
 # Keep Git fast and quiet inside tests
@@ -17,6 +17,8 @@ export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=1
 # ---------------------- appearance & output ----------------------
 is_tty=0; [[ -t 1 ]] && is_tty=1
 USE_COLOR=1
+# Disable colors in non-interactive environments
+((is_tty)) || USE_COLOR=0
 QUIET=0
 VERBOSE=0
 KEEP_OUTPUT=0
@@ -182,7 +184,7 @@ run_one() {
         return 0
     fi
 
-    ((QUIET)) || color blu "Running: $name\n"
+    ((QUIET)) || printf 'Running: %s\n' "$name"
 
     local output="" status=0
     if [[ -n "$TIMEOUT" && -n "$TIMEOUT_BIN" ]]; then
@@ -231,7 +233,7 @@ run_one() {
     fi
 
     ((TESTS_PASSED++))
-    ((QUIET)) || color grn "✓ PASS: $name\n"
+    ((QUIET)) || printf '✓ PASS: %s\n' "$name"
     if ((KEEP_OUTPUT)); then
         printf '  Output:\n'
         printf '  %s\n' "$output" | sed 's/^/    /'
@@ -387,11 +389,11 @@ main() {
         exit 0
     fi
 
-    sayc yel "Testing Modular Semantic Version Analyzer Components"
-    say "Base ref:    $BASE_REF ($BASE_COMMIT_SHA)"
-    say "Target ref:  $TARGET_REF ($LAST_COMMIT_SHA)"
-    say "Executables: $DEV_BIN"
-    say ""
+    printf 'Testing Modular Semantic Version Analyzer Components\n'
+    printf 'Base ref:    %s (%s)\n' "$BASE_REF" "$BASE_COMMIT_SHA"
+    printf 'Target ref:  %s (%s)\n' "$TARGET_REF" "$LAST_COMMIT_SHA"
+    printf 'Executables: %s\n' "$DEV_BIN"
+    printf '\n'
 
     local i
     for ((i=0; i<${#TEST_NAMES[@]}; i++)); do
@@ -400,19 +402,19 @@ main() {
 
     # Summary
     printf '\n'
-    sayc yel "=== Test Summary ==="
-    say "Tests passed: $(color grn "$TESTS_PASSED")"
-    say "Tests failed: $(color red "$TESTS_FAILED")"
-    say "Tests skipped: $(color yel "$TESTS_SKIPPED")"
-    say "Total tests: $((TESTS_PASSED + TESTS_FAILED + TESTS_SKIPPED))"
+    printf '=== Test Summary ===\n'
+    printf 'Tests passed: %s\n' "$TESTS_PASSED"
+    printf 'Tests failed: %s\n' "$TESTS_FAILED"
+    printf 'Tests skipped: %s\n' "$TESTS_SKIPPED"
+    printf 'Total tests: %s\n' "$((TESTS_PASSED + TESTS_FAILED + TESTS_SKIPPED))"
     local elapsed=$(( $(date +%s) - START_TS ))
     printf 'Elapsed: %ss\n' "$elapsed"
 
     if [[ "$TESTS_FAILED" -eq 0 ]]; then
-        sayc grn "All tests passed! Modular components look healthy."
+        printf 'All tests passed! Modular components look healthy.\n'
         exit 0
     else
-        sayc red "Some tests failed. See outputs above for details."
+        printf 'Some tests failed. See outputs above for details.\n'
         exit 1
     fi
 }

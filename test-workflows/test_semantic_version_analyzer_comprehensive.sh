@@ -109,7 +109,7 @@ run_test_with_version() {
     printf '%s\n' ""
 }
 
-SEMANTIC_ANALYZER_SCRIPT="$(pwd)/dev-bin/semantic-version-analyzer.sh"
+SEMANTIC_ANALYZER_SCRIPT="$PROJECT_ROOT/dev-bin/semantic-version-analyzer.sh"
 
 # Test 1: Basic functionality
 printf '%s\n' "${CYAN}=== Test 1: Basic functionality ===${RESET}"
@@ -124,7 +124,7 @@ run_test "Help command" \
 # Test 2: Invalid version format
 run_test_with_version "Invalid version format" \
     "invalid" \
-    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
+    "$SEMANTIC_ANALYZER_SCRIPT --suggest-only --strict-status" \
     "20" \
     "none"
 
@@ -132,7 +132,7 @@ run_test_with_version "Invalid version format" \
 run_test_with_version "Basic analysis with valid version" \
     "1.0.0" \
     "$SEMANTIC_ANALYZER_SCRIPT --suggest-only" \
-    "20" \
+    "0" \
     "none"
 
 # Test 4: JSON output format
