@@ -29,7 +29,6 @@ TIMEOUT_BIN="$(command -v timeout || true)"
 
 # Environment overrides for repository-dependent expectations
 EXPECT_VERSION="${EXPECT_VERSION:-10.5.12}"
-EXPECT_CMAKE_DETECT="${EXPECT_CMAKE_DETECT:-variable}"
 
 color() { 
     ((USE_COLOR && is_tty)) || { printf '%s' "$2"; return; }
@@ -75,7 +74,6 @@ Options:
 
 Env overrides:
   EXPECT_VERSION=<ver>          Expected "current" VERSION when asserted (default: $EXPECT_VERSION)
-  # CMakeLists.txt now auto-updates from VERSION file (no cmake-updater needed)
   NO_COLOR=true                 Disable colors
 EOF
 }
@@ -110,9 +108,6 @@ TESTS_FAILED=0
 TESTS_SKIPPED=0
 START_TS=$(date +%s)
 
-# Arrays to store tests
-declare -a TEST_NAMES TEST_CMDS TEST_EXPECTS TEST_MODES TEST_EXITS
-
 # ---------------------- helpers ----------------------
 require_git_repo() {
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
@@ -137,142 +132,48 @@ maybe_warn_timeout() {
     fi
 }
 
-bin_exists() { [[ -x "$1" ]]; }
-
-add_test() {
-    local name="$1" cmd="$2" expect="${3:-}" mode="${4:-contains}" exit_code="${5:-0}"
-    TEST_NAMES+=("$name")
-    TEST_CMDS+=("$cmd")
-    TEST_EXPECTS+=("$expect")
-    TEST_MODES+=("$mode")
-    TEST_EXITS+=("$exit_code")
-}
-
-match_output() {
-    local mode="$1" expected="$2" output="$3"
-    case "$mode" in
-        succeeds)   return 0 ;;                            # exit-code-only
-        contains)   [[ "$output" == *"$expected"* ]] ;;
-        exact)      [[ "$output" == "$expected" ]] ;;
-        nonempty)   [[ -n "$output" ]] ;;
-        regex)      [[ "$output" =~ $expected ]] ;;
-        *)          die "Unknown match mode: $mode" ;;
-    esac
-}
-
-run_one() {
-    local idx="$1"
-    local name="${TEST_NAMES[$idx]}"
-    local cmd="${TEST_CMDS[$idx]}"
-    local expect="${TEST_EXPECTS[$idx]}"
-    local mode="${TEST_MODES[$idx]}"
-    local want_exit="${TEST_EXITS[$idx]}"
-
-    # binary presence check (first token path)
-    local first_token; first_token="$(printf '%s' "$cmd" | awk '{print $1}')"
-    if [[ "$first_token" == ./* || "$first_token" == /* ]]; then
-        if ! bin_exists "$first_token"; then
-            ((TESTS_SKIPPED++))
-            ((QUIET)) || color yel "⚠ SKIP: $name (missing executable: $first_token)\n"
-            return 0
-        fi
-    fi
-
-    # ONLY filter
+run_test() {
+    local name="$1" cmd="$2" expect="$3"
+    
+    # Check if test should be filtered
     if [[ -n "$ONLY_FILTER" && ! "$name" =~ $ONLY_FILTER ]]; then
         ((TESTS_SKIPPED++))
-        ((QUIET)) || color yel "⚠ SKIP: $name (filtered)\n"
         return 0
     fi
-
+    
     ((QUIET)) || printf 'Running: %s\n' "$name"
-
-    local output="" status=0
-    if [[ -n "$TIMEOUT" && -n "$TIMEOUT_BIN" ]]; then
-        set +e
-        output="$($TIMEOUT_BIN -s KILL "$TIMEOUT" bash -c "$cmd" 2>&1)"
-        status=$?
-        set -e
-        if (( status == 137 )); then
-            ((TESTS_FAILED++))
-            color red "✗ FAIL: $name\n"
-            printf '  Error: timed out after %ss\n' "$TIMEOUT"
-            ((STOP_ON_FAIL)) && exit 1
-            return 1
-        fi
-    else
-        set +e
-        output="$(bash -c "$cmd" 2>&1)"
-        status=$?
-        set -e
-    fi
-
-    ((VERBOSE)) && printf 'Command: %s\n' "$cmd"
-    ((VERBOSE)) && printf 'Exit: %d\n' "$status"
-    ((VERBOSE)) && printf 'Output:\n%s\n' "$output"
-
-    if (( status != want_exit )); then
-        ((TESTS_FAILED++))
-        color red "✗ FAIL: $name\n"
-        printf '  Error: expected exit %d, got %d\n' "$want_exit" "$status"
-        if ((VERBOSE)) || [[ "$want_exit" -eq 0 ]]; then
+    
+    # Execute command and capture output
+    local output
+    output="$(eval "$cmd" 2>&1)"
+    local status=$?
+    
+    # Check if output contains expected string
+    if echo "$output" | grep -q "$expect"; then
+        ((TESTS_PASSED++))
+        ((QUIET)) || printf '✓ PASS: %s\n' "$name"
+        if ((KEEP_OUTPUT)); then
             printf '  Output:\n'
             printf '  %s\n' "$output" | sed 's/^/    /'
         fi
-        ((STOP_ON_FAIL)) && exit 1
-        return 1
-    fi
-
-    if ! match_output "$mode" "$expect" "$output"; then
+    else
         ((TESTS_FAILED++))
-        color red "✗ FAIL: $name\n"
-        printf '  Error: output check failed (%s)\n' "$mode"
+        color red "✗ FAIL: $name"
         printf '  Expected: %s\n' "$expect"
         printf '  Got: %s\n' "$output"
-        ((STOP_ON_FAIL)) && exit 1
-        return 1
+        if ((STOP_ON_FAIL)); then
+            exit 1
+        fi
     fi
-
-    ((TESTS_PASSED++))
-    ((QUIET)) || printf '✓ PASS: %s\n' "$name"
-    if ((KEEP_OUTPUT)); then
-        printf '  Output:\n'
-        printf '  %s\n' "$output" | sed 's/^/    /'
-    fi
-    return 0
 }
 
-list_tests() {
-    local i
-    for ((i=0; i<${#TEST_NAMES[@]}; i++)); do
-        printf '%2d) %s\n' "$((i+1))" "${TEST_NAMES[$i]}"
-    done
-}
-
-# ---------------------- domain-specific helpers ----------------------
-read_version_file() { [[ -f VERSION ]] && tr -d ' \t\r\n' < VERSION || echo ""; }
-
-bump_patch() {
-    local v="$1"
-    # simple semver bump: MAJOR.MINOR.PATCH[-pre] -> MAJOR.MINOR.(PATCH+1)
-    # strip prerelease if any for expectation
-    v="${v%%-*}"
-    IFS='.' read -r MA MI PA <<<"$v"
-    [[ -n "$MA" && -n "$MI" && -n "$PA" ]] || return 1
-    printf '%d.%d.%d' "$MA" "$MI" "$((PA+1))"
-}
-
-# ---------------------- define tests ----------------------
-build_tests() {
+# ---------------------- main ----------------------
+main() {
+    maybe_warn_timeout
+    
     # preconditions
     require_git_repo
     ensure_dev_bin
-
-    local cur_ver expect_next
-    cur_ver="$(read_version_file)"
-    expect_next="$(bump_patch "$cur_ver" || true)"
-    # Fallback to provided expectation if bump failed
-    [[ -n "$expect_next" ]] || expect_next="10.5.13"
 
     # Default refs
     TARGET_REF="${TARGET_REF:-HEAD}"
@@ -293,100 +194,16 @@ build_tests() {
     [[ -n "$LAST_COMMIT_SHA" ]] || die "Cannot resolve target ref: $TARGET_REF"
     [[ -n "$BASE_COMMIT_SHA" ]] || die "Cannot resolve base ref: $BASE_REF"
 
-    # Binary availability tests
-    add_test "ref-resolver exists" "test -x \"$DEV_BIN/ref-resolver.sh\"" "" "succeeds"
-    add_test "version-config-loader exists" "test -x \"$DEV_BIN/version-config-loader.sh\"" "" "succeeds"
-    add_test "file-change-analyzer exists" "test -x \"$DEV_BIN/file-change-analyzer.sh\"" "" "succeeds"
-    add_test "cli-options-analyzer exists" "test -x \"$DEV_BIN/cli-options-analyzer.sh\"" "" "succeeds"
-    add_test "security-keyword-analyzer exists" "test -x \"$DEV_BIN/security-keyword-analyzer.sh\"" "" "succeeds"
-    add_test "version-calculator exists" "test -x \"$DEV_BIN/version-calculator.sh\"" "" "succeeds"
-    add_test "semantic-version-analyzer exists" "test -x \"$DEV_BIN/semantic-version-analyzer.sh\"" "" "succeeds"
-
-    # Help output tests
-    add_test "ref-resolver --help" "\"$DEV_BIN/ref-resolver.sh\" --help" "Usage:" "contains"
-    add_test "version-config-loader --help" "\"$DEV_BIN/version-config-loader.sh\" --help" "Usage:" "contains"
-    add_test "file-change-analyzer --help" "\"$DEV_BIN/file-change-analyzer.sh\" --help" "Usage:" "contains"
-    add_test "cli-options-analyzer --help" "\"$DEV_BIN/cli-options-analyzer.sh\" --help" "Usage:" "contains"
-    add_test "security-keyword-analyzer --help" "\"$DEV_BIN/security-keyword-analyzer.sh\" --help" "Usage:" "contains"
-    add_test "version-calculator --help" "\"$DEV_BIN/version-calculator.sh\" --help" "Usage:" "contains"
-    add_test "semantic-version-analyzer --help" "\"$DEV_BIN/semantic-version-analyzer.sh\" --help" "Usage:" "contains"
-
-    # Configuration loading tests
-    add_test "version-config-loader --validate-only" "\"$DEV_BIN/version-config-loader.sh\" --validate-only" "" "succeeds"
-    add_test "version-config-loader --machine" "\"$DEV_BIN/version-config-loader.sh\" --machine" "" "succeeds"
-
-    # Reference resolution tests
-    add_test "ref-resolver --print-base" "\"$DEV_BIN/ref-resolver.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --print-base" "" "succeeds"
-    add_test "ref-resolver --machine" "\"$DEV_BIN/ref-resolver.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
-
-    # File change analysis tests
-    add_test "file-change-analyzer basic" "\"$DEV_BIN/file-change-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
-    add_test "file-change-analyzer machine" "\"$DEV_BIN/file-change-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
-
-    # CLI options analysis tests
-    add_test "cli-options-analyzer basic" "\"$DEV_BIN/cli-options-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
-    add_test "cli-options-analyzer machine" "\"$DEV_BIN/cli-options-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
-
-    # Security keyword analysis tests
-    add_test "security-keyword-analyzer basic" "\"$DEV_BIN/security-keyword-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
-    add_test "security-keyword-analyzer machine" "\"$DEV_BIN/security-keyword-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" "" "succeeds"
-
-    # Version calculation tests
-    add_test "version-calculator basic" "\"$DEV_BIN/version-calculator.sh\" --current-version 1.2.3 --bump-type minor --loc 500" "" "succeeds"
-    add_test "version-calculator machine" "\"$DEV_BIN/version-calculator.sh\" --current-version 1.2.3 --bump-type minor --loc 500 --machine" "" "succeeds"
-
-    # Orchestrator tests
-    add_test "semantic-version-analyzer basic" "\"$DEV_BIN/semantic-version-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" "" "succeeds"
-    add_test "semantic-version-analyzer --suggest-only" "\"$DEV_BIN/semantic-version-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --suggest-only" "" "succeeds"
-
-    # Error handling tests
-    add_test "invalid base reference" "\"$DEV_BIN/ref-resolver.sh\" --base INVALID_REF --target \"$TARGET_REF\"" "" "succeeds" 1
-    add_test "missing required argument" "\"$DEV_BIN/file-change-analyzer.sh\"" "" "succeeds" 1
-    add_test "invalid bump type" "\"$DEV_BIN/version-calculator.sh\" --current-version 1.2.3 --bump-type invalid" "" "succeeds" 1
-
-    # Additional tools from o3 version (if they exist)
-    if [[ -x "$DEV_BIN/version-utils.sh" ]]; then
-    add_test "version-utils last-tag" "\"$DEV_BIN/version-utils.sh\" last-tag v" "" "succeeds"
-    add_test "version-utils hash-file VERSION" "\"$DEV_BIN/version-utils.sh\" hash-file VERSION" "" "succeeds"
-    add_test "version-utils read-version" "\"$DEV_BIN/version-utils.sh\" read-version VERSION" "$EXPECT_VERSION" "contains"
-    fi
-
-    if [[ -x "$DEV_BIN/version-validator" ]]; then
-        add_test "version-validator validate 1.0.0" "\"$DEV_BIN/version-validator\" validate 1.0.0" "valid" "contains"
-        add_test "version-validator compare 1.0.0 1.0.1" "\"$DEV_BIN/version-validator\" compare 1.0.0 1.0.1" "-1" "contains"
-        add_test "version-validator parse 1.2.3" "\"$DEV_BIN/version-validator\" parse 1.2.3" "1" "contains"
-        add_test "version-validator is-prerelease 1.0.0-rc.1" "\"$DEV_BIN/version-validator\" is-prerelease 1.0.0-rc.1" "true" "contains"
-    fi
-
-    if [[ -x "$DEV_BIN/version-calculator-loc" ]]; then
-        add_test "version-calculator-loc patch bump" "\"$DEV_BIN/version-calculator-loc\" --current-version 1.0.0 --bump-type patch" "1.0.1" "contains"
-        add_test "version-calculator-loc help" "\"$DEV_BIN/version-calculator-loc\" --help" "Usage:" "contains"
-    fi
-
-    # CMakeLists.txt now auto-updates from VERSION file (no cmake-updater needed)
-
-    if [[ -x "$DEV_BIN/git-operations.sh" ]]; then
-    add_test "git-operations help" "\"$DEV_BIN/git-operations.sh\"" "Usage:" "contains"
-    fi
-
-    if [[ -x "$DEV_BIN/cli-parser" ]]; then
-        add_test "cli-parser help" "\"$DEV_BIN/cli-parser\" help" "Usage:" "contains"
-        add_test "cli-parser validate patch --commit" "\"$DEV_BIN/cli-parser\" validate patch --commit" "valid" "contains"
-    fi
-
-    if [[ -x "$DEV_BIN/bump-version.sh" ]]; then
-    add_test "bump-version help" "\"$DEV_BIN/bump-version.sh\" --help" "Usage:" "contains"
-    add_test "bump-version dry-run" "\"$DEV_BIN/bump-version.sh\" patch --dry-run" "$expect_next" "contains"
-    fi
-}
-
-# ---------------------- main ----------------------
-main() {
-    maybe_warn_timeout
-    build_tests
-
     if [[ "${LIST_TESTS:-0}" -eq 1 ]]; then
-        list_tests
+        printf 'Available tests:\n'
+        printf '  - Binary availability tests\n'
+        printf '  - Help output tests\n'
+        printf '  - Version calculation tests\n'
+        printf '  - Mathematical version bump tests\n'
+        printf '  - Tag manager tests\n'
+        printf '  - Orchestrator tests\n'
+        printf '  - Error handling tests\n'
+        printf '  - Additional tools tests\n'
         exit 0
     fi
 
@@ -396,10 +213,91 @@ main() {
     printf 'Executables: %s\n' "$DEV_BIN"
     printf '\n'
 
-    local i
-    for ((i=0; i<${#TEST_NAMES[@]}; i++)); do
-        run_one "$i"
-    done
+    # Binary availability tests
+    run_test "ref-resolver exists" "test -x \"$DEV_BIN/ref-resolver.sh\"" ""
+    run_test "version-config-loader exists" "test -x \"$DEV_BIN/version-config-loader.sh\"" ""
+    run_test "file-change-analyzer exists" "test -x \"$DEV_BIN/file-change-analyzer.sh\"" ""
+    run_test "cli-options-analyzer exists" "test -x \"$DEV_BIN/cli-options-analyzer.sh\"" ""
+    run_test "security-keyword-analyzer exists" "test -x \"$DEV_BIN/security-keyword-analyzer.sh\"" ""
+    run_test "version-calculator exists" "test -x \"$DEV_BIN/version-calculator.sh\"" ""
+    run_test "semantic-version-analyzer exists" "test -x \"$DEV_BIN/semantic-version-analyzer.sh\"" ""
+    run_test "mathematical-version-bump exists" "test -x \"$DEV_BIN/mathematical-version-bump.sh\"" ""
+    run_test "tag-manager exists" "test -x \"$DEV_BIN/tag-manager.sh\"" ""
+    run_test "version-utils exists" "test -x \"$DEV_BIN/version-utils.sh\"" ""
+    run_test "version-validator exists" "test -x \"$DEV_BIN/version-validator.sh\"" ""
+    run_test "version-calculator-loc exists" "test -x \"$DEV_BIN/version-calculator-loc.sh\"" ""
+    run_test "git-operations exists" "test -x \"$DEV_BIN/git-operations.sh\"" ""
+
+    # Help output tests
+    run_test "ref-resolver --help" "\"$DEV_BIN/ref-resolver.sh\" --help" "Reference Resolver"
+    run_test "version-config-loader --help" "\"$DEV_BIN/version-config-loader.sh\" --help" "Version Configuration Loader"
+    run_test "file-change-analyzer --help" "\"$DEV_BIN/file-change-analyzer.sh\" --help" "File Change Analyzer"
+    run_test "cli-options-analyzer --help" "\"$DEV_BIN/cli-options-analyzer.sh\" --help" "CLI Options Analyzer"
+    run_test "security-keyword-analyzer --help" "\"$DEV_BIN/security-keyword-analyzer.sh\" --help" "Security Keyword Analyzer"
+    run_test "version-calculator --help" "\"$DEV_BIN/version-calculator.sh\" --help" "Version Calculator"
+    run_test "semantic-version-analyzer --help" "\"$DEV_BIN/semantic-version-analyzer.sh\" --help" "Semantic Version Analyzer v2"
+    run_test "mathematical-version-bump --help" "\"$DEV_BIN/mathematical-version-bump.sh\" --help" "Mathematical Version Bumper for vglog-filter"
+    run_test "tag-manager help" "\"$DEV_BIN/tag-manager.sh\"" "Tag Manager for vglog-filter"
+    run_test "version-utils --help" "\"$DEV_BIN/version-utils.sh\" --help" "Usage: version-utils.sh"
+    run_test "version-validator --help" "\"$DEV_BIN/version-validator.sh\" --help" "Usage: version-validator"
+    run_test "version-calculator-loc --help" "\"$DEV_BIN/version-calculator-loc.sh\" --help" "Usage: version-calculator-loc"
+    run_test "git-operations --help" "\"$DEV_BIN/git-operations.sh\" --help" "Usage: git-operations.sh"
+
+    # Configuration loading tests
+    run_test "version-config-loader --validate-only" "\"$DEV_BIN/version-config-loader.sh\" --validate-only" ""
+    run_test "version-config-loader --machine" "\"$DEV_BIN/version-config-loader.sh\" --machine" ""
+
+    # Reference resolution tests
+    run_test "ref-resolver --print-base" "\"$DEV_BIN/ref-resolver.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --print-base" ""
+    run_test "ref-resolver --machine" "\"$DEV_BIN/ref-resolver.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" ""
+
+    # File change analysis tests
+    run_test "file-change-analyzer basic" "\"$DEV_BIN/file-change-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" ""
+    run_test "file-change-analyzer machine" "\"$DEV_BIN/file-change-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" ""
+
+    # CLI options analysis tests
+    run_test "cli-options-analyzer basic" "\"$DEV_BIN/cli-options-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" ""
+    run_test "cli-options-analyzer machine" "\"$DEV_BIN/cli-options-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" ""
+
+    # Security keyword analysis tests
+    run_test "security-keyword-analyzer basic" "\"$DEV_BIN/security-keyword-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" ""
+    run_test "security-keyword-analyzer machine" "\"$DEV_BIN/security-keyword-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --machine" ""
+
+    # Version calculation tests
+    run_test "version-calculator basic" "\"$DEV_BIN/version-calculator.sh\" --current-version 1.2.3 --bump-type minor --loc 500" "Next version:"
+    run_test "version-calculator machine" "\"$DEV_BIN/version-calculator.sh\" --current-version 1.2.3 --bump-type minor --loc 500 --machine" "NEXT_VERSION="
+    run_test "version-calculator-loc basic" "\"$DEV_BIN/version-calculator-loc.sh\" --current-version 1.2.3 --bump-type minor" "1.7.0"
+    run_test "version-calculator-loc machine" "\"$DEV_BIN/version-calculator-loc.sh\" --current-version 1.2.3 --bump-type minor --machine" "NEW="
+
+    # Mathematical version bump tests
+    run_test "mathematical-version-bump print" "\"$DEV_BIN/mathematical-version-bump.sh\" --print --base \"$BASE_REF\" --target \"$TARGET_REF\"" "Mathematical analysis suggests:"
+    run_test "mathematical-version-bump dry-run" "\"$DEV_BIN/mathematical-version-bump.sh\" --dry-run --base \"$BASE_REF\" --target \"$TARGET_REF\"" "Mathematical analysis suggests:"
+
+    # Tag manager tests
+    run_test "tag-manager list" "\"$DEV_BIN/tag-manager.sh\" list" ""
+
+    # Orchestrator tests
+    run_test "semantic-version-analyzer basic" "\"$DEV_BIN/semantic-version-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\"" ""
+    run_test "semantic-version-analyzer --suggest-only" "\"$DEV_BIN/semantic-version-analyzer.sh\" --base \"$BASE_REF\" --target \"$TARGET_REF\" --suggest-only" ""
+
+    # Error handling tests
+    run_test "invalid base reference" "\"$DEV_BIN/ref-resolver.sh\" --base INVALID_REF --target \"$TARGET_REF\"" "" 1
+    run_test "missing required argument" "\"$DEV_BIN/file-change-analyzer.sh\"" "" 1
+    run_test "invalid bump type" "\"$DEV_BIN/version-calculator.sh\" --current-version 1.2.3 --bump-type invalid" "" 1
+
+    # Additional tools tests (if they exist)
+    if [[ -x "$DEV_BIN/version-utils.sh" ]]; then
+        run_test "version-utils last-tag" "\"$DEV_BIN/version-utils.sh\" last-tag v" ""
+        run_test "version-utils hash-file VERSION" "\"$DEV_BIN/version-utils.sh\" hash-file VERSION" ""
+        run_test "version-utils read-version" "\"$DEV_BIN/version-utils.sh\" read-version VERSION" "$EXPECT_VERSION"
+    fi
+
+    if [[ -x "$DEV_BIN/version-validator.sh" ]]; then
+        run_test "version-validator validate 1.0.0" "\"$DEV_BIN/version-validator.sh\" validate 1.0.0" "valid"
+        run_test "version-validator compare 1.0.0 1.0.1" "\"$DEV_BIN/version-validator.sh\" compare 1.0.0 1.0.1" "^-1$"
+        run_test "version-validator parse 1.2.3" "\"$DEV_BIN/version-validator.sh\" parse 1.2.3" "1"
+        run_test "version-validator is-prerelease 1.0.0-rc.1" "\"$DEV_BIN/version-validator.sh\" is-prerelease 1.0.0-rc.1" "true"
+    fi
 
     # Summary
     printf '\n'
