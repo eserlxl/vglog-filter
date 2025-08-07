@@ -238,4 +238,64 @@ fi
 cd - >/dev/null 2>&1 || exit
 cleanup_temp_test_env "$test_dir"
 
+# Test 8: Repository with current project version (should work)
+echo "Test 8: Repository with current project version..."
+test_dir=$(create_temp_test_env "current-version")
+cd "$test_dir" || exit 1
+
+# Update VERSION to match current project version
+echo "10.5.12" > VERSION
+git add VERSION
+git commit -m "Update to current version" >/dev/null 2>&1
+
+output=$("$SCRIPT_PATH" --verbose --repo-root "$test_dir" 2>&1)
+exit_code=$?
+
+if [[ $exit_code -ge 10 && $exit_code -le 20 ]]; then
+    echo "✅ PASS: Current version repo exits with valid code: $exit_code"
+else
+    echo "❌ FAIL: Current version repo has wrong exit code: $exit_code"
+    echo "Output: $output"
+    exit 1
+fi
+
+# Check for current version in the output
+if echo "$output" | grep -q "Current version: 10.5.12"; then
+    echo "✅ PASS: Current version repo shows correct version analysis"
+else
+    echo "❌ FAIL: Current version repo missing correct version analysis"
+    echo "Output: $output"
+    exit 1
+fi
+
+cd - >/dev/null 2>&1 || exit
+cleanup_temp_test_env "$test_dir"
+
+# Test 9: Repository with strict status mode
+echo "Test 9: Repository with strict status mode..."
+test_dir=$(create_temp_test_env "strict-status")
+cd "$test_dir" || exit 1
+
+output=$("$SCRIPT_PATH" --suggest-only --strict-status --repo-root "$test_dir" 2>&1)
+exit_code=$?
+
+if [[ $exit_code -ge 10 && $exit_code -le 20 ]]; then
+    echo "✅ PASS: Strict status mode exits with valid code: $exit_code"
+else
+    echo "❌ FAIL: Strict status mode has wrong exit code: $exit_code"
+    echo "Output: $output"
+    exit 1
+fi
+
+if echo "$output" | grep -E -q "^(major|minor|patch|none)$"; then
+    echo "✅ PASS: Strict status mode produces valid suggestion"
+else
+    echo "❌ FAIL: Strict status mode produces invalid suggestion"
+    echo "Output: $output"
+    exit 1
+fi
+
+cd - >/dev/null 2>&1 || exit
+cleanup_temp_test_env "$test_dir"
+
 echo "✅ All minimal repository support tests passed!"

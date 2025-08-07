@@ -80,7 +80,7 @@ create_temp_test_env() {
     fi
     
     # Copy essential project files
-    cp "$project_root/VERSION" . 2>/dev/null || echo "9.3.0" > VERSION
+    cp "$project_root/VERSION" . 2>/dev/null || echo "10.5.12" > VERSION
     cp "$project_root/CMakeLists.txt" . 2>/dev/null || echo "project(test)" > CMakeLists.txt
     cp -r "$project_root/src" . 2>/dev/null || mkdir -p src
     
