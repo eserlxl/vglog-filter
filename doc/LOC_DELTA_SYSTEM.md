@@ -25,7 +25,7 @@ MINOR: 5 * (1 + LOC/500)  # Medium changes get medium increments
 MAJOR: 10 * (1 + LOC/1000) # Large changes get large increments
 
 # Enhanced bonus system with 7 categories
-+ Breaking changes: API (+3), CLI (+2), Removed features (+2)
++ Breaking changes: API (+5), CLI (+4), Removed features (+3)
 + Security & stability: Security vuln (+5), CVE (+2), Memory safety (+4)
 + Performance: 50%+ perf (+3), 20-50% perf (+2), Memory reduction (+2)
 + Features: New CLI (+2), New config (+1), New files (+1)
@@ -38,7 +38,7 @@ MAJOR: 10 * (1 + LOC/1000) # Large changes get large increments
 
 1. **Always Increase Only the Last Identifier**: All version changes increment only the patch version (the last number)
 2. **LOC-Based Delta Calculation**: The increment amount is calculated based on Lines of Code (LOC) changed plus bonus additions
-3. **Rollover Logic**: Uses mod 100 for patch and minor version limits with automatic rollover
+3. **Rollover Logic**: Uses mod 1000 for patch and minor version limits with automatic rollover
 4. **Enhanced Reason Format**: Includes LOC value and version type in analysis output
 5. **Universal Patch Detection**: Every change results in at least a patch bump
 6. **Early Exit Optimization**: Skips expensive LOC calculation when bonus threshold is met
@@ -49,9 +49,9 @@ MAJOR: 10 * (1 + LOC/1000) # Large changes get large increments
 The system automatically detects and applies bonuses across 7 comprehensive categories:
 
 #### Breaking Changes (High Impact)
-- **API breaking changes**: +3 (function signature changes, removed prototypes)
-- **CLI breaking changes**: +2 (CLI option removals)
-- **Removed features**: +2 (deprecated feature removals)
+- **API breaking changes**: +5 (function signature changes, removed prototypes)
+- **CLI breaking changes**: +4 (CLI option removals)
+- **Removed features**: +3 (deprecated feature removals)
 - **Database schema changes**: +4 (schema modifications)
 - **Config format changes**: +3 (configuration file format changes)
 - **Plugin API changes**: +3 (plugin interface modifications)
@@ -145,10 +145,10 @@ The system includes performance optimizations:
 ### New Rollover System
 The system implements intelligent rollover logic:
 
-- **Patch rollover**: When patch + delta >= 100, apply mod 100 and increment minor
-- **Minor rollover**: When minor + 1 >= 100, apply mod 100 and increment major
-- **Example**: 10.5.95 + 6 = 10.6.1 (patch rollover)
-- **Example**: 10.99.95 + 6 = 11.0.1 (minor rollover)
+- **Patch rollover**: When patch + delta >= 1000, apply mod 1000 and increment minor
+- **Minor rollover**: When minor + 1 >= 1000, apply mod 1000 and increment major
+- **Example**: 10.5.995 + 6 = 10.6.1 (patch rollover)
+- **Example**: 10.999.995 + 6 = 11.0.1 (minor rollover)
 
 ### Enhanced Reason Format
 The system now provides enhanced analysis output that includes:
@@ -220,13 +220,13 @@ Result: 10.5.12 → 10.5.38 (patch with major-level delta)
 #### Rollover Examples
 ```bash
 # Patch rollover
-10.5.95 + 6 = 10.6.1
+10.5.995 + 6 = 10.6.1
 
 # Minor rollover  
-10.99.95 + 6 = 11.0.1
+10.999.995 + 6 = 11.0.1
 
 # Double rollover
-10.99.99 + 1 = 11.0.0
+10.999.999 + 1 = 11.0.0
 ```
 
 ## Configuration
@@ -245,7 +245,7 @@ base_deltas:
 # LOC cap and rollover configuration
 limits:
   loc_cap: 10000
-  rollover: 100  # Two-digit rollover feels right for most projects
+  rollover: 1000  # Three-digit rollover for better version management
 
 # LOC divisors for different change types
 loc_divisors:
@@ -256,9 +256,9 @@ loc_divisors:
 # Enhanced bonus system - 7 categories with point values
 bonuses:
   breaking_changes:
-    api_breaking: 3
-    cli_breaking: 2
-    removed_features: 2
+    api_breaking: 5
+    cli_breaking: 4
+    removed_features: 3
     database_schema: 4
     config_format: 3
     plugin_api: 3
@@ -362,8 +362,8 @@ VERSION_MINOR_DELTA="5*(1+LOC/500)"
 VERSION_MAJOR_DELTA="10*(1+LOC/1000)"
 
 # Rollover limits
-VERSION_PATCH_LIMIT=100
-VERSION_MINOR_LIMIT=100
+VERSION_PATCH_LIMIT=1000
+VERSION_MINOR_LIMIT=1000
 
 # Enhanced bonus values
 VERSION_BREAKING_CLI_BONUS=2
@@ -383,8 +383,8 @@ VERSION_SECURITY_BONUS=2
 ```
 
 ### Default Values
-- `VERSION_PATCH_LIMIT=100`
-- `VERSION_MINOR_LIMIT=100`
+- `VERSION_PATCH_LIMIT=1000`
+- `VERSION_MINOR_LIMIT=1000`
 - `VERSION_PATCH_DELTA="1*(1+LOC/250)"`
 - `VERSION_MINOR_DELTA="5*(1+LOC/500)"`
 - `VERSION_MAJOR_DELTA="10*(1+LOC/1000)"`
@@ -477,7 +477,7 @@ The system includes performance optimizations:
 - **Pure mathematical logic**: All decisions based on bonus point calculations
 - **Proportional versioning**: Bigger changes = bigger version jumps
 - **Prevents inflation**: Version numbers stay manageable
-- **Predictable progression**: Clear rollover rules with mod 100
+- **Predictable progression**: Clear rollover rules with mod 1000
 - **Maintains semantics**: Still follows semver principles
 - **Always increases patch**: Consistent behavior across all change types
 - **Performance optimized**: Early exit for high-impact changes
@@ -517,7 +517,7 @@ Run the comprehensive test suite to see the system in action:
 This demonstrates:
 - Small, medium, and large changes
 - Delta calculations with new formulas
-- Rollover scenarios with mod 100 logic
+- Rollover scenarios with mod 1000 logic
 - Configuration options
 - Enhanced reason format
 - Integration with semantic analyzer
