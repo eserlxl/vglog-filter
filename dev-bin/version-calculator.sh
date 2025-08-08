@@ -16,6 +16,15 @@ export LC_ALL=C
 # ----- script directory ------------------------------------------------------
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
+# ----- source utilities ------------------------------------------------------
+# shellcheck disable=SC1091
+if [[ -f "$SCRIPT_DIR/version-utils.sh" ]]; then
+    # Expected to provide: die, is_uint, init_colors
+    # shellcheck source=/dev/null
+    # shellcheck disable=SC1091
+    source "$SCRIPT_DIR/version-utils.sh"
+fi
+
 # ----- guards ----------------------------------------------------------------
 (( BASH_VERSINFO[0] >= 4 )) || { echo "Error: requires Bash ≥ 4" >&2; exit 1; }
 
@@ -49,8 +58,18 @@ EOF
 }
 
 # ----- utilities -------------------------------------------------------------
-die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
-is_uint() { [[ "$1" =~ ^[0-9]+$ ]]; }
+# Provide fallbacks for functions not in version-utils.sh
+has_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+if ! has_cmd die; then
+    die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+fi
+
+if ! has_cmd is_uint; then
+    is_uint() { [[ "$1" =~ ^[0-9]+$ ]]; }
+fi
+
+# Functions specific to this script
 to_lower() { printf '%s' "${1,,}"; }
 is_semver_xyz() { [[ "$1" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; }
 

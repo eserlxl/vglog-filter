@@ -22,7 +22,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # shellcheck disable=SC1091
 if [[ -f "$SCRIPT_DIR/version-utils.sh" ]]; then
-    # Expected to provide: init_colors, die, split_semver (optional)
+    # Expected to provide: init_colors, die, split_semver, is_uint
     # shellcheck source=/dev/null
     # shellcheck disable=SC1091
     source "$SCRIPT_DIR/version-utils.sh"
@@ -47,12 +47,16 @@ if ! has_cmd split_semver 2>/dev/null; then
         local v="${1-}"
         [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Invalid version format: $v (expected MAJOR.MINOR.PATCH)"
         IFS='.' read -r maj min pat <<<"$v"
-        printf '%s %s %s' "$maj" "$min" "$pat"
+        printf '%s\n%s\n%s' "$maj" "$min" "$pat"
     }
 fi
 
+# Provide is_uint if not sourced from version-utils.sh
+if ! has_cmd is_uint 2>/dev/null; then
+    is_uint() { [[ "${1-}" =~ ^[0-9]+$ ]]; }
+fi
+
 # ---------- tiny helpers ------------------------------------------------------
-is_uint() { [[ "${1-}" =~ ^[0-9]+$ ]]; }
 need_val() { [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "$1 requires a value"; }
 json_escape() {
     local s=${1-}
@@ -146,69 +150,15 @@ get_analysis_explanation() {
 }
 
 # ---------- version checks ----------------------------------------------------
-ensure_semver() {
-    local v="$1"
-    [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Invalid version format: $v (expected MAJOR.MINOR.PATCH)"
-}
+# Use validate_version_format from version-utils.sh if available, otherwise provide fallback
+if ! has_cmd validate_version_format 2>/dev/null; then
+    validate_version_format() {
+        local v="$1"
+        [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Invalid version format: $v (expected MAJOR.MINOR.PATCH)"
+    }
+fi
 
-# ---------- rollover math -----------------------------------------------------
-# Returns: "<patch> <minor> <major>"
-roll_patch() {
-    local patch="$1" minor="$2" major="$3" delta="$4" m="$VERSION_PATCH_LIMIT"
-    local np=$((patch + delta))
-    local carry_minor=$(( np / m ))
-    local fp=$(( np % m ))
-    local nm=$(( minor + carry_minor ))
-    local carry_major=$(( nm / m ))
-    local fm=$(( nm % m ))
-    local fmj=$(( major + carry_major ))
-    printf '%s %s %s' "$fp" "$fm" "$fmj"
-}
 
-# Returns: "<minor> <major>"
-roll_minor() {
-    local minor="$1" major="$2" delta="$3" m="$VERSION_MINOR_LIMIT"
-    local nm=$(( minor + delta ))
-    local carry_major=$(( nm / m ))
-    local fm=$(( nm % m ))
-    local fmj=$(( major + carry_major ))
-    printf '%s %s' "$fm" "$fmj"
-}
-
-calculate_version_bump() {
-    local current="$1" type="$2" delta="$3"
-    ensure_semver "$current"
-    is_uint "$delta" || die "Non-integer delta: $delta"
-    local MAJOR MINOR PATCH
-    MAJOR=$(split_semver "$current" | sed -n '1p')
-    MINOR=$(split_semver "$current" | sed -n '2p')
-    PATCH=$(split_semver "$current" | sed -n '3p')
-
-    case "$type" in
-        patch)
-            local roll_result
-            roll_result=$(roll_patch "$PATCH" "$MINOR" "$MAJOR" "$delta")
-            PATCH=$(echo "$roll_result" | awk '{print $1}')
-            MINOR=$(echo "$roll_result" | awk '{print $2}')
-            MAJOR=$(echo "$roll_result" | awk '{print $3}')
-            ;;
-        minor)
-            [[ "${PRESERVE_PATCH_ON_MINOR,,}" == "true" ]] || PATCH=0
-            local roll_result
-            roll_result=$(roll_minor "$MINOR" "$MAJOR" "$delta")
-            MINOR=$(echo "$roll_result" | awk '{print $1}')
-            MAJOR=$(echo "$roll_result" | awk '{print $2}')
-            ;;
-        major)
-            [[ "${PRESERVE_LOWER_ON_MAJOR,,}" == "true" ]] || { MINOR=0; PATCH=0; }
-            MAJOR=$(( MAJOR + delta ))
-            ;;
-        *)
-            die "Invalid bump type '$type' (must be: major|minor|patch)"
-            ;;
-    esac
-    printf '%s.%s.%s' "$MAJOR" "$MINOR" "$PATCH"
-}
 
 # ---------- config & output ---------------------------------------------------
 load_version_config() {
@@ -237,28 +187,7 @@ emit_machine() {
         "$old" "$new" "$type" "${delta:-0}" "${source:-default}"
 }
 
-# ---------- main bump logic ---------------------------------------------------
-bump_version_with_loc() {
-    local current_version="$1" bump_type="$2" original_project_root="$3" repo_root="$4"
-    [[ -n "$current_version" ]] || die "Current version is required"
-    [[ "$bump_type" =~ ^(major|minor|patch)$ ]] || die "Bump type must be major|minor|patch"
-    local delta=1 analyzer_path semantic_delta
-    analyzer_path="$(find_semantic_analyzer "$original_project_root" "$(pwd)")"
-    if [[ -n "$analyzer_path" ]]; then
-        semantic_delta="$(get_semantic_delta "$analyzer_path" "$bump_type" "$repo_root" "$original_project_root" || true)"
-        if [[ -n "$semantic_delta" && "$semantic_delta" =~ ^[0-9]+$ ]]; then
-            delta="$semantic_delta"
-        fi
-    fi
-    if [[ -z "${delta-}" ]]; then
-        case "$bump_type" in
-            patch) delta="$VERSION_PATCH_DELTA" ;;
-            minor) delta="$VERSION_MINOR_DELTA" ;;
-            major) delta="$VERSION_MAJOR_DELTA" ;;
-        esac
-    fi
-    calculate_version_bump "$current_version" "$bump_type" "$delta"
-}
+
 
 # --- Standalone usage --------------------------------------------------------
 usage() {
@@ -357,7 +286,7 @@ main() {
     # Handle --set case
     if [[ -n "$set_version" ]]; then
         # Validate set version format
-        ensure_semver "$set_version"
+        validate_version_format "$set_version"
         
         if $verbose; then
             printf 'Set: direct  Old: %s  New: %s\n' "$current_version" "$set_version" >&2
@@ -397,9 +326,14 @@ main() {
         esac
     fi
     
-    # Calculate new version
+    # Calculate new version using version-calculator.sh
     local new_version
-    new_version=$(calculate_version_bump "$current_version" "$bump_type" "$delta")
+    new_version="$("$SCRIPT_DIR/version-calculator.sh" \
+        --current-version "$current_version" \
+        --bump-type "$bump_type" \
+        --loc 0 \
+        --bonus "${delta:-0}" \
+        --quiet)"
     
     if $verbose; then
         {
