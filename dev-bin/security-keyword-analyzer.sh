@@ -2,18 +2,18 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# Security Keyword Analyzer
-# Detects security-related keywords in commit messages and code changes
+# Security keyword analyzer for vglog-filter
+# Analyzes security-related keywords in git diffs and commit messages
 
 set -Eeuo pipefail
 IFS=$'\n\t'
-export LC_ALL=C
-# Prevent any pager and avoid unnecessary repo locks for better performance.
-export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
 
 # ------------- defaults -------------
 BASE_REF=""
@@ -35,15 +35,14 @@ W_MEM=2               # memory safety issues
 W_CRASH=1             # crash/robustness fixes
 
 # ------------- helpers -------------
-die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found"; }
-is_true() { [[ "${1,,}" =~ ^(1|y|yes|true)$ ]]; }
+# is_true() function is now sourced from version-utils.sh
 
-# Sanitize integer
-int_or_zero() { printf '%s' "${1:-0}" | tr -cd '0-9'; }
+# Sanitize integer - use is_uint from version-utils.sh instead
+# int_or_zero() { printf '%s' "${1:-0}" | tr -cd '0-9'; }
 
 # Sanitize JSON integer emission
-emit_json_kv_num() { printf '  "%s": %s' "$1" "$(int_or_zero "$2")"; }
+emit_json_kv_num() { printf '  "%s": %s' "$1" "$(is_uint "${2:-0}" && printf '%s' "$2" || printf '0')"; }
 
 # GREP engine selection (prefer PCRE for \b, \s, \w, etc.)
 grep_supports_pcre() {
@@ -171,13 +170,10 @@ if mapfile -d '' _pspec < <(build_pathspec_array "$ONLY_PATHS"); then
     fi
 fi
 
-# Validate git references
+# Verify git reference exists
 verify_ref() {
     local ref="$1"
-    if ! git -c color.ui=false rev-parse -q --verify "$ref^{commit}" >/dev/null; then
-        printf 'Error: Invalid reference: %s\n' "$ref" >&2
-        exit 1
-    fi
+    git rev-parse --verify --quiet "${ref}^{commit}" >/dev/null || die "Invalid reference: $ref"
 }
 
 verify_ref "$BASE_REF"
@@ -244,7 +240,7 @@ analyze_security_keywords() {
 
     local security_keywords=0
     [[ -n "$commits_text" ]] && security_keywords="$(printf '%s' "$commits_text" | count_occurrences "$SEC_REGEX" "$GREP_ENGINE")"
-    security_keywords="$(int_or_zero "$security_keywords")"
+    security_keywords="$(is_uint "$security_keywords" && printf '%s' "$security_keywords" || printf '0')"
     
     # Diff scan (with options)
     local -a diff_args=(diff -M -C "$base_ref..$target_ref")
@@ -277,10 +273,10 @@ analyze_security_keywords() {
         crash_fixes="$(printf '%s' "$diff_content" | count_occurrences "$CRASH_REGEX" "$GREP_ENGINE")"
     fi
 
-    security_patterns="$(int_or_zero "$security_patterns")"
-    cve_patterns="$(int_or_zero "$cve_patterns")"
-    memory_safety_issues="$(int_or_zero "$memory_safety_issues")"
-    crash_fixes="$(int_or_zero "$crash_fixes")"
+    security_patterns="$(is_uint "$security_patterns" && printf '%s' "$security_patterns" || printf '0')"
+    cve_patterns="$(is_uint "$cve_patterns" && printf '%s' "$cve_patterns" || printf '0')"
+    memory_safety_issues="$(is_uint "$memory_safety_issues" && printf '%s' "$memory_safety_issues" || printf '0')"
+    crash_fixes="$(is_uint "$crash_fixes" && printf '%s' "$crash_fixes" || printf '0')"
     
     # Calculate weighted total security score
     local total_security_score=$(( security_keywords * W_COMMITS \

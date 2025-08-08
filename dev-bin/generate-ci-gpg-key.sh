@@ -1,18 +1,20 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# Generate a GPG key for CI (commit signing) with safe defaults.
-# - Defaults to Ed25519 (recommended) and sign-only usage.
-# - Exports armored public/secret keys and (optionally) single-line base64.
-# - Writes outputs to a directory (default: ./ci-gpg-out) with mode 700.
-# - By default, DOES NOT print secrets to stdout; use --print-secrets if you must.
+# CI GPG key generator for vglog-filter
+# Generates GPG keys for CI/CD signing
 
 set -Eeuo pipefail
+IFS=$'\n\t'
+export LC_ALL=C
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
 
 # ---------- appearance & helpers ----------
 is_tty=0; [[ -t 1 ]] && is_tty=1
@@ -21,7 +23,6 @@ colorize() { if (( is_tty )); then printf '%s' "${1}"; fi; }
 say()  { colorize "${c_cyn}";  printf '[*] %s\n' "$*"; colorize "${c_rst}"; }
 ok()   { colorize "${c_grn}";  printf '[✓] %s\n' "$*"; colorize "${c_rst}"; }
 warn() { colorize "${c_ylw}";  printf '[!] %s\n' "$*"; colorize "${c_rst}"; }
-die()  { colorize "${c_red}";  printf '[✗] %s\n' "$*"; colorize "${c_rst}"; exit 1; }
 
 # ---------- defaults ----------
 NAME="vglog-filter CI Bot"
@@ -38,7 +39,7 @@ WITH_SUBKEY=0      # create signing subkey with cert-only primary (recommended)
 MAKE_REVOKE=0      # write revocation-cert.asc
 
 # ---------- utilities ----------
-require_cmd() { command -v "$1" >/dev/null 2>&1 || die "'$1' is not installed"; }
+# die() and require_cmd() functions are now sourced from version-utils.sh
 
 abs_path() {
   # Portable absolute path (macOS lacks readlink -f, sometimes no realpath)

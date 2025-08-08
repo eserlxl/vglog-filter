@@ -68,6 +68,33 @@ require_cmd() {
   ((${#missing[@]}==0)) || _die "Missing required tools: ${missing[*]}"
 }
 
+# ------------------- boolean utilities -------------------
+is_true() {
+  # normalize various truthy/falsey inputs to 0/1 return code
+  local v="${1:-}"
+  case "${v,,}" in
+    1|true|t|yes|y|on)  return 0 ;;
+    0|false|f|no|n|off) return 1 ;;
+    *)                  return 1 ;;
+  esac
+}
+
+is_false() {
+  ! is_true "${1:-}"
+}
+
+# ------------------- JSON utilities -------------------
+json_escape() {
+  # Comprehensive JSON string escaper
+  local s="${1:-}"
+  s="${s//\\/\\\\}"  # backslash
+  s="${s//\"/\\\"}"  # double quote
+  s="${s//$'\n'/\\n}"  # newline
+  s="${s//$'\r'/\\r}"  # carriage return
+  s="${s//$'\t'/\\t}"  # tab
+  printf '%s' "$s"
+}
+
 # ------------------- portable realpath -------------------
 _realpath() {
   # $1: path
@@ -206,6 +233,12 @@ check_git_identity() {
   e="$(git config --get user.email || true)"
   [[ -n "$n" ]] || _warn "git user.name is not set"
   [[ -n "$e" ]] || _warn "git user.email is not set"
+}
+
+# Validate git reference
+verify_ref() {
+  local ref="$1"
+  git -c color.ui=false rev-parse -q --verify "${ref}^{commit}" >/dev/null || _die "Invalid reference: $ref"
 }
 
 # ------------------- version file utilities -------------------

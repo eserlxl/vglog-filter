@@ -2,22 +2,19 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# Keep an "alpha" branch synchronized with a base branch (e.g., main).
-# Enhanced with safety features, dry-run support, and better error handling.
-#
-# Examples:
-#   ./sync_alpha.sh                                   # ff-only merge origin/main -> alpha
-#   ./sync_alpha.sh --strategy merge --merge-commit   # allow a merge commit if needed
-#   ./sync_alpha.sh --strategy reset --yes            # HARD RESET alpha to origin/main (push with lease)
-#   ./sync_alpha.sh --alpha alpha --base main --remote origin --checkout
-#
+# Alpha sync script for vglog-filter
+# Syncs alpha versions between branches
+
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
 
 # -------------------- appearance / logging --------------------
 is_tty=0; [[ -t 1 ]] && is_tty=1
@@ -27,9 +24,7 @@ YEL=$([[ $is_tty -eq 1 ]] && printf '\033[1;33m' || printf '')
 BLU=$([[ $is_tty -eq 1 ]] && printf '\033[0;34m' || printf '')
 NC=$([[ $is_tty -eq 1 ]] && printf '\033[0m' || printf '')
 
-die() { printf '%b[ERR]%b %s\n' "$RED" "$NC" "${1:-unknown error}" >&2; exit 1; }
-info(){ printf '%b[INFO]%b %s\n' "$BLU" "$NC" "$*"; }
-warn(){ printf '%b[WARN]%b %s\n' "$YEL" "$NC" "$*"; }
+# die(), info(), warn() functions are now sourced from version-utils.sh
 
 # -------------------- configuration --------------------
 DRY_RUN=0

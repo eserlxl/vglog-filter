@@ -2,18 +2,19 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# Semantic Version Analyzer v2 for vglog-filter
-# Orchestrates modular components for version analysis
+# Semantic version analyzer for vglog-filter
+# Analyzes semantic changes for version bumping
 
-set -Euo pipefail
+set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
-# Avoid pagers and unnecessary repo locks for speed.
-export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
 
 # ----------------------------- help / ui --------------------------------------
 show_help() {
@@ -152,16 +153,7 @@ int_or_default() {
   [[ "$v" =~ ^-?[0-9]+$ ]] && printf '%s' "$v" || printf '%s' "$def"
 }
 
-# Minimal JSON string escaper (enough for refs/versions/short fields)
-json_escape() {
-  local s=${1:-}
-  s=${s//\\/\\\\}
-  s=${s//\"/\\\"}
-  s=${s//$'\n'/\\n}
-  s=${s//$'\r'/\\r}
-  s=${s//$'\t'/\\t}
-  printf '%s' "$s"
-}
+# json_escape() function is now sourced from version-utils.sh
 
 # Build common argv for analyzers (array via nameref)
 build_common_argv() {

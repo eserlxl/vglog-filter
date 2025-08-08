@@ -2,16 +2,20 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# Keyword Analyzer
-# Detects breaking change keywords and other bonus indicators in code comments and commit messages
+# Keyword analyzer for vglog-filter
+# Analyzes keywords in git diffs and commit messages
 
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
+
 # Prevent any pager and avoid unnecessary repo locks for better performance.
 export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
@@ -64,7 +68,7 @@ VERBOSE=false
 FAIL_ON="none"        # none|any|break|security
 
 # ------------------------- helpers -------------------------------------------
-die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+# die() function is now sourced from version-utils.sh
 
 # vnote() { $VERBOSE && printf '[%s] %s\n' "$PROG" "$*" || :; }  # Unused function - commented out to fix shellcheck warning
 
@@ -89,13 +93,14 @@ ensure_ref() {
     git rev-parse --verify --quiet "${ref}^{commit}" >/dev/null || die "Invalid ref: ${ref}"
 }
 
-int_or_zero() {
-    # prints only digits; returns 0 if empty
-    local v="${1:-0}"
-    v="$(printf '%s' "$v" | tr -cd '0-9')"
-    if [[ -z "$v" ]]; then v=0; fi
-    printf '%s' "$v"
-}
+# int_or_zero() function is now replaced with is_uint from version-utils.sh
+# int_or_zero() {
+#     # prints only digits; returns 0 if empty
+#     local v="${1:-0}"
+#     v="$(printf '%s' "$v" | tr -cd '0-9')"
+#     if [[ -z "$v" ]]; then v=0; fi
+#     printf '%s' "$v"
+# }
 
 count_matches() {
     # stdin + regex -> integer (line-based count, case-insensitive)
@@ -103,7 +108,7 @@ count_matches() {
     local pattern="$1"
     local n
     n="$(grep -Eci -- "$pattern" 2>/dev/null || true)"
-    int_or_zero "$n"
+    is_uint "$n" && printf '%s' "$n" || printf '0'
 }
 
 json_bool() {

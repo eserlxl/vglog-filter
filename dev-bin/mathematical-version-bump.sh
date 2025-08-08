@@ -2,16 +2,19 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# Mathematical Version Bumper for vglog-filter
-# Purely mathematical versioning system - no manual bump types needed
+# Mathematical version bump for vglog-filter
+# Performs mathematical version bumping with git operations
 
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
 
 # ------------------------------ bootstrap ------------------------------------
 
@@ -23,19 +26,17 @@ if ! command -v realpath >/dev/null 2>&1; then
   exit 127
 fi
 
-SCRIPT_DIR="$(dirname -- "$(realpath -- "$0")")"
-
 # Helper to die consistently (before version-utils is sourced)
-_die_boot() { printf '[%s] %s\n' "$PROG" "$*" >&2; exit 1; }
+# _die_boot() { printf '[%s] %s\n' "$PROG" "$*" >&2; exit 1; }
 
 # Require Bash ≥ 4 (associative arrays & modern features used in utilities)
 if (( BASH_VERSINFO[0] < 4 )); then
-  _die_boot "Bash ≥ 4 is required; current: ${BASH_VERSION}"
+  die "Bash ≥ 4 is required; current: ${BASH_VERSION}"
 fi
 
 # Validate helper scripts exist early (fail fast & clear)
-_need_exec() { local p="$1" name="${2:-$1}"; [[ -x "$p" ]] || _die_boot "Required helper '$name' not executable at: $p"; }
-[[ -r "$SCRIPT_DIR/version-utils.sh" ]] || _die_boot "Missing: $SCRIPT_DIR/version-utils.sh"
+_need_exec() { local p="$1" name="${2:-$1}"; [[ -x "$p" ]] || die "Required helper '$name' not executable at: $p"; }
+[[ -r "$SCRIPT_DIR/version-utils.sh" ]] || die "Missing: $SCRIPT_DIR/version-utils.sh"
 _need_exec "$SCRIPT_DIR/semantic-version-analyzer.sh" "semantic-version-analyzer"
 _need_exec "$SCRIPT_DIR/version-calculator-loc.sh"      "version-calculator-loc"
 _need_exec "$SCRIPT_DIR/git-operations.sh"              "git-operations"
@@ -43,6 +44,7 @@ _need_exec "$SCRIPT_DIR/version-validator.sh"           "version-validator"
 
 # shellcheck source=/dev/null
 # shellcheck disable=SC1091
+# shellcheck disable=SC2154
 source "$SCRIPT_DIR/version-utils.sh"
 
 # ------------------------------ traps/cleanup --------------------------------
@@ -50,7 +52,6 @@ source "$SCRIPT_DIR/version-utils.sh"
 # Ensure cleanup hook exists even if utilities change later
 # Note: cleanup is handled by version-utils.sh automatically
 
-# shellcheck disable=SC2154
 trap '{
   st=$?
   if (( st != 0 )); then

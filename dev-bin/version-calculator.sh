@@ -2,16 +2,19 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# Version Calculator
-# Calculates next version based on LOC-based delta system and bonus points
+# Version calculator for vglog-filter
+# Calculates version bumps based on semantic analysis
 
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
 
 # ----- script directory ------------------------------------------------------
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -59,17 +62,7 @@ EOF
 
 # ----- utilities -------------------------------------------------------------
 # Provide fallbacks for functions not in version-utils.sh
-has_cmd() { command -v "$1" >/dev/null 2>&1; }
-
-if ! has_cmd die; then
-    die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
-fi
-
-if ! has_cmd is_uint; then
-    is_uint() { [[ "$1" =~ ^[0-9]+$ ]]; }
-fi
-
-# Functions specific to this script
+# has_cmd() function is now replaced with require_cmd() from version-utils.sh
 to_lower() { printf '%s' "${1,,}"; }
 is_semver_xyz() { [[ "$1" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; }
 

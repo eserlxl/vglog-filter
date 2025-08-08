@@ -20,6 +20,9 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/version-utils.sh"
 
+# Initialize colors
+init_colors
+
 # Fail loudly with context
 # shellcheck disable=SC2154
 trap '{
@@ -39,13 +42,7 @@ to_bool() {
     esac
 }
 
-is_true() {
-    to_bool "${1:-}"
-}
-
-is_false() {
-    ! to_bool "${1:-}"
-}
+# is_true() and is_false() functions are now sourced from version-utils.sh
 
 git_in_repo() {
     git rev-parse --git-dir >/dev/null 2>&1
@@ -64,9 +61,7 @@ current_branch_name() {
     git rev-parse --abbrev-ref HEAD 2>/dev/null
 }
 
-require_git() { 
-    command -v git >/dev/null 2>&1 || die "git not found"
-}
+# require_git() function is now replaced with check_git_repo() from version-utils.sh
 
 # --- Git state checks --------------------------------------------------------
 check_dirty_tree() {
@@ -110,7 +105,7 @@ check_git_prerequisites() {
     local do_push="$3"
     local push_tags="$4"
     
-    require_git
+    check_git_repo
     git_in_repo || die "Not in a git repository"
     
     # Check for detached HEAD if committing/tagging/pushing

@@ -2,17 +2,19 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# Tag management script for vglog-filter
-# Usage: ./dev-bin/tag-manager [list|cleanup|create|info] [options]
+# Tag manager for vglog-filter
+# Manages git tags for versioning
 
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
-export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
 
 # ---- trap unexpected errors with context ---------------------------------------------------------
 err_trap() {
@@ -48,17 +50,10 @@ PROTECT_CURRENT="${PROTECT_CURRENT:-1}"
 TAG_MSG_PREFIX="${TAG_MSG_PREFIX:-vglog-filter}"
 
 # ---- small log helpers --------------------------------------------------------------------------
-die()   { printf '%s\n' "Error: $*" >&2; exit 1; }
-warn()  { printf '%s\n' "Warning: $*" >&2; }
-info()  { printf '%s\n' "$*"; }
+# die(), warn(), info() functions are now sourced from version-utils.sh
 is_tty(){ [[ -t 0 && -t 1 ]]; }
 
-# generic boolean parser: true/false, yes/no, on/off, 1/0
-is_true() {
-  local v="${1:-0}"
-  shopt -s nocasematch
-  [[ "$v" == 1 || "$v" == "true" || "$v" == "yes" || "$v" == "on" ]]
-}
+# is_true() function is now sourced from version-utils.sh
 
 confirm() {
   local prompt="${1:-Proceed?}"

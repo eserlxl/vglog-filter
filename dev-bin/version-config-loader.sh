@@ -2,12 +2,8 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# Version Configuration Loader
-# Loads and validates versioning configuration from YAML files and environment variables
+# Version config loader for vglog-filter
+# Loads versioning configuration from YAML files
 
 set -Eeuo pipefail
 shopt -s lastpipe
@@ -15,12 +11,18 @@ IFS=$'\n\t'
 export LC_ALL=C
 umask 022
 
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
+
 # ---------- program id / guards ----------
 readonly PROG="${0##*/}"
 (( BASH_VERSINFO[0] >= 4 )) || { printf '%s\n' "Error: $PROG requires Bash ≥ 4" >&2; exit 2; }
 
 # ---------- paths ----------
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 DEFAULT_CONFIG="$SCRIPT_DIR/../dev-config/versioning.yml"
 CONFIG_FILE="$DEFAULT_CONFIG"
 
@@ -63,8 +65,7 @@ EOF
 }
 
 # ---------- logging / utils ----------
-warn() { printf 'Warning (%s): %s\n' "$PROG" "$*" >&2; }
-die()  { printf 'Error (%s): %s\n'   "$PROG" "$*" >&2; exit 1; }
+# warn() and die() functions are now sourced from version-utils.sh
 
 trap 'warn "line $LINENO: $BASH_COMMAND"' ERR
 
@@ -77,7 +78,7 @@ is_positive()      { is_number "$1" && awk -v v="$1" 'BEGIN{exit !(v>0)}'; }
 is_nonneg_number() { is_number "$1" && awk -v v="$1" 'BEGIN{exit !(v>=0)}'; }
 
 # JSON helpers
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+# json_escape() function is now sourced from version-utils.sh
 num_or_null() { [[ -n "${1:-}" ]] && printf '%s' "$1" || printf 'null'; }
 str_or_null() { [[ -n "${1:-}" ]] && { printf '"'; json_escape "$1"; printf '"'; } || printf 'null'; }
 

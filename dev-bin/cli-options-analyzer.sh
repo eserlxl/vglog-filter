@@ -1,30 +1,29 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# CLI Options Analyzer
-# Detects and analyzes CLI option changes in C/C++ source files
+# CLI options analyzer for vglog-filter
+# Analyzes CLI/API breaking changes in git diffs
 
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
-# Prevent any pager and avoid unnecessary repo locks for better performance.
-export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
 
 # --- utils -------------------------------------------------------------------
 
-die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+# die() function is now sourced from version-utils.sh
 note() { :; } # overwritten by --verbose
 
 boolstr() { [[ "$1" == true ]] && printf 'true' || printf 'false'; }
 
-json_escape() { # naive escape for simple strings
-  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
-}
+# json_escape() function is now sourced from version-utils.sh
 
 trim_spaces() {
   # trim leading/trailing ASCII and Unicode spaces
@@ -37,13 +36,7 @@ one_line() {  # turn a newline-separated list into space-separated one line
 
 join_by() { local IFS="$1"; shift; printf '%s' "$*"; }
 
-require_cmd() {
-  local miss=()
-  for c in git awk sed grep tr wc sort comm paste head tail cut; do
-    command -v "$c" >/dev/null 2>&1 || miss+=("$c")
-  done
-  ((${#miss[@]}==0)) || die "Missing required tools: ${miss[*]}"
-}
+# require_cmd() function is now sourced from version-utils.sh
 
 have_git() { command -v git >/dev/null 2>&1; }
 
@@ -51,11 +44,7 @@ verify_git_repo() {
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not inside a git repository"
 }
 
-# Validate git references
-verify_ref() {
-    local ref="$1"
-    git -c color.ui=false rev-parse -q --verify "$ref^{commit}" >/dev/null || die "Invalid reference: $ref"
-}
+# verify_ref() function is now sourced from version-utils.sh
 
 # comm requires sorted input
 set_diff_counts() {

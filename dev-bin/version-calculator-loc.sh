@@ -2,24 +2,25 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# LOC-based version calculator for vglog-filter
-# Calculates version bumps based on lines of code changes and semantic analysis
+# Version calculator with LOC delta for vglog-filter
+# Calculates version bumps based on lines of code changes
 
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
 
 # ---------- traps & ids -------------------------------------------------------
 readonly PROG="${0##*/}"
 trap 'echo "[${PROG}] Error at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 # ---------- script dir & optional utilities ----------------------------------
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-
 # shellcheck disable=SC1091
 if [[ -f "$SCRIPT_DIR/version-utils.sh" ]]; then
     # Expected to provide: init_colors, die, split_semver, is_uint
@@ -58,11 +59,7 @@ fi
 
 # ---------- tiny helpers ------------------------------------------------------
 need_val() { [[ -n "${2-}" && "${2#-}" = "$2" ]] || die "$1 requires a value"; }
-json_escape() {
-    local s=${1-}
-    s=${s//\\/\\\\}; s=${s//\"/\\\"}; s=${s//$'\n'/\\n}; s=${s//$'\r'/\\r}; s=${s//$'\t'/\\t}
-    printf '%s' "$s"
-}
+# json_escape() function is now sourced from version-utils.sh
 
 # ---------- defaults (env-overridable) ---------------------------------------
 : "${VERSION_PATCH_LIMIT:=1000}"

@@ -1,17 +1,21 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# Reference Resolver
-# Resolves git references and determines base references for comparison
+# Reference resolver for vglog-filter
+# Resolves git references and calculates commit counts
 
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
+
 # Prevent any pager and avoid unnecessary repo locks for better performance.
 export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
 
@@ -98,15 +102,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 # --- helpers ---
-die()  { printf 'Error: %s\n' "$*" >&2; exit 1; }
-warn() { printf 'Warning: %s\n' "$*" >&2; }
-info() { printf 'Info: %s\n' "$*" >&2; }
+# die() function is now sourced from version-utils.sh
+# warn() function is now sourced from version-utils.sh
+# info() function is now sourced from version-utils.sh
 
-json_escape() {
-    local s=${1-}
-    s=${s//\\/\\\\}; s=${s//\"/\\\"}; s=${s//$'\n'/\\n}; s=${s//$'\r'/\\r}; s=${s//$'\t'/\\t}
-    printf '%s' "$s"
-}
+# json_escape() function is now sourced from version-utils.sh
 
 # Check git command
 if ! command -v git >/dev/null 2>&1; then
@@ -130,13 +130,7 @@ resolve_sha() {
     git -c color.ui=false rev-parse -q --verify "${ref}^{commit}" 2>/dev/null || true
 }
 
-# Validate git reference
-verify_ref() {
-    local ref="$1"
-    if ! git -c color.ui=false rev-parse -q --verify "${ref}^{commit}" >/dev/null; then
-        die "Invalid reference: $ref"
-    fi
-}
+# verify_ref() function is now sourced from version-utils.sh
 
 # Count commits between base..target; echoes integer.
 count_commits() {

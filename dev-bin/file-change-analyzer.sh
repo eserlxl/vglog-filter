@@ -2,18 +2,19 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is part of vglog-filter and is licensed under
-# the GNU General Public License v3.0 or later.
-# See the LICENSE file in the project root for details.
-#
-# File Change Analyzer
-# Analyzes file changes and classifies them by type
+# File change analyzer for vglog-filter
+# Analyzes file changes in git diffs
 
-set -Euo pipefail
+set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
-# Prevent any pager and avoid unnecessary repo locks for better performance.
-export GIT_PAGER=cat PAGER=cat GIT_OPTIONAL_LOCKS=0
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/version-utils.sh"
+
+# Initialize colors
+init_colors
 
 # Bash features used by this script (for trimming globs safely)
 shopt -s extglob
@@ -52,7 +53,7 @@ EOF
 }
 
 # --- Error handling functions ---
-die() { printf 'Error: %s\n' "$*" >&2; exit 2; }
+# die() function is now sourced from version-utils.sh
 warn() { [[ "${QUIET:-false}" == "true" ]] || printf 'Warning: %s\n' "$*\n" >&2; }
 err()  { printf 'Error: %s\n' "$*\n" >&2; }
 
@@ -110,11 +111,10 @@ if [[ -n "$REPO_ROOT" ]]; then
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not a git repo: $REPO_ROOT"
 fi
 
-# Validate git references
+# Verify git reference exists
 verify_ref() {
     local ref="$1"
-    git -c color.ui=false rev-parse -q --verify "$ref^{commit}" >/dev/null \
-        || die "Invalid reference: $ref"
+    git rev-parse --verify --quiet "${ref}^{commit}" >/dev/null || die "Invalid reference: $ref"
 }
 verify_ref "$BASE_REF"
 verify_ref "$TARGET_REF"
