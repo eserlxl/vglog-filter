@@ -74,8 +74,35 @@ jobs:
           set -euo pipefail
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          # Disable GPG signing in CI to prevent hanging
-          git config --local commit.gpgSign false
+
+      - name: Setup GPG for CI signing
+        if: steps.version-analysis.outputs.bump_type != 'skip'
+        run: |
+          set -euo pipefail
+          
+          # Check if GPG secrets are available
+          if [[ -z "${{ secrets.GPG_PRIVATE_KEY }}" ]] || [[ -z "${{ secrets.GPG_PASSPHRASE }}" ]]; then
+            echo "ERROR: GPG_PRIVATE_KEY and GPG_PASSPHRASE secrets are required for signed commits"
+            echo "Please run ./dev-bin/generate-ci-gpg-key.sh and add the secrets to your repository"
+            exit 1
+          fi
+          
+          # Import the GPG private key
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          
+          # Get the key ID from the imported key
+          GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')
+          if [[ -z "$GPG_KEY_ID" ]]; then
+            echo "ERROR: Failed to import GPG key"
+            exit 1
+          fi
+          
+          # Configure Git to use the GPG key
+          git config --local user.signingkey "$GPG_KEY_ID"
+          git config --local commit.gpgsign true
+          
+          # Set up gpg-agent with the passphrase
+          echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --batch --passphrase-fd 0 --pinentry-mode loopback --sign --local-user "$GPG_KEY_ID" /dev/null >/dev/null 2>&1 || true
 
       - name: Determine version bump type
         id: version-analysis
@@ -164,11 +191,11 @@ jobs:
 
           # Add [skip ci] to prevent triggering other workflows
           ANALYSIS_MESSAGE="[skip ci] Auto version bump triggered by ${{ github.event_name }}" \
-            ./dev-bin/mathematical-version-bump.sh --commit --no-verify
+            ./dev-bin/mathematical-version-bump.sh --commit
 
           # Ensure [skip ci] present even if the script didn't include it
           if ! git log -1 --pretty=%B | grep -q '\[skip ci\]'; then
-            git commit --amend --no-verify -m "$(git log -1 --pretty=%B) [skip ci]"
+            git commit --amend -m "$(git log -1 --pretty=%B) [skip ci]"
           fi
 
           NEW_VERSION="$(cat VERSION)"
