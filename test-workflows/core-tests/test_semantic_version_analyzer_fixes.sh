@@ -2,6 +2,10 @@
 # Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
 # Test script for semantic version analyzer fixes
 # Tests the bug fixes and improvements made to the analyzer
 # shellcheck disable=SC2317 # eval is used for dynamic command execution

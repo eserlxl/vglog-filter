@@ -1,5 +1,11 @@
 #!/bin/bash
-
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+#
 # Test script to verify MemorySanitizer fix through string matching approach
 # This script verifies that the MSan issue was resolved by switching to string matching
 
