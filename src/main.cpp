@@ -15,6 +15,7 @@
 #include <cstring>
 #include <getopt.h> // POSIX getopt_long
 #include <iostream>
+#include <cstdio>
 #include <limits>
 #include <optional>
 #include <string>
@@ -109,7 +110,8 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvd:m:spMVh"};
             case 'p': opt.show_progress = true; break;
             case 'M': opt.monitor_memory = true; break;
             case 'V':
-                std::cout << "vglog-filter version " << VERSION_STRING << '\n';
+                std::fprintf(stdout, "vglog-filter version %.*s\n",
+                             static_cast<int>(VERSION_STRING.size()), VERSION_STRING.data());
                 return std::nullopt;
             case 'h':
                 usage(argv[0]);
@@ -145,7 +147,7 @@ void setup_input_source(Options& opt, int argc, char* argv[]) {
     if (!opt.stream_mode) {
         opt.stream_mode = opt.use_stdin ? true : is_large_file(opt.filename);
         if (opt.stream_mode && !opt.use_stdin) {
-            std::cerr << "Info: Large file detected, using stream processing mode\n";
+            std::fputs("Info: Large file detected, using stream processing mode\n", stderr);
         }
     }
 }
@@ -159,14 +161,14 @@ void process_input(const Options& opt) {
 
     if (opt.stream_mode) {
         if (opt.use_stdin) {
-            processor.process_stream(std::cin);
+            processor.process_stream_cfile(stdin);
         } else {
             process_file_stream(opt.filename, opt);
         }
     } else {
         const std::vector<std::string> lines = read_file_lines(opt.filename);
         if (lines.empty() && !opt.filename.empty() && opt.filename != STDIN_SENTINEL) {
-            std::cerr << "Warning: Input file '" << opt.filename << "' is empty\n";
+            std::fprintf(stderr, "Warning: Input file '%s' is empty\n", opt.filename.c_str());
             return;
         }
         processor.process_lines(lines);
@@ -180,8 +182,8 @@ void process_input(const Options& opt) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    // Favor correctness with standard iostreams; keep sync enabled for tool-compat.
-    std::ios::sync_with_stdio(true);
+    // Favor performance and avoid libstdc++ locale initialization paths flagged by MSan
+    std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr);
 
     try {
@@ -194,7 +196,7 @@ int main(int argc, char* argv[]) {
             return 0;
         }
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << '\n';
+        std::fprintf(stderr, "Error: %s\n", e.what());
         return 1;
     }
 

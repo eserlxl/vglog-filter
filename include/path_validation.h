@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <cstdio>
 #include <string_view>
 #include <string>
 
@@ -24,5 +25,8 @@ namespace path_validation {
 
 // Safely opens an ifstream after validating the path (exceptions enabled).
 [[nodiscard]] std::ifstream safe_ifstream(std::string_view filename);
+
+// Safely opens a C stdio FILE* after validating the path. Caller must fclose().
+[[nodiscard]] std::FILE* safe_fopen(std::string_view filename);
 
 } // namespace path_validation

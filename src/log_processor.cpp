@@ -14,6 +14,7 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <cstdio>
 #include <ranges>
 #include <string>
 #include <thread>
@@ -202,12 +203,49 @@ void LogProcessor::process_stream(std::istream& in) {
     output_pending_blocks();
 }
 
-std::size_t LogProcessor::get_file_size_for_progress() const {
-    try {
-        return static_cast<std::size_t>(std::filesystem::file_size(opt.filename));
-    } catch (...) {
-        return 0;
+void LogProcessor::process_stream_cfile(std::FILE* fp) {
+    if (fp == nullptr) return;
+    std::size_t bytes_processed = 0;
+    std::size_t total_bytes     = 0;
+
+    if (opt.show_progress && !opt.use_stdin) {
+        total_bytes = get_file_size_for_progress();
     }
+
+    std::string line;
+    line.reserve(1024);
+    char*  buf      = nullptr;
+    size_t buf_size = 0;
+    // getline(3) allocates/callback; we will copy into std::string to reuse downstream
+    ssize_t read = -1;
+    while ((read = ::getline(&buf, &buf_size, fp)) != -1) {
+        if (read > 0 && buf[read - 1] == '\n') {
+            // Exclude trailing newline from processing length accounting
+            line.assign(buf, static_cast<std::size_t>(read - 1));
+            bytes_processed += static_cast<std::size_t>(read);
+        } else {
+            line.assign(buf, static_cast<std::size_t>(read));
+            bytes_processed += static_cast<std::size_t>(read);
+        }
+
+        validate_line_length(line);
+        if (should_report_progress(bytes_processed, total_bytes)) {
+            report_progress(bytes_processed, total_bytes, opt.filename);
+        }
+        process_line(line);
+    }
+    if (buf) std::free(buf);
+
+    if (opt.show_progress && total_bytes > 0) {
+        report_progress(bytes_processed, total_bytes, opt.filename);
+    }
+
+    flush();
+    output_pending_blocks();
+}
+
+std::size_t LogProcessor::get_file_size_for_progress() const {
+    return get_file_size_bytes(opt.filename);
 }
 
 bool LogProcessor::should_report_progress(std::size_t bytes_processed, std::size_t total_bytes) const {
@@ -217,7 +255,7 @@ bool LogProcessor::should_report_progress(std::size_t bytes_processed, std::size
 
 void LogProcessor::output_pending_blocks() const {
     if (!opt.trim || marker_found) {
-        for (const auto& b : pending_blocks) std::cout << b;
+        for (const auto& b : pending_blocks) std::fwrite(b.data(), 1, b.size(), stdout);
     }
 }
 
@@ -279,7 +317,8 @@ void LogProcessor::flush() {
             validate_pending_blocks_count(pending_blocks.size());
             pending_blocks.emplace_back(raw + '\n');
         } else {
-            std::cout << raw << '\n';
+            std::fwrite(raw.data(), 1, raw.size(), stdout);
+            std::fputc('\n', stdout);
         }
     }
     clear_current_state();

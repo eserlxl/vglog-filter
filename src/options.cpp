@@ -6,29 +6,40 @@
 // See the LICENSE file in the project root for details.
 
 #include "options.h"
-#include <sstream>
+#include <cstdio>
 
 void usage(std::string_view prog) {
-    std::cout << "Usage: " << prog << " [options] [valgrind_log]\n\n"
-       << "Input\n"
-       << "  valgrind_log            Path to Valgrind log file (default: stdin if omitted)\n"
-       << "  -                       Read from stdin (explicit)\n\n"
-       << "Options\n"
-       << "  -k, --keep-debug-info   Keep everything; do not trim above last debug marker.\n"
-       << "  -v, --verbose           Show completely raw blocks (no address / \"at:\" scrub).\n"
-       << "  -d N, --depth N         Signature depth (default: " << DEFAULT_DEPTH << ", 0 = unlimited).\n"
-       << "  -m S, --marker S        Marker string (default: \"" << DEFAULT_MARKER << "\").\n"
-       << "  -s, --stream            Force stream processing mode (auto-detected for files >5MB).\n"
-       << "  -p, --progress          Show progress for large files.\n"
-       << "  -M, --memory            Monitor memory usage during processing.\n"
-       << "  -V, --version           Show version information.\n"
-       << "  -h, --help              Show this help.\n\n"
-       << "Notes\n"
-       << "  • In stream mode (including stdin), the tool outputs only the region after the *last*\n"
-       << "    marker encountered (if any). If no marker is found, the entire input is processed.\n\n"
-       << "Examples\n"
-       << "  " << prog << " log.txt                 # Process file\n"
-       << "  " << prog << " < log.txt               # Process from stdin\n"
-       << "  " << prog << " - < log.txt             # Explicit stdin\n"
-       << "  valgrind ./prog 2>&1 | " << prog << "     # Direct pipe from valgrind\n";
+    // Using stdio to avoid libstdc++ locale initialization that MSan flags
+    std::fprintf(stdout, "Usage: %.*s [options] [valgrind_log]\n\n",
+                 static_cast<int>(prog.size()), prog.data());
+
+    std::fputs("Input\n", stdout);
+    std::fputs("  valgrind_log            Path to Valgrind log file (default: stdin if omitted)\n", stdout);
+    std::fputs("  -                       Read from stdin (explicit)\n\n", stdout);
+
+    std::fputs("Options\n", stdout);
+    std::fputs("  -k, --keep-debug-info   Keep everything; do not trim above last debug marker.\n", stdout);
+    std::fputs("  -v, --verbose           Show completely raw blocks (no address / \"at:\" scrub).\n", stdout);
+    std::fprintf(stdout, "  -d N, --depth N         Signature depth (default: %d, 0 = unlimited).\n", DEFAULT_DEPTH);
+    std::fprintf(stdout, "  -m S, --marker S        Marker string (default: \"%.*s\").\n",
+                 static_cast<int>(DEFAULT_MARKER.size()), DEFAULT_MARKER.data());
+    std::fputs("  -s, --stream            Force stream processing mode (auto-detected for files >5MB).\n", stdout);
+    std::fputs("  -p, --progress          Show progress for large files.\n", stdout);
+    std::fputs("  -M, --memory            Monitor memory usage during processing.\n", stdout);
+    std::fputs("  -V, --version           Show version information.\n", stdout);
+    std::fputs("  -h, --help              Show this help.\n\n", stdout);
+
+    std::fputs("Notes\n", stdout);
+    std::fputs("  • In stream mode (including stdin), the tool outputs only the region after the *last*\n", stdout);
+    std::fputs("    marker encountered (if any). If no marker is found, the entire input is processed.\n\n", stdout);
+
+    std::fputs("Examples\n", stdout);
+    std::fprintf(stdout, "  %.*s log.txt                 # Process file\n",
+                 static_cast<int>(prog.size()), prog.data());
+    std::fprintf(stdout, "  %.*s < log.txt               # Process from stdin\n",
+                 static_cast<int>(prog.size()), prog.data());
+    std::fprintf(stdout, "  %.*s - < log.txt             # Explicit stdin\n",
+                 static_cast<int>(prog.size()), prog.data());
+    std::fprintf(stdout, "  valgrind ./prog 2>&1 | %.*s     # Direct pipe from valgrind\n",
+                 static_cast<int>(prog.size()), prog.data());
 }

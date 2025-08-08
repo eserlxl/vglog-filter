@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <cstdio>
 #include <limits>
 #include <optional>
 #include <sstream>
@@ -19,6 +20,7 @@
 #include <string_view>
 #include <sys/resource.h> // Linux
 #include <vector>
+#include <sys/stat.h>
 
 namespace {
 
@@ -65,9 +67,12 @@ std::string create_error_message(std::string_view operation,
 
 void report_progress(std::size_t bytes_processed, std::size_t total_bytes, std::string_view filename) {
     if (total_bytes == 0 || bytes_processed > total_bytes) return;
-    std::cerr << "\rProcessing " << filename << ": " << pct(bytes_processed, total_bytes)
-              << "% (" << to_mb(bytes_processed) << "/" << to_mb(total_bytes) << " MB)" << std::flush;
-    if (bytes_processed >= total_bytes) std::cerr << '\n';
+    std::fprintf(stderr,
+                 "\rProcessing %.*s: %s%% (%s/%s MB)",
+                 static_cast<int>(filename.size()), filename.data(),
+                 pct(bytes_processed, total_bytes).c_str(),
+                 to_mb(bytes_processed).c_str(), to_mb(total_bytes).c_str());
+    if (bytes_processed >= total_bytes) std::fputc('\n', stderr);
 }
 
 std::size_t get_memory_usage_mb() noexcept {
@@ -83,9 +88,15 @@ std::size_t get_memory_usage_mb() noexcept {
 void report_memory_usage(std::string_view operation, std::string_view filename) {
     const auto mb = get_memory_usage_mb();
     if (mb > 0) {
-        std::cerr << "Memory usage during " << operation;
-        if (!filename.empty()) std::cerr << " for " << filename;
-        std::cerr << ": " << mb << " MB\n";
+        if (!filename.empty()) {
+            std::fprintf(stderr, "Memory usage during %.*s for %.*s: %zu MB\n",
+                         static_cast<int>(operation.size()), operation.data(),
+                         static_cast<int>(filename.size()), filename.data(),
+                         mb);
+        } else {
+            std::fprintf(stderr, "Memory usage during %.*s: %zu MB\n",
+                         static_cast<int>(operation.size()), operation.data(), mb);
+        }
     }
 }
 
@@ -111,7 +122,10 @@ bool is_large_file(std::string_view fname) {
     if (fname.empty()) return false;
     try {
         const auto p = path_validation::validate_and_canonicalize(fname);
-        const auto s = std::filesystem::file_size(p);
+        // Prefer POSIX stat to avoid libstdc++ filesystem heavy code paths under MSan
+        struct stat st{};
+        if (::stat(p.c_str(), &st) != 0) return false;
+        const auto s = static_cast<std::uintmax_t>(st.st_size);
         validate_file_size(static_cast<std::size_t>(s));
         return s >= static_cast<std::uintmax_t>(LARGE_FILE_THRESHOLD_MB) * MB_TO_BYTES;
     } catch (...) {
@@ -121,7 +135,21 @@ bool is_large_file(std::string_view fname) {
 
 void process_file_stream(std::string_view fname, const Options& opt) {
     if (fname.empty()) throw std::invalid_argument("Filename cannot be empty");
-    auto ifs = path_validation::safe_ifstream(fname);
     LogProcessor processor(opt);
-    processor.process_stream(ifs);
+    // Prefer C stdio path to avoid libstdc++ internal locale/stream interactions with MSan
+    std::FILE* fp = path_validation::safe_fopen(fname);
+    processor.process_stream_cfile(fp);
+    std::fclose(fp);
+}
+
+std::size_t get_file_size_bytes(std::string_view fname) {
+    if (fname.empty()) return 0;
+    try {
+        const auto p = path_validation::validate_and_canonicalize(fname);
+        struct stat st{};
+        if (::stat(p.c_str(), &st) != 0) return 0;
+        return static_cast<std::size_t>(st.st_size);
+    } catch (...) {
+        return 0;
+    }
 }

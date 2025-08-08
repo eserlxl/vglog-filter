@@ -11,6 +11,10 @@
 #include <cctype>
 #include <stdexcept>
 #include <string>
+#include <vector>
+#include <limits.h>
+#include <unistd.h>
+#include <cstdlib>
 
 namespace path_validation {
 
@@ -35,14 +39,52 @@ constexpr bool is_dangerous_char(char c) noexcept {
     return s.size() > 2 && s[1] == ':' && (s[2] == '/' || s[2] == '\\');
 }
 
-[[nodiscard]] bool within(const std::filesystem::path& child,
-                          const std::filesystem::path& base) {
-    auto child_it = child.begin();
-    auto base_it  = base.begin();
-    for (; base_it != base.end(); ++base_it, ++child_it) {
-        if (child_it == child.end() || *child_it != *base_it) return false;
+[[nodiscard]] std::string get_current_working_directory() {
+    char* buffer = ::getcwd(nullptr, 0);
+    if (buffer == nullptr) {
+        throw std::runtime_error("Failed to get current working directory");
     }
-    return true;
+    std::string cwd(buffer);
+    std::free(buffer);
+    if (cwd.empty()) {
+        throw std::runtime_error("Empty current working directory");
+    }
+    // Remove trailing slash except for root
+    if (cwd.size() > 1 && cwd.back() == '/') cwd.pop_back();
+    return cwd;
+}
+
+[[nodiscard]] std::vector<std::string> split_path_components(std::string_view path) {
+    std::vector<std::string> components;
+    std::size_t start = 0;
+    while (start <= path.size()) {
+        const std::size_t pos = path.find('/', start);
+        const std::size_t len = (pos == std::string_view::npos ? path.size() : pos) - start;
+        if (len > 0) {
+            const std::string part(path.substr(start, len));
+            if (part != ".") {
+                if (part == "..") {
+                    if (!components.empty()) components.pop_back();
+                } else {
+                    components.push_back(part);
+                }
+            }
+        }
+        if (pos == std::string_view::npos) break;
+        start = pos + 1;
+    }
+    return components;
+}
+
+[[nodiscard]] std::string join_components_as_absolute(const std::vector<std::string>& components) {
+    std::string result;
+    result.reserve(64);
+    result.push_back('/');
+    for (std::size_t i = 0; i < components.size(); ++i) {
+        result.append(components[i]);
+        if (i + 1 < components.size()) result.push_back('/');
+    }
+    return result;
 }
 
 } // namespace
@@ -68,17 +110,38 @@ std::filesystem::path validate_and_canonicalize(std::string_view input_path) {
     if (input_path == STDIN_MARKER) {
         return std::filesystem::path(STDIN_MARKER);
     }
-    const auto sanitized_rel = sanitize_path_for_file_access(input_path);
+    const std::string sanitized_rel = sanitize_path_for_file_access(input_path);
 
-    const auto cwd    = std::filesystem::current_path();
-    const auto joined = cwd / sanitized_rel;
-    // weakly_canonical avoids throwing if intermediate parts don't exist
-    const auto canon  = std::filesystem::weakly_canonical(joined);
+    const std::string base_dir = get_current_working_directory();
 
-    if (!within(canon, std::filesystem::weakly_canonical(cwd))) {
+    std::vector<std::string> base_components = split_path_components(base_dir);
+    const std::size_t base_size = base_components.size();
+
+    std::vector<std::string> rel_components = split_path_components(sanitized_rel);
+
+    std::vector<std::string> combined;
+    combined.reserve(base_components.size() + rel_components.size());
+    for (const auto& c : base_components) combined.push_back(c);
+    for (const auto& c : rel_components) {
+        if (c == "..") {
+            if (combined.size() > base_size) combined.pop_back();
+            else throw std::runtime_error("Resolved path escapes working directory.");
+        } else if (c == "." || c.empty()) {
+            continue;
+        } else {
+            combined.push_back(c);
+        }
+    }
+
+    const std::string resolved_abs = join_components_as_absolute(combined);
+
+    if (!(resolved_abs.size() >= base_dir.size() &&
+          (resolved_abs == base_dir || (resolved_abs.compare(0, base_dir.size(), base_dir) == 0 &&
+                                        (resolved_abs.size() == base_dir.size() || resolved_abs[base_dir.size()] == '/'))))) {
         throw std::runtime_error("Resolved path escapes working directory.");
     }
-    return canon;
+
+    return std::filesystem::path(resolved_abs);
 }
 
 std::ifstream safe_ifstream(std::string_view filename) {
@@ -92,6 +155,18 @@ std::ifstream safe_ifstream(std::string_view filename) {
         throw std::runtime_error("Failed to open file: " + path.string());
     }
     return ifs;
+}
+
+std::FILE* safe_fopen(std::string_view filename) {
+    if (filename == STDIN_MARKER) {
+        throw std::runtime_error("Cannot open stdin with fopen.");
+    }
+    const auto path = validate_and_canonicalize(filename);
+    std::FILE* fp = std::fopen(path.c_str(), "r");
+    if (fp == nullptr) {
+        throw std::runtime_error("Failed to open file: " + path.string());
+    }
+    return fp;
 }
 
 } // namespace path_validation

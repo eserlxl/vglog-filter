@@ -29,6 +29,7 @@ void report_memory_usage(std::string_view operation, std::string_view filename =
 // File helpers
 [[nodiscard]] std::vector<std::string> read_file_lines(std::string_view fname);
 [[nodiscard]] bool is_large_file(std::string_view fname);
+[[nodiscard]] std::size_t get_file_size_bytes(std::string_view fname);
 
 // Stream processing wrapper
 void process_file_stream(std::string_view fname, const Options& opt);

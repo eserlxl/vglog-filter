@@ -19,6 +19,7 @@
 #include <string_view>
 #include <unordered_set>
 #include <vector>
+#include <cstdio>
 
 class LogProcessor {
 public:
@@ -29,6 +30,7 @@ public:
     explicit LogProcessor(const Options& options);
 
     void process_stream(std::istream& in);
+    void process_stream_cfile(std::FILE* fp);
     void process_lines(const VecS& lines);
 
 private:
