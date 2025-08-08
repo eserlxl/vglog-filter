@@ -123,6 +123,10 @@ loc_divisors:
   minor: 500
   patch: 250
 
+# Bonus multiplier cap to prevent excessive version increases during large refactoring
+# This caps the LOC-based bonus multiplier (1 + LOC/loc_divisor) to prevent runaway version bumps
+bonus_multiplier_cap: 5.0  # Maximum bonus multiplier allowed (default: 5.0 = 5x bonus amplification)
+
 # Pattern matching configuration
 # Provides parameterised numeric thresholds for performance messages
 # Consider making pattern keywords themselves configurable for team-specific wording conventions

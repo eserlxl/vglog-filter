@@ -522,6 +522,10 @@ main() {
     # For suggest-only without strict-status, always exit with success code
     exit 0
   fi
+  if [[ "$JSON_OUTPUT" == "true" ]]; then
+    # For JSON output, always exit with success code since the suggestion is encoded in the JSON
+    exit 0
+  fi
   case "$suggestion" in
     major) exit 10 ;;
     minor) exit 11 ;;

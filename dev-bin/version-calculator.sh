@@ -13,6 +13,9 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
 
+# ----- script directory ------------------------------------------------------
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+
 # ----- guards ----------------------------------------------------------------
 (( BASH_VERSINFO[0] >= 4 )) || { echo "Error: requires Bash ≥ 4" >&2; exit 1; }
 
@@ -78,6 +81,7 @@ JSON_OUTPUT=false
 QUIET_OUTPUT=false
 STRICT=false
 MAIN_VERSION_MOD=1000
+BONUS_MULTIPLIER_CAP=""  # Will be loaded from configuration
 
 # ----- parse args ------------------------------------------------------------
 while [[ $# -gt 0 ]]; do
@@ -115,6 +119,23 @@ is_uint "$LOC"   || die "--loc must be a non-negative integer"
 is_uint "$BONUS" || die "--bonus must be a non-negative integer"
 # shellcheck disable=SC2015
 is_uint "$MAIN_VERSION_MOD" && (( MAIN_VERSION_MOD >= 1 )) || die "--main-mod must be a positive integer"
+
+# ----- load configuration -----------------------------------------------------
+# Load bonus multiplier cap from configuration if available
+config_file="${SCRIPT_DIR}/../dev-config/versioning.yml"
+if [[ -f "$config_file" ]]; then
+    cap_value=""
+    if cap_value=$(yq -r '.bonus_multiplier_cap // empty' "$config_file" 2>/dev/null); then
+        if [[ -n "$cap_value" && "$cap_value" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            BONUS_MULTIPLIER_CAP="$cap_value"
+        fi
+    fi
+fi
+
+# Set default value if not loaded from configuration
+if [[ -z "$BONUS_MULTIPLIER_CAP" ]]; then
+    BONUS_MULTIPLIER_CAP="5.0"  # Default fallback value
+fi
 
 # ----- parse semver (fallback or strict) -------------------------------------
 major=0 minor=0 patch=0
@@ -237,10 +258,21 @@ BASE_DELTA="$(calc_base_delta "$BUMP_TYPE" "$LOC")"
 # total_bonus = round(BONUS * (1 + LOC/loc_divisor)) = BONUS + round(BONUS*LOC/loc_divisor)
 # Keep math integer, only render multiplier as string w/2 decimals.
 bonus_scale_100=$(( (100 * (LOC_DIVISOR + LOC) + LOC_DIVISOR/2) / LOC_DIVISOR ))   # == round(100*(1+LOC/L))
-BONUS_MULTIPLIER_STR="$(fmt_fixed2_from_int100 "$bonus_scale_100")"
 
-bonus_extra="$(round_div "$(( BONUS * LOC ))" "$LOC_DIVISOR")"
-TOTAL_BONUS=$(( BONUS + bonus_extra ))
+# Apply bonus multiplier cap to prevent excessive version increases
+raw_multiplier=""
+raw_multiplier=$(awk "BEGIN {printf \"%.2f\", $bonus_scale_100 / 100.0}")
+capped_multiplier=""
+capped_multiplier=$(awk "BEGIN {mult = $raw_multiplier; cap = $BONUS_MULTIPLIER_CAP; printf \"%.2f\", (mult > cap) ? cap : mult}")
+capped_scale_100=""
+capped_scale_100=$(awk "BEGIN {printf \"%.0f\", $capped_multiplier * 100}")
+
+BONUS_MULTIPLIER_STR="$(fmt_fixed2_from_int100 "$capped_scale_100")"
+
+# Calculate total bonus using the capped multiplier
+capped_bonus_extra=""
+capped_bonus_extra=$(awk "BEGIN {printf \"%.0f\", $BONUS * $capped_multiplier - $BONUS}")
+TOTAL_BONUS=$(( BONUS + capped_bonus_extra ))
 
 # ----- total delta -----------------------------------------------------------
 TOTAL_DELTA=$(( BASE_DELTA + TOTAL_BONUS ))

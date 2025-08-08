@@ -230,7 +230,7 @@ calculate_mathematical_version() {
 
   printf '%s\n' "${CYAN}Analyzing changes to determine mathematical version bump...${RESET}" >&2
 
-  local -a analyzer_args=( --suggest-only --strict-status )
+  local -a analyzer_args=( --json )
   [[ -n "$OPT_REPO_ROOT"     ]] && analyzer_args+=( --repo-root "$OPT_REPO_ROOT" )
   [[ -n "$OPT_SINCE_TAG"     ]] && analyzer_args+=( --since "$OPT_SINCE_TAG" )
   [[ -n "$OPT_SINCE_COMMIT"  ]] && analyzer_args+=( --since-commit "$OPT_SINCE_COMMIT" )
@@ -241,12 +241,36 @@ calculate_mathematical_version() {
   [[ -n "$OPT_ONLY_PATHS"    ]] && analyzer_args+=( --only-paths "$OPT_ONLY_PATHS" )
   [[ "$OPT_IGNORE_WHITESPACE" == "true" ]] && analyzer_args+=( --ignore-whitespace )
 
-  local suggested_bump="" sa_rc=0
-  if ! suggested_bump="$("$SCRIPT_DIR/semantic-version-analyzer.sh" "${analyzer_args[@]}" 2> >(sed 's/^/[analyzer] /' >&2))"; then
-    sa_rc=$?
-    warn "semantic-version-analyzer exited with status $sa_rc"
+  local sa_output="" sa_rc=0
+  # Use temporary file to capture output without triggering error handling
+  local temp_output
+  temp_output="$(mktemp)"
+  set +e
+  "$SCRIPT_DIR/semantic-version-analyzer.sh" "${analyzer_args[@]}" > "$temp_output" 2> >(sed 's/^/[analyzer] /' >&2)
+  sa_rc=$?
+  set -e
+  sa_output="$(cat "$temp_output" 2>/dev/null || echo "")"
+  
+
+  
+  rm -f "$temp_output"
+  
+  # Semantic analyzer uses exit codes to indicate bump type, not errors
+  # 10=major, 11=minor, 12=patch, 20=none, 0=success
+  if [[ "$sa_rc" -ne 0 && "$sa_rc" -ne 10 && "$sa_rc" -ne 11 && "$sa_rc" -ne 12 && "$sa_rc" -ne 20 ]]; then
+    warn "semantic-version-analyzer exited with unexpected status $sa_rc"
   fi
-  suggested_bump="${suggested_bump//[$'\r\n']/}"
+
+  # Parse JSON output to get suggestion and next_version
+  local suggested_bump="none"
+  local next_version=""
+  
+  if [[ -n "$sa_output" ]]; then
+    suggested_bump="$(echo "$sa_output" | jq -r '.suggestion // "none"' 2>/dev/null || echo "none")"
+    next_version="$(echo "$sa_output" | jq -r '.next_version // empty' 2>/dev/null || echo "")"
+    
+
+  fi
 
   if [[ -z "$suggested_bump" ]]; then
     suggested_bump="none"
@@ -264,16 +288,21 @@ calculate_mathematical_version() {
 
   printf '%s\n' "${CYAN}Mathematical analysis suggests: ${suggested_bump} bump${RESET}" >&2
 
-  local -a calculator_args=(
-    --current-version "$current_version"
-    --bump-type "$suggested_bump"
-    --original-project-root "$ORIGINAL_PROJECT_ROOT"
-  )
-  [[ -n "$OPT_REPO_ROOT" ]] && calculator_args+=( --repo-root "$OPT_REPO_ROOT" )
+  # Use the next_version from semantic analyzer if available, otherwise fall back to version-calculator-loc.sh
+  if [[ -n "$next_version" ]]; then
+    printf '%s' "$next_version"
+  else
+    local -a calculator_args=(
+      --current-version "$current_version"
+      --bump-type "$suggested_bump"
+      --original-project-root "$ORIGINAL_PROJECT_ROOT"
+    )
+    [[ -n "$OPT_REPO_ROOT" ]] && calculator_args+=( --repo-root "$OPT_REPO_ROOT" )
 
-  local new_version
-  new_version="$("$SCRIPT_DIR/version-calculator-loc.sh" "${calculator_args[@]}")"
-  printf '%s' "$new_version"
+    local new_version
+    new_version="$("$SCRIPT_DIR/version-calculator-loc.sh" "${calculator_args[@]}")"
+    printf '%s' "$new_version"
+  fi
 }
 
 # ------------------------------ file updates ----------------------------------
