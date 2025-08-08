@@ -1,3 +1,0 @@
-Some debug info
-Successfully downloaded debug
-More content after marker
