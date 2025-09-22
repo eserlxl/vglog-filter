@@ -76,7 +76,7 @@ jobs:
           ${{ matrix.os.update_cmd }}
           ${{ matrix.os.install_cmd }} ${{ matrix.os.packages }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
