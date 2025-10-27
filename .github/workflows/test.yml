@@ -196,7 +196,7 @@ jobs:
 
       - name: Upload binary artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: vglog-filter-${{ matrix.build-type }}
           path: ${{ env.BINARY_PATH }}
@@ -205,7 +205,7 @@ jobs:
 
       - name: Upload build logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: build-logs-${{ matrix.build-type }}
           path: |

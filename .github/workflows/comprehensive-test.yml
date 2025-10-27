@@ -209,7 +209,7 @@ jobs:
 
       - name: Upload build artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: vglog-filter-${{ matrix.build_config.name }}
           path: ${{ env.BINARY_PATH }}
@@ -218,7 +218,7 @@ jobs:
 
       - name: Upload build logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: build-logs-${{ matrix.build_config.name }}
           path: |
