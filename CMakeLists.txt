@@ -245,10 +245,10 @@ endif ()
 include(CheckIPOSupported)
 set(_ipo_allowed OFF)
 check_ipo_supported(RESULT _ipo_allowed OUTPUT _ipo_msg)
-if (PERFORMANCE_BUILD AND _ipo_allowed)
-  set_property(TARGET vglog-filter PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-  set_property(TARGET vglog-filter-lib PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-  message(STATUS "IPO/LTO enabled for vglog-filter")
+if (FALSE) # IPO Disabled
+  # set_property(TARGET vglog-filter PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+  # set_property(TARGET vglog-filter-lib PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+  message(STATUS "IPO/LTO disabled by policy for stability")
 else()
   message(STATUS "IPO/LTO not enabled: ${_ipo_msg}")
 endif()
@@ -282,6 +282,7 @@ if (BUILD_TESTING)
   add_test_exe(test_regex_patterns  "test/test_regex_patterns.cpp")
   add_test_exe(test_cli_options     "test/test_cli_options.cpp")
   add_test_exe(test_edge_utf8_perm  "test/test_edge_utf8_perm.cpp")
+  add_test_exe(test_structured_filter "test/test_structured_filter.cpp")
 
   # Convenience target to run tests with nice output
   add_custom_target(run-tests

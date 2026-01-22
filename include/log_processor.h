@@ -30,6 +30,14 @@ struct LogStats {
   std::size_t unique_blocks = 0;
 };
 
+struct LogEntry {
+  std::string raw_content;
+  std::string signature;
+  std::string error_type;
+  std::string pid;
+  std::vector<std::string> stack_trace;
+};
+
 class LogProcessor {
 public:
   using Str = std::string;
@@ -63,8 +71,10 @@ private:
   void output_pending_blocks() const;
   void write_output(const void* data, size_t size) const;
   void write_output(char c) const;
-  void write_json_record(const std::string& raw_block, const std::string& signature) const;
+  void write_json_record(const LogEntry& entry) const;
 
+  [[nodiscard]] LogEntry parse_entry(const std::string& raw_block,
+                                     const std::string& signature) const;
   [[nodiscard]] std::string process_raw_line(const std::string& processed_line) const;
   [[nodiscard]] std::string generate_signature_key() const;
 
@@ -87,7 +97,7 @@ private:
   std::unordered_set<Str> seen;
 
   // stream-mode buffer
-  std::vector<Str> pending_blocks;
+  std::vector<LogEntry> pending_blocks;
   bool marker_found{false};
 
   // Stats and output

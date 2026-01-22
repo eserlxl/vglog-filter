@@ -28,6 +28,7 @@ struct Options {
   std::string output_file;
   bool json_output = false;
   bool use_stdin = false;
+  std::vector<std::string> exclude_types;
 };
 
 void usage(std::string_view prog);

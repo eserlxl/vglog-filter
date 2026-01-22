@@ -49,9 +49,10 @@ constinit option LONG_OPTS[] = {{"keep-debug-info", no_argument, nullptr, 'k'},
                                 {"memory", no_argument, nullptr, 'M'},
                                 {"version", no_argument, nullptr, 'V'},
                                 {"help", no_argument, nullptr, 'h'},
+                                {"exclude-type", required_argument, nullptr, 'e'},
                                 {nullptr, 0, nullptr, 0}};
 
-inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVh"};
+inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
 
 [[nodiscard]] std::string make_range_error(std::string_view what, int lo, int hi) {
   std::string msg;
@@ -147,6 +148,11 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVh"};
       case 'h':
         usage(argv[0]);
         return std::nullopt;
+      case 'e':
+        if (optarg && *optarg) {
+          opt.exclude_types.emplace_back(optarg);
+        }
+        break;
       default:
         usage(argv[0]);
         throw std::runtime_error("Invalid option. Use -h for help.");

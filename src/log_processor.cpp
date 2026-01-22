@@ -323,9 +323,9 @@ void LogProcessor::output_pending_blocks() const {
   if (!opt.trim || marker_found) {
     for (const auto& b : pending_blocks) {
       if (opt.json_output) {
-        write_json_record(b, "");
+        write_json_record(b);
       } else {
-        write_output(b.data(), b.size());
+        write_output(b.raw_content.data(), b.raw_content.size());
         write_output('\n');
       }
     }
@@ -396,16 +396,26 @@ void LogProcessor::flush() {
   stats.blocks_found++;
 
   const std::string key = generate_signature_key();
+  LogEntry entry = parse_entry(raw, key);
+
+  // Filter check
+  for (const auto& ex : opt.exclude_types) {
+    if (entry.error_type.find(ex) != std::string::npos) {
+      clear_current_state();
+      return;
+    }
+  }
+
   if (seen.insert(key).second) {
     stats.unique_blocks++;
     if (opt.stream_mode) {
       validate_pending_blocks_count(pending_blocks.size());
-      pending_blocks.emplace_back(raw);
+      pending_blocks.emplace_back(std::move(entry));
     } else {
       if (opt.json_output) {
-        write_json_record(raw, key);
+        write_json_record(entry);
       } else {
-        write_output(raw.data(), raw.size());
+        write_output(entry.raw_content.data(), entry.raw_content.size());
         write_output('\n');
       }
     }
@@ -458,13 +468,77 @@ void LogProcessor::write_output(char c) const {
   }
 }
 
-void LogProcessor::write_json_record(const std::string& raw_block,
-                                     const std::string& signature) const {
+void LogProcessor::write_json_record(const LogEntry& entry) const {
   if (!out_fp)
     return;
-  std::string json = "{\"type\":\"record\",\"raw\":\"" + escape_json(raw_block) +
-                     "\",\"signature\":\"" + escape_json(signature) + "\"}\n";
+  std::string json = "{\"type\":\"record\"";
+  json += ",\"raw\":\"" + escape_json(entry.raw_content) + "\"";
+  json += ",\"signature\":\"" + escape_json(entry.signature) + "\"";
+  if (!entry.error_type.empty()) {
+    json += ",\"error_type\":\"" + escape_json(entry.error_type) + "\"";
+  }
+  if (!entry.pid.empty()) {
+    json += ",\"pid\":\"" + escape_json(entry.pid) + "\"";
+  }
+  if (!entry.stack_trace.empty()) {
+    json += ",\"stack_trace\":[";
+    for (size_t i = 0; i < entry.stack_trace.size(); ++i) {
+      if (i > 0)
+        json += ",";
+      json += "\"" + escape_json(entry.stack_trace[i]) + "\"";
+    }
+    json += "]";
+  }
+  json += "}\n";
   write_output(json.data(), json.size());
+}
+
+LogEntry LogProcessor::parse_entry(const std::string& raw_block,
+                                   const std::string& signature) const {
+  LogEntry entry;
+  entry.raw_content = raw_block;
+  entry.signature = signature;
+
+  std::string_view sv = raw_block;
+  // Parse first line for PID and Error Type
+  size_t first_eol = sv.find('\n');
+  if (first_eol == std::string_view::npos)
+    first_eol = sv.size();
+  std::string_view first_line = sv.substr(0, first_eol);
+
+  // Extract PID: ==12345==
+  if (first_line.size() >= 2 && first_line[0] == '=' && first_line[1] == '=') {
+    size_t end_pid = first_line.find("==", 2);
+    if (end_pid != std::string_view::npos) {
+      entry.pid = std::string(first_line.substr(2, end_pid - 2));
+    }
+  }
+
+  // Extract Error Type (rest of first line after prefix)
+  entry.error_type = replace_prefix(first_line);
+  if (!entry.error_type.empty() && entry.error_type.back() == '\r') {
+    entry.error_type.pop_back();
+  }
+
+  // Populate stack trace from subsequent lines
+  size_t pos = first_eol + 1;
+  while (pos < sv.size()) {
+    size_t eol = sv.find('\n', pos);
+    if (eol == std::string_view::npos)
+      eol = sv.size();
+    std::string_view line = sv.substr(pos, eol - pos);
+    std::string content = replace_prefix(line);
+    if (!content.empty()) {
+      // Trim newlines
+      while (!content.empty() && (content.back() == '\n' || content.back() == '\r')) {
+        content.pop_back();
+      }
+      entry.stack_trace.push_back(std::move(content));
+    }
+    pos = eol + 1;
+  }
+
+  return entry;
 }
 
 void LogProcessor::print_stats(std::FILE* out) const {
