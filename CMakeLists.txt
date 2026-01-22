@@ -182,6 +182,7 @@ endif()
 add_library(vglog-filter-lib
   src/options.cpp
   src/file_utils.cpp
+  src/json_utils.cpp
   src/log_processor.cpp
   src/path_validation.cpp
   src/canonicalization.cpp

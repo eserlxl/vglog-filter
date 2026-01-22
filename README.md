@@ -194,6 +194,10 @@ valgrind --leak-check=full --show-leak-kinds=all ./your_program 2>&1 | ./build/b
 | `-v` | `--verbose` | Show completely raw blocks (no address / "at:" scrub) |
 | `-d N` | `--depth N` | Signature depth (default: 1, 0 = unlimited) |
 | `-m S` | `--marker S` | Marker string for trimming (default: "Successfully downloaded debug") |
+| `-e S` | `--exclude-type S` | Filter out blocks with error types containing S |
+| | `--rotate-size-mb N` | Rotate output file after N megabytes |
+| | `--rotate-backups N` | Number of backup files to keep (default: 0) |
+| | `--strict` | Enable strict parsing mode (aborts on malformed critical logs) |
 | `-s` | `--stream` | Force stream processing mode |
 | `-p` | `--progress` | Show progress for large files |
 | `-M` | `--memory` | Monitor memory usage during processing |

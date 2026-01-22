@@ -9,6 +9,7 @@
 
 #include "canonicalization.h"
 #include "file_utils.h"
+#include "json_utils.h"
 
 #include <array>
 #include <chrono>
@@ -34,6 +35,13 @@ constinit inline std::size_t MAX_LINE_LENGTH = 1024u * 1024u;      // 1MB per li
 constinit inline std::size_t MAX_BLOCK_SIZE = 10u * 1024u * 1024u; // 10MB per block
 constinit inline std::size_t MAX_PENDING_BLOCKS = 1000u;
 
+constexpr size_t RESERVE_SIZE_SEEN = 256;
+constexpr size_t RESERVE_SIZE_PENDING = 64;
+constexpr size_t RESERVE_SIZE_SIGLINES = 64;
+constexpr size_t VG_LINE_MIN_LEN = 4;
+constexpr size_t MATCH_BYTES_HEAD_LEN = 10; // " bytes in "
+constexpr size_t MATCH_BLOCKS_LEN = 7;      // " blocks"
+
 void validate_line_length(std::string_view line) {
   if (line.size() > MAX_LINE_LENGTH) {
     throw std::runtime_error("Line too long (max " + std::to_string(MAX_LINE_LENGTH) + " bytes)");
@@ -51,51 +59,12 @@ void validate_pending_blocks_count(std::size_t n) {
   }
 }
 
-std::string escape_json(const std::string& s) {
-  std::string out;
-  out.reserve(s.size() + 8);
-  for (char c : s) {
-    switch (c) {
-      case '"':
-        out += "\\\"";
-        break;
-      case '\\':
-        out += "\\\\";
-        break;
-      case '\b':
-        out += "\\b";
-        break;
-      case '\f':
-        out += "\\f";
-        break;
-      case '\n':
-        out += "\\n";
-        break;
-      case '\r':
-        out += "\\r";
-        break;
-      case '\t':
-        out += "\\t";
-        break;
-      default:
-        if (static_cast<unsigned char>(c) < 0x20) {
-          char buf[7];
-          std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-          out += buf;
-        } else {
-          out += c;
-        }
-    }
-  }
-  return out;
-}
-
 } // namespace
 
 LogProcessor::LogProcessor(const Options& options) : opt(options), stats{} {
-  seen.reserve(256);
-  pending_blocks.reserve(opt.stream_mode ? 64 : 0);
-  sigLines.reserve(64);
+  seen.reserve(RESERVE_SIZE_SEEN);
+  pending_blocks.reserve(opt.stream_mode ? RESERVE_SIZE_PENDING : 0);
+  sigLines.reserve(RESERVE_SIZE_SIGLINES);
   initialize_string_patterns();
 
   if (!opt.output_file.empty()) {
@@ -120,14 +89,14 @@ void LogProcessor::initialize_string_patterns() {
 }
 
 bool LogProcessor::matches_vg_line(std::string_view line) const noexcept {
-  if (line.size() < 4)
+  if (line.size() < VG_LINE_MIN_LEN)
     return false;
   if (line[0] != '=' || line[1] != '=')
     return false;
   std::size_t i = 2;
   while (i < line.size() && is_digit(line[i]))
     ++i;
-  if (i < 4 || i + 1 >= line.size())
+  if (i < VG_LINE_MIN_LEN || i + 1 >= line.size())
     return false;
   return line[i] == '=' && line[i + 1] == '=';
 }
@@ -165,16 +134,17 @@ bool LogProcessor::matches_bytes_head(std::string_view line) const noexcept {
     return false;
   while (pos < line.size() && is_digit(line[pos]))
     ++pos;
-  if (pos + 10 >= line.size() || line.substr(pos, 10) != " bytes in ")
+  if (pos + MATCH_BYTES_HEAD_LEN >= line.size() ||
+      line.substr(pos, MATCH_BYTES_HEAD_LEN) != " bytes in ")
     return false;
-  pos += 10;
+  pos += MATCH_BYTES_HEAD_LEN;
   if (pos >= line.size() || !is_digit(line[pos]))
     return false;
   while (pos < line.size() && is_digit(line[pos]))
     ++pos;
-  if (pos + 7 > line.size())
+  if (pos + MATCH_BLOCKS_LEN > line.size())
     return false;
-  return line.substr(pos, 7) == " blocks";
+  return line.substr(pos, MATCH_BLOCKS_LEN) == " blocks";
 }
 
 bool LogProcessor::matches_at_pattern(std::string_view line) const noexcept {
@@ -490,20 +460,20 @@ void LogProcessor::write_json_record(const LogEntry& entry) {
   if (!out_fp)
     return;
   std::string json = "{\"type\":\"record\"";
-  json += ",\"raw\":\"" + escape_json(entry.raw_content) + "\"";
-  json += ",\"signature\":\"" + escape_json(entry.signature) + "\"";
+  json += ",\"raw\":\"" + json_utils::escape_string(entry.raw_content) + "\"";
+  json += ",\"signature\":\"" + json_utils::escape_string(entry.signature) + "\"";
   if (!entry.error_type.empty()) {
-    json += ",\"error_type\":\"" + escape_json(entry.error_type) + "\"";
+    json += ",\"error_type\":\"" + json_utils::escape_string(entry.error_type) + "\"";
   }
   if (!entry.pid.empty()) {
-    json += ",\"pid\":\"" + escape_json(entry.pid) + "\"";
+    json += ",\"pid\":\"" + json_utils::escape_string(entry.pid) + "\"";
   }
   if (!entry.stack_trace.empty()) {
     json += ",\"stack_trace\":[";
     for (size_t i = 0; i < entry.stack_trace.size(); ++i) {
       if (i > 0)
         json += ",";
-      json += "\"" + escape_json(entry.stack_trace[i]) + "\"";
+      json += "\"" + json_utils::escape_string(entry.stack_trace[i]) + "\"";
     }
     json += "]";
   }
