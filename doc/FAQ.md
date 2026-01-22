@@ -178,7 +178,7 @@ For detailed prerequisites and build instructions, refer to the [Build Guide](BU
 
 ### What are the system requirements to build and run `vglog-filter`?
 -   **Operating System**: Linux or other POSIX-compliant systems are primarily supported and tested.
--   **Compiler**: A C++20 compatible compiler (GCC 10+ or Clang 12+).
+-   **Compiler**: A C++23 compatible compiler (GCC 13+ or Clang 17+).
 -   **Build System**: CMake 3.16 or newer.
 -   **Standard Build Tools**: `make` or `ninja` (typically included with `build-essential` on Debian/Ubuntu or `base-devel` on Arch Linux).
 
@@ -372,7 +372,7 @@ Common causes and solutions:
 
 ### Build fails with compiler errors
 Ensure you have:
-- A C++20 compatible compiler (GCC 10+ or Clang 12+)
+- A C++23 compatible compiler (GCC 13+ or Clang 17+)
 - CMake 3.16 or newer
 - Required build tools installed
 

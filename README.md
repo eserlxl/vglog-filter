@@ -5,7 +5,7 @@
 [![Cross-Platform](https://github.com/eserlxl/vglog-filter/actions/workflows/cross-platform.yml/badge.svg)](https://github.com/eserlxl/vglog-filter/actions/workflows/cross-platform.yml)
 [![CodeQL](https://github.com/eserlxl/vglog-filter/actions/workflows/codeql.yml/badge.svg)](https://github.com/eserlxl/vglog-filter/actions/workflows/codeql.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://isocpp.org/std/status)
+[![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://isocpp.org/std/status)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 
 **vglog-filter** is a fast, secure, and flexible command-line tool designed to process and clean up Valgrind log files. It helps developers focus on relevant information by removing noise, deduplicating stack traces, and normalizing logs for easier inspection and comparison. It features advanced LOC-based versioning and comprehensive testing.
@@ -48,7 +48,7 @@ Valgrind is an indispensable tool for detecting memory errors and leaks in C/C++
 ### Performance & Efficiency
 - **Memory-efficient stream processing**: Designed to handle extremely large log files without excessive memory consumption, preventing Out-Of-Memory (OOM) errors
 - **Automatic optimization**: Intelligently selects the most efficient processing mode based on input file size
-- **Modern C++**: Built with C++20, leveraging features like `std::string_view` for optimal performance
+- **Modern C++**: Built with C++23, leveraging modern features like `std::string_view` for optimal performance
 - **Progress reporting**: Real-time progress indicators for large file processing
 
 ### Security & Reliability
@@ -73,7 +73,7 @@ Valgrind is an indispensable tool for detecting memory errors and leaks in C/C++
 ## Quick Start
 
 ### Prerequisites
-- C++20 compatible compiler (GCC 10+, Clang 12+, or MSVC 2019+)
+- C++23 compatible compiler (GCC 13+, Clang 17+, or MSVC 2022 17.4+)
 - CMake 3.16 or later
 - Make or Ninja build system
 

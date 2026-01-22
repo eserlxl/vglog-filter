@@ -18,10 +18,10 @@ This guide provides comprehensive instructions for building `vglog-filter` from 
 
 Before you can build `vglog-filter`, ensure you have the following tools installed on your system:
 
--   **C++20 Compatible Compiler**: A compiler that supports the C++20 standard. Recommended compilers:
-    -   GCC (GNU Compiler Collection) version 10 or newer.
-    -   Clang (LLVM) version 12 or newer.
-    -   MSVC 2019 or newer (Windows).
+-   **C++23 Compatible Compiler**: A compiler that supports the C++23 standard. Recommended compilers:
+    -   GCC (GNU Compiler Collection) version 13 or newer.
+    -   Clang (LLVM) version 17 or newer.
+    -   MSVC 2022 17.4 or newer (Windows).
 -   **CMake**: A cross-platform build system generator. Version 3.16 or higher is required.
 -   **Make or Ninja**: Build system for compilation.
 
@@ -285,7 +285,7 @@ If you encounter problems during the build process, consider the following:
 
 -   **Missing Prerequisites**: Double-check that all [prerequisites](#prerequisites) are installed and accessible in your system's PATH.
 
--   **Compiler Version**: Ensure your C++ compiler supports C++20. You can check your GCC version with `g++ --version` or Clang version with `clang++ --version`.
+-   **Compiler Version**: Ensure your C++ compiler supports C++23. You can check your GCC version with `g++ --version` or Clang version with `clang++ --version`.
 
 -   **CMake Version**: Verify your CMake version with `cmake --version`. If it's older than 3.16, you'll need to update it.
 

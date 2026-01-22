@@ -42,7 +42,7 @@ if (BUILD_OUT_OF_SOURCE)
 endif ()
 
 # C++ standard (no compiler extensions)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -187,7 +187,7 @@ add_library(vglog-filter-lib
   src/canonicalization.cpp
 )
 target_link_libraries(vglog-filter-lib PUBLIC project_options project_warnings)
-target_compile_features(vglog-filter-lib PUBLIC cxx_std_20)
+target_compile_features(vglog-filter-lib PUBLIC cxx_std_23)
 
 # Apply additional compiler flags for security and code quality
 if (NOT MSVC)

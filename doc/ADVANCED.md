@@ -390,7 +390,7 @@ For developers interested in extending `vglog-filter`'s capabilities, consider t
 
 ### Adding New Filtering Logic
 
-Implement new C++ code within `src/log_processor.cpp` to handle novel Valgrind output patterns or introduce more sophisticated filtering algorithms. The codebase is designed with extensibility in mind, using modern C++20 features.
+Implement new C++ code within `src/log_processor.cpp` to handle novel Valgrind output patterns or introduce more sophisticated filtering algorithms. The codebase is designed with extensibility in mind, using modern C++23 features.
 
 Key areas for extension:
 - **Pattern matching**: Add new regex patterns for different Valgrind output formats

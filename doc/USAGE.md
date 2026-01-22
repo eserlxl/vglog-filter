@@ -49,7 +49,7 @@ To use `vglog-filter`, you need to build it from its source code. For detailed i
 
 Before building `vglog-filter`, ensure you have the following tools installed on your system:
 
-- **C++ Compiler**: GCC 10+ or Clang 12+ with C++20 support
+- **C++ Compiler**: GCC 13+ or Clang 17+ with C++23 support
 - **CMake**: Version 3.16 or higher
 - **Make**: GNU Make or Ninja build system
 - **Git**: For cloning the repository (optional, for development)

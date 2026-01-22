@@ -425,14 +425,14 @@ Maintaining high code quality is paramount for `vglog-filter`. Adhere to the fol
 -   **Readability**: Write clear, concise, and well-structured code. Use meaningful variable and function names.
 -   **Modularity**: Design components to be modular and loosely coupled, promoting reusability and easier maintenance.
 -   **Error Handling**: Implement robust error handling for all potential failure points, providing informative error messages.
--   **Performance**: Be mindful of performance, especially in critical paths. Leverage C++20 features and standard library algorithms where appropriate.
+-   **Performance**: Be mindful of performance, especially in critical paths. Leverage C++23 features and standard library algorithms where appropriate.
 -   **Security**: Write secure code, paying attention to potential vulnerabilities like buffer overflows, uninitialized memory access, and path traversal issues. The sanitizers and CodeQL workflows are there to help.
 -   **Consistency**: Follow existing coding style and conventions within the project. Automated tools like Clang-Tidy and ShellCheck help enforce this.
 -   **Documentation**: Add comments to explain complex logic or non-obvious design choices. Update relevant documentation files (like this guide) when introducing new features or changing existing behavior.
 
 ### C++ Best Practices
 
-- Use C++20 features appropriately (concepts, ranges, etc.)
+- Use C++23 features appropriately (concepts, ranges, etc.)
 - Prefer RAII and smart pointers over raw pointers
 - Use `const` correctness throughout
 - Leverage the standard library algorithms
@@ -466,7 +466,7 @@ If you encounter issues during development, here are some common problems and tr
 ### Common Build Issues
 
 1.  **CMake version too old**: Ensure you are using CMake 3.16 or newer. Update if necessary.
-2.  **Compiler not C++20 compatible**: Verify your compiler (GCC 10+ or Clang 12+) supports C++20. Update your compiler if it's outdated.
+2.  **Compiler not C++23 compatible**: Verify your compiler (GCC 13+ or Clang 17+) supports C++23. Update your compiler if it's outdated.
 3.  **Missing dependencies**: Ensure all build essentials (e.g., `build-essential` on Debian/Ubuntu) and CMake are installed.
 4.  **Permission issues**: Check file permissions and ownership in your project directory, especially after cloning or extracting.
 5.  **Build directory conflicts**: Use `./build.sh clean` to remove old build artifacts if you encounter strange build issues.
