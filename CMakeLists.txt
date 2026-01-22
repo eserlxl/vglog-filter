@@ -283,6 +283,7 @@ if (BUILD_TESTING)
   add_test_exe(test_cli_options     "test/test_cli_options.cpp")
   add_test_exe(test_edge_utf8_perm  "test/test_edge_utf8_perm.cpp")
   add_test_exe(test_structured_filter "test/test_structured_filter.cpp")
+  add_test_exe(test_rotation_strict   "test/test_rotation_strict.cpp")
 
   # Convenience target to run tests with nice output
   add_custom_target(run-tests

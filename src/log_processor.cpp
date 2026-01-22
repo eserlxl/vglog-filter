@@ -319,7 +319,7 @@ bool LogProcessor::should_report_progress(std::size_t bytes_processed,
          (bytes_processed % PROGRESS_REPORT_INTERVAL == 0 || bytes_processed >= total_bytes);
 }
 
-void LogProcessor::output_pending_blocks() const {
+void LogProcessor::output_pending_blocks() {
   if (!opt.trim || marker_found) {
     for (const auto& b : pending_blocks) {
       if (opt.json_output) {
@@ -398,9 +398,15 @@ void LogProcessor::flush() {
   const std::string key = generate_signature_key();
   LogEntry entry = parse_entry(raw, key);
 
+  if (opt.strict_mode && (entry.pid.empty() || entry.error_type.empty())) {
+    stats.parse_errors++;
+    throw std::runtime_error("Strict mode: Failed to parse valid Valgrind entry from block");
+  }
+
   // Filter check
   for (const auto& ex : opt.exclude_types) {
     if (entry.error_type.find(ex) != std::string::npos) {
+      stats.filtered_count++;
       clear_current_state();
       return;
     }
@@ -457,18 +463,30 @@ std::size_t LogProcessor::find_marker(const VecS& lines) const {
   return 0;
 }
 
-void LogProcessor::write_output(const void* data, size_t size) const {
+void LogProcessor::write_output(const void* data, size_t size) {
   if (out_fp && data && size > 0) {
+    if (opt.rotate_size_mb > 0) {
+      long pos = std::ftell(out_fp);
+      if (pos >= 0 && static_cast<size_t>(pos) + size > opt.rotate_size_mb * 1024 * 1024) {
+        rotate_log();
+      }
+    }
     std::fwrite(data, 1, size, out_fp);
   }
 }
-void LogProcessor::write_output(char c) const {
+void LogProcessor::write_output(char c) {
   if (out_fp) {
+    if (opt.rotate_size_mb > 0) {
+      long pos = std::ftell(out_fp);
+      if (pos >= 0 && static_cast<size_t>(pos) + 1 > opt.rotate_size_mb * 1024 * 1024) {
+        rotate_log();
+      }
+    }
     std::fputc(c, out_fp);
   }
 }
 
-void LogProcessor::write_json_record(const LogEntry& entry) const {
+void LogProcessor::write_json_record(const LogEntry& entry) {
   if (!out_fp)
     return;
   std::string json = "{\"type\":\"record\"";
@@ -548,9 +566,10 @@ void LogProcessor::print_stats(std::FILE* out) const {
     if (out_fp) {
       std::fprintf(out_fp,
                    "{\"type\":\"stats\",\"lines_read\":%zu,\"bytes_processed\":%zu,\"blocks_"
-                   "found\":%zu,\"unique_blocks\":%zu}\n",
-                   stats.lines_read, stats.bytes_processed, stats.blocks_found,
-                   stats.unique_blocks);
+                   "found\":%zu,\"unique_blocks\":%zu,\"filtered_count\":%zu,\"parse_errors\":%zu}"
+                   "\n",
+                   stats.lines_read, stats.bytes_processed, stats.blocks_found, stats.unique_blocks,
+                   stats.filtered_count, stats.parse_errors);
     }
   } else {
     std::fprintf(out, "--- Statistics ---\n");
@@ -558,5 +577,42 @@ void LogProcessor::print_stats(std::FILE* out) const {
     std::fprintf(out, "Bytes processed : %zu\n", stats.bytes_processed);
     std::fprintf(out, "Blocks found    : %zu\n", stats.blocks_found);
     std::fprintf(out, "Unique blocks   : %zu\n", stats.unique_blocks);
+    std::fprintf(out, "Filtered blocks : %zu\n", stats.filtered_count);
+    if (opt.strict_mode) {
+      std::fprintf(out, "Parse errors    : %zu\n", stats.parse_errors);
+    }
   }
+}
+
+void LogProcessor::rotate_log() {
+  if (opt.output_file.empty())
+    return;
+
+  // Close current
+  // Note: we must ensure we don't close stdout if that was used,
+  // but output_file implies not stdout.
+  // Resetting file_handle_lifetime closes the file.
+  file_handle_lifetime.reset();
+  out_fp = nullptr;
+
+  namespace fs = std::filesystem;
+  std::error_code ec;
+
+  // Shift backups: .N -> .N+1
+  for (size_t i = opt.rotate_backups; i > 0; --i) {
+    // If i=1, source is file. dest is file.1
+    // If i=2, source is file.1. dest is file.2
+    std::string old_name =
+        (i == 1) ? opt.output_file : (opt.output_file + "." + std::to_string(i - 1));
+    std::string new_name = opt.output_file + "." + std::to_string(i);
+
+    if (fs::exists(old_name, ec)) {
+      fs::rename(old_name, new_name, ec);
+    }
+  }
+
+  // Open new file
+  auto fh = std::make_shared<FileHandle>(opt.output_file.c_str(), "w");
+  out_fp = fh->get();
+  file_handle_lifetime = std::static_pointer_cast<void>(fh);
 }

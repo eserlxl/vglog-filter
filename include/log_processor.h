@@ -28,6 +28,8 @@ struct LogStats {
   std::size_t bytes_processed = 0;
   std::size_t blocks_found = 0;
   std::size_t unique_blocks = 0;
+  std::size_t filtered_count = 0;
+  std::size_t parse_errors = 0;
 };
 
 struct LogEntry {
@@ -68,10 +70,11 @@ private:
   [[nodiscard]] bool should_report_progress(std::size_t bytes_processed,
                                             std::size_t total_bytes) const;
 
-  void output_pending_blocks() const;
-  void write_output(const void* data, size_t size) const;
-  void write_output(char c) const;
-  void write_json_record(const LogEntry& entry) const;
+  void output_pending_blocks();
+  void write_output(const void* data, size_t size);
+  void write_output(char c);
+  void write_json_record(const LogEntry& entry);
+  void rotate_log();
 
   [[nodiscard]] LogEntry parse_entry(const std::string& raw_block,
                                      const std::string& signature) const;

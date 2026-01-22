@@ -36,6 +36,8 @@ inline constexpr auto STDIN_SENTINEL = std::string_view{"-"};
 inline constexpr auto VERSION_STRING = std::string_view{TOSTRING(VGLOG_FILTER_VERSION)};
 inline constexpr int MAX_MARKER_LENGTH = 1024;
 
+enum { OPT_ROTATE_SIZE = 1000, OPT_ROTATE_BACKUPS, OPT_STRICT };
+
 // getopt_long table
 // NOLINTNEXTLINE(modernize-avoid-c-arrays)
 constinit option LONG_OPTS[] = {{"keep-debug-info", no_argument, nullptr, 'k'},
@@ -50,9 +52,14 @@ constinit option LONG_OPTS[] = {{"keep-debug-info", no_argument, nullptr, 'k'},
                                 {"version", no_argument, nullptr, 'V'},
                                 {"help", no_argument, nullptr, 'h'},
                                 {"exclude-type", required_argument, nullptr, 'e'},
+                                {"rotate-size-mb", required_argument, nullptr, OPT_ROTATE_SIZE},
+                                {"rotate-backups", required_argument, nullptr, OPT_ROTATE_BACKUPS},
+                                {"strict", no_argument, nullptr, OPT_STRICT},
                                 {nullptr, 0, nullptr, 0}};
 
 inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
+
+// ... (helpers) ...
 
 [[nodiscard]] std::string make_range_error(std::string_view what, int lo, int hi) {
   std::string msg;

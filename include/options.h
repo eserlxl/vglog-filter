@@ -29,6 +29,10 @@ struct Options {
   bool json_output = false;
   bool use_stdin = false;
   std::vector<std::string> exclude_types;
+
+  size_t rotate_size_mb = 0;
+  size_t rotate_backups = 0;
+  bool strict_mode = false;
 };
 
 void usage(std::string_view prog);
