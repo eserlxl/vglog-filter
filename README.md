@@ -195,11 +195,14 @@ valgrind --leak-check=full --show-leak-kinds=all ./your_program 2>&1 | ./build/b
 | `-d N` | `--depth N` | Signature depth (default: 1, 0 = unlimited) |
 | `-m S` | `--marker S` | Marker string for trimming (default: "Successfully downloaded debug") |
 | `-e S` | `--exclude-type S` | Filter out blocks with error types containing S |
+| | `--exclude-stack R` | Filter out blocks where stack matches regex R |
 | | `--rotate-size-mb N` | Rotate output file after N megabytes |
 | | `--rotate-backups N` | Number of backup files to keep (default: 0) |
 | | `--strict` | Enable strict parsing mode (aborts on malformed critical logs) |
 | `-s` | `--stream` | Force stream processing mode |
 | `-p` | `--progress` | Show progress for large files |
+| | `--json` | Output in JSON format (one record per line) |
+| | `--detailed-json` | Output detailed JSON (includes pid, error_type, stack_trace) |
 | `-M` | `--memory` | Monitor memory usage during processing |
 | `-V` | `--version` | Show version information |
 | `-h` | `--help` | Show help message |
