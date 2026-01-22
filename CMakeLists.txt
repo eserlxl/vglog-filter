@@ -186,6 +186,7 @@ add_library(vglog-filter-lib
   src/log_processor.cpp
   src/path_validation.cpp
   src/canonicalization.cpp
+  src/log_parser.cpp
 )
 target_link_libraries(vglog-filter-lib PUBLIC project_options project_warnings)
 target_compile_features(vglog-filter-lib PUBLIC cxx_std_23)
@@ -285,6 +286,7 @@ if (BUILD_TESTING)
   add_test_exe(test_edge_utf8_perm  "test/test_edge_utf8_perm.cpp")
   add_test_exe(test_structured_filter "test/test_structured_filter.cpp")
   add_test_exe(test_rotation_strict   "test/test_rotation_strict.cpp")
+  add_test_exe(test_log_parser        "test/test_log_parser.cpp")
 
   # Convenience target to run tests with nice output
   add_custom_target(run-tests

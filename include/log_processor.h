@@ -8,6 +8,7 @@
 #pragma once
 
 #include "file_utils.h"
+#include "log_entry.h"
 #include "options.h"
 
 #include <algorithm>
@@ -30,14 +31,6 @@ struct LogStats {
   std::size_t unique_blocks = 0;
   std::size_t filtered_count = 0;
   std::size_t parse_errors = 0;
-};
-
-struct LogEntry {
-  std::string raw_content;
-  std::string signature;
-  std::string error_type;
-  std::string pid;
-  std::vector<std::string> stack_trace;
 };
 
 class LogProcessor {

@@ -36,7 +36,7 @@ inline constexpr auto STDIN_SENTINEL = std::string_view{"-"};
 inline constexpr auto VERSION_STRING = std::string_view{TOSTRING(VGLOG_FILTER_VERSION)};
 inline constexpr int MAX_MARKER_LENGTH = 1024;
 
-enum { OPT_ROTATE_SIZE = 1000, OPT_ROTATE_BACKUPS, OPT_STRICT };
+enum { OPT_ROTATE_SIZE = 1000, OPT_ROTATE_BACKUPS, OPT_STRICT, OPT_DETAILED_JSON };
 
 // getopt_long table
 // NOLINTNEXTLINE(modernize-avoid-c-arrays)
@@ -54,7 +54,9 @@ constinit option LONG_OPTS[] = {{"keep-debug-info", no_argument, nullptr, 'k'},
                                 {"exclude-type", required_argument, nullptr, 'e'},
                                 {"rotate-size-mb", required_argument, nullptr, OPT_ROTATE_SIZE},
                                 {"rotate-backups", required_argument, nullptr, OPT_ROTATE_BACKUPS},
+                                {"rotate-backups", required_argument, nullptr, OPT_ROTATE_BACKUPS},
                                 {"strict", no_argument, nullptr, OPT_STRICT},
+                                {"detailed-json", no_argument, nullptr, OPT_DETAILED_JSON},
                                 {nullptr, 0, nullptr, 0}};
 
 inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
@@ -159,6 +161,14 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
         if (optarg && *optarg) {
           opt.exclude_types.emplace_back(optarg);
         }
+        if (optarg && *optarg) {
+          opt.exclude_types.emplace_back(optarg);
+        }
+        break;
+      case OPT_DETAILED_JSON:
+        opt.detailed_json = true;
+        // detailed-json implies json
+        opt.json_output = true;
         break;
       default:
         usage(argv[0]);

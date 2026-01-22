@@ -10,6 +10,7 @@
 #include "canonicalization.h"
 #include "file_utils.h"
 #include "json_utils.h"
+#include "log_parser.h"
 
 #include <array>
 #include <chrono>
@@ -167,15 +168,7 @@ bool LogProcessor::matches_q_pattern(std::string_view line) const noexcept {
 }
 
 std::string LogProcessor::replace_prefix(std::string_view line) const {
-  if (!matches_vg_line(line))
-    return std::string{line};
-  std::size_t i = 2;
-  while (i < line.size() && is_digit(line[i]))
-    ++i;
-  i += 2; // ==
-  while (i < line.size() && std::isspace(static_cast<unsigned char>(line[i])))
-    ++i;
-  return std::string{line.substr(i)};
+  return std::string{LogParser::remove_prefix(line)};
 }
 
 std::string LogProcessor::replace_patterns(const std::string& line) const {
@@ -462,20 +455,23 @@ void LogProcessor::write_json_record(const LogEntry& entry) {
   std::string json = "{\"type\":\"record\"";
   json += ",\"raw\":\"" + json_utils::escape_string(entry.raw_content) + "\"";
   json += ",\"signature\":\"" + json_utils::escape_string(entry.signature) + "\"";
-  if (!entry.error_type.empty()) {
-    json += ",\"error_type\":\"" + json_utils::escape_string(entry.error_type) + "\"";
-  }
-  if (!entry.pid.empty()) {
-    json += ",\"pid\":\"" + json_utils::escape_string(entry.pid) + "\"";
-  }
-  if (!entry.stack_trace.empty()) {
-    json += ",\"stack_trace\":[";
-    for (size_t i = 0; i < entry.stack_trace.size(); ++i) {
-      if (i > 0)
-        json += ",";
-      json += "\"" + json_utils::escape_string(entry.stack_trace[i]) + "\"";
+
+  if (opt.detailed_json) {
+    if (!entry.error_type.empty()) {
+      json += ",\"error_type\":\"" + json_utils::escape_string(entry.error_type) + "\"";
     }
-    json += "]";
+    if (!entry.pid.empty()) {
+      json += ",\"pid\":\"" + json_utils::escape_string(entry.pid) + "\"";
+    }
+    if (!entry.stack_trace.empty()) {
+      json += ",\"stack_trace\":[";
+      for (size_t i = 0; i < entry.stack_trace.size(); ++i) {
+        if (i > 0)
+          json += ",";
+        json += "\"" + json_utils::escape_string(entry.stack_trace[i]) + "\"";
+      }
+      json += "]";
+    }
   }
   json += "}\n";
   write_output(json.data(), json.size());
@@ -494,17 +490,17 @@ LogEntry LogProcessor::parse_entry(const std::string& raw_block,
     first_eol = sv.size();
   std::string_view first_line = sv.substr(0, first_eol);
 
-  // Extract PID: ==12345==
-  if (first_line.size() >= 2 && first_line[0] == '=' && first_line[1] == '=') {
-    size_t end_pid = first_line.find("==", 2);
-    if (end_pid != std::string_view::npos) {
-      entry.pid = std::string(first_line.substr(2, end_pid - 2));
-    }
+  auto header = LogParser::parse_header(first_line);
+  if (header) {
+    entry.pid = std::move(header->first);
+    entry.error_type = std::move(header->second);
+  } else {
+    // Fallback
+    entry.error_type = replace_prefix(first_line);
   }
-
-  // Extract Error Type (rest of first line after prefix)
-  entry.error_type = replace_prefix(first_line);
-  if (!entry.error_type.empty() && entry.error_type.back() == '\r') {
+  // Trim EOL from type
+  while (!entry.error_type.empty() &&
+         (entry.error_type.back() == '\r' || entry.error_type.back() == '\n')) {
     entry.error_type.pop_back();
   }
 
@@ -515,13 +511,19 @@ LogEntry LogProcessor::parse_entry(const std::string& raw_block,
     if (eol == std::string_view::npos)
       eol = sv.size();
     std::string_view line = sv.substr(pos, eol - pos);
-    std::string content = replace_prefix(line);
-    if (!content.empty()) {
+
+    // Use LogParser to clean line
+    auto content = LogParser::remove_prefix(line);
+    std::string s_content{content};
+
+    if (!s_content.empty()) {
       // Trim newlines
-      while (!content.empty() && (content.back() == '\n' || content.back() == '\r')) {
-        content.pop_back();
+      while (!s_content.empty() && (s_content.back() == '\n' || s_content.back() == '\r')) {
+        s_content.pop_back();
       }
-      entry.stack_trace.push_back(std::move(content));
+      if (!s_content.empty()) {
+        entry.stack_trace.push_back(std::move(s_content));
+      }
     }
     pos = eol + 1;
   }
