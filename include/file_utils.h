@@ -16,6 +16,25 @@
 #include <string_view>
 #include <vector>
 
+// RAII wrapper for FILE*
+class FileHandle {
+public:
+    explicit FileHandle(const char* filename, const char* mode);
+    ~FileHandle();
+    // Non-copyable
+    FileHandle(const FileHandle&) = delete;
+    FileHandle& operator=(const FileHandle&) = delete;
+    // Moveable
+    FileHandle(FileHandle&& other) noexcept;
+    FileHandle& operator=(FileHandle&& other) noexcept;
+
+    [[nodiscard]] std::FILE* get() const noexcept;
+    explicit operator bool() const noexcept;
+
+private:
+    std::FILE* fp = nullptr;
+};
+
 // Formatted error text
 [[nodiscard]] std::string create_error_message(std::string_view operation,
                                                std::string_view filename,

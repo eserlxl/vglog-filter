@@ -7,24 +7,27 @@
 
 #pragma once
 
+#include <iostream>
 #include <string>
 #include <string_view>
-#include <iostream>
+#include <vector>
 
-inline constexpr int   DEFAULT_DEPTH               = 1;
-inline constexpr auto  DEFAULT_MARKER              = std::string_view{"Successfully downloaded debug"};
-inline constexpr size_t LARGE_FILE_THRESHOLD_MB    = 5;
+inline constexpr int DEFAULT_DEPTH = 1;
+inline constexpr auto DEFAULT_MARKER = std::string_view{"Successfully downloaded debug"};
+inline constexpr size_t LARGE_FILE_THRESHOLD_MB = 5;
 
 struct Options {
-    int         depth          = DEFAULT_DEPTH;
-    bool        trim           = true;
-    bool        scrub_raw      = true;
-    bool        stream_mode    = false;
-    bool        show_progress  = false;
-    bool        monitor_memory = false;
-    std::string marker         = std::string(DEFAULT_MARKER);
-    std::string filename;
-    bool        use_stdin      = false;
+  int depth = DEFAULT_DEPTH;
+  bool trim = true;
+  bool scrub_raw = true;
+  bool stream_mode = false;
+  bool show_progress = false;
+  bool monitor_memory = false;
+  std::vector<std::string> markers;
+  std::string filename;
+  std::string output_file;
+  bool json_output = false;
+  bool use_stdin = false;
 };
 
 void usage(std::string_view prog);

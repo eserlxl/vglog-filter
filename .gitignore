@@ -377,3 +377,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+# Finalize cleanup
+docs/
+*.json
