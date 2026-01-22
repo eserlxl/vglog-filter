@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <iosfwd>
 #include <memory>
+#include <regex>
 #include <span>
 #include <string>
 #include <string_view>
@@ -110,4 +111,6 @@ private:
   std::string at_pattern;
   std::string by_pattern;
   std::string q_pattern;
+
+  std::vector<std::regex> stack_regexes;
 };

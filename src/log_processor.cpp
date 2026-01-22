@@ -73,6 +73,15 @@ LogProcessor::LogProcessor(const Options& options) : opt(options), stats{} {
     out_fp = fh->get();
     file_handle_lifetime = std::static_pointer_cast<void>(fh);
   }
+
+  // Pre-compile regexes
+  try {
+    for (const auto& pat : opt.exclude_stack_patterns) {
+      stack_regexes.emplace_back(pat, std::regex::optimize);
+    }
+  } catch (const std::regex_error& e) {
+    throw std::runtime_error("Invalid regex in exclude-stack: " + std::string(e.what()));
+  }
 }
 
 LogProcessor::~LogProcessor() = default;
@@ -372,6 +381,19 @@ void LogProcessor::flush() {
       stats.filtered_count++;
       clear_current_state();
       return;
+    }
+  }
+
+  // Stack Regex Filter
+  if (!stack_regexes.empty()) {
+    for (const auto& re : stack_regexes) {
+      for (const auto& frame : entry.stack_trace) {
+        if (std::regex_search(frame, re)) {
+          stats.filtered_count++;
+          clear_current_state();
+          return;
+        }
+      }
     }
   }
 

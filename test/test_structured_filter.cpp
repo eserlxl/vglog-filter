@@ -4,65 +4,119 @@
 
 #include <cassert>
 #include <cstdio>
+#include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
+#include <vector>
 
-// Test filtering by exclude_types
-void test_filtering() {
+int count_blocks_in_file(const std::string& filename) {
+  std::ifstream f(filename);
+  std::string line;
+  int count = 0;
+  while (std::getline(f, line)) {
+    if (line.find("\"type\":\"record\"") != std::string::npos) {
+      count++;
+    }
+  }
+  return count;
+}
+
+bool test_filter_types() {
+  std::string output_file = "test_filter_types.json";
   Options opt;
-  opt.json_output = false;
-  opt.exclude_types.push_back("process terminating"); // Should match case-sensitive or insensitive?
-  // Implementation uses find(), so case-sensitive based on raw log. Valgrind usually lowercases some things or Mixed.
-  // "Process terminating" is standard. My implementation uses `entry.error_type` which comes from `replace_prefix`.
-  // Let's use exact match or partial match.
+  opt.json_output = true;
+  opt.trim = false;
+  opt.output_file = output_file;
   opt.exclude_types.push_back("Process terminating");
 
-  LogProcessor processor(opt);
+  {
+    LogProcessor processor(opt);
 
-  // Sample blocks
-  std::string block1 = "==123== Invalid read of size 4\n==123==    at 0x400: main (test.c:10)\n";
-  std::string block2 = "==123== Process terminating with default action of signal 11\n==123==    "
-                       "at 0x400: raise (raise.c:1)\n";
+    std::string block1 = "==123== Invalid read of size 4\n==123==    at 0x400: main (test.c:10)\n";
+    std::string block2 = "==123== Process terminating with default action of signal 11\n==123==    "
+                         "at 0x400: raise (raise.c:1)\n";
 
-  // We simulate processing by feeding lines
-  std::vector<std::string> lines;
-  // Split block1
-  std::stringstream ss1(block1);
-  std::string line;
-  while (std::getline(ss1, line))
-    lines.push_back(line);
-  // Split block2
-  std::stringstream ss2(block2);
-  while (std::getline(ss2, line))
-    lines.push_back(line);
+    std::vector<std::string> lines;
+    std::stringstream ss(block1 + block2);
+    std::string line;
+    while (std::getline(ss, line))
+      lines.push_back(line);
 
-  // Capture output
-  std::string output_file = "test_filter_out.txt";
-  // Redirect stdout to file is hard here without pipe.
-  // But LogProcessor takes a FILE* in process_stream_cfile or writes to generic out.
-  // Actually LogProcessor writes to `out_fp` which defaults to stdout.
-  // We can't easily capture stdout unless we reopen it.
-  // BUT, LogProcessor ctor takes options with `output_file`.
+    processor.process_lines(lines);
+  } // processor destroyed, file flushed and closed
 
+  // Check output
+  int count = count_blocks_in_file(output_file);
+  if (count != 1) {
+    std::cerr << "test_filter_types: Expected 1 block, got " << count << "\n";
+    std::ifstream f(output_file);
+    std::cout << "File Content:\n" << f.rdbuf() << "\n";
+  }
+  TEST_ASSERT(count == 1, "Should filter out one block");
+
+  std::ifstream f(output_file);
+  std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Invalid read");
+  TEST_ASSERT(content.find("Process terminating") == std::string::npos,
+              "Should exclude Process terminating");
+
+  std::remove(output_file.c_str());
+  TEST_PASS("Type filtering");
+  return true;
+}
+
+bool test_filter_stack_regex() {
+  std::string output_file = "test_filter_stack.json";
+  Options opt;
+  opt.json_output = true;
+  opt.trim = false;
   opt.output_file = output_file;
-  LogProcessor processor_file(opt);
-  processor_file.process_lines(lines);
-  // Destructor closes file (via shared_ptr holder if we rely on it?)
-  // Actually LogProcessor doesn't close `out_fp` unless it opened it.
-  // It opens it if `output_file` is set.
+  opt.exclude_stack_patterns.push_back(".*libcursed.*");
 
-  // Check file content
-  // We expect block1 to be there, block2 to be missing.
+  {
+    LogProcessor processor(opt);
+
+    std::string block1 = "==123== Invalid read\n==123==    at 0x400: main (test.c:10)\n";
+    std::string block2 =
+        "==123== Invalid write\n==123==    at 0x500: evil_func (libcursed.so:99)\n";
+
+    std::vector<std::string> lines;
+    std::stringstream ss(block1 + block2);
+    std::string line;
+    while (std::getline(ss, line))
+      lines.push_back(line);
+
+    processor.process_lines(lines);
+  } // processor destroyed, file flushed and closed
+
+  int count = count_blocks_in_file(output_file);
+  if (count != 1) {
+    std::cerr << "test_filter_stack_regex: Expected 1 block, got " << count << "\n";
+    std::ifstream f(output_file);
+    std::cout << "File Content:\n" << f.rdbuf() << "\n";
+  }
+  TEST_ASSERT(count == 1, "Should filter out stack-matched block");
+
+  std::ifstream f(output_file);
+  std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Block 1");
+  TEST_ASSERT(content.find("Invalid write") == std::string::npos, "Should exclude Block 2");
+
+  std::remove(output_file.c_str());
+  TEST_PASS("Stack Regex filtering");
+  return true;
 }
 
 int main() {
-  try {
-    test_filtering();
-    std::cout << "test_filtering passed\n";
-  } catch (const std::exception& e) {
-    std::cerr << "Test failed: " << e.what() << "\n";
+  bool passed = true;
+  passed &= test_filter_types();
+  passed &= test_filter_stack_regex();
+
+  if (passed) {
+    std::cout << "All structured filter tests passed\n";
+    return 0;
+  } else {
+    std::cerr << "Some structured filter tests failed\n";
     return 1;
   }
-  return 0;
 }
