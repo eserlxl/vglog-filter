@@ -40,10 +40,10 @@ struct Options {
   bool strict_mode = false;
 
   // Iteration 1 Extension
-  size_t maxErrors = 0; // 0 = unlimited
-  std::vector<std::string> includeTypes;
-  std::vector<std::string> includeFunctions;
-  std::vector<std::string> excludeFunctions;
+  size_t max_errors = 0; // 0 = unlimited
+  std::vector<std::string> include_types;
+  std::vector<std::string> include_functions;
+  std::vector<std::string> exclude_functions;
 };
 
 void usage(std::string_view prog);

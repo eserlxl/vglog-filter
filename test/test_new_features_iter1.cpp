@@ -2,15 +2,13 @@
 #include "options.h"
 #include "test_helpers.h"
 
-#include <cstdio>
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <vector>
 
-bool test_max_errors() {
+bool testMaxErrors() {
   Options opt;
-  opt.maxErrors = 2;
+  opt.max_errors = 2;
   LogProcessor processor(opt);
 
   std::string block = "==12345== Invalid read\n==12345==    at 0x1: f1 (a.c:1)\n";
@@ -32,9 +30,9 @@ bool test_max_errors() {
   return true;
 }
 
-bool test_include_filter() {
+bool testIncludeFilter() {
   Options opt;
-  opt.includeTypes.push_back("KeepMe");
+  opt.include_types.push_back("KeepMe");
 
   LogProcessor processor(opt);
   std::string b1 = "==12345== KeepMe error\n==12345==    at 0x1: f (f.c:1)\n";
@@ -55,9 +53,9 @@ bool test_include_filter() {
   return true;
 }
 
-bool test_exclude_function() {
+bool testExcludeFunction() {
   Options opt;
-  opt.excludeFunctions.push_back("badFunc");
+  opt.exclude_functions.push_back("badFunc");
 
   LogProcessor processor(opt);
   std::string b1 = "==12345== Error\n==12345==    at 0x1: goodFunc (f.c:1)\n";
@@ -80,9 +78,9 @@ bool test_exclude_function() {
 
 int main() {
   bool passed = true;
-  passed &= test_max_errors();
-  passed &= test_include_filter();
-  passed &= test_exclude_function();
+  passed &= testMaxErrors();
+  passed &= testIncludeFilter();
+  passed &= testExcludeFunction();
 
   if (passed) {
     std::cout << "Iter1 Feat Tests Passed\n";

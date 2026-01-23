@@ -193,23 +193,23 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
         }
         break;
       case OPT_MAX_ERRORS:
-        opt.maxErrors = static_cast<size_t>(
+        opt.max_errors = static_cast<size_t>(
             parse_nonneg_int(optarg ? std::string_view{optarg} : std::string_view{},
                              std::numeric_limits<int>::max()));
         break;
       case OPT_INCLUDE_TYPE:
         if (optarg && *optarg) {
-          opt.includeTypes.emplace_back(optarg);
+          opt.include_types.emplace_back(optarg);
         }
         break;
       case OPT_INCLUDE_FUNCTION:
         if (optarg && *optarg) {
-          opt.includeFunctions.emplace_back(optarg);
+          opt.include_functions.emplace_back(optarg);
         }
         break;
       case OPT_EXCLUDE_FUNCTION:
         if (optarg && *optarg) {
-          opt.excludeFunctions.emplace_back(optarg);
+          opt.exclude_functions.emplace_back(optarg);
         }
         break;
       default:

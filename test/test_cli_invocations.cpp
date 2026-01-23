@@ -8,13 +8,18 @@
 #include <unistd.h>
 #include <vector>
 
-// Helper to run vglog-filter in a subprocess and capture stdout
-bool run_cli_test(const std::string& test_name, const std::vector<std::string>& args,
-                  const std::string& input, const std::string& expected_output_fragment) {
-  int input_pipe[2];
-  int output_pipe[2];
+namespace {
+constexpr int EXIT_COMMAND_NOT_FOUND = 127;
+constexpr int READ_BUFFER_SIZE = 128;
+} // namespace
 
-  if (pipe(input_pipe) == -1 || pipe(output_pipe) == -1) {
+// Helper to run vglog-filter in a subprocess and capture stdout
+bool runCliTest(const std::string& testName, const std::vector<std::string>& args,
+                const std::string& input, const std::string& expectedFragment) {
+  int inputPipe[2];
+  int outputPipe[2];
+
+  if (pipe(inputPipe) == -1 || pipe(outputPipe) == -1) {
     perror("pipe");
     return false;
   }
@@ -25,78 +30,91 @@ bool run_cli_test(const std::string& test_name, const std::vector<std::string>& 
     return false;
   }
 
-  if (pid == 0) {          // Child
-    close(input_pipe[1]);  // Close write end of input
-    close(output_pipe[0]); // Close read end of output
+  if (pid == 0) {         // Child
+    close(inputPipe[1]);  // Close write end of input
+    close(outputPipe[0]); // Close read end of output
 
-    dup2(input_pipe[0], STDIN_FILENO);
-    dup2(output_pipe[1], STDOUT_FILENO);
+    dup2(inputPipe[0], STDIN_FILENO);
+    dup2(outputPipe[1], STDOUT_FILENO);
 
-    close(input_pipe[0]);
-    close(output_pipe[1]);
+    close(inputPipe[0]);
+    close(outputPipe[1]);
 
-    std::vector<const char*> c_args;
+    std::vector<const char*> cArgs;
     namespace fs = std::filesystem;
-    std::string bin_path_str;
+    std::string binPathStr;
 
-    if (fs::exists("./build/bin/vglog-filter")) {
-      bin_path_str = fs::absolute("./build/bin/vglog-filter").string();
-    } else if (fs::exists("./bin/vglog-filter")) {
-      bin_path_str = fs::absolute("./bin/vglog-filter").string();
-    } else {
-      std::cerr << "Child cannot find vglog-filter binary (checked ./build/bin/ and ./bin/)\n";
-      exit(127);
+    // Check potential locations
+    const std::vector<std::string> searchPaths = {
+        "./build/bin/vglog-filter", "./vglog-filter", "./bin/vglog-filter",
+        "./bin/Debug/vglog-filter",
+        "../build-asan/bin/Debug/vglog-filter" // In case we are deep
+    };
+
+    bool found = false;
+    for (const auto& p : searchPaths) {
+      if (fs::exists(p)) {
+        binPathStr = fs::absolute(p).string();
+        found = true;
+        break;
+      }
     }
 
-    // std::cerr << "DEBUG: Executing " << bin_path_str << "\n";
-    c_args.push_back(bin_path_str.c_str());
+    if (!found) {
+      std::cerr << "Child cannot find vglog-filter binary. Checked:\n";
+      for (const auto& p : searchPaths) {
+        std::cerr << "  " << p << "\n";
+      }
+      std::cerr << "CWD: " << fs::current_path() << "\n";
+      exit(EXIT_COMMAND_NOT_FOUND);
+    }
+
+    // std::cerr << "DEBUG: Executing " << binPathStr << "\n";
+    cArgs.push_back(binPathStr.c_str());
     for (const auto& arg : args) {
-      c_args.push_back(arg.c_str());
+      cArgs.push_back(arg.c_str());
     }
-    c_args.push_back(nullptr);
+    cArgs.push_back(nullptr);
 
-    execv(c_args[0], const_cast<char* const*>(c_args.data()));
+    execv(cArgs[0], const_cast<char* const*>(cArgs.data()));
     perror("execv");
-    exit(127);
+    exit(EXIT_COMMAND_NOT_FOUND);
   } else { // Parent
-    close(input_pipe[0]);
-    close(output_pipe[1]);
+    close(inputPipe[0]);
+    close(outputPipe[1]);
 
     // Write input
-    ssize_t written = write(input_pipe[1], input.data(), input.size());
+    ssize_t written = write(inputPipe[1], input.data(), input.size());
     if (written < 0 || static_cast<size_t>(written) != input.size()) {
       perror("write");
       // If we fail to write input, the child might hang or fail.
-      // We should probably just continue and let the test fail on output check,
-      // or exit. Exiting is safer to avoid hangs.
       _exit(1);
     }
-    close(input_pipe[1]); // Close to signal EOF
+    close(inputPipe[1]); // Close to signal EOF
 
     // Read output
-    std::string actual_output;
-    char buffer[128];
+    std::string actualOutput;
+    char buffer[READ_BUFFER_SIZE];
     ssize_t count;
-    while ((count = read(output_pipe[0], buffer, sizeof(buffer))) > 0) {
-      actual_output.append(buffer, static_cast<size_t>(count));
+    while ((count = read(outputPipe[0], buffer, sizeof(buffer))) > 0) {
+      actualOutput.append(buffer, static_cast<size_t>(count));
     }
-    close(output_pipe[0]);
+    close(outputPipe[0]);
 
     int status;
     waitpid(pid, &status, 0);
 
     if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-      if (actual_output.find(expected_output_fragment) != std::string::npos) {
-        TEST_PASS(test_name);
+      if (actualOutput.find(expectedFragment) != std::string::npos) {
+        TEST_PASS(testName);
         return true;
-      } else {
-        std::cerr << "FAIL: " << test_name << "\n";
-        std::cerr << "  Expected substring: " << expected_output_fragment << "\n";
-        std::cerr << "  Actual output: " << actual_output << "\n";
-        return false;
       }
+      std::cerr << "FAIL: " << testName << "\n";
+      std::cerr << "  Expected substring: " << expectedFragment << "\n";
+      std::cerr << "  Actual output: " << actualOutput << "\n";
+      return false;
     } else {
-      std::cerr << "FAIL: " << test_name << " (exited with " << WEXITSTATUS(status) << ")\n";
+      std::cerr << "FAIL: " << testName << " (exited with " << WEXITSTATUS(status) << ")\n";
       return false;
     }
   }
@@ -107,39 +125,29 @@ int main() {
 
   // Test 1: Max Errors
   // We send 4 errors, limit to 2.
-  std::string input_err = "==12345== Error\n==12345==    at main (m.c:1)\n";
-  std::string input_4errs;
+  std::string inputErr = "==12345== Error\n==12345==    at main (m.c:1)\n";
+  std::string input4Errs;
   for (int i = 0; i < 4; ++i)
-    input_4errs += input_err;
-
-  // We can't easily count blocks in output string without logic,
-  // but the output size should be roughly 2 blocks worth.
-  // Actually, simpler: check if we see "Error" 2 times or 4.
-  // Or, use a very distinct error type for the 3rd block.
+    input4Errs += inputErr;
 
   std::string err1 = "==12345== ErrOne\n==12345==    at f (f.c:1)\n";
   std::string err2 = "==12345== ErrTwo\n==12345==    at f (f.c:1)\n";
   std::string err3 = "==12345== ErrThree\n==12345==    at f (f.c:1)\n";
 
-  passed &=
-      run_cli_test("CLI Max Errors", {"-k", "--max-errors", "2"}, err1 + err2 + err3, "ErrTwo");
-  // Verify ErrThree is NOT present
-  // run_cli_test checks for presence, so we'd need a negative check.
-  // Let's rely on standard logic: if it runs successfully and produces output, verify substring manually?
-  // Let's implement negative check logic inline? No, keep it simple.
+  passed &= runCliTest("CLI Max Errors", {"-k", "--max-errors", "2"}, err1 + err2 + err3, "ErrTwo");
 
   // Test 2: Include Type
   // Use "Invalid read" to trigger standard block separation, append unique suffix for filtering
-  passed &= run_cli_test("CLI Include Type", {"-k", "--include-type", "KeepMe"},
-                         "==12345== Invalid read KeepMe\n==12345==    at 0x1: f (f.c:1)\n"
-                         "==12345== Invalid read DropMe\n==12345==    at 0x1: f (f.c:1)\n",
-                         "KeepMe");
+  passed &= runCliTest("CLI Include Type", {"-k", "--include-type", "KeepMe"},
+                       "==12345== Invalid read KeepMe\n==12345==    at 0x1: f (f.c:1)\n"
+                       "==12345== Invalid read DropMe\n==12345==    at 0x1: f (f.c:1)\n",
+                       "KeepMe");
 
   // Test 3: Exclude Function
-  passed &= run_cli_test("CLI Exclude Function", {"-k", "--exclude-function", "bad"},
-                         "==12345== Invalid read E\n==12345==    at 0x1: bad (f.c:1)\n"
-                         "==12345== Invalid read E\n==12345==    at 0x1: good (f.c:1)\n",
-                         "good");
+  passed &= runCliTest("CLI Exclude Function", {"-k", "--exclude-function", "bad"},
+                       "==12345== Invalid read E\n==12345==    at 0x1: bad (f.c:1)\n"
+                       "==12345== Invalid read E\n==12345==    at 0x1: good (f.c:1)\n",
+                       "good");
 
   if (passed) {
     std::cout << "All CLI invocation tests passed.\n";

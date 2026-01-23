@@ -220,7 +220,7 @@ void LogProcessor::process_stream(std::istream& in) {
     if (should_report_progress(bytes_processed, total_bytes)) {
       report_progress(bytes_processed, total_bytes, opt.filename);
     }
-    if (opt.maxErrors > 0 && stats.blocks_found >= opt.maxErrors) {
+    if (opt.max_errors > 0 && stats.blocks_found >= opt.max_errors) {
       clear_current_state();
       break;
     }
@@ -260,7 +260,7 @@ void LogProcessor::process_stream_cfile(std::FILE* fp) {
     if (should_report_progress(bytes_processed, total_bytes)) {
       report_progress(bytes_processed, total_bytes, opt.filename);
     }
-    if (opt.maxErrors > 0 && stats.blocks_found >= opt.maxErrors) {
+    if (opt.max_errors > 0 && stats.blocks_found >= opt.max_errors) {
       clear_current_state();
       break;
     }
@@ -412,8 +412,8 @@ void LogProcessor::flush() {
   }
 
   // Iteration 1 Extension: Function Name Exclusion
-  if (!opt.excludeFunctions.empty()) {
-    for (const auto& func : opt.excludeFunctions) {
+  if (!opt.exclude_functions.empty()) {
+    for (const auto& func : opt.exclude_functions) {
       if (entry.hasFrameMatching(func)) {
         stats.filtered_count++;
         clear_current_state();
@@ -423,12 +423,12 @@ void LogProcessor::flush() {
   }
 
   // Iteration 1 Extension: Include-Only Logic
-  bool includesActive = !opt.includeTypes.empty() || !opt.includeFunctions.empty();
+  bool includesActive = !opt.include_types.empty() || !opt.include_functions.empty();
   if (includesActive) {
     bool matched = false;
     // Check Types
-    if (!opt.includeTypes.empty()) {
-      for (const auto& type : opt.includeTypes) {
+    if (!opt.include_types.empty()) {
+      for (const auto& type : opt.include_types) {
         if (entry.matchesErrorType(type)) {
           matched = true;
           break;
@@ -436,8 +436,8 @@ void LogProcessor::flush() {
       }
     }
     // Check Functions (if not already matched)
-    if (!matched && !opt.includeFunctions.empty()) {
-      for (const auto& func : opt.includeFunctions) {
+    if (!matched && !opt.include_functions.empty()) {
+      for (const auto& func : opt.include_functions) {
         if (entry.hasFrameMatching(func)) {
           matched = true;
           break;
