@@ -13,10 +13,20 @@ struct LogWriter::Impl {
   const Options& opt;
   std::FILE* out_fp{stdout};
   std::shared_ptr<void> file_handle_lifetime;
+  bool isFirstEntry = true; // Iteration 2: State for array
 
   explicit Impl(const Options& options) : opt(options) {
     if (!opt.outputFile.empty()) {
       open_file(opt.outputFile);
+    }
+    if (opt.jsonArray && out_fp) {
+      std::fwrite("[", 1, 1, out_fp);
+    }
+  }
+
+  ~Impl() {
+    if (opt.jsonArray && out_fp) {
+      std::fwrite("]", 1, 1, out_fp);
     }
   }
 
@@ -32,6 +42,9 @@ struct LogWriter::Impl {
     }
 
     // Close current file
+    if (opt.jsonArray && out_fp) {
+      std::fwrite("]", 1, 1, out_fp);
+    }
     file_handle_lifetime.reset();
     out_fp = nullptr;
 
@@ -39,7 +52,7 @@ struct LogWriter::Impl {
     std::error_code ec;
 
     // Shift backups
-    for (size_t i = opt.rotateBackups; i > 0; --i) {
+    for (size_t i = opt.rotation.rotateBackups; i > 0; --i) {
       std::string old_name =
           (i == 1) ? opt.outputFile : (opt.outputFile + "." + std::to_string(i - 1));
       std::string new_name = opt.outputFile + "." + std::to_string(i);
@@ -51,13 +64,17 @@ struct LogWriter::Impl {
 
     // Reopen
     open_file(opt.outputFile);
+    if (opt.jsonArray && out_fp) {
+      std::fwrite("[", 1, 1, out_fp);
+      isFirstEntry = true; // Reset state for new file
+    }
   }
 
   void check_rotation(size_t additional_bytes) {
-    if (opt.rotateSizeMb > 0 && out_fp && !opt.outputFile.empty()) {
+    if (opt.rotation.rotateSizeMb > 0 && out_fp && !opt.outputFile.empty()) {
       long pos = std::ftell(out_fp);
       if (pos >= 0 &&
-          static_cast<size_t>(pos) + additional_bytes > opt.rotateSizeMb * 1024 * 1024) {
+          static_cast<size_t>(pos) + additional_bytes > opt.rotation.rotateSizeMb * 1024 * 1024) {
         rotate_log();
       }
     }
@@ -126,7 +143,7 @@ struct LogWriter::Impl {
         }
       }
     }
-    buffer += "}\n";
+    buffer += "}"; // No newline here
   }
 };
 
@@ -142,13 +159,19 @@ void LogWriter::writeEntry(const LogEntry& entry) {
     std::string json;
     json.reserve(entry.rawContent.size() + 128); // heuristic
     pImpl->format_json(entry, json);
-    pImpl->write_data(json.data(), json.size());
+
+    if (pImpl->opt.jsonArray) {
+      if (!pImpl->isFirstEntry) {
+        pImpl->write_data(",", 1);
+      }
+      pImpl->write_data(json.data(), json.size());
+      pImpl->isFirstEntry = false;
+    } else {
+      json += "\n";
+      pImpl->write_data(json.data(), json.size());
+    }
   } else {
     pImpl->write_data(entry.rawContent.data(), entry.rawContent.size());
-    // Raw content usually ends with newline, but ensure one if we're separating blocks?
-    // The original code did `write_output('\n');` after content.
-    // Let's stick to original behavior but check if content has newline.
-    // Original code: write_output(b.rawContent.data(), b.rawContent.size()); write_output('\n');
     pImpl->write_data("\n", 1);
   }
 }

@@ -17,34 +17,44 @@ inline constexpr int DEFAULT_DEPTH = 1;
 inline constexpr auto DEFAULT_MARKER = std::string_view{"Successfully downloaded debug"};
 inline constexpr size_t LARGE_FILE_THRESHOLD_MB = 5;
 
-struct Options {
-  int depth = DEFAULT_DEPTH;
-  bool trim = true;
-  bool scrub_raw = true;
-  bool streamMode = false;
-  bool showProgress = false;
-  bool monitor_memory = false;
-  std::vector<std::string> markers;
-  std::string filename;
-  std::string outputFile;
-  bool jsonOutput = false;
-  bool use_stdin = false;
+struct FilterConfig {
   std::vector<std::string> excludeTypes;
   std::vector<std::string> excludeStackPatterns;
   std::vector<std::string> excludeSourcePaths;
   std::vector<int32_t> excludeThreads;
-  bool detailedJson = false;
-
-  size_t rotateSizeMb = 0;
-  size_t rotateBackups = 0;
-  bool strictMode = false;
-
   // Iteration 1 Extension
   size_t maxErrors = 0; // 0 = unlimited
   std::vector<std::string> includeTypes;
   std::vector<std::string> includeFunctions;
   std::vector<std::string> excludeFunctions;
+};
+
+struct RotationConfig {
+  size_t rotateSizeMb = 0;
+  size_t rotateBackups = 0;
+};
+
+struct Options {
+  int depth = DEFAULT_DEPTH;
+  bool trim = true;
+  bool scrubRaw = true; // Renamed from scrub_raw
+  bool streamMode = false;
+  bool showProgress = false;
+  bool monitorMemory = false; // Renamed from monitor_memory
+  std::vector<std::string> markers;
+  std::string filename;
+  std::string outputFile;
+  bool jsonOutput = false;
+  bool jsonArray = false; // Iteration 2
+  bool useStdin = false;  // Renamed from use_stdin
+  bool detailedJson = false;
   bool detailedStats = false;
+  bool strictMode = false;
+
+  // Nested Configs
+  FilterConfig filter;
+  RotationConfig rotation;
+
   /**
    * @brief Validates the configuration.
    * @throws std::runtime_error if invalid.

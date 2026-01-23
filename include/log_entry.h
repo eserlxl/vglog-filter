@@ -85,4 +85,21 @@ struct LogEntry {
       return funcMatch && locMatch;
     });
   }
+
+  // Iteration 2 Extensions
+  [[nodiscard]] bool involvesSourceFile(std::string_view filename) const {
+    return hasFrameMatching("", filename);
+  }
+
+  [[nodiscard]] std::vector<std::string> getUniqueFiles() const {
+    std::vector<std::string> files;
+    for (const auto& frame : stackFrames) {
+      if (!frame.location.empty()) {
+        // extract filename from location if needed, but location usually is "file:line"
+        // for now just return the location string
+        files.push_back(frame.location);
+      }
+    }
+    return files;
+  }
 };

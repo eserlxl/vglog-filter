@@ -32,7 +32,7 @@ bool test_has_frame_predicate() {
 bool test_max_errors() {
   Options opt;
   opt.trim = false;
-  opt.maxErrors = 2;
+  opt.filter.maxErrors = 2;
   LogProcessor processor(opt);
 
   std::string input;
@@ -54,7 +54,7 @@ bool test_max_errors() {
 bool test_include_types() {
   Options opt;
   opt.trim = false;
-  opt.includeTypes.push_back("Invalid read");
+  opt.filter.includeTypes.push_back("Invalid read");
   LogProcessor processor(opt);
 
   // Use LogProcessor::processLines for simplified testing

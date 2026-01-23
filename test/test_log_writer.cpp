@@ -80,8 +80,8 @@ bool test_writer_rotation() {
 
   Options opt;
   opt.outputFile = filename;
-  opt.rotateSizeMb = 1; // 1MB
-  opt.rotateBackups = 1;
+  opt.rotation.rotateSizeMb = 1; // 1MB
+  opt.rotation.rotateBackups = 1;
 
   // Mock size check override or use small size?
   // Since rotateSizeMb is size_t mb, min is 1MB.

@@ -27,7 +27,7 @@ bool test_filter_types() {
   opt.jsonOutput = true;
   opt.trim = false;
   opt.outputFile = outputFile;
-  opt.excludeTypes.push_back("Process terminating");
+  opt.filter.excludeTypes.push_back("Process terminating");
 
   {
     LogProcessor processor(opt);
@@ -70,7 +70,7 @@ bool test_filter_stack_regex() {
   opt.jsonOutput = true;
   opt.trim = false;
   opt.outputFile = outputFile;
-  opt.excludeStackPatterns.push_back(".*libcursed.*");
+  opt.filter.excludeStackPatterns.push_back(".*libcursed.*");
 
   {
     LogProcessor processor(opt);
@@ -111,7 +111,7 @@ bool test_filter_tid() {
   opt.jsonOutput = true;
   opt.trim = false;
   opt.outputFile = outputFile;
-  opt.excludeThreads.push_back(2);
+  opt.filter.excludeThreads.push_back(2);
 
   {
     LogProcessor processor(opt);
@@ -147,7 +147,7 @@ bool test_filter_source_path() {
   opt.trim = false;
   // Note: scrub_raw is true by default, verifying parser handles scrubbed lines.
   opt.outputFile = outputFile;
-  opt.excludeSourcePaths.push_back("vendor/lib3rd");
+  opt.filter.excludeSourcePaths.push_back("vendor/lib3rd");
 
   {
     LogProcessor processor(opt);

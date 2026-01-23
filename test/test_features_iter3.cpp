@@ -14,7 +14,7 @@ namespace fs = std::filesystem;
 bool test_options_validation() {
   {
     Options opt;
-    opt.rotateBackups = 5;
+    opt.rotation.rotateBackups = 5;
     opt.outputFile = ""; // Invalid
     try {
       opt.validate();
@@ -28,7 +28,7 @@ bool test_options_validation() {
 
   {
     Options opt;
-    opt.rotateSizeMb = 10;
+    opt.rotation.rotateSizeMb = 10;
     opt.outputFile = ""; // Invalid
     try {
       opt.validate();
@@ -42,7 +42,7 @@ bool test_options_validation() {
 
   {
     Options opt;
-    opt.rotateBackups = 5;
+    opt.rotation.rotateBackups = 5;
     opt.outputFile = "out.log"; // Valid
     try {
       opt.validate();
@@ -101,7 +101,7 @@ bool test_structured_json() {
   opt.jsonOutput = true;
   opt.detailedJson = true;
   opt.trim = false;
-  opt.scrub_raw = false; // Disable scrubbing so we keep addresses and at/by prefixes
+  opt.scrubRaw = false; // Disable scrubbing so we keep addresses and at/by prefixes
 
   {
     LogProcessor p(opt);

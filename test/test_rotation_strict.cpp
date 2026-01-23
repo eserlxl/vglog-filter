@@ -28,11 +28,11 @@ void test_rotation() {
   Options opt;
   opt.outputFile = out_base;
   opt.trim = false;
-  opt.rotateSizeMb = 1; // 1 MB
-  opt.rotateBackups = 1;
+  opt.rotation.rotateSizeMb = 1; // 1 MB
+  opt.rotation.rotateBackups = 1;
 
   // We can't easily test 1MB limit without writing 1MB.
-  // But we can hack: LogProcessor logic uses opt.rotateSizeMb.
+  // But we can hack: LogProcessor logic uses opt.rotation.rotateSizeMb.
   // If we can modify the check...
   // Or we just write 1.1 MB. 1 MB is small enough.
 

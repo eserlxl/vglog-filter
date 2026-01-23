@@ -184,6 +184,7 @@ add_library(vglog-filter-lib
   src/file_utils.cpp
   src/json_utils.cpp
   src/log_processor.cpp
+  src/log_filter.cpp
   src/path_validation.cpp
   src/canonicalization.cpp
   src/log_parser.cpp
@@ -293,6 +294,7 @@ if (BUILD_TESTING)
   add_test_exe(test_cli_invocations   "test/test_cli_invocations.cpp")
   add_test_exe(test_features_iter2    "test/test_features_iter2.cpp")
   add_test_exe(test_features_iter3    "test/test_features_iter3.cpp")
+  add_test_exe(test_json_modes        "test/test_json_modes.cpp")
 
   # Convenience target to run tests with nice output
   add_custom_target(run-tests

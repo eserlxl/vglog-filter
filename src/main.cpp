@@ -46,7 +46,8 @@ enum {
   OPT_INCLUDE_TYPE,
   OPT_INCLUDE_FUNCTION,
   OPT_EXCLUDE_FUNCTION,
-  OPT_DETAILED_STATS
+  OPT_DETAILED_STATS,
+  OPT_JSON_ARRAY // Iteration 2
 };
 
 // getopt_long table
@@ -74,6 +75,7 @@ constinit option LONG_OPTS[] = {
     {"include-function", required_argument, nullptr, OPT_INCLUDE_FUNCTION},
     {"exclude-function", required_argument, nullptr, OPT_EXCLUDE_FUNCTION},
     {"detailed-stats", no_argument, nullptr, OPT_DETAILED_STATS},
+    {"json-array", no_argument, nullptr, OPT_JSON_ARRAY},
     {nullptr, 0, nullptr, 0}};
 
 inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
@@ -143,7 +145,7 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
         opt.trim = false;
         break;
       case 'v':
-        opt.scrub_raw = false;
+        opt.scrubRaw = false;
         break;
       case 'j':
         opt.jsonOutput = true;
@@ -165,7 +167,7 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
         opt.showProgress = true;
         break;
       case 'M':
-        opt.monitor_memory = true;
+        opt.monitorMemory = true;
         break;
       case 'V':
         std::fprintf(stdout, "vglog-filter version %.*s\n", static_cast<int>(VERSION_STRING.size()),
@@ -176,10 +178,7 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
         return std::nullopt;
       case 'e':
         if (optarg && *optarg) {
-          opt.excludeTypes.emplace_back(optarg);
-        }
-        if (optarg && *optarg) {
-          opt.excludeTypes.emplace_back(optarg);
+          opt.filter.excludeTypes.emplace_back(optarg);
         }
         break;
 
@@ -193,28 +192,32 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
         break;
       case OPT_EXCLUDE_STACK:
         if (optarg && *optarg) {
-          opt.excludeStackPatterns.emplace_back(optarg);
+          opt.filter.excludeStackPatterns.emplace_back(optarg);
         }
         break;
       case OPT_MAX_ERRORS:
-        opt.maxErrors = static_cast<size_t>(
+        opt.filter.maxErrors = static_cast<size_t>(
             parse_nonneg_int(optarg ? std::string_view{optarg} : std::string_view{},
                              std::numeric_limits<int>::max()));
         break;
       case OPT_INCLUDE_TYPE:
         if (optarg && *optarg) {
-          opt.includeTypes.emplace_back(optarg);
+          opt.filter.includeTypes.emplace_back(optarg);
         }
         break;
       case OPT_INCLUDE_FUNCTION:
         if (optarg && *optarg) {
-          opt.includeFunctions.emplace_back(optarg);
+          opt.filter.includeFunctions.emplace_back(optarg);
         }
         break;
       case OPT_EXCLUDE_FUNCTION:
         if (optarg && *optarg) {
-          opt.excludeFunctions.emplace_back(optarg);
+          opt.filter.excludeFunctions.emplace_back(optarg);
         }
+        break;
+      case OPT_JSON_ARRAY:
+        opt.jsonArray = true;
+        opt.jsonOutput = true; // Implies JSON output
         break;
       default:
         usage(argv[0]);
@@ -231,7 +234,7 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
 
 void setup_input_source(Options& opt, int argc, char* argv[]) {
   if (optind >= argc) {
-    opt.use_stdin = true;
+    opt.useStdin = true;
     opt.filename = std::string{STDIN_SENTINEL};
   } else {
     const char* arg = argv[optind];
@@ -240,7 +243,7 @@ void setup_input_source(Options& opt, int argc, char* argv[]) {
 
     const std::string_view name{arg};
     if (name == STDIN_SENTINEL) {
-      opt.use_stdin = true;
+      opt.useStdin = true;
       opt.filename = std::string{STDIN_SENTINEL};
     } else {
       // Prefer string-based sanitization first; canonicalization happens in file helpers.
@@ -250,22 +253,22 @@ void setup_input_source(Options& opt, int argc, char* argv[]) {
 
   // Auto-detect streaming when not explicitly requested
   if (!opt.streamMode) {
-    opt.streamMode = opt.use_stdin ? true : is_large_file(opt.filename);
-    if (opt.streamMode && !opt.use_stdin) {
+    opt.streamMode = opt.useStdin ? true : is_large_file(opt.filename);
+    if (opt.streamMode && !opt.useStdin) {
       std::fputs("Info: Large file detected, using stream processing mode\n", stderr);
     }
   }
 }
 
 void process_input(const Options& opt) {
-  if (opt.monitor_memory) {
+  if (opt.monitorMemory) {
     report_memory_usage("starting processing", opt.filename);
   }
 
   LogProcessor processor(opt);
 
   if (opt.streamMode) {
-    if (opt.use_stdin) {
+    if (opt.useStdin) {
       processor.processStreamCFile(stdin);
     } else {
       process_file_stream(opt.filename, opt);
@@ -279,11 +282,11 @@ void process_input(const Options& opt) {
     processor.processLines(lines);
   }
 
-  if (opt.monitor_memory) {
+  if (opt.monitorMemory) {
     report_memory_usage("completed processing", opt.filename);
   }
 
-  if (opt.showProgress || opt.monitor_memory) {
+  if (opt.showProgress || opt.monitorMemory) {
     processor.printStats(stderr);
   }
 }

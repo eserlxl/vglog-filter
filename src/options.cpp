@@ -77,10 +77,10 @@ void usage(std::string_view prog) {
 }
 
 void Options::validate() const {
-  if (rotateBackups > 0 && outputFile.empty()) {
+  if (rotation.rotateBackups > 0 && outputFile.empty()) {
     throw std::runtime_error("Rotation requires output file (-o/--output)");
   }
-  if (rotateSizeMb > 0 && outputFile.empty()) {
+  if (rotation.rotateSizeMb > 0 && outputFile.empty()) {
     throw std::runtime_error("Rotation size requires output file (-o/--output)");
   }
 }

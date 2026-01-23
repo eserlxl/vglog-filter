@@ -22,9 +22,9 @@ bool test_rotation() {
 
   Options opt;
   opt.outputFile = base_name;
-  opt.rotateSizeMb = 1;
-  opt.rotateBackups = 2;
-  opt.scrub_raw = false; // Disable scrubbing
+  opt.rotation.rotateSizeMb = 1;
+  opt.rotation.rotateBackups = 2;
+  opt.scrubRaw = false; // Disable scrubbing
 
   {
     LogProcessor p(opt);
@@ -82,7 +82,7 @@ bool test_regex_filtering() {
   Options opt;
   opt.trim = false; // Disable trim so we don't need markers
   // Filter out any stack frame containing "crypto"
-  opt.excludeStackPatterns.push_back(".*crypto.*");
+  opt.filter.excludeStackPatterns.push_back(".*crypto.*");
 
   LogProcessor p(opt);
 
