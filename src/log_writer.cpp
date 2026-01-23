@@ -71,7 +71,7 @@ struct LogWriter::Impl {
     std::fwrite(data, 1, size, out_fp);
   }
 
-  void format_json(const LogEntry& entry, std::string& buffer) {
+  void format_json(const LogEntry& entry, std::string& buffer) const {
     buffer = "{\"type\":\"record\"";
     buffer += ",\"raw\":\"" + json_utils::escape_string(entry.rawContent) + "\"";
     buffer += ",\"signature\":\"" + json_utils::escape_string(entry.signature) + "\"";
@@ -94,6 +94,36 @@ struct LogWriter::Impl {
           buffer += "\"" + json_utils::escape_string(entry.stackTrace[i]) + "\"";
         }
         buffer += "]";
+
+        // Structured Frames
+        if (!entry.stackFrames.empty()) {
+          buffer += ",\"frames\":[";
+          bool firstFrame = true;
+          for (const auto& frame : entry.stackFrames) {
+            if (!firstFrame)
+              buffer += ",";
+            buffer += "{";
+            bool firstField = true;
+            if (!frame.address.empty()) {
+              buffer += "\"addr\":\"" + json_utils::escape_string(frame.address) + "\"";
+              firstField = false;
+            }
+            if (!frame.function.empty()) {
+              if (!firstField)
+                buffer += ",";
+              buffer += "\"func\":\"" + json_utils::escape_string(frame.function) + "\"";
+              firstField = false;
+            }
+            if (!frame.location.empty()) {
+              if (!firstField)
+                buffer += ",";
+              buffer += "\"loc\":\"" + json_utils::escape_string(frame.location) + "\"";
+            }
+            buffer += "}";
+            firstFrame = false;
+          }
+          buffer += "]";
+        }
       }
     }
     buffer += "}\n";
