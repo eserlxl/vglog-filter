@@ -1,26 +1,28 @@
 # Codebase Feature Verification (Iteration 2)
 
-## 1. Automated Test Results
-- **Suite Status**: PASS
-- **Total Tests**: 19
-- **New Tests**: 
-  - `test_json_modes`: PASSED. Confirms correct formatting for both JSON Lines and JSON Array modes.
+## Build Status
+- **Build Command**: `cmake --build build > build/build.log 2>&1`
+- **Modules Built**: `vglog-filter`, `test_options_builder`, `test_log_writer`.
+- **Outcome**: Success (Exit Code 0).
+- **Warnings**: None new. Existing strict mode warnings (magic numbers, case style) are tracked for Iteration 3.
 
-## 2. Feature Verification
-- **JSON Array**:
-  - **Contract**: Starts with `[`, ends with `]`, comma separated. Correct.
-  - **State**: `LogWriter::Impl` correctly tracks `isFirstEntry` to manage commas.
-  - **Rotation**: `rotate_log` closes current array with `]` and starts new one with `[`. This is a critical correctness detail that was implemented and verified.
-- **LogEntry API**:
-  - `involvesSourceFile`: Used in `LogFilter` successfully.
-  - `hasFrameMatching`: Used in `LogFilter` successfully.
+## Test Results
+- **Command**: `ctest --test-dir build --output-on-failure`
+- **Total Tests**: 20
+- **Passed**: 20
+- **Failed**: 0
+- **Duration**: ~0.26s
 
-## 3. Correctness Assessment
-- **Memory Safety**: `LogWriter` buffering is minimal (strings). `LogEntry` methods use `std::string_view` where possible for efficiency.
-- **Concurrency**: `LogWriter` is not thread-safe (by design, intended for serial use from `LogProcessor`), but `LogEntry` is const-correct.
+### Feature Verification
+| Feature | Test Case | Result |
+| :--- | :--- | :--- |
+| **OptionsBuilder** | `test_options_builder::test_builder_basic` | **PASS** |
+| **CLI Refactoring** | `test_cli_options` (Integration) | **PASS** |
+| **JSON Timestamp** | `test_log_writer::test_writer_json` | **PASS** |
 
-## 4. Risks/Observations
-- **Large Arrays**: Loading a huge JSON array file into memory (in a consumer) might suck. This is why strict JSON Array mode is sometimes discouraged for logs, but since it was requested/audit-identified, providing it as an *option* is correct. The default remains streaming-friendly.
+## Manual Verification Coverage
+- **Integration**: The `test_cli_options` simulates real user invocations. Since it passes after refactoring `main.cpp` to `cli_parser.cpp`, the refactor is correct.
+- **API**: `OptionsBuilder` tests confirm the fluent API works as designed.
 
-## 5. Conclusion
-Iteration 2 features are implemented and verified. The codebase is now more robust and user-friendly.
+## Known Issues / TODOs
+- **Lint Warnings**: Many "Invalid case style" and "magic number" lints remain. These are targeted for Iteration 3 cleanup.

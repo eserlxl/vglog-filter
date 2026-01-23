@@ -1,36 +1,32 @@
 # Codebase Feature Audit (Iteration 1)
 
-## 1. Existing Capabilities (Under-exposed or Incomplete)
-- **Options Management**: The `Options` struct is a flat collection of 20+ fields, mixing I/O, filtering, and rotation logic.
-- **Filtering Logic**: Implemented directly inside `LogProcessor::shouldKeepEntry`. Use of `std::regex` inside the hot path (for each entry) is functional but coupled.
-- **Statistics**: `LogStats` collects data but `LogWriter` decides how to print it. Separation is slightly blurry.
-- **LogParser**: Currently just a set of static methods. Good for now, but `LogParser::parseStackFrame` returns `std::optional<std::string>`, missing the opportunity to return structured data directly in all cases (though `parseFrameStructured` exists).
+## Existing Capabilities (Under-Exposed or Incomplete)
+1.  **Thread Filtering**: `excludeThreads` exists, but there is no `includeThreads`. This makes "isolate thread X" workflows difficult.
+2.  **PID Filtering**: `LogEntry` has `pid`, but `FilterConfig` offers no way to filter by PID (neither include nor exclude).
+3.  **Timestamp Awareness**: The codebase ignores timestamps in Valgrind output (`--time-stamp=yes`), losing critical ordering/context vs other system logs.
+4.  **Structured Stats**: `LogStats` collects error counts by PID and TID, but the CLI only has a generic `--detailed-stats` flag which may not be fully granular in JSON mode.
 
-## 2. Missing Features Logically Implied by Current Design
-- **Structured Configuration**: `Options` should be nested (e.g., `FilterConfig`, `RotationConfig`).
-- **Encapsulated Filter Engine**: Filtering is a core domain concept that deserves its own class (`LogFilter`), separate from the "Processor" (which should focus on the loop/pipeline).
-- **Dependency Injection**: `LogProcessor` creates its own `LogWriter`. It should accept an `ILogWriter` or `LogWriter` instance/factory to allow better testing and flexibility.
-- **Standard Layout**: The codebase mixes `snake_case` and `camelCase`.
+## Missing Features Logically Implied by Current Design
+1.  **Symmetric Filtering**: If we can exclude threads, we should be able to include them. If we have PIDs, we should be able to filter them.
+2.  **Primary Blame Frame**: Users generally care about the "first frame in my code". `LogEntry` parses frames but doesn't offer a helper to find the "blame" frame (first non-library frame, or first frame with line number).
+3.  **Time Parsing**: `LogEntry` structure implies a faithful structured representation of the log, yet omits the timestamp field common in production runs.
 
-## 3. High-Risk Correctness or Safety Issues
-- **Manual String Parsing**: `LogProcessor::process_line` relies on manual character loops and `line[i]` access. While likely safe due to bounds checks, it's brittle.
-- **Regex Performance**: Re-evaluating `std::regex` (even if compiled) for every frame of every entry in a large log file could be slow. `Options` stores strings, `LogProcessor` compiles them in ctor.
+## High-Risk Correctness or Safety Issues
+1.  **Thread Safety**: `LogProcessor` is explicitly non-thread-safe. While acceptable for a CLI tool, this limits library usage.
+2.  **Parser Strictness**: `LogParser::parseHeader` uses "relaxed" checks. This might misidentify content as headers in mixed streams.
+3.  **Memory Limits**: `MAX_BLOCK_SIZE` is 10MB. Large monolithic blocks (e.g. from infinite recursion output) could trigger this, but the error message handling is basic exception throwing.
 
-## 4. API Usability Gaps and Misuse Risks
-- **Naming Conventions**: Major violation of the User's "camelCase" rule.
-  - `scrub_raw` -> `scrubRaw`
-  - `use_stdin` -> `useStdin`
-  - `process_line` -> `processLine`
-  - `matches_vg_line` -> `matchesVgLine`
-- **Globals/Constants**: `DEFAULT_MARKER` is a global string view. `MAX_LINE_LENGTH` is `constinit`.
+## API Usability Gaps
+1.  **Configuration Construction**: `Options` is a large POD struct. Constructing it in tests or library usage is verbose. Builder pattern or fluent helpers would be better (Iteration 2 candidate).
+2.  **LogEntry Inspection**: `hasFrameMatching` is good, but `getPrimaryFrame` is better for reporting.
 
-## 5. Missing Tests Blocking Safe Feature Expansion
-- **Filter Combinations**: Need to verify that `includeTypes` AND `excludeFunctions` work together as expected (currently logic suggests `include` checks first).
-- **JSON Structure**: Need to ensure `detailedJson` output is valid JSON (tests exist but should be robust).
+## Missing Tests
+1.  **Timestamp Parsing**: No tests for timestamped logs.
+2.  **Complex Filter Combinations**: Need to verify `includeTypes` AND `excludeFunctions` behavior logic (AND vs OR vs Precedence).
 
-## 6. Areas That Must Remain Unchanged
-- **Valgrind Compatibility**: The core parsing logic for `==PID==` must not break.
-- **Performance**: Avoid adding heap allocations in the hot loop (`process_line`).
+## Areas Maintaining Status Quo
+- **File I/O**: `std::istream` and `FILE*` dual support is good, efficient enough. No need to change to `mmap` or similar unless performance issues arise.
+- **Regex Backend**: `std::regex` is used. Do not switch to `ctre` or `re2` unless performance is proven bottleneck (Iteration 2 optimization if needed).
 
-## 7. Changes Since Last Iteration
-- N/A (Iteration 1).
+## Changes Since Last Iteration
+(N/A - This is Iteration 1)

@@ -1,69 +1,57 @@
 # Codebase Feature Design (Iteration 2)
 
-## 1. Proposed New / Extended APIs
+## 1. Options Builder (Usability)
 
-### A. LogEntry Enhancements (`include/log_entry.h`)
-Transform `LogEntry` from a POD struct into a rich class (or struct with methods).
-
-```cpp
-struct LogEntry {
-  // ... existing fields ...
-
-  // NEW Helpers
-  [[nodiscard]] bool hasFrameMatching(const std::string& functionName) const;
-  [[nodiscard]] bool hasFrameMatching(const std::regex& pattern) const;
-  [[nodiscard]] bool involvesSourceFile(std::string_view filename) const;
-  
-  // Data extraction
-  [[nodiscard]] std::vector<std::string> getUniqueFiles() const;
-  // [[nodiscard]] std::string toJson() const; // Helper to self-serialize?
-};
-```
-
-### B. LogWriter JSON Modes (`include/log_writer.h`)
-Update `LogWriter` to handle stateful writing for JSON Arrays.
+**Header**: `include/options_builder.h`
 
 ```cpp
-class LogWriter {
+#pragma once
+#include "options.h"
+
+class OptionsBuilder {
 public:
-  enum class OutputFormat {
-    Text,
-    JsonLines,
-    JsonArray
-  };
-  
-  // ...
+  OptionsBuilder() = default;
+
+  OptionsBuilder& setJsonOutput(bool enabled);
+  OptionsBuilder& setDetailedJson(bool enabled);
+  OptionsBuilder& setOutputFile(const std::string& path);
+  OptionsBuilder& addExcludePid(int pid);
+  OptionsBuilder& addIncludePid(int pid);
+  OptionsBuilder& addIncludeThread(int tid);
+  // ... other methods ...
+
+  Options build() const;
+
 private:
-  bool isFirstEntry = true;
-  OutputFormat format = OutputFormat::Text;
-  
-  void writeJsonArrayItem(const LogEntry& entry);
-  void writeJsonLine(const LogEntry& entry);
-  
-  // Destructor must close array if needed
-  ~LogWriter(); 
+  Options opts;
 };
 ```
 
-### C. Options Update (`include/options.h`)
+## 2. CLI Refactoring (Refactoring)
+
+**Header**: `include/cli_parser.h`
+
 ```cpp
-struct Options {
-  // ...
-  bool jsonArray = false; // New flag
-  // ...
-};
+#pragma once
+#include "options.h"
+#include <optional>
+
+namespace cli {
+  std::optional<Options> parse_args(int argc, char* argv[]);
+}
 ```
 
-## 2. Refactoring `LogFilter`
-Update `LogFilter::shouldKeep` to use `entry.hasFrameMatching(...)` to simplify the implementation.
+**Implementation**: `src/cli_parser.cpp`
+- Move `parse_command_line` logic from `main.cpp` to here.
+- Clean up `main.cpp` to just call `cli::parse_args`.
 
-## 3. Behavioral Contracts
-- **JSON Array**:
-  - Must start with `[` on initialization (or first write?). Initialization is safer.
-  - Must write `,` between items.
-  - Must write `]` on destruction or explicit `close()`.
-  - If no entries, result should be `[]`.
+## 3. JSON Output Updates (Consistency)
 
-## 4. Tests
-- `test_json_modes.cpp`: Verify OutputFormat::JsonArray produces valid JSON.
-- `test_log_entry_methods.cpp`: Verify regex/string matching helpers.
+**File**: `src/log_writer.cpp`
+- Update `format_json` to serialization `timestamp` field if present.
+- Use `json_utils::escape_string`.
+
+## Validation Plan
+- **Unit Test**: `test_cli_options.cpp` (refactored to use `cli_parser`).
+- **Unit Test**: `test_log_writer.cpp` (verify timestamp field in JSON).
+- **Unit Test**: `test_options_builder.cpp` (new test).
