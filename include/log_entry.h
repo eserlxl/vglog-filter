@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -28,4 +29,7 @@ struct LogEntry {
 
   /// Source line number where this block started in the input stream
   size_t line_number = 0;
+
+  /// Thread ID if present (e.g. from "Thread 1:")
+  std::optional<int32_t> tid;
 };

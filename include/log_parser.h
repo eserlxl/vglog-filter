@@ -1,6 +1,7 @@
 #pragma once
 
 #include "log_entry.h"
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -8,13 +9,19 @@
 
 class LogParser {
 public:
+  struct HeaderResult {
+    std::string pid;
+    std::string error_type;
+    std::optional<int32_t> tid;
+  };
+
   /**
-   * @brief Parses a header line to extract PID and Error Type.
+   * @brief Parses a header line to extract PID, Error Type, and optional Thread ID.
    *
-   * @param line The line to parse (e.g. "==12345== Invalid read...")
-   * @return std::pair<pid, error_type> if successful, or std::nullopt.
+   * @param line The line to parse (e.g. "==12345== Thread 2: Invalid read...")
+   * @return HeaderResult if successful, or std::nullopt.
    */
-  static std::optional<std::pair<std::string, std::string>> parse_header(std::string_view line);
+  static std::optional<HeaderResult> parse_header(std::string_view line);
 
   /**
    * @brief Parses a stack frame line.

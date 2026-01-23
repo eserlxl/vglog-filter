@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -30,6 +31,7 @@ struct Options {
   bool use_stdin = false;
   std::vector<std::string> exclude_types;
   std::vector<std::string> exclude_stack_patterns;
+  std::vector<int32_t> exclude_threads;
   bool detailed_json = false;
 
   size_t rotate_size_mb = 0;

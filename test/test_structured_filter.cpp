@@ -107,10 +107,47 @@ bool test_filter_stack_regex() {
   return true;
 }
 
+bool test_filter_tid() {
+  std::string output_file = "test_filter_tid.json";
+  Options opt;
+  opt.json_output = true;
+  opt.trim = false;
+  opt.output_file = output_file;
+  opt.exclude_threads.push_back(2);
+
+  {
+    LogProcessor processor(opt);
+
+    std::string block1 = "==123== Thread 1: Invalid read\n==123==    at 0x400: main (test.c:10)\n";
+    std::string block2 = "==123== Thread 2: Invalid write\n==123==    at 0x500: bad (test.c:20)\n";
+
+    std::vector<std::string> lines;
+    std::stringstream ss(block1 + block2);
+    std::string line;
+    while (std::getline(ss, line))
+      lines.push_back(line);
+
+    processor.process_lines(lines);
+  }
+
+  int count = count_blocks_in_file(output_file);
+  TEST_ASSERT(count == 1, "Should filter out Thread 2");
+
+  std::ifstream f(output_file);
+  std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Thread 1");
+  TEST_ASSERT(content.find("Invalid write") == std::string::npos, "Should exclude Thread 2");
+
+  std::remove(output_file.c_str());
+  TEST_PASS("Thread filtering");
+  return true;
+}
+
 int main() {
   bool passed = true;
   passed &= test_filter_types();
   passed &= test_filter_stack_regex();
+  passed &= test_filter_tid();
 
   if (passed) {
     std::cout << "All structured filter tests passed\n";

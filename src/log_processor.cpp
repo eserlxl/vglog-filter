@@ -379,6 +379,17 @@ void LogProcessor::flush() {
     }
   }
 
+  // Thread Filter
+  if (entry.tid.has_value()) {
+    for (auto t : opt.exclude_threads) {
+      if (t == *entry.tid) {
+        stats.filtered_count++;
+        clear_current_state();
+        return;
+      }
+    }
+  }
+
   if (seen.insert(key).second) {
     stats.unique_blocks++;
     if (opt.stream_mode) {
@@ -440,8 +451,9 @@ LogEntry LogProcessor::parse_entry(const std::string& raw_block,
 
   auto header = LogParser::parse_header(first_line);
   if (header) {
-    entry.pid = std::move(header->first);
-    entry.error_type = std::move(header->second);
+    entry.pid = std::move(header->pid);
+    entry.error_type = std::move(header->error_type);
+    entry.tid = header->tid;
   } else {
     // Fallback
     entry.error_type = LogParser::remove_prefix(first_line);

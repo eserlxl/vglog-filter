@@ -82,6 +82,9 @@ struct LogWriter::Impl {
       if (!entry.pid.empty()) {
         buffer += ",\"pid\":\"" + json_utils::escape_string(entry.pid) + "\"";
       }
+      if (entry.tid.has_value()) {
+        buffer += ",\"tid\":" + std::to_string(*entry.tid);
+      }
       if (!entry.stack_trace.empty()) {
         buffer += ",\"stack_trace\":[";
         for (size_t i = 0; i < entry.stack_trace.size(); ++i) {

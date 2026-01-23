@@ -8,35 +8,62 @@ constexpr bool is_digit(char c) noexcept {
 }
 } // namespace
 
-std::optional<std::pair<std::string, std::string>> LogParser::parse_header(std::string_view line) {
-  if (line.size() < 2 || line[0] != '=' || line[1] != '=') {
-    return std::nullopt;
-  }
-  auto content = remove_prefix(line);
-  if (content.empty())
-    return std::nullopt;
+std::optional<LogParser::HeaderResult> LogParser::parse_header(std::string_view line) {
+  // Relaxed check: if it doesn't start with ==, assume it's just content
+  bool has_prefix = (line.size() >= 2 && line[0] == '=' && line[1] == '=');
 
-  // Extract PID from the original line if present
-  // Format: ==12345== Error Type...
+  std::string_view content_view = line;
   std::string pid;
-  if (line.size() >= 2 && line[0] == '=' && line[1] == '=') {
+
+  if (has_prefix) {
+    content_view = remove_prefix(line);
     size_t end_pid = line.find("==", 2);
     if (end_pid != std::string_view::npos) {
       pid = std::string(line.substr(2, end_pid - 2));
     }
   }
 
-  // Heuristic: Check if content looks like a known error start
-  // We don't strictly enforce "Invalid read" keys here to allow generic errors,
-  // but the caller might filter.
+  // Trim leading whitespace
+  while (!content_view.empty() && std::isspace(content_view.front())) {
+    content_view.remove_prefix(1);
+  }
+
+  if (content_view.empty())
+    return std::nullopt;
+
+  // Check for Thread ID (e.g., "Thread 2: ...")
+  std::optional<int32_t> tid;
+  std::string_view error_part = content_view;
+
+  if (content_view.starts_with("Thread ")) {
+    size_t pos = 7; // "Thread " length
+    size_t num_start = pos;
+    while (pos < content_view.size() && is_digit(content_view[pos])) {
+      pos++;
+    }
+    if (pos > num_start && pos < content_view.size() && content_view[pos] == ':') {
+      // Found "Thread N:"
+      std::string_view num_str = content_view.substr(num_start, pos - num_start);
+      try {
+        tid = std::stoi(std::string(num_str));
+        // Skip ": "
+        pos++;
+        if (pos < content_view.size() && content_view[pos] == ' ')
+          pos++;
+        error_part = content_view.substr(pos);
+      } catch (...) {
+        // Parse error, ignore tid
+      }
+    }
+  }
 
   // Clean trailing copy-paste artifacts if any
-  std::string error_type(content);
+  std::string error_type(error_part);
   while (!error_type.empty() && std::isspace(static_cast<unsigned char>(error_type.back()))) {
     error_type.pop_back();
   }
 
-  return std::make_pair(std::move(pid), std::move(error_type));
+  return HeaderResult{std::move(pid), std::move(error_type), tid};
 }
 
 std::optional<std::string> LogParser::parse_stack_frame(std::string_view line) {
