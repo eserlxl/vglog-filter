@@ -291,6 +291,7 @@ if (BUILD_TESTING)
   add_test_exe(test_log_writer        "test/test_log_writer.cpp")
   add_test_exe(test_new_features_iter1 "test/test_new_features_iter1.cpp")
   add_test_exe(test_cli_invocations   "test/test_cli_invocations.cpp")
+  add_test_exe(test_features_iter2    "test/test_features_iter2.cpp")
 
   # Convenience target to run tests with nice output
   add_custom_target(run-tests

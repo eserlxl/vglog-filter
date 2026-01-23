@@ -35,6 +35,8 @@ struct LogStats {
   std::size_t filteredCount = 0;
   std::size_t parseErrors = 0;
   std::unordered_map<std::string, std::size_t> errorCounts;
+  std::unordered_map<int32_t, std::size_t> errorCountsByPid;
+  std::unordered_map<int32_t, std::size_t> errorCountsByTid;
 };
 
 /**
@@ -149,4 +151,5 @@ private:
   std::string q_pattern;
 
   std::vector<std::regex> stack_regexes;
+  std::string pendingPid;
 };

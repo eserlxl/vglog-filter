@@ -323,6 +323,15 @@ void LogProcessor::process_line(std::string_view line) {
     }
   }
 
+  // Extract PID from line before it gets stripped
+  std::string currentLinePid;
+  if (line.size() >= 4 && line[0] == '=' && line[1] == '=') {
+    size_t end_pid = line.find("==", 2);
+    if (end_pid != std::string_view::npos) {
+      currentLinePid = std::string(line.substr(2, end_pid - 2));
+    }
+  }
+
   if (!matches_vg_line(line))
     return;
 
@@ -330,8 +339,19 @@ void LogProcessor::process_line(std::string_view line) {
 
   if (matches_start_pattern(processed)) {
     flush();
+    // After flush, we are starting a new block (potentially)
+    // Update pendingPid with the PID from the current line that started this new block
+    if (raw.empty()) {
+      pendingPid = currentLinePid;
+    }
+
     if (matches_bytes_head(processed))
       return;
+  }
+
+  // If we are starting a new block (and didn't flush above, or flushed and empty), capture PID
+  if (raw.empty() && pendingPid.empty() && !currentLinePid.empty()) {
+    pendingPid = currentLinePid;
   }
 
   auto rawLine = process_raw_line(processed);
@@ -363,6 +383,10 @@ void LogProcessor::flush() {
   const std::string key = generate_signature_key();
   LogEntry entry = parse_entry(raw, key);
 
+  if (entry.pid.empty()) {
+    entry.pid = pendingPid;
+  }
+
   if (opt.strictMode && (entry.pid.empty() || entry.errorType.empty())) {
     stats.parseErrors++;
     throw std::runtime_error("Strict mode: Failed to parse valid Valgrind entry from block");
@@ -378,6 +402,16 @@ void LogProcessor::flush() {
   if (seen.insert(key).second) {
     stats.uniqueBlocks++;
     stats.errorCounts[entry.errorType]++;
+    if (!entry.pid.empty()) {
+      try {
+        stats.errorCountsByPid[std::stoi(entry.pid)]++;
+      } catch (...) {
+        // Ignore non-numeric PID if any
+      }
+    }
+    if (entry.tid.has_value()) {
+      stats.errorCountsByTid[*entry.tid]++;
+    }
     if (opt.streamMode) {
       validate_pending_blocks_count(pending_blocks.size());
       pending_blocks.emplace_back(std::move(entry));
@@ -482,6 +516,7 @@ void LogProcessor::clear_current_state() noexcept {
   raw.clear();
   sig.clear();
   sigLines.clear();
+  pendingPid.clear();
 }
 
 void LogProcessor::reset_epoch() noexcept {

@@ -151,6 +151,31 @@ void LogWriter::writeStats(const struct LogStats& stats) {
       }
       json += "}";
     }
+
+    if (pImpl->opt.detailedStats) {
+      if (!stats.errorCountsByPid.empty()) {
+        json += ",\"error_breakdown_by_pid\":{";
+        bool first = true;
+        for (const auto& [pid, count] : stats.errorCountsByPid) {
+          if (!first)
+            json += ",";
+          json += "\"" + std::to_string(pid) + "\":" + std::to_string(count);
+          first = false;
+        }
+        json += "}";
+      }
+      if (!stats.errorCountsByTid.empty()) {
+        json += ",\"error_breakdown_by_tid\":{";
+        bool first = true;
+        for (const auto& [tid, count] : stats.errorCountsByTid) {
+          if (!first)
+            json += ",";
+          json += "\"" + std::to_string(tid) + "\":" + std::to_string(count);
+          first = false;
+        }
+        json += "}";
+      }
+    }
     json += "}\n";
     pImpl->write_data(json.data(), json.size());
   } else {
@@ -167,6 +192,20 @@ void LogWriter::writeStats(const struct LogStats& stats) {
         std::fprintf(pImpl->out_fp, "\nError Breakdown:\n");
         for (const auto& [type, count] : stats.errorCounts) {
           std::fprintf(pImpl->out_fp, "  %-40s : %zu\n", type.c_str(), count);
+        }
+      }
+      if (pImpl->opt.detailedStats) {
+        if (!stats.errorCountsByPid.empty()) {
+          std::fprintf(pImpl->out_fp, "\nError Breakdown by PID:\n");
+          for (const auto& [pid, count] : stats.errorCountsByPid) {
+            std::fprintf(pImpl->out_fp, "  PID %-36d : %zu\n", pid, count);
+          }
+        }
+        if (!stats.errorCountsByTid.empty()) {
+          std::fprintf(pImpl->out_fp, "\nError Breakdown by TID:\n");
+          for (const auto& [tid, count] : stats.errorCountsByTid) {
+            std::fprintf(pImpl->out_fp, "  TID %-36d : %zu\n", tid, count);
+          }
         }
       }
       if (pImpl->opt.strictMode) {

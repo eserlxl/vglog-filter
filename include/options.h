@@ -44,6 +44,7 @@ struct Options {
   std::vector<std::string> includeTypes;
   std::vector<std::string> includeFunctions;
   std::vector<std::string> excludeFunctions;
+  bool detailedStats = false;
   /**
    * @brief Validates the configuration.
    * @throws std::runtime_error if invalid.

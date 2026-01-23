@@ -45,7 +45,8 @@ enum {
   OPT_MAX_ERRORS,
   OPT_INCLUDE_TYPE,
   OPT_INCLUDE_FUNCTION,
-  OPT_EXCLUDE_FUNCTION
+  OPT_EXCLUDE_FUNCTION,
+  OPT_DETAILED_STATS
 };
 
 // getopt_long table
@@ -65,7 +66,6 @@ constinit option LONG_OPTS[] = {
     {"exclude-type", required_argument, nullptr, 'e'},
     {"rotate-size-mb", required_argument, nullptr, OPT_ROTATE_SIZE},
     {"rotate-backups", required_argument, nullptr, OPT_ROTATE_BACKUPS},
-    {"rotate-backups", required_argument, nullptr, OPT_ROTATE_BACKUPS},
     {"strict", no_argument, nullptr, OPT_STRICT},
     {"detailed-json", no_argument, nullptr, OPT_DETAILED_JSON},
     {"exclude-stack", required_argument, nullptr, OPT_EXCLUDE_STACK},
@@ -73,6 +73,7 @@ constinit option LONG_OPTS[] = {
     {"include-type", required_argument, nullptr, OPT_INCLUDE_TYPE},
     {"include-function", required_argument, nullptr, OPT_INCLUDE_FUNCTION},
     {"exclude-function", required_argument, nullptr, OPT_EXCLUDE_FUNCTION},
+    {"detailed-stats", no_argument, nullptr, OPT_DETAILED_STATS},
     {nullptr, 0, nullptr, 0}};
 
 inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
@@ -186,6 +187,9 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
         opt.detailedJson = true;
         // detailed-json implies json
         opt.jsonOutput = true;
+        break;
+      case OPT_DETAILED_STATS:
+        opt.detailedStats = true;
         break;
       case OPT_EXCLUDE_STACK:
         if (optarg && *optarg) {

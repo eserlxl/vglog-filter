@@ -26,12 +26,16 @@ void usage(std::string_view prog) {
              stdout);
   std::fputs("  -j, --json              Output JSON format.\n", stdout);
   std::fputs("  --detailed-json         Output detailed JSON with structured fields.\n", stdout);
+  std::fputs("  --detailed-stats        Output detailed statistics (PID/TID breakdown).\n", stdout);
   std::fprintf(stdout, "  -d N, --depth N         Signature depth (default: %d, 0 = unlimited).\n",
                DEFAULT_DEPTH);
   std::fprintf(stdout, "  -m S, --marker S        Marker string (default: \"%.*s\").\n",
                static_cast<int>(DEFAULT_MARKER.size()), DEFAULT_MARKER.data());
   std::fputs("  --max-errors N          Limit the number of error blocks output (default: 0 = "
              "unlimited).\n",
+             stdout);
+  std::fputs("  --rotate-size-mb N      Rotate output log after N MB (requires -o).\n", stdout);
+  std::fputs("  --rotate-backups N      Keep N backup files during rotation (requires -o).\n",
              stdout);
   std::fputs("  --include-type S        Include only errors with types containing S (can occur "
              "multiple times).\n",
@@ -40,6 +44,9 @@ void usage(std::string_view prog) {
              "occur multiple times).\n",
              stdout);
   std::fputs("  --exclude-function S    Exclude errors with stack frames containing S (can occur "
+             "multiple times).\n",
+             stdout);
+  std::fputs("  --exclude-stack S       Exclude errors where stack matches regex S (can occur "
              "multiple times).\n",
              stdout);
   std::fputs(

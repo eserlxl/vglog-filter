@@ -54,17 +54,35 @@ struct LogEntry {
    * @param locationPattern Substring to find in location/file (if non-empty)
    * @return true if both patterns (when provided) match in the SAME frame.
    */
-  [[nodiscard]] bool hasFrameMatching(std::string_view functionPattern,
-                                      std::string_view locationPattern = "") const {
+  /**
+   * @brief Checks if any stack frame satisfies the given predicate.
+   * @param predicate A callable that takes a const StackFrame& and returns bool.
+   * @return true if predicate returns true for any frame.
+   */
+  template <typename Predicate>
+  [[nodiscard]] bool hasFrame(Predicate predicate) const {
     for (const auto& frame : stackFrames) {
-      bool funcMatch =
-          functionPattern.empty() || frame.function.find(functionPattern) != std::string::npos;
-      bool locMatch =
-          locationPattern.empty() || frame.location.find(locationPattern) != std::string::npos;
-      if (funcMatch && locMatch) {
+      if (predicate(frame)) {
         return true;
       }
     }
     return false;
+  }
+
+  /**
+   * @brief Checks if any stack frame matches the given patterns.
+   * @param functionPattern Substring to find in function name (if non-empty)
+   * @param locationPattern Substring to find in location/file (if non-empty)
+   * @return true if both patterns (when provided) match in the SAME frame.
+   */
+  [[nodiscard]] bool hasFrameMatching(std::string_view functionPattern,
+                                      std::string_view locationPattern = "") const {
+    return hasFrame([&](const StackFrame& frame) {
+      bool funcMatch =
+          functionPattern.empty() || frame.function.find(functionPattern) != std::string::npos;
+      bool locMatch =
+          locationPattern.empty() || frame.location.find(locationPattern) != std::string::npos;
+      return funcMatch && locMatch;
+    });
   }
 };
