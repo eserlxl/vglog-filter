@@ -5,10 +5,56 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
 namespace fs = std::filesystem;
+
+bool test_options_validation() {
+  {
+    Options opt;
+    opt.rotateBackups = 5;
+    opt.outputFile = ""; // Invalid
+    try {
+      opt.validate();
+      std::cerr << "FAIL: validate() should throw when rotateBackups > 0 and outputFile is empty"
+                << std::endl;
+      return false;
+    } catch (const std::runtime_error& e) {
+      // Expected
+    }
+  }
+
+  {
+    Options opt;
+    opt.rotateSizeMb = 10;
+    opt.outputFile = ""; // Invalid
+    try {
+      opt.validate();
+      std::cerr << "FAIL: validate() should throw when rotateSizeMb > 0 and outputFile is empty"
+                << std::endl;
+      return false;
+    } catch (const std::runtime_error& e) {
+      // Expected
+    }
+  }
+
+  {
+    Options opt;
+    opt.rotateBackups = 5;
+    opt.outputFile = "out.log"; // Valid
+    try {
+      opt.validate();
+    } catch (const std::exception& e) {
+      std::cerr << "FAIL: validate() threw unexpected exception: " << e.what() << std::endl;
+      return false;
+    }
+  }
+
+  TEST_PASS("test_options_validation");
+  return true;
+}
 
 bool test_tid_parsing() {
   std::string line = "==100== Thread 2: Invalid read of size 4";
@@ -74,7 +120,13 @@ bool test_structured_json() {
   }
 
   std::ifstream ifs(base_name);
-  std::string content((std::istreambuf_iterator<char>(ifs)), (std::istreambuf_iterator<char>()));
+  if (!ifs) {
+    std::cerr << "FAIL: Cannot open output file" << std::endl;
+    return false;
+  }
+  std::stringstream buffer;
+  buffer << ifs.rdbuf();
+  std::string content = buffer.str();
 
   // Verify JSON content roughly (strings present)
   // We expect "frames" array
@@ -106,5 +158,6 @@ int main() {
   bool passed = true;
   passed &= test_tid_parsing();
   passed &= test_structured_json();
+  passed &= test_options_validation();
   return passed ? 0 : 1;
 }
