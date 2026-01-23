@@ -54,8 +54,7 @@ bool test_filter_types() {
   }
   TEST_ASSERT(count == 1, "Should filter out one block");
 
-  std::ifstream f(output_file);
-  std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  std::string content = read_file_to_string(output_file);
   TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Invalid read");
   TEST_ASSERT(content.find("Process terminating") == std::string::npos,
               "Should exclude Process terminating");
@@ -97,8 +96,7 @@ bool test_filter_stack_regex() {
   }
   TEST_ASSERT(count == 1, "Should filter out stack-matched block");
 
-  std::ifstream f(output_file);
-  std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  std::string content = read_file_to_string(output_file);
   TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Block 1");
   TEST_ASSERT(content.find("Invalid write") == std::string::npos, "Should exclude Block 2");
 
@@ -133,8 +131,7 @@ bool test_filter_tid() {
   int count = count_blocks_in_file(output_file);
   TEST_ASSERT(count == 1, "Should filter out Thread 2");
 
-  std::ifstream f(output_file);
-  std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  std::string content = read_file_to_string(output_file);
   TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Thread 1");
   TEST_ASSERT(content.find("Invalid write") == std::string::npos, "Should exclude Thread 2");
 
@@ -176,8 +173,7 @@ bool test_filter_source_path() {
   }
   TEST_ASSERT(count == 1, "Should filter out vendor path");
 
-  std::ifstream f(output_file);
-  std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  std::string content = read_file_to_string(output_file);
   TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Block 1");
   TEST_ASSERT(content.find("Invalid write") == std::string::npos, "Should exclude Block 2");
 

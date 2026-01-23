@@ -27,8 +27,7 @@ bool test_writer_basic() {
     writer.write_entry(entry);
   }
 
-  std::ifstream f(filename);
-  std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  std::string content = read_file_to_string(filename);
   TEST_ASSERT(content == "Raw Content Line\n", "Should write raw content with newline");
 
   fs::remove(filename);
@@ -57,8 +56,7 @@ bool test_writer_json() {
     writer.write_entry(entry);
   }
 
-  std::ifstream f(filename);
-  std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  std::string content = read_file_to_string(filename);
 
   // Simple check for JSON structure
   TEST_ASSERT(content.find("\"type\":\"record\"") != std::string::npos, "JSON type missing");
