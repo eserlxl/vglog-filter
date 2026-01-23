@@ -40,14 +40,14 @@ public:
    *
    * @param entry The log entry to write.
    */
-  void write_entry(const LogEntry& entry);
+  void writeEntry(const LogEntry& entry);
 
   /**
    * @brief Writes raw string content directly.
    *
    * @param content Raw data to write.
    */
-  void write_raw(const std::string& content);
+  void writeRaw(const std::string& content);
 
   /**
    * @brief Writes statistics block.

@@ -292,7 +292,7 @@ bool LogProcessor::should_report_progress(std::size_t bytes_processed,
 void LogProcessor::output_pending_blocks() {
   if (!opt.trim || marker_found) {
     for (const auto& b : pending_blocks) {
-      writer->write_entry(b);
+      writer->writeEntry(b);
     }
   }
 }
@@ -369,11 +369,30 @@ void LogProcessor::flush() {
   }
 
   // Filter check
+  if (!shouldKeepEntry(entry)) {
+    stats.filtered_count++;
+    clear_current_state();
+    return;
+  }
+
+  if (seen.insert(key).second) {
+    stats.unique_blocks++;
+    stats.error_counts[entry.error_type]++;
+    if (opt.stream_mode) {
+      validate_pending_blocks_count(pending_blocks.size());
+      pending_blocks.emplace_back(std::move(entry));
+    } else {
+      writer->writeEntry(entry);
+    }
+  }
+  clear_current_state();
+}
+
+bool LogProcessor::shouldKeepEntry(const LogEntry& entry) const {
+  // Exclude Types
   for (const auto& ex : opt.exclude_types) {
     if (entry.error_type.find(ex) != std::string::npos) {
-      stats.filtered_count++;
-      clear_current_state();
-      return;
+      return false;
     }
   }
 
@@ -382,9 +401,7 @@ void LogProcessor::flush() {
     for (const auto& re : stack_regexes) {
       for (const auto& frame : entry.stack_trace) {
         if (std::regex_search(frame, re)) {
-          stats.filtered_count++;
-          clear_current_state();
-          return;
+          return false;
         }
       }
     }
@@ -394,9 +411,7 @@ void LogProcessor::flush() {
   if (entry.tid.has_value()) {
     for (auto t : opt.exclude_threads) {
       if (t == *entry.tid) {
-        stats.filtered_count++;
-        clear_current_state();
-        return;
+        return false;
       }
     }
   }
@@ -406,26 +421,22 @@ void LogProcessor::flush() {
     for (const auto& frame : entry.stack_frames) {
       for (const auto& path : opt.exclude_source_paths) {
         if (frame.location.find(path) != std::string::npos) {
-          stats.filtered_count++;
-          clear_current_state();
-          return;
+          return false;
         }
       }
     }
   }
 
-  // Iteration 1 Extension: Function Name Exclusion
+  // Function Name Exclusion
   if (!opt.exclude_functions.empty()) {
     for (const auto& func : opt.exclude_functions) {
       if (entry.hasFrameMatching(func)) {
-        stats.filtered_count++;
-        clear_current_state();
-        return;
+        return false;
       }
     }
   }
 
-  // Iteration 1 Extension: Include-Only Logic
+  // Include-Only Logic
   bool includesActive = !opt.include_types.empty() || !opt.include_functions.empty();
   if (includesActive) {
     bool matched = false;
@@ -449,22 +460,11 @@ void LogProcessor::flush() {
     }
 
     if (!matched) {
-      stats.filtered_count++;
-      clear_current_state();
-      return;
+      return false;
     }
   }
 
-  if (seen.insert(key).second) {
-    stats.unique_blocks++;
-    if (opt.stream_mode) {
-      validate_pending_blocks_count(pending_blocks.size());
-      pending_blocks.emplace_back(std::move(entry));
-    } else {
-      writer->write_entry(entry);
-    }
-  }
-  clear_current_state();
+  return true;
 }
 
 std::string LogProcessor::generate_signature_key() const {

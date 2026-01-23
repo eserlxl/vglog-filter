@@ -107,7 +107,7 @@ LogWriter::~LogWriter() = default;
 LogWriter::LogWriter(LogWriter&&) noexcept = default;
 LogWriter& LogWriter::operator=(LogWriter&&) noexcept = default;
 
-void LogWriter::write_entry(const LogEntry& entry) {
+void LogWriter::writeEntry(const LogEntry& entry) {
   if (pImpl->opt.json_output) {
     std::string json;
     json.reserve(entry.raw_content.size() + 128); // heuristic
@@ -123,7 +123,7 @@ void LogWriter::write_entry(const LogEntry& entry) {
   }
 }
 
-void LogWriter::write_raw(const std::string& content) {
+void LogWriter::writeRaw(const std::string& content) {
   pImpl->write_data(content.data(), content.size());
 }
 
@@ -139,6 +139,18 @@ void LogWriter::writeStats(const struct LogStats& stats) {
     json += ",\"unique_blocks\":" + std::to_string(stats.unique_blocks);
     json += ",\"filtered_count\":" + std::to_string(stats.filtered_count);
     json += ",\"parse_errors\":" + std::to_string(stats.parse_errors);
+
+    if (!stats.error_counts.empty()) {
+      json += ",\"error_breakdown\":{";
+      bool first = true;
+      for (const auto& [type, count] : stats.error_counts) {
+        if (!first)
+          json += ",";
+        json += "\"" + json_utils::escape_string(type) + "\":" + std::to_string(count);
+        first = false;
+      }
+      json += "}";
+    }
     json += "}\n";
     pImpl->write_data(json.data(), json.size());
   } else {
@@ -151,6 +163,12 @@ void LogWriter::writeStats(const struct LogStats& stats) {
       std::fprintf(pImpl->out_fp, "Blocks found    : %zu\n", stats.blocks_found);
       std::fprintf(pImpl->out_fp, "Unique blocks   : %zu\n", stats.unique_blocks);
       std::fprintf(pImpl->out_fp, "Filtered blocks : %zu\n", stats.filtered_count);
+      if (!stats.error_counts.empty()) {
+        std::fprintf(pImpl->out_fp, "\nError Breakdown:\n");
+        for (const auto& [type, count] : stats.error_counts) {
+          std::fprintf(pImpl->out_fp, "  %-40s : %zu\n", type.c_str(), count);
+        }
+      }
       if (pImpl->opt.strict_mode) {
         std::fprintf(pImpl->out_fp, "Parse errors    : %zu\n", stats.parse_errors);
       }

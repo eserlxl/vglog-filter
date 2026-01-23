@@ -24,7 +24,7 @@ bool test_writer_basic() {
     LogWriter writer(opt);
     LogEntry entry;
     entry.raw_content = "Raw Content Line";
-    writer.write_entry(entry);
+    writer.writeEntry(entry);
   }
 
   std::string content = read_file_to_string(filename);
@@ -53,7 +53,7 @@ bool test_writer_json() {
     entry.error_type = "ErrType";
     entry.pid = "123";
     entry.stack_trace.push_back("Frame1");
-    writer.write_entry(entry);
+    writer.writeEntry(entry);
   }
 
   std::string content = read_file_to_string(filename);
@@ -92,9 +92,9 @@ bool test_writer_rotation() {
   {
     LogWriter writer(opt);
     std::string big_chunk(1024 * 1024 + 100, 'A'); // > 1MB
-    writer.write_raw(big_chunk);
+    writer.writeRaw(big_chunk);
     // Next write should trigger rotation
-    writer.write_raw("Trigger");
+    writer.writeRaw("Trigger");
   }
 
   TEST_ASSERT(fs::exists(filename), "Current log should exist");

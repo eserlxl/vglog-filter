@@ -22,6 +22,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -33,6 +34,7 @@ struct LogStats {
   std::size_t unique_blocks = 0;
   std::size_t filtered_count = 0;
   std::size_t parse_errors = 0;
+  std::unordered_map<std::string, std::size_t> error_counts;
 };
 
 class LogProcessor {
@@ -59,6 +61,9 @@ private:
   void clear_current_state() noexcept;
   void reset_epoch() noexcept;
   [[nodiscard]] std::size_t find_marker(const VecS& lines) const;
+
+  // Centralized filtering logic
+  [[nodiscard]] bool shouldKeepEntry(const LogEntry& entry) const;
 
   void initialize_string_patterns();
   [[nodiscard]] std::size_t get_file_size_for_progress() const;
