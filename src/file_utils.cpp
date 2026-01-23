@@ -142,7 +142,7 @@ void process_file_stream(std::string_view fname, const Options& opt) {
   LogProcessor processor(opt);
   // Prefer C stdio path to avoid libstdc++ internal locale/stream interactions with MSan
   FileHandle fh(fname.data(), "r");
-  processor.processStream_cfile(fh.get());
+  processor.processStreamCFile(fh.get());
 }
 
 // ---- FileHandle Implementation ----

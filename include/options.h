@@ -44,6 +44,11 @@ struct Options {
   std::vector<std::string> includeTypes;
   std::vector<std::string> includeFunctions;
   std::vector<std::string> excludeFunctions;
+  /**
+   * @brief Validates the configuration.
+   * @throws std::runtime_error if invalid.
+   */
+  void validate() const;
 };
 
 void usage(std::string_view prog);

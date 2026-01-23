@@ -7,6 +7,7 @@
 
 #include "options.h"
 #include <cstdio>
+#include <stdexcept>
 
 void usage(std::string_view prog) {
   // Using stdio to avoid libstdc++ locale initialization that MSan flags
@@ -66,4 +67,13 @@ void usage(std::string_view prog) {
                static_cast<int>(prog.size()), prog.data());
   std::fprintf(stdout, "  valgrind ./prog 2>&1 | %.*s     # Direct pipe from valgrind\n",
                static_cast<int>(prog.size()), prog.data());
+}
+
+void Options::validate() const {
+  if (rotateBackups > 0 && outputFile.empty()) {
+    throw std::runtime_error("Rotation requires output file (-o/--output)");
+  }
+  if (rotateSizeMb > 0 && outputFile.empty()) {
+    throw std::runtime_error("Rotation size requires output file (-o/--output)");
+  }
 }

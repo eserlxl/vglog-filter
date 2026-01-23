@@ -51,6 +51,11 @@ public:
 
   /**
    * @brief Writes statistics block.
+   *
+   * In JSON mode, writes a "stats" record.
+   * In Text mode, writes a human-readable summary table.
+   *
+   * @param stats The statistics to output.
    */
   void writeStats(const struct LogStats& stats);
 

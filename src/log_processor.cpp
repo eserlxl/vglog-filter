@@ -237,7 +237,7 @@ void LogProcessor::processStream(std::istream& in) {
   output_pending_blocks();
 }
 
-void LogProcessor::processStream_cfile(std::FILE* fp) {
+void LogProcessor::processStreamCFile(std::FILE* fp) {
   if (fp == nullptr)
     return;
   std::size_t bytesProcessed = 0;

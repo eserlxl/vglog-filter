@@ -262,7 +262,7 @@ void process_input(const Options& opt) {
 
   if (opt.streamMode) {
     if (opt.use_stdin) {
-      processor.processStream_cfile(stdin);
+      processor.processStreamCFile(stdin);
     } else {
       process_file_stream(opt.filename, opt);
     }
@@ -295,6 +295,7 @@ int main(int argc, char* argv[]) {
     if (auto parsed = parse_command_line(argc, argv)) {
       auto& opt = *parsed;
       setup_input_source(opt, argc, argv);
+      opt.validate();
       process_input(opt);
     } else {
       // Help/version printed; normal exit.

@@ -37,22 +37,56 @@ struct LogStats {
   std::unordered_map<std::string, std::size_t> errorCounts;
 };
 
+/**
+ * @brief Main processor class for Valgrind logs.
+ *
+ * Handles reading input streams, identifying error blocks, filtering them based on Options,
+ * and dispatching to LogWriter.
+ * Not thread-safe.
+ */
 class LogProcessor {
 public:
   using Str = std::string;
   using VecS = std::vector<Str>;
   using StrSpan = std::span<const Str>;
 
+  /**
+   * @brief Constructs a new Log Processor.
+   * @param options Configuration options. Must remain valid for object lifetime.
+   */
   explicit LogProcessor(const Options& options);
   ~LogProcessor();
 
+  /**
+   * @brief Process logs from a C++ input stream (e.g. ifstream).
+   * @param in Input stream to read from.
+   */
   void processStream(std::istream& in);
-  void processStream_cfile(std::FILE* fp);
+
+  /**
+   * @brief Process logs from a C file pointer (e.g. stdin).
+   * @param fp C file pointer (must be valid).
+   */
+  void processStreamCFile(std::FILE* fp);
+
+  /**
+   * @brief Process a pre-loaded vector of log lines.
+   * @param lines Vector of strings representing lines.
+   */
   void processLines(const VecS& lines);
 
+  /**
+   * @brief Get the current processing statistics.
+   * @return const LogStats& Reference to stats struct.
+   */
   [[nodiscard]] const LogStats& getStats() const noexcept {
     return stats;
   }
+
+  /**
+   * @brief Print statistics to a file pointer.
+   * @param out Output C file pointer.
+   */
   void printStats(std::FILE* out) const;
 
 private:
