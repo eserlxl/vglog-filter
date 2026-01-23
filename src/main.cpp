@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
   std::cin.tie(nullptr);
 
   try {
-    if (auto parsed = cli::parse_args(argc, argv)) {
+    if (auto parsed = cli::parseArgs(argc, argv)) {
       auto& opt = *parsed;
       setup_input_source(opt, argc, argv);
       opt.validate();

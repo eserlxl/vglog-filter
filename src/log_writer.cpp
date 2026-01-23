@@ -7,7 +7,12 @@
 #include "log_processor.h"
 
 #include <filesystem>
-#include <iostream>
+// #include <iostream> - Removed (unused)
+
+namespace {
+constexpr size_t MB_IN_BYTES = 1024 * 1024;
+constexpr size_t JSON_BUFFER_RESERVE = 128;
+} // namespace
 
 struct LogWriter::Impl {
   const Options& opt;
@@ -74,7 +79,7 @@ struct LogWriter::Impl {
     if (opt.rotation.rotateSizeMb > 0 && out_fp && !opt.outputFile.empty()) {
       long pos = std::ftell(out_fp);
       if (pos >= 0 &&
-          static_cast<size_t>(pos) + additional_bytes > opt.rotation.rotateSizeMb * 1024 * 1024) {
+          static_cast<size_t>(pos) + additional_bytes > opt.rotation.rotateSizeMb * MB_IN_BYTES) {
         rotate_log();
       }
     }
@@ -160,7 +165,7 @@ LogWriter& LogWriter::operator=(LogWriter&&) noexcept = default;
 void LogWriter::writeEntry(const LogEntry& entry) {
   if (pImpl->opt.jsonOutput) {
     std::string json;
-    json.reserve(entry.rawContent.size() + 128); // heuristic
+    json.reserve(entry.rawContent.size() + JSON_BUFFER_RESERVE); // heuristic
     pImpl->format_json(entry, json);
 
     if (pImpl->opt.jsonArray) {

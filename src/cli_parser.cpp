@@ -2,14 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "cli_parser.h"
-#include "file_utils.h" // For is_large_file check if needed logic moves here?
-// No, helper functions for parsing should be moved here or kept in anonymous namespace?
-// Let's copy relevant parsing logic.
 
 #include <charconv>
 #include <cstdio>
 #include <getopt.h>
-#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -21,9 +17,9 @@ namespace cli {
 namespace {
 
 inline constexpr int MAX_DEPTH = 1000;
-inline constexpr auto STDIN_SENTINEL = std::string_view{"-"};
-inline constexpr auto VERSION_STRING = "10.5.0"; // Should match main.cpp definition or cmake
+inline constexpr auto VERSION_STRING = "10.5.0";
 inline constexpr int MAX_MARKER_LENGTH = 1024;
+inline constexpr size_t ERROR_MSG_BUFFER_SIZE = 64;
 
 enum {
   OPT_ROTATE_SIZE = 1000,
@@ -77,7 +73,7 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
 
 [[nodiscard]] std::string make_range_error(std::string_view what, int lo, int hi) {
   std::string msg;
-  msg.reserve(64);
+  msg.reserve(ERROR_MSG_BUFFER_SIZE);
   msg.append(what)
       .append(" out of valid range [")
       .append(std::to_string(lo))
@@ -120,7 +116,7 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
 
 } // namespace
 
-std::optional<Options> parse_args(int argc, char* argv[]) {
+std::optional<Options> parseArgs(int argc, char* argv[]) {
   if (argc < 1 || argv == nullptr) {
     throw std::runtime_error("Invalid command line arguments");
   }
@@ -238,14 +234,6 @@ std::optional<Options> parse_args(int argc, char* argv[]) {
   if (opt.markers.empty()) {
     opt.markers.push_back(std::string(DEFAULT_MARKER));
   }
-
-  // Handle position args (filename)
-  // Moved this logic here? No, 'setup_input_source' in main.cpp handles it using optind.
-  // But usage of 'optind' here persists because it's global?
-  // Yes, getopt uses global 'optind'.
-  // However, parse_args usually just returns options and lets caller handle positional args?
-  // But 'optind' is needed.
-  // We can let the caller access 'optind'.
 
   return opt;
 }

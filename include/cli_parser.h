@@ -13,6 +13,6 @@ namespace cli {
  * @return std::optional<Options> containing options if successful, or nullopt if help/version was printed.
  * @throws std::runtime_error on invalid arguments.
  */
-std::optional<Options> parse_args(int argc, char* argv[]);
+std::optional<Options> parseArgs(int argc, char* argv[]);
 
 } // namespace cli
