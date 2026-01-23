@@ -119,12 +119,12 @@ bool test_extremely_large_file() {
     // Try to read the file (simulate vglog-filter processing)
     std::ifstream in(tf.path());
     std::string read_line;
-    int lines_read = 0;
-    while (std::getline(in, read_line) && lines_read < 100) {
-        lines_read++;
+    int linesRead = 0;
+    while (std::getline(in, read_line) && linesRead < 100) {
+        linesRead++;
     }
     
-    TEST_ASSERT(lines_read > 0, "Should be able to read at least some lines from large file");
+    TEST_ASSERT(linesRead > 0, "Should be able to read at least some lines from large file");
     TEST_PASS("Extremely large file handled");
     return true;
 }
@@ -141,16 +141,16 @@ bool test_null_bytes_in_middle() {
     
     std::ifstream in(tf.path(), std::ios::binary);
     std::string line;
-    int lines_read = 0;
+    int linesRead = 0;
     bool found_null = false;
     while (std::getline(in, line)) {
-        lines_read++;
+        linesRead++;
         if (line.find("Second line") != std::string::npos) {
             found_null = (line.find('\0') != std::string::npos);
         }
     }
     
-    TEST_ASSERT(lines_read >= 2, "Should read at least first and third lines");
+    TEST_ASSERT(linesRead >= 2, "Should read at least first and third lines");
     TEST_ASSERT(found_null, "Should detect null byte in middle of line");
     TEST_PASS("Null bytes in middle of file handled");
     return true;
@@ -169,12 +169,12 @@ bool test_control_characters() {
     
     std::ifstream in(tf.path(), std::ios::binary);
     std::string line;
-    int lines_read = 0;
+    int linesRead = 0;
     while (std::getline(in, line)) {
-        lines_read++;
+        linesRead++;
     }
     
-    TEST_ASSERT(lines_read >= 5, "Should read lines with control characters");
+    TEST_ASSERT(linesRead >= 5, "Should read lines with control characters");
     TEST_PASS("Control characters handled");
     return true;
 }
@@ -193,16 +193,16 @@ bool test_very_long_lines() {
     
     std::ifstream in(tf.path());
     std::string line;
-    int lines_read = 0;
+    int linesRead = 0;
     bool found_long_line = false;
     while (std::getline(in, line)) {
-        lines_read++;
+        linesRead++;
         if (line.length() > 1000000) {
             found_long_line = true;
         }
     }
     
-    TEST_ASSERT(lines_read >= 2, "Should read both lines");
+    TEST_ASSERT(linesRead >= 2, "Should read both lines");
     TEST_ASSERT(found_long_line, "Should handle very long lines");
     TEST_PASS("Very long lines handled");
     return true;
@@ -219,12 +219,12 @@ bool test_mixed_line_endings() {
     
     std::ifstream in(tf.path(), std::ios::binary);
     std::string line;
-    int lines_read = 0;
+    int linesRead = 0;
     while (std::getline(in, line)) {
-        lines_read++;
+        linesRead++;
     }
     
-    TEST_ASSERT(lines_read >= 3, "Should handle mixed line endings");
+    TEST_ASSERT(linesRead >= 3, "Should handle mixed line endings");
     TEST_PASS("Mixed line endings handled");
     return true;
 }

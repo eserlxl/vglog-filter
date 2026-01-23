@@ -8,7 +8,7 @@
 
 bool testMaxErrors() {
   Options opt;
-  opt.max_errors = 2;
+  opt.maxErrors = 2;
   LogProcessor processor(opt);
 
   std::string block = "==12345== Invalid read\n==12345==    at 0x1: f1 (a.c:1)\n";
@@ -17,12 +17,12 @@ bool testMaxErrors() {
     input_buffer += block;
   std::stringstream input_stream(input_buffer);
 
-  processor.process_stream(input_stream);
+  processor.processStream(input_stream);
 
-  if (processor.get_stats().blocks_found != 2) {
-    std::cerr << "Max errors failed. Found: " << processor.get_stats().blocks_found << std::endl;
-    std::cerr << "Lines read: " << processor.get_stats().lines_read << std::endl;
-    std::cerr << "Bytes processed: " << processor.get_stats().bytes_processed << std::endl;
+  if (processor.getStats().blocksFound != 2) {
+    std::cerr << "Max errors failed. Found: " << processor.getStats().blocksFound << std::endl;
+    std::cerr << "Lines read: " << processor.getStats().linesRead << std::endl;
+    std::cerr << "Bytes processed: " << processor.getStats().bytesProcessed << std::endl;
     return false;
   }
 
@@ -32,7 +32,7 @@ bool testMaxErrors() {
 
 bool testIncludeFilter() {
   Options opt;
-  opt.include_types.push_back("KeepMe");
+  opt.includeTypes.push_back("KeepMe");
 
   LogProcessor processor(opt);
   std::string b1 = "==12345== KeepMe error\n==12345==    at 0x1: f (f.c:1)\n";
@@ -40,12 +40,12 @@ bool testIncludeFilter() {
 
   std::stringstream input_stream(b1 + b2);
 
-  processor.process_stream(input_stream);
+  processor.processStream(input_stream);
 
-  if (processor.get_stats().blocks_found != 1) {
-    std::cerr << "Include filter failed. Found: " << processor.get_stats().blocks_found
+  if (processor.getStats().blocksFound != 1) {
+    std::cerr << "Include filter failed. Found: " << processor.getStats().blocksFound
               << std::endl;
-    std::cerr << "Lines read: " << processor.get_stats().lines_read << std::endl;
+    std::cerr << "Lines read: " << processor.getStats().linesRead << std::endl;
     return false;
   }
 
@@ -55,7 +55,7 @@ bool testIncludeFilter() {
 
 bool testExcludeFunction() {
   Options opt;
-  opt.exclude_functions.push_back("badFunc");
+  opt.excludeFunctions.push_back("badFunc");
 
   LogProcessor processor(opt);
   std::string b1 = "==12345== Error\n==12345==    at 0x1: goodFunc (f.c:1)\n";
@@ -63,12 +63,12 @@ bool testExcludeFunction() {
 
   std::stringstream input_stream(b1 + b2);
 
-  processor.process_stream(input_stream);
+  processor.processStream(input_stream);
 
-  if (processor.get_stats().blocks_found != 1) {
-    std::cerr << "Exclude function failed. Found: " << processor.get_stats().blocks_found
+  if (processor.getStats().blocksFound != 1) {
+    std::cerr << "Exclude function failed. Found: " << processor.getStats().blocksFound
               << std::endl;
-    std::cerr << "Lines read: " << processor.get_stats().lines_read << std::endl;
+    std::cerr << "Lines read: " << processor.getStats().linesRead << std::endl;
     return false;
   }
 

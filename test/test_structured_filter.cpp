@@ -22,12 +22,12 @@ int count_blocks_in_file(const std::string& filename) {
 }
 
 bool test_filter_types() {
-  std::string output_file = "test_filter_types.json";
+  std::string outputFile = "test_filter_types.json";
   Options opt;
-  opt.json_output = true;
+  opt.jsonOutput = true;
   opt.trim = false;
-  opt.output_file = output_file;
-  opt.exclude_types.push_back("Process terminating");
+  opt.outputFile = outputFile;
+  opt.excludeTypes.push_back("Process terminating");
 
   {
     LogProcessor processor(opt);
@@ -42,35 +42,35 @@ bool test_filter_types() {
     while (std::getline(ss, line))
       lines.push_back(line);
 
-    processor.process_lines(lines);
+    processor.processLines(lines);
   } // processor destroyed, file flushed and closed
 
   // Check output
-  int count = count_blocks_in_file(output_file);
+  int count = count_blocks_in_file(outputFile);
   if (count != 1) {
     std::cerr << "test_filter_types: Expected 1 block, got " << count << "\n";
-    std::ifstream f(output_file);
+    std::ifstream f(outputFile);
     std::cout << "File Content:\n" << f.rdbuf() << "\n";
   }
   TEST_ASSERT(count == 1, "Should filter out one block");
 
-  std::string content = read_file_to_string(output_file);
+  std::string content = read_file_to_string(outputFile);
   TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Invalid read");
   TEST_ASSERT(content.find("Process terminating") == std::string::npos,
               "Should exclude Process terminating");
 
-  std::remove(output_file.c_str());
+  std::remove(outputFile.c_str());
   TEST_PASS("Type filtering");
   return true;
 }
 
 bool test_filter_stack_regex() {
-  std::string output_file = "test_filter_stack.json";
+  std::string outputFile = "test_filter_stack.json";
   Options opt;
-  opt.json_output = true;
+  opt.jsonOutput = true;
   opt.trim = false;
-  opt.output_file = output_file;
-  opt.exclude_stack_patterns.push_back(".*libcursed.*");
+  opt.outputFile = outputFile;
+  opt.excludeStackPatterns.push_back(".*libcursed.*");
 
   {
     LogProcessor processor(opt);
@@ -85,33 +85,33 @@ bool test_filter_stack_regex() {
     while (std::getline(ss, line))
       lines.push_back(line);
 
-    processor.process_lines(lines);
+    processor.processLines(lines);
   } // processor destroyed, file flushed and closed
 
-  int count = count_blocks_in_file(output_file);
+  int count = count_blocks_in_file(outputFile);
   if (count != 1) {
     std::cerr << "test_filter_stack_regex: Expected 1 block, got " << count << "\n";
-    std::ifstream f(output_file);
+    std::ifstream f(outputFile);
     std::cout << "File Content:\n" << f.rdbuf() << "\n";
   }
   TEST_ASSERT(count == 1, "Should filter out stack-matched block");
 
-  std::string content = read_file_to_string(output_file);
+  std::string content = read_file_to_string(outputFile);
   TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Block 1");
   TEST_ASSERT(content.find("Invalid write") == std::string::npos, "Should exclude Block 2");
 
-  std::remove(output_file.c_str());
+  std::remove(outputFile.c_str());
   TEST_PASS("Stack Regex filtering");
   return true;
 }
 
 bool test_filter_tid() {
-  std::string output_file = "test_filter_tid.json";
+  std::string outputFile = "test_filter_tid.json";
   Options opt;
-  opt.json_output = true;
+  opt.jsonOutput = true;
   opt.trim = false;
-  opt.output_file = output_file;
-  opt.exclude_threads.push_back(2);
+  opt.outputFile = outputFile;
+  opt.excludeThreads.push_back(2);
 
   {
     LogProcessor processor(opt);
@@ -125,29 +125,29 @@ bool test_filter_tid() {
     while (std::getline(ss, line))
       lines.push_back(line);
 
-    processor.process_lines(lines);
+    processor.processLines(lines);
   }
 
-  int count = count_blocks_in_file(output_file);
+  int count = count_blocks_in_file(outputFile);
   TEST_ASSERT(count == 1, "Should filter out Thread 2");
 
-  std::string content = read_file_to_string(output_file);
+  std::string content = read_file_to_string(outputFile);
   TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Thread 1");
   TEST_ASSERT(content.find("Invalid write") == std::string::npos, "Should exclude Thread 2");
 
-  std::remove(output_file.c_str());
+  std::remove(outputFile.c_str());
   TEST_PASS("Thread filtering");
   return true;
 }
 
 bool test_filter_source_path() {
-  std::string output_file = "test_filter_path.json";
+  std::string outputFile = "test_filter_path.json";
   Options opt;
-  opt.json_output = true;
+  opt.jsonOutput = true;
   opt.trim = false;
   // Note: scrub_raw is true by default, verifying parser handles scrubbed lines.
-  opt.output_file = output_file;
-  opt.exclude_source_paths.push_back("vendor/lib3rd");
+  opt.outputFile = outputFile;
+  opt.excludeSourcePaths.push_back("vendor/lib3rd");
 
   {
     LogProcessor processor(opt);
@@ -162,22 +162,22 @@ bool test_filter_source_path() {
     while (std::getline(ss, line))
       lines.push_back(line);
 
-    processor.process_lines(lines);
+    processor.processLines(lines);
   }
 
-  int count = count_blocks_in_file(output_file);
+  int count = count_blocks_in_file(outputFile);
   if (count != 1) {
     std::cerr << "test_filter_source_path: Expected 1 block, got " << count << "\n";
-    std::ifstream f(output_file);
+    std::ifstream f(outputFile);
     std::cout << "File Content:\n" << f.rdbuf() << "\n";
   }
   TEST_ASSERT(count == 1, "Should filter out vendor path");
 
-  std::string content = read_file_to_string(output_file);
+  std::string content = read_file_to_string(outputFile);
   TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Block 1");
   TEST_ASSERT(content.find("Invalid write") == std::string::npos, "Should exclude Block 2");
 
-  std::remove(output_file.c_str());
+  std::remove(outputFile.c_str());
   TEST_PASS("Source Path filtering");
   return true;
 }

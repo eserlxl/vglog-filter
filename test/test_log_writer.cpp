@@ -17,13 +17,13 @@ bool test_writer_basic() {
     fs::remove(filename);
 
   Options opt;
-  opt.output_file = filename;
-  opt.json_output = false;
+  opt.outputFile = filename;
+  opt.jsonOutput = false;
 
   {
     LogWriter writer(opt);
     LogEntry entry;
-    entry.raw_content = "Raw Content Line";
+    entry.rawContent = "Raw Content Line";
     writer.writeEntry(entry);
   }
 
@@ -41,18 +41,18 @@ bool test_writer_json() {
     fs::remove(filename);
 
   Options opt;
-  opt.output_file = filename;
-  opt.json_output = true;
-  opt.detailed_json = true;
+  opt.outputFile = filename;
+  opt.jsonOutput = true;
+  opt.detailedJson = true;
 
   {
     LogWriter writer(opt);
     LogEntry entry;
-    entry.raw_content = "RawContent";
+    entry.rawContent = "RawContent";
     entry.signature = "Sig";
-    entry.error_type = "ErrType";
+    entry.errorType = "ErrType";
     entry.pid = "123";
-    entry.stack_trace.push_back("Frame1");
+    entry.stackTrace.push_back("Frame1");
     writer.writeEntry(entry);
   }
 
@@ -62,8 +62,8 @@ bool test_writer_json() {
   TEST_ASSERT(content.find("\"type\":\"record\"") != std::string::npos, "JSON type missing");
   TEST_ASSERT(content.find("\"raw\":\"RawContent\"") != std::string::npos, "JSON raw missing");
   TEST_ASSERT(content.find("\"pid\":\"123\"") != std::string::npos, "JSON pid missing");
-  TEST_ASSERT(content.find("\"error_type\":\"ErrType\"") != std::string::npos,
-              "JSON error_type missing");
+  TEST_ASSERT(content.find("\"errorType\":\"ErrType\"") != std::string::npos,
+              "JSON errorType missing");
 
   fs::remove(filename);
   TEST_PASS("test_writer_json");
@@ -79,12 +79,12 @@ bool test_writer_rotation() {
     fs::remove(filename + ".1");
 
   Options opt;
-  opt.output_file = filename;
-  opt.rotate_size_mb = 1; // 1MB
-  opt.rotate_backups = 1;
+  opt.outputFile = filename;
+  opt.rotateSizeMb = 1; // 1MB
+  opt.rotateBackups = 1;
 
   // Mock size check override or use small size?
-  // Since rotate_size_mb is size_t mb, min is 1MB.
+  // Since rotateSizeMb is size_t mb, min is 1MB.
   // We can't easily test rotation without writing > 1MB.
   // We can't change LogWriter impl to accept bytes easily without changing interface.
   // Let's write 1MB+ of data.

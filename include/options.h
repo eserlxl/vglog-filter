@@ -21,29 +21,29 @@ struct Options {
   int depth = DEFAULT_DEPTH;
   bool trim = true;
   bool scrub_raw = true;
-  bool stream_mode = false;
-  bool show_progress = false;
+  bool streamMode = false;
+  bool showProgress = false;
   bool monitor_memory = false;
   std::vector<std::string> markers;
   std::string filename;
-  std::string output_file;
-  bool json_output = false;
+  std::string outputFile;
+  bool jsonOutput = false;
   bool use_stdin = false;
-  std::vector<std::string> exclude_types;
-  std::vector<std::string> exclude_stack_patterns;
-  std::vector<std::string> exclude_source_paths;
-  std::vector<int32_t> exclude_threads;
-  bool detailed_json = false;
+  std::vector<std::string> excludeTypes;
+  std::vector<std::string> excludeStackPatterns;
+  std::vector<std::string> excludeSourcePaths;
+  std::vector<int32_t> excludeThreads;
+  bool detailedJson = false;
 
-  size_t rotate_size_mb = 0;
-  size_t rotate_backups = 0;
-  bool strict_mode = false;
+  size_t rotateSizeMb = 0;
+  size_t rotateBackups = 0;
+  bool strictMode = false;
 
   // Iteration 1 Extension
-  size_t max_errors = 0; // 0 = unlimited
-  std::vector<std::string> include_types;
-  std::vector<std::string> include_functions;
-  std::vector<std::string> exclude_functions;
+  size_t maxErrors = 0; // 0 = unlimited
+  std::vector<std::string> includeTypes;
+  std::vector<std::string> includeFunctions;
+  std::vector<std::string> excludeFunctions;
 };
 
 void usage(std::string_view prog);

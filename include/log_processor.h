@@ -28,13 +28,13 @@
 
 // Basic processing statistics
 struct LogStats {
-  std::size_t lines_read = 0;
-  std::size_t bytes_processed = 0;
-  std::size_t blocks_found = 0;
-  std::size_t unique_blocks = 0;
-  std::size_t filtered_count = 0;
-  std::size_t parse_errors = 0;
-  std::unordered_map<std::string, std::size_t> error_counts;
+  std::size_t linesRead = 0;
+  std::size_t bytesProcessed = 0;
+  std::size_t blocksFound = 0;
+  std::size_t uniqueBlocks = 0;
+  std::size_t filteredCount = 0;
+  std::size_t parseErrors = 0;
+  std::unordered_map<std::string, std::size_t> errorCounts;
 };
 
 class LogProcessor {
@@ -46,14 +46,14 @@ public:
   explicit LogProcessor(const Options& options);
   ~LogProcessor();
 
-  void process_stream(std::istream& in);
-  void process_stream_cfile(std::FILE* fp);
-  void process_lines(const VecS& lines);
+  void processStream(std::istream& in);
+  void processStream_cfile(std::FILE* fp);
+  void processLines(const VecS& lines);
 
-  [[nodiscard]] const LogStats& get_stats() const noexcept {
+  [[nodiscard]] const LogStats& getStats() const noexcept {
     return stats;
   }
-  void print_stats(std::FILE* out) const;
+  void printStats(std::FILE* out) const;
 
 private:
   void process_line(std::string_view line);
@@ -67,7 +67,7 @@ private:
 
   void initialize_string_patterns();
   [[nodiscard]] std::size_t get_file_size_for_progress() const;
-  [[nodiscard]] bool should_report_progress(std::size_t bytes_processed,
+  [[nodiscard]] bool should_report_progress(std::size_t bytesProcessed,
                                             std::size_t total_bytes) const;
 
   void output_pending_blocks(); // Kept as it manages pending_blocks vector logic

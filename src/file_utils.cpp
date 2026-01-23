@@ -65,14 +65,14 @@ std::string create_error_message(std::string_view operation, std::string_view fi
   return m;
 }
 
-void report_progress(std::size_t bytes_processed, std::size_t total_bytes,
+void report_progress(std::size_t bytesProcessed, std::size_t total_bytes,
                      std::string_view filename) {
-  if (total_bytes == 0 || bytes_processed > total_bytes)
+  if (total_bytes == 0 || bytesProcessed > total_bytes)
     return;
   std::fprintf(stderr, "\rProcessing %.*s: %s%% (%s/%s MB)", static_cast<int>(filename.size()),
-               filename.data(), pct(bytes_processed, total_bytes).c_str(),
-               to_mb(bytes_processed).c_str(), to_mb(total_bytes).c_str());
-  if (bytes_processed >= total_bytes)
+               filename.data(), pct(bytesProcessed, total_bytes).c_str(),
+               to_mb(bytesProcessed).c_str(), to_mb(total_bytes).c_str());
+  if (bytesProcessed >= total_bytes)
     std::fputc('\n', stderr);
 }
 
@@ -142,7 +142,7 @@ void process_file_stream(std::string_view fname, const Options& opt) {
   LogProcessor processor(opt);
   // Prefer C stdio path to avoid libstdc++ internal locale/stream interactions with MSan
   FileHandle fh(fname.data(), "r");
-  processor.process_stream_cfile(fh.get());
+  processor.processStream_cfile(fh.get());
 }
 
 // ---- FileHandle Implementation ----

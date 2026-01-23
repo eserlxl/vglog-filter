@@ -8,7 +8,7 @@ constexpr bool is_digit(char c) noexcept {
 }
 } // namespace
 
-std::optional<LogParser::HeaderResult> LogParser::parse_header(std::string_view line) {
+std::optional<LogParser::HeaderResult> LogParser::parseHeader(std::string_view line) {
   // Relaxed check: if it doesn't start with ==, assume it's just content
   bool has_prefix = (line.size() >= 2 && line[0] == '=' && line[1] == '=');
 
@@ -16,7 +16,7 @@ std::optional<LogParser::HeaderResult> LogParser::parse_header(std::string_view 
   std::string pid;
 
   if (has_prefix) {
-    content_view = remove_prefix(line);
+    content_view = removePrefix(line);
     size_t end_pid = line.find("==", 2);
     if (end_pid != std::string_view::npos) {
       pid = std::string(line.substr(2, end_pid - 2));
@@ -58,16 +58,16 @@ std::optional<LogParser::HeaderResult> LogParser::parse_header(std::string_view 
   }
 
   // Clean trailing copy-paste artifacts if any
-  std::string error_type(error_part);
-  while (!error_type.empty() && std::isspace(static_cast<unsigned char>(error_type.back()))) {
-    error_type.pop_back();
+  std::string errorType(error_part);
+  while (!errorType.empty() && std::isspace(static_cast<unsigned char>(errorType.back()))) {
+    errorType.pop_back();
   }
 
-  return HeaderResult{std::move(pid), std::move(error_type), tid};
+  return HeaderResult{std::move(pid), std::move(errorType), tid};
 }
 
-std::optional<LogEntry::StackFrame> LogParser::parse_frame_structured(std::string_view line) {
-  auto content = remove_prefix(line);
+std::optional<LogEntry::StackFrame> LogParser::parseFrameStructured(std::string_view line) {
+  auto content = removePrefix(line);
   if (content.empty())
     return std::nullopt;
 
@@ -134,12 +134,12 @@ std::optional<LogEntry::StackFrame> LogParser::parse_frame_structured(std::strin
                               std::move(location)};
 }
 
-std::optional<std::string> LogParser::parse_stack_frame(std::string_view line) {
+std::optional<std::string> LogParser::parseStackFrame(std::string_view line) {
   // Expected: "   at 0x..." or "   by 0x..."
   // But processed line might have prefix removed already.
   // Let's assume input is full line.
 
-  auto content = remove_prefix(line);
+  auto content = removePrefix(line);
   if (content.find("at : ") != std::string_view::npos ||
       content.find("by : ") != std::string_view::npos ||
       content.find("at 0x") != std::string_view::npos ||
@@ -151,7 +151,7 @@ std::optional<std::string> LogParser::parse_stack_frame(std::string_view line) {
   return std::nullopt;
 }
 
-std::string_view LogParser::remove_prefix(std::string_view line) {
+std::string_view LogParser::removePrefix(std::string_view line) {
   // ==12345== prefix
   if (line.size() < 2 || line[0] != '=' || line[1] != '=') {
     return line;

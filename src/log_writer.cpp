@@ -15,8 +15,8 @@ struct LogWriter::Impl {
   std::shared_ptr<void> file_handle_lifetime;
 
   explicit Impl(const Options& options) : opt(options) {
-    if (!opt.output_file.empty()) {
-      open_file(opt.output_file);
+    if (!opt.outputFile.empty()) {
+      open_file(opt.outputFile);
     }
   }
 
@@ -27,7 +27,7 @@ struct LogWriter::Impl {
   }
 
   void rotate_log() {
-    if (opt.output_file.empty()) {
+    if (opt.outputFile.empty()) {
       return;
     }
 
@@ -39,10 +39,10 @@ struct LogWriter::Impl {
     std::error_code ec;
 
     // Shift backups
-    for (size_t i = opt.rotate_backups; i > 0; --i) {
+    for (size_t i = opt.rotateBackups; i > 0; --i) {
       std::string old_name =
-          (i == 1) ? opt.output_file : (opt.output_file + "." + std::to_string(i - 1));
-      std::string new_name = opt.output_file + "." + std::to_string(i);
+          (i == 1) ? opt.outputFile : (opt.outputFile + "." + std::to_string(i - 1));
+      std::string new_name = opt.outputFile + "." + std::to_string(i);
 
       if (fs::exists(old_name, ec)) {
         fs::rename(old_name, new_name, ec);
@@ -50,14 +50,14 @@ struct LogWriter::Impl {
     }
 
     // Reopen
-    open_file(opt.output_file);
+    open_file(opt.outputFile);
   }
 
   void check_rotation(size_t additional_bytes) {
-    if (opt.rotate_size_mb > 0 && out_fp && !opt.output_file.empty()) {
+    if (opt.rotateSizeMb > 0 && out_fp && !opt.outputFile.empty()) {
       long pos = std::ftell(out_fp);
       if (pos >= 0 &&
-          static_cast<size_t>(pos) + additional_bytes > opt.rotate_size_mb * 1024 * 1024) {
+          static_cast<size_t>(pos) + additional_bytes > opt.rotateSizeMb * 1024 * 1024) {
         rotate_log();
       }
     }
@@ -73,12 +73,12 @@ struct LogWriter::Impl {
 
   void format_json(const LogEntry& entry, std::string& buffer) {
     buffer = "{\"type\":\"record\"";
-    buffer += ",\"raw\":\"" + json_utils::escape_string(entry.raw_content) + "\"";
+    buffer += ",\"raw\":\"" + json_utils::escape_string(entry.rawContent) + "\"";
     buffer += ",\"signature\":\"" + json_utils::escape_string(entry.signature) + "\"";
 
-    if (opt.detailed_json) {
-      if (!entry.error_type.empty()) {
-        buffer += ",\"error_type\":\"" + json_utils::escape_string(entry.error_type) + "\"";
+    if (opt.detailedJson) {
+      if (!entry.errorType.empty()) {
+        buffer += ",\"errorType\":\"" + json_utils::escape_string(entry.errorType) + "\"";
       }
       if (!entry.pid.empty()) {
         buffer += ",\"pid\":\"" + json_utils::escape_string(entry.pid) + "\"";
@@ -86,12 +86,12 @@ struct LogWriter::Impl {
       if (entry.tid.has_value()) {
         buffer += ",\"tid\":" + std::to_string(*entry.tid);
       }
-      if (!entry.stack_trace.empty()) {
-        buffer += ",\"stack_trace\":[";
-        for (size_t i = 0; i < entry.stack_trace.size(); ++i) {
+      if (!entry.stackTrace.empty()) {
+        buffer += ",\"stackTrace\":[";
+        for (size_t i = 0; i < entry.stackTrace.size(); ++i) {
           if (i > 0)
             buffer += ",";
-          buffer += "\"" + json_utils::escape_string(entry.stack_trace[i]) + "\"";
+          buffer += "\"" + json_utils::escape_string(entry.stackTrace[i]) + "\"";
         }
         buffer += "]";
       }
@@ -108,17 +108,17 @@ LogWriter::LogWriter(LogWriter&&) noexcept = default;
 LogWriter& LogWriter::operator=(LogWriter&&) noexcept = default;
 
 void LogWriter::writeEntry(const LogEntry& entry) {
-  if (pImpl->opt.json_output) {
+  if (pImpl->opt.jsonOutput) {
     std::string json;
-    json.reserve(entry.raw_content.size() + 128); // heuristic
+    json.reserve(entry.rawContent.size() + 128); // heuristic
     pImpl->format_json(entry, json);
     pImpl->write_data(json.data(), json.size());
   } else {
-    pImpl->write_data(entry.raw_content.data(), entry.raw_content.size());
+    pImpl->write_data(entry.rawContent.data(), entry.rawContent.size());
     // Raw content usually ends with newline, but ensure one if we're separating blocks?
     // The original code did `write_output('\n');` after content.
     // Let's stick to original behavior but check if content has newline.
-    // Original code: write_output(b.raw_content.data(), b.raw_content.size()); write_output('\n');
+    // Original code: write_output(b.rawContent.data(), b.rawContent.size()); write_output('\n');
     pImpl->write_data("\n", 1);
   }
 }
@@ -128,22 +128,22 @@ void LogWriter::writeRaw(const std::string& content) {
 }
 
 void LogWriter::writeStats(const struct LogStats& stats) {
-  if (pImpl->opt.json_output) {
+  if (pImpl->opt.jsonOutput) {
     // Manually construct JSON to avoid dependency on LogProcessor internals or complex serialization libs
     // Note: This duplicates logic slightly but keeps LogWriter self-contained.
     // In a larger system, we'd use a shared JSON builder.
     std::string json = "{\"type\":\"stats\"";
-    json += ",\"lines_read\":" + std::to_string(stats.lines_read);
-    json += ",\"bytes_processed\":" + std::to_string(stats.bytes_processed);
-    json += ",\"blocks_found\":" + std::to_string(stats.blocks_found);
-    json += ",\"unique_blocks\":" + std::to_string(stats.unique_blocks);
-    json += ",\"filtered_count\":" + std::to_string(stats.filtered_count);
-    json += ",\"parse_errors\":" + std::to_string(stats.parse_errors);
+    json += ",\"linesRead\":" + std::to_string(stats.linesRead);
+    json += ",\"bytesProcessed\":" + std::to_string(stats.bytesProcessed);
+    json += ",\"blocksFound\":" + std::to_string(stats.blocksFound);
+    json += ",\"uniqueBlocks\":" + std::to_string(stats.uniqueBlocks);
+    json += ",\"filteredCount\":" + std::to_string(stats.filteredCount);
+    json += ",\"parseErrors\":" + std::to_string(stats.parseErrors);
 
-    if (!stats.error_counts.empty()) {
+    if (!stats.errorCounts.empty()) {
       json += ",\"error_breakdown\":{";
       bool first = true;
-      for (const auto& [type, count] : stats.error_counts) {
+      for (const auto& [type, count] : stats.errorCounts) {
         if (!first)
           json += ",";
         json += "\"" + json_utils::escape_string(type) + "\":" + std::to_string(count);
@@ -158,19 +158,19 @@ void LogWriter::writeStats(const struct LogStats& stats) {
     // Using intermediate buffer or direct fwrite only if we have format access
     if (pImpl->out_fp) {
       std::fprintf(pImpl->out_fp, "--- Statistics ---\n");
-      std::fprintf(pImpl->out_fp, "Lines read      : %zu\n", stats.lines_read);
-      std::fprintf(pImpl->out_fp, "Bytes processed : %zu\n", stats.bytes_processed);
-      std::fprintf(pImpl->out_fp, "Blocks found    : %zu\n", stats.blocks_found);
-      std::fprintf(pImpl->out_fp, "Unique blocks   : %zu\n", stats.unique_blocks);
-      std::fprintf(pImpl->out_fp, "Filtered blocks : %zu\n", stats.filtered_count);
-      if (!stats.error_counts.empty()) {
+      std::fprintf(pImpl->out_fp, "Lines read      : %zu\n", stats.linesRead);
+      std::fprintf(pImpl->out_fp, "Bytes processed : %zu\n", stats.bytesProcessed);
+      std::fprintf(pImpl->out_fp, "Blocks found    : %zu\n", stats.blocksFound);
+      std::fprintf(pImpl->out_fp, "Unique blocks   : %zu\n", stats.uniqueBlocks);
+      std::fprintf(pImpl->out_fp, "Filtered blocks : %zu\n", stats.filteredCount);
+      if (!stats.errorCounts.empty()) {
         std::fprintf(pImpl->out_fp, "\nError Breakdown:\n");
-        for (const auto& [type, count] : stats.error_counts) {
+        for (const auto& [type, count] : stats.errorCounts) {
           std::fprintf(pImpl->out_fp, "  %-40s : %zu\n", type.c_str(), count);
         }
       }
-      if (pImpl->opt.strict_mode) {
-        std::fprintf(pImpl->out_fp, "Parse errors    : %zu\n", stats.parse_errors);
+      if (pImpl->opt.strictMode) {
+        std::fprintf(pImpl->out_fp, "Parse errors    : %zu\n", stats.parseErrors);
       }
     }
   }

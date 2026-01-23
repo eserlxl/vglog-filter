@@ -41,7 +41,7 @@ private:
                                                std::string_view details = {}) noexcept;
 
 // Progress helpers
-void report_progress(std::size_t bytes_processed, std::size_t total_bytes, std::string_view filename);
+void report_progress(std::size_t bytesProcessed, std::size_t total_bytes, std::string_view filename);
 [[nodiscard]] std::size_t get_memory_usage_mb() noexcept;
 void report_memory_usage(std::string_view operation, std::string_view filename = {});
 

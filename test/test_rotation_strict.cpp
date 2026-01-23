@@ -26,13 +26,13 @@ void test_rotation() {
     fs::remove(out_base + ".1");
 
   Options opt;
-  opt.output_file = out_base;
+  opt.outputFile = out_base;
   opt.trim = false;
-  opt.rotate_size_mb = 1; // 1 MB
-  opt.rotate_backups = 1;
+  opt.rotateSizeMb = 1; // 1 MB
+  opt.rotateBackups = 1;
 
   // We can't easily test 1MB limit without writing 1MB.
-  // But we can hack: LogProcessor logic uses opt.rotate_size_mb.
+  // But we can hack: LogProcessor logic uses opt.rotateSizeMb.
   // If we can modify the check...
   // Or we just write 1.1 MB. 1 MB is small enough.
 
@@ -51,14 +51,14 @@ void test_rotation() {
   // LogProcessor writes raw blocks.
   for (int i = 0; i < 110; ++i) {
     std::vector<std::string> lines;
-    // Split block into lines to feed process_lines
-    // Actually process_lines takes vector of strings.
+    // Split block into lines to feed processLines
+    // Actually processLines takes vector of strings.
     // We can just construct it.
     // Simplification: emulate file stream processing which chunks by line.
     // Or just feed 110 blocks.
     lines.push_back("==123== Error " + std::to_string(i));
     lines.push_back("==123==    at " + big_chunk);
-    processor.process_lines(lines);
+    processor.processLines(lines);
   }
 
   // Check files

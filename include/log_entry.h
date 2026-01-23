@@ -13,22 +13,22 @@
  */
 struct LogEntry {
   /// Full original text block (including header and stack traces)
-  std::string raw_content;
+  std::string rawContent;
 
   /// Deduplication signature (usually based on stack semantics)
   std::string signature;
 
   /// The type of error (e.g., "Invalid read of size 4")
-  std::string error_type;
+  std::string errorType;
 
   /// Process ID extracted from the Valgrind marker "==PID=="
   std::string pid;
 
   /// Individual stack frames extracted from the block
-  std::vector<std::string> stack_trace;
+  std::vector<std::string> stackTrace;
 
   /// Source line number where this block started in the input stream
-  size_t line_number = 0;
+  size_t lineNumber = 0;
 
   /// Thread ID if present (e.g. from "Thread 1:")
   std::optional<int32_t> tid;
@@ -39,13 +39,13 @@ struct LogEntry {
     std::string function;
     std::string location;
   };
-  std::vector<StackFrame> stack_frames;
+  std::vector<StackFrame> stackFrames;
 
   /**
    * @brief Checks if the error type matches a pattern (substring).
    */
   [[nodiscard]] bool matchesErrorType(std::string_view typePattern) const {
-    return error_type.find(typePattern) != std::string::npos;
+    return errorType.find(typePattern) != std::string::npos;
   }
 
   /**
@@ -56,7 +56,7 @@ struct LogEntry {
    */
   [[nodiscard]] bool hasFrameMatching(std::string_view functionPattern,
                                       std::string_view locationPattern = "") const {
-    for (const auto& frame : stack_frames) {
+    for (const auto& frame : stackFrames) {
       bool funcMatch =
           functionPattern.empty() || frame.function.find(functionPattern) != std::string::npos;
       bool locMatch =

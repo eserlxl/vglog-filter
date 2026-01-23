@@ -145,10 +145,10 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
         opt.scrub_raw = false;
         break;
       case 'j':
-        opt.json_output = true;
+        opt.jsonOutput = true;
         break;
       case 'o':
-        opt.output_file = optarg ? std::string{optarg} : std::string{};
+        opt.outputFile = optarg ? std::string{optarg} : std::string{};
         break;
       case 'd':
         opt.depth =
@@ -158,10 +158,10 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
         opt.markers.push_back(parse_marker(optarg ? std::string_view{optarg} : std::string_view{}));
         break;
       case 's':
-        opt.stream_mode = true;
+        opt.streamMode = true;
         break;
       case 'p':
-        opt.show_progress = true;
+        opt.showProgress = true;
         break;
       case 'M':
         opt.monitor_memory = true;
@@ -175,41 +175,41 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
         return std::nullopt;
       case 'e':
         if (optarg && *optarg) {
-          opt.exclude_types.emplace_back(optarg);
+          opt.excludeTypes.emplace_back(optarg);
         }
         if (optarg && *optarg) {
-          opt.exclude_types.emplace_back(optarg);
+          opt.excludeTypes.emplace_back(optarg);
         }
         break;
 
       case OPT_DETAILED_JSON:
-        opt.detailed_json = true;
+        opt.detailedJson = true;
         // detailed-json implies json
-        opt.json_output = true;
+        opt.jsonOutput = true;
         break;
       case OPT_EXCLUDE_STACK:
         if (optarg && *optarg) {
-          opt.exclude_stack_patterns.emplace_back(optarg);
+          opt.excludeStackPatterns.emplace_back(optarg);
         }
         break;
       case OPT_MAX_ERRORS:
-        opt.max_errors = static_cast<size_t>(
+        opt.maxErrors = static_cast<size_t>(
             parse_nonneg_int(optarg ? std::string_view{optarg} : std::string_view{},
                              std::numeric_limits<int>::max()));
         break;
       case OPT_INCLUDE_TYPE:
         if (optarg && *optarg) {
-          opt.include_types.emplace_back(optarg);
+          opt.includeTypes.emplace_back(optarg);
         }
         break;
       case OPT_INCLUDE_FUNCTION:
         if (optarg && *optarg) {
-          opt.include_functions.emplace_back(optarg);
+          opt.includeFunctions.emplace_back(optarg);
         }
         break;
       case OPT_EXCLUDE_FUNCTION:
         if (optarg && *optarg) {
-          opt.exclude_functions.emplace_back(optarg);
+          opt.excludeFunctions.emplace_back(optarg);
         }
         break;
       default:
@@ -245,9 +245,9 @@ void setup_input_source(Options& opt, int argc, char* argv[]) {
   }
 
   // Auto-detect streaming when not explicitly requested
-  if (!opt.stream_mode) {
-    opt.stream_mode = opt.use_stdin ? true : is_large_file(opt.filename);
-    if (opt.stream_mode && !opt.use_stdin) {
+  if (!opt.streamMode) {
+    opt.streamMode = opt.use_stdin ? true : is_large_file(opt.filename);
+    if (opt.streamMode && !opt.use_stdin) {
       std::fputs("Info: Large file detected, using stream processing mode\n", stderr);
     }
   }
@@ -260,9 +260,9 @@ void process_input(const Options& opt) {
 
   LogProcessor processor(opt);
 
-  if (opt.stream_mode) {
+  if (opt.streamMode) {
     if (opt.use_stdin) {
-      processor.process_stream_cfile(stdin);
+      processor.processStream_cfile(stdin);
     } else {
       process_file_stream(opt.filename, opt);
     }
@@ -272,15 +272,15 @@ void process_input(const Options& opt) {
       std::fprintf(stderr, "Warning: Input file '%s' is empty\n", opt.filename.c_str());
       return;
     }
-    processor.process_lines(lines);
+    processor.processLines(lines);
   }
 
   if (opt.monitor_memory) {
     report_memory_usage("completed processing", opt.filename);
   }
 
-  if (opt.show_progress || opt.monitor_memory) {
-    processor.print_stats(stderr);
+  if (opt.showProgress || opt.monitor_memory) {
+    processor.printStats(stderr);
   }
 }
 

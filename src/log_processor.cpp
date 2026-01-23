@@ -62,7 +62,7 @@ void validate_pending_blocks_count(std::size_t n) {
 
 LogProcessor::LogProcessor(const Options& options) : opt(options), stats{} {
   seen.reserve(RESERVE_SIZE_SEEN);
-  pending_blocks.reserve(opt.stream_mode ? RESERVE_SIZE_PENDING : 0);
+  pending_blocks.reserve(opt.streamMode ? RESERVE_SIZE_PENDING : 0);
   sigLines.reserve(RESERVE_SIZE_SIGLINES);
   initialize_string_patterns();
 
@@ -70,7 +70,7 @@ LogProcessor::LogProcessor(const Options& options) : opt(options), stats{} {
 
   // Pre-compile regexes
   try {
-    for (const auto& pat : opt.exclude_stack_patterns) {
+    for (const auto& pat : opt.excludeStackPatterns) {
       stack_regexes.emplace_back(pat, std::regex::optimize);
     }
   } catch (const std::regex_error& e) {
@@ -209,40 +209,40 @@ std::string LogProcessor::replace_patterns(const std::string& line) const {
   return out;
 }
 
-void LogProcessor::process_stream(std::istream& in) {
-  std::size_t bytes_processed = 0;
+void LogProcessor::processStream(std::istream& in) {
+  std::size_t bytesProcessed = 0;
   std::size_t total_bytes = 0;
-  if (opt.show_progress && !opt.use_stdin) {
+  if (opt.showProgress && !opt.use_stdin) {
     total_bytes = get_file_size_for_progress();
   }
   std::string line;
   while (std::getline(in, line)) {
-    stats.lines_read++;
+    stats.linesRead++;
     validate_line_length(line);
-    bytes_processed += line.size() + 1;
-    if (should_report_progress(bytes_processed, total_bytes)) {
-      report_progress(bytes_processed, total_bytes, opt.filename);
+    bytesProcessed += line.size() + 1;
+    if (should_report_progress(bytesProcessed, total_bytes)) {
+      report_progress(bytesProcessed, total_bytes, opt.filename);
     }
-    if (opt.max_errors > 0 && stats.blocks_found >= opt.max_errors) {
+    if (opt.maxErrors > 0 && stats.blocksFound >= opt.maxErrors) {
       clear_current_state();
       break;
     }
     process_line(line);
   }
-  stats.bytes_processed = bytes_processed;
-  if (opt.show_progress && total_bytes > 0) {
-    report_progress(bytes_processed, total_bytes, opt.filename);
+  stats.bytesProcessed = bytesProcessed;
+  if (opt.showProgress && total_bytes > 0) {
+    report_progress(bytesProcessed, total_bytes, opt.filename);
   }
   flush();
   output_pending_blocks();
 }
 
-void LogProcessor::process_stream_cfile(std::FILE* fp) {
+void LogProcessor::processStream_cfile(std::FILE* fp) {
   if (fp == nullptr)
     return;
-  std::size_t bytes_processed = 0;
+  std::size_t bytesProcessed = 0;
   std::size_t total_bytes = 0;
-  if (opt.show_progress && !opt.use_stdin) {
+  if (opt.showProgress && !opt.use_stdin) {
     total_bytes = get_file_size_for_progress();
   }
   std::string line;
@@ -253,17 +253,17 @@ void LogProcessor::process_stream_cfile(std::FILE* fp) {
   while ((read = ::getline(&buf, &buf_size, fp)) != -1) {
     if (read > 0 && buf[read - 1] == '\n') {
       line.assign(buf, static_cast<std::size_t>(read - 1));
-      bytes_processed += static_cast<std::size_t>(read);
+      bytesProcessed += static_cast<std::size_t>(read);
     } else {
       line.assign(buf, static_cast<std::size_t>(read));
-      bytes_processed += static_cast<std::size_t>(read);
+      bytesProcessed += static_cast<std::size_t>(read);
     }
-    stats.lines_read++;
+    stats.linesRead++;
     validate_line_length(line);
-    if (should_report_progress(bytes_processed, total_bytes)) {
-      report_progress(bytes_processed, total_bytes, opt.filename);
+    if (should_report_progress(bytesProcessed, total_bytes)) {
+      report_progress(bytesProcessed, total_bytes, opt.filename);
     }
-    if (opt.max_errors > 0 && stats.blocks_found >= opt.max_errors) {
+    if (opt.maxErrors > 0 && stats.blocksFound >= opt.maxErrors) {
       clear_current_state();
       break;
     }
@@ -271,9 +271,9 @@ void LogProcessor::process_stream_cfile(std::FILE* fp) {
   }
   if (buf)
     std::free(buf);
-  stats.bytes_processed = bytes_processed;
-  if (opt.show_progress && total_bytes > 0) {
-    report_progress(bytes_processed, total_bytes, opt.filename);
+  stats.bytesProcessed = bytesProcessed;
+  if (opt.showProgress && total_bytes > 0) {
+    report_progress(bytesProcessed, total_bytes, opt.filename);
   }
   flush();
   output_pending_blocks();
@@ -283,10 +283,10 @@ std::size_t LogProcessor::get_file_size_for_progress() const {
   return get_file_size_bytes(opt.filename);
 }
 
-bool LogProcessor::should_report_progress(std::size_t bytes_processed,
+bool LogProcessor::should_report_progress(std::size_t bytesProcessed,
                                           std::size_t total_bytes) const {
-  return opt.show_progress && total_bytes > 0 &&
-         (bytes_processed % PROGRESS_REPORT_INTERVAL == 0 || bytes_processed >= total_bytes);
+  return opt.showProgress && total_bytes > 0 &&
+         (bytesProcessed % PROGRESS_REPORT_INTERVAL == 0 || bytesProcessed >= total_bytes);
 }
 
 void LogProcessor::output_pending_blocks() {
@@ -297,7 +297,7 @@ void LogProcessor::output_pending_blocks() {
   }
 }
 
-void LogProcessor::process_lines(const VecS& lines) {
+void LogProcessor::processLines(const VecS& lines) {
   std::size_t start_index = 0;
   if (opt.trim) {
     start_index = find_marker(lines);
@@ -305,7 +305,7 @@ void LogProcessor::process_lines(const VecS& lines) {
       return;
   }
   for (std::size_t i = start_index; i < lines.size(); ++i) {
-    stats.lines_read++;
+    stats.linesRead++;
     validate_line_length(lines[i]);
     process_line(lines[i]);
   }
@@ -313,7 +313,7 @@ void LogProcessor::process_lines(const VecS& lines) {
 }
 
 void LogProcessor::process_line(std::string_view line) {
-  if (opt.trim && opt.stream_mode) {
+  if (opt.trim && opt.streamMode) {
     for (const auto& m : opt.markers) {
       if (line.find(m) != std::string_view::npos) {
         marker_found = true;
@@ -326,7 +326,7 @@ void LogProcessor::process_line(std::string_view line) {
   if (!matches_vg_line(line))
     return;
 
-  std::string processed{LogParser::remove_prefix(line)};
+  std::string processed{LogParser::removePrefix(line)};
 
   if (matches_start_pattern(processed)) {
     flush();
@@ -358,27 +358,27 @@ void LogProcessor::flush() {
   }
 
   validate_block_size(raw.size());
-  stats.blocks_found++;
+  stats.blocksFound++;
 
   const std::string key = generate_signature_key();
   LogEntry entry = parse_entry(raw, key);
 
-  if (opt.strict_mode && (entry.pid.empty() || entry.error_type.empty())) {
-    stats.parse_errors++;
+  if (opt.strictMode && (entry.pid.empty() || entry.errorType.empty())) {
+    stats.parseErrors++;
     throw std::runtime_error("Strict mode: Failed to parse valid Valgrind entry from block");
   }
 
   // Filter check
   if (!shouldKeepEntry(entry)) {
-    stats.filtered_count++;
+    stats.filteredCount++;
     clear_current_state();
     return;
   }
 
   if (seen.insert(key).second) {
-    stats.unique_blocks++;
-    stats.error_counts[entry.error_type]++;
-    if (opt.stream_mode) {
+    stats.uniqueBlocks++;
+    stats.errorCounts[entry.errorType]++;
+    if (opt.streamMode) {
       validate_pending_blocks_count(pending_blocks.size());
       pending_blocks.emplace_back(std::move(entry));
     } else {
@@ -390,8 +390,8 @@ void LogProcessor::flush() {
 
 bool LogProcessor::shouldKeepEntry(const LogEntry& entry) const {
   // Exclude Types
-  for (const auto& ex : opt.exclude_types) {
-    if (entry.error_type.find(ex) != std::string::npos) {
+  for (const auto& ex : opt.excludeTypes) {
+    if (entry.errorType.find(ex) != std::string::npos) {
       return false;
     }
   }
@@ -399,7 +399,7 @@ bool LogProcessor::shouldKeepEntry(const LogEntry& entry) const {
   // Stack Regex Filter
   if (!stack_regexes.empty()) {
     for (const auto& re : stack_regexes) {
-      for (const auto& frame : entry.stack_trace) {
+      for (const auto& frame : entry.stackTrace) {
         if (std::regex_search(frame, re)) {
           return false;
         }
@@ -409,7 +409,7 @@ bool LogProcessor::shouldKeepEntry(const LogEntry& entry) const {
 
   // Thread Filter
   if (entry.tid.has_value()) {
-    for (auto t : opt.exclude_threads) {
+    for (auto t : opt.excludeThreads) {
       if (t == *entry.tid) {
         return false;
       }
@@ -417,9 +417,9 @@ bool LogProcessor::shouldKeepEntry(const LogEntry& entry) const {
   }
 
   // Path Filter (Structured Stack)
-  if (!opt.exclude_source_paths.empty()) {
-    for (const auto& frame : entry.stack_frames) {
-      for (const auto& path : opt.exclude_source_paths) {
+  if (!opt.excludeSourcePaths.empty()) {
+    for (const auto& frame : entry.stackFrames) {
+      for (const auto& path : opt.excludeSourcePaths) {
         if (frame.location.find(path) != std::string::npos) {
           return false;
         }
@@ -428,8 +428,8 @@ bool LogProcessor::shouldKeepEntry(const LogEntry& entry) const {
   }
 
   // Function Name Exclusion
-  if (!opt.exclude_functions.empty()) {
-    for (const auto& func : opt.exclude_functions) {
+  if (!opt.excludeFunctions.empty()) {
+    for (const auto& func : opt.excludeFunctions) {
       if (entry.hasFrameMatching(func)) {
         return false;
       }
@@ -437,12 +437,12 @@ bool LogProcessor::shouldKeepEntry(const LogEntry& entry) const {
   }
 
   // Include-Only Logic
-  bool includesActive = !opt.include_types.empty() || !opt.include_functions.empty();
+  bool includesActive = !opt.includeTypes.empty() || !opt.includeFunctions.empty();
   if (includesActive) {
     bool matched = false;
     // Check Types
-    if (!opt.include_types.empty()) {
-      for (const auto& type : opt.include_types) {
+    if (!opt.includeTypes.empty()) {
+      for (const auto& type : opt.includeTypes) {
         if (entry.matchesErrorType(type)) {
           matched = true;
           break;
@@ -450,8 +450,8 @@ bool LogProcessor::shouldKeepEntry(const LogEntry& entry) const {
       }
     }
     // Check Functions (if not already matched)
-    if (!matched && !opt.include_functions.empty()) {
-      for (const auto& func : opt.include_functions) {
+    if (!matched && !opt.includeFunctions.empty()) {
+      for (const auto& func : opt.includeFunctions) {
         if (entry.hasFrameMatching(func)) {
           matched = true;
           break;
@@ -504,7 +504,7 @@ std::size_t LogProcessor::find_marker(const VecS& lines) const {
 LogEntry LogProcessor::parse_entry(const std::string& raw_block,
                                    const std::string& signature) const {
   LogEntry entry;
-  entry.raw_content = raw_block;
+  entry.rawContent = raw_block;
   entry.signature = signature;
 
   std::string_view sv = raw_block;
@@ -514,19 +514,19 @@ LogEntry LogProcessor::parse_entry(const std::string& raw_block,
     first_eol = sv.size();
   std::string_view first_line = sv.substr(0, first_eol);
 
-  auto header = LogParser::parse_header(first_line);
+  auto header = LogParser::parseHeader(first_line);
   if (header) {
     entry.pid = std::move(header->pid);
-    entry.error_type = std::move(header->error_type);
+    entry.errorType = std::move(header->errorType);
     entry.tid = header->tid;
   } else {
     // Fallback
-    entry.error_type = LogParser::remove_prefix(first_line);
+    entry.errorType = LogParser::removePrefix(first_line);
   }
   // Trim EOL from type
-  while (!entry.error_type.empty() &&
-         (entry.error_type.back() == '\r' || entry.error_type.back() == '\n')) {
-    entry.error_type.pop_back();
+  while (!entry.errorType.empty() &&
+         (entry.errorType.back() == '\r' || entry.errorType.back() == '\n')) {
+    entry.errorType.pop_back();
   }
 
   // Populate stack trace from subsequent lines
@@ -538,7 +538,7 @@ LogEntry LogProcessor::parse_entry(const std::string& raw_block,
     std::string_view line = sv.substr(pos, eol - pos);
 
     // Use LogParser to clean line
-    auto content = LogParser::remove_prefix(line);
+    auto content = LogParser::removePrefix(line);
     std::string s_content{content};
 
     if (!s_content.empty()) {
@@ -547,11 +547,11 @@ LogEntry LogProcessor::parse_entry(const std::string& raw_block,
         s_content.pop_back();
       }
       if (!s_content.empty()) {
-        auto structured = LogParser::parse_frame_structured(s_content);
+        auto structured = LogParser::parseFrameStructured(s_content);
         if (structured) {
-          entry.stack_frames.push_back(std::move(*structured));
+          entry.stackFrames.push_back(std::move(*structured));
         }
-        entry.stack_trace.push_back(std::move(s_content));
+        entry.stackTrace.push_back(std::move(s_content));
       }
     }
     pos = eol + 1;
@@ -560,7 +560,7 @@ LogEntry LogProcessor::parse_entry(const std::string& raw_block,
   return entry;
 }
 
-void LogProcessor::print_stats(std::FILE* out) const {
+void LogProcessor::printStats(std::FILE* out) const {
   if (!out)
     return;
   // Use LogWriter to format stats (Iter 1 requirement)
