@@ -33,6 +33,9 @@ struct LogEntry {
   /// Thread ID if present (e.g. from "Thread 1:")
   std::optional<int32_t> tid;
 
+  /// Timestamp if present (e.g. from "==PID== 01:23:45")
+  std::optional<std::string> timestamp;
+
   struct StackFrame {
     std::string raw;
     std::string address;
@@ -101,5 +104,29 @@ struct LogEntry {
       }
     }
     return files;
+  }
+
+  /**
+   * @brief Returns the first stack frame that does NOT match exclusion patterns.
+   * Useful for finding the "blame" frame in user code.
+   * @param excludePatterns Substrings to ignore (e.g. "malloc", "::alloc").
+   * @return Pointer to the frame, or nullptr if all match or empty.
+   */
+  [[nodiscard]] const StackFrame* getPrimaryFrame(
+      const std::vector<std::string>& excludePatterns = {}) const {
+    for (const auto& frame : stackFrames) {
+      bool excluded = false;
+      for (const auto& pat : excludePatterns) {
+        if (frame.function.find(pat) != std::string::npos ||
+            frame.location.find(pat) != std::string::npos) {
+          excluded = true;
+          break;
+        }
+      }
+      if (!excluded) {
+        return &frame;
+      }
+    }
+    return nullptr;
   }
 };

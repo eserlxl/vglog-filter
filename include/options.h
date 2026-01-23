@@ -27,6 +27,9 @@ struct FilterConfig {
   std::vector<std::string> includeTypes;
   std::vector<std::string> includeFunctions;
   std::vector<std::string> excludeFunctions;
+  std::vector<int32_t> excludePids;    // Iteration 1: Explicit exclude by PID
+  std::vector<int32_t> includePids;    // Iteration 1: Only include these PIDs
+  std::vector<int32_t> includeThreads; // Iteration 1: Only include these Threads
 };
 
 struct RotationConfig {

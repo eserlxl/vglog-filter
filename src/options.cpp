@@ -49,6 +49,14 @@ void usage(std::string_view prog) {
   std::fputs("  --exclude-stack S       Exclude errors where stack matches regex S (can occur "
              "multiple times).\n",
              stdout);
+  std::fputs("  --exclude-pid N         Exclude errors from PID N (can occur multiple times).\n",
+             stdout);
+  std::fputs("  --include-pid N         Include only errors from PID N (can occur multiple "
+             "times).\n",
+             stdout);
+  std::fputs("  --include-thread N      Include only errors from Thread N (can occur multiple "
+             "times).\n",
+             stdout);
   std::fputs(
       "  -s, --stream            Force stream processing mode (auto-detected for files >5MB).\n",
       stdout);

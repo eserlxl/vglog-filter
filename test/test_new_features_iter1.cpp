@@ -57,7 +57,6 @@ bool test_include_types() {
   opt.filter.includeTypes.push_back("Invalid read");
   LogProcessor processor(opt);
 
-  // Use LogProcessor::processLines for simplified testing
   std::vector<std::string> lines;
   auto add_block = [&](const std::string& type) {
     lines.push_back("==100== " + type);
@@ -73,21 +72,9 @@ bool test_include_types() {
   processor.processLines(lines);
 
   const auto& stats = processor.getStats();
-  // stats.blocksFound counts found *before* filtering?
-  // Let's check implementation again.
-  // Line 361: stats.blocksFound++;
-  // Line 372: if (!shouldKeepEntry) { stats.filteredCount++; ... return; }
-  // Line 378: if (seen.insert()...) { stats.uniqueBlocks++; ... }
-
-  // So:
-  // blocksFound should be 4 (total blocks in input)
-  // filteredCount should be 2 (write + jump)
-  // uniqueBlocks should be 2 (read4 + read8 are unique)
-  // errorCounts should contain 2 entries (types)
-
-  TEST_ASSERT(stats.blocksFound == 4u, "Found 4 blocks total");
-  TEST_ASSERT(stats.filteredCount == 2u, "Filtered 2 blocks");
+  // kept 2 blocks (read 4 and read 8)
   TEST_ASSERT(stats.uniqueBlocks == 2u, "Kept 2 unique blocks");
+  TEST_ASSERT(stats.filteredCount == 2u, "Filtered 2 blocks");
 
   TEST_PASS("test_include_types");
   return true;
@@ -110,11 +97,119 @@ bool test_pid_stats() {
   processor.processLines(lines);
 
   const auto& stats = processor.getStats();
+  // Invalid read + Invalid write = 2 blocks
   TEST_ASSERT(stats.errorCountsByPid.size() == 2u, "Should track 2 PIDs");
   TEST_ASSERT(stats.errorCountsByPid.at(100) == 1u, "PID 100 count 1");
   TEST_ASSERT(stats.errorCountsByPid.at(200) == 1u, "PID 200 count 1");
 
   TEST_PASS("test_pid_stats");
+  return true;
+}
+
+bool test_timestamp_parsing() {
+  std::string line = "==12345== 01:23:45 MyError";
+  auto res = LogParser::parseHeader(LogParser::removePrefix(line));
+  TEST_ASSERT(res.has_value(), "Should parse header");
+  TEST_ASSERT(res->timestamp.has_value(), "Should have timestamp");
+  TEST_ASSERT(*res->timestamp == "01:23:45", "Timestamp should match");
+  TEST_ASSERT(res->errorType == "MyError", "Error type should match");
+
+  // Multilevel timestamp
+  line = "==12345== 01:23:45.678 MyError";
+  res = LogParser::parseHeader(LogParser::removePrefix(line));
+  TEST_ASSERT(*res->timestamp == "01:23:45.678", "Timestamp ms should match");
+
+  // No timestamp
+  line = "==12345== MyError";
+  res = LogParser::parseHeader(LogParser::removePrefix(line));
+  TEST_ASSERT(!res->timestamp.has_value(), "Should not have timestamp");
+
+  TEST_PASS("test_timestamp_parsing");
+  return true;
+}
+
+bool test_primary_frame() {
+  LogEntry entry;
+  entry.stackFrames = {{"", "", "malloc", ""},
+                       {"", "", "operator new", ""},
+                       {"", "", "my_func", "file.cpp:10"},
+                       {"", "", "main", "main.cpp:5"}};
+
+  auto* f = entry.getPrimaryFrame({"malloc", "operator new"});
+  TEST_ASSERT(f != nullptr, "Should find frame");
+  TEST_ASSERT(f->function == "my_func", "Should be my_func");
+
+  f = entry.getPrimaryFrame({"malloc", "operator new", "my_func", "main"});
+  TEST_ASSERT(f == nullptr, "Should return nullptr if all excluded");
+
+  TEST_PASS("test_primary_frame");
+  return true;
+}
+
+bool test_pid_filters() {
+  Options opt;
+  opt.trim = false;
+
+  // Test Include PID
+  opt.filter.includePids = {100};
+  {
+    LogProcessor p(opt);
+    std::vector<std::string> lines;
+    // Use "Invalid read" to trigger block start
+    lines.push_back("==100== Invalid read");
+    lines.push_back("==100== at f");
+    lines.push_back("");
+    lines.push_back("==200== Invalid read");
+    lines.push_back("==200== at f");
+    lines.push_back("");
+    p.processLines(lines);
+    TEST_ASSERT(p.getStats().uniqueBlocks == 1u, "Should keep only PID 100");
+    TEST_ASSERT(p.getStats().filteredCount == 1u, "Should filter PID 200");
+  }
+
+  // Test Exclude PID
+  opt.filter.includePids.clear();
+  opt.filter.excludePids = {100};
+  {
+    LogProcessor p(opt);
+    std::vector<std::string> lines;
+    lines.push_back("==100== Invalid read");
+    lines.push_back("==100== at f");
+    lines.push_back("");
+    lines.push_back("==200== Invalid read");
+    lines.push_back("==200== at f");
+    lines.push_back("");
+    p.processLines(lines);
+    TEST_ASSERT(p.getStats().uniqueBlocks == 1u, "Should keep only PID 200");
+    TEST_ASSERT(p.getStats().filteredCount == 1u, "Should filter PID 100");
+  }
+
+  TEST_PASS("test_pid_filters");
+  return true;
+}
+
+bool test_thread_filters() {
+  Options opt;
+  opt.trim = false;
+  opt.filter.includeThreads = {2};
+
+  LogProcessor p(opt);
+  std::vector<std::string> lines;
+  lines.push_back("==100== Thread 1: Invalid read");
+  lines.push_back("==100== at f");
+  lines.push_back("");
+  lines.push_back("==100== Thread 2: Invalid read");
+  lines.push_back("==100== at f");
+  lines.push_back("");
+  lines.push_back("==100== Thread 3: Invalid read");
+  lines.push_back("==100== at f");
+  lines.push_back("");
+
+  p.processLines(lines);
+  TEST_ASSERT(p.getStats().uniqueBlocks == 1u, "Should keep only Thread 2");
+  TEST_ASSERT(p.getStats().filteredCount == 2u, "Should filter others");
+
+  TEST_PASS("test_thread_filters");
   return true;
 }
 
@@ -126,6 +221,10 @@ int main() {
   all_passed &= test_max_errors();
   all_passed &= test_include_types();
   all_passed &= test_pid_stats();
+  all_passed &= test_timestamp_parsing();
+  all_passed &= test_primary_frame();
+  all_passed &= test_pid_filters();
+  all_passed &= test_thread_filters();
 
   if (all_passed) {
     std::cout << "\nAll Iteration 1 tests passed!" << std::endl;

@@ -47,7 +47,10 @@ enum {
   OPT_INCLUDE_FUNCTION,
   OPT_EXCLUDE_FUNCTION,
   OPT_DETAILED_STATS,
-  OPT_JSON_ARRAY // Iteration 2
+  OPT_JSON_ARRAY,    // Iteration 2
+  OPT_EXCLUDE_PID,   // Iteration 1
+  OPT_INCLUDE_PID,   // Iteration 1
+  OPT_INCLUDE_THREAD // Iteration 1
 };
 
 // getopt_long table
@@ -76,6 +79,9 @@ constinit option LONG_OPTS[] = {
     {"exclude-function", required_argument, nullptr, OPT_EXCLUDE_FUNCTION},
     {"detailed-stats", no_argument, nullptr, OPT_DETAILED_STATS},
     {"json-array", no_argument, nullptr, OPT_JSON_ARRAY},
+    {"exclude-pid", required_argument, nullptr, OPT_EXCLUDE_PID},
+    {"include-pid", required_argument, nullptr, OPT_INCLUDE_PID},
+    {"include-thread", required_argument, nullptr, OPT_INCLUDE_THREAD},
     {nullptr, 0, nullptr, 0}};
 
 inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
@@ -218,6 +224,24 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
       case OPT_JSON_ARRAY:
         opt.jsonArray = true;
         opt.jsonOutput = true; // Implies JSON output
+        break;
+      case OPT_EXCLUDE_PID:
+        if (optarg && *optarg) {
+          opt.filter.excludePids.push_back(
+              parse_nonneg_int(optarg, std::numeric_limits<int>::max()));
+        }
+        break;
+      case OPT_INCLUDE_PID:
+        if (optarg && *optarg) {
+          opt.filter.includePids.push_back(
+              parse_nonneg_int(optarg, std::numeric_limits<int>::max()));
+        }
+        break;
+      case OPT_INCLUDE_THREAD:
+        if (optarg && *optarg) {
+          opt.filter.includeThreads.push_back(
+              parse_nonneg_int(optarg, std::numeric_limits<int>::max()));
+        }
         break;
       default:
         usage(argv[0]);

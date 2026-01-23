@@ -43,6 +43,19 @@ bool LogFilter::shouldKeep(const LogEntry& entry) const {
     }
   }
 
+  // PID Filter (Exclude) - Iteration 1
+  if (!entry.pid.empty()) {
+    try {
+      int32_t pidVal = std::stoi(entry.pid);
+      for (auto p : config.excludePids) {
+        if (p == pidVal)
+          return false;
+      }
+    } catch (...) {
+      // Ignore non-numeric PID
+    }
+  }
+
   // Path Filter (Structured Stack Exclude)
   if (!config.excludeSourcePaths.empty()) {
     for (const auto& path : config.excludeSourcePaths) {
@@ -61,31 +74,68 @@ bool LogFilter::shouldKeep(const LogEntry& entry) const {
     }
   }
 
-  // Include-Only Logic (OR logic)
-  bool includesActive = !config.includeTypes.empty() || !config.includeFunctions.empty();
+  // Include-Only Logic (OR logic within category, AND across categories)
+  bool includesActive = !config.includeTypes.empty() || !config.includeFunctions.empty() ||
+                        !config.includePids.empty() || !config.includeThreads.empty();
   if (includesActive) {
-    bool matched = false;
     // Check Types
     if (!config.includeTypes.empty()) {
+      bool matched = false;
       for (const auto& type : config.includeTypes) {
         if (entry.matchesErrorType(type)) {
           matched = true;
           break;
         }
       }
+      if (!matched)
+        return false;
     }
-    // Check Functions (if not already matched)
-    if (!matched && !config.includeFunctions.empty()) {
+
+    // Check Functions
+    if (!config.includeFunctions.empty()) {
+      bool matched = false;
       for (const auto& func : config.includeFunctions) {
         if (entry.hasFrameMatching(func)) {
           matched = true;
           break;
         }
       }
+      if (!matched)
+        return false;
     }
 
-    if (!matched) {
-      return false;
+    // Check PIDs
+    if (!config.includePids.empty()) {
+      bool matched = false;
+      if (!entry.pid.empty()) {
+        try {
+          int32_t pidVal = std::stoi(entry.pid);
+          for (auto p : config.includePids) {
+            if (p == pidVal) {
+              matched = true;
+              break;
+            }
+          }
+        } catch (...) {
+        }
+      }
+      if (!matched)
+        return false;
+    }
+
+    // Check Threads
+    if (!config.includeThreads.empty()) {
+      bool matched = false;
+      if (entry.tid.has_value()) {
+        for (auto t : config.includeThreads) {
+          if (t == *entry.tid) {
+            matched = true;
+            break;
+          }
+        }
+      }
+      if (!matched)
+        return false;
     }
   }
 

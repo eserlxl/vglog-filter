@@ -469,6 +469,7 @@ LogEntry LogProcessor::parseEntry(const std::string& rawBlock, const std::string
     entry.pid = std::move(header->pid);
     entry.errorType = std::move(header->errorType);
     entry.tid = header->tid;
+    entry.timestamp = std::move(header->timestamp);
   } else {
     // Fallback
     entry.errorType = LogParser::removePrefix(first_line);

@@ -31,6 +31,27 @@ std::optional<LogParser::HeaderResult> LogParser::parseHeader(std::string_view l
   if (content_view.empty())
     return std::nullopt;
 
+  // Check for Timestamp (e.g., "00:00:00.123 ")
+  // Format is usually HH:MM:SS.ms or just HH:MM:SS
+  std::optional<std::string> timestamp;
+  if (content_view.size() >= 8 && is_digit(content_view[0]) && is_digit(content_view[1]) &&
+      content_view[2] == ':' && is_digit(content_view[3])) {
+    // Simple heuristic: if it looks like time, take it.
+    // Scan until space
+    size_t pos = 0;
+    while (pos < content_view.size() &&
+           !std::isspace(static_cast<unsigned char>(content_view[pos]))) {
+      pos++;
+    }
+    timestamp = std::string(content_view.substr(0, pos));
+    // Remove timestamp and following space from content
+    content_view.remove_prefix(pos);
+    while (!content_view.empty() &&
+           std::isspace(static_cast<unsigned char>(content_view.front()))) {
+      content_view.remove_prefix(1);
+    }
+  }
+
   // Check for Thread ID (e.g., "Thread 2: ...")
   std::optional<int32_t> tid;
   std::string_view error_part = content_view;
@@ -63,7 +84,7 @@ std::optional<LogParser::HeaderResult> LogParser::parseHeader(std::string_view l
     errorType.pop_back();
   }
 
-  return HeaderResult{std::move(pid), std::move(errorType), tid};
+  return HeaderResult{std::move(pid), std::move(errorType), tid, std::move(timestamp)};
 }
 
 std::optional<LogEntry::StackFrame> LogParser::parseFrameStructured(std::string_view line) {

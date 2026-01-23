@@ -13,6 +13,7 @@ public:
     std::string pid;
     std::string errorType;
     std::optional<int32_t> tid;
+    std::optional<std::string> timestamp;
   };
 
   /**
