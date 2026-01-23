@@ -37,6 +37,9 @@ constexpr size_t RESERVE_SIZE_SIGLINES = 64;
 constexpr size_t VG_LINE_MIN_LEN = 4;
 constexpr size_t MATCH_BYTES_HEAD_LEN = 10; // " bytes in "
 constexpr size_t MATCH_BLOCKS_LEN = 7;      // " blocks"
+constexpr size_t RESERVE_LINE_SIZE = 1024;
+constexpr size_t RESERVE_KEY_SIZE = 256;
+constexpr size_t NUM_START_KEYS = 10;
 
 void validate_line_length(std::string_view line) {
   if (line.size() > MAX_LINE_LENGTH) {
@@ -115,7 +118,7 @@ bool LogProcessor::matches_prefix(std::string_view line) const noexcept {
 }
 
 bool LogProcessor::matches_start_pattern(std::string_view line) const noexcept {
-  static constexpr std::array<std::string_view, 10> keys{
+  static constexpr std::array<std::string_view, NUM_START_KEYS> keys{
       "Invalid read",     "Invalid write",      "Syscall param",   "Use of uninitialised",
       "Conditional jump", "bytes in ",          "still reachable", "possibly lost",
       "definitely lost",  "Process terminating"};
@@ -243,7 +246,7 @@ void LogProcessor::process_stream_cfile(std::FILE* fp) {
     total_bytes = get_file_size_for_progress();
   }
   std::string line;
-  line.reserve(1024);
+  line.reserve(RESERVE_LINE_SIZE);
   char* buf = nullptr;
   size_t buf_size = 0;
   ssize_t read = -1;
@@ -468,7 +471,7 @@ std::string LogProcessor::generate_signature_key() const {
   if (opt.depth <= 0)
     return sig;
   std::string key;
-  key.reserve(256);
+  key.reserve(RESERVE_KEY_SIZE);
   for (const auto& line : sigLines | std::views::take(static_cast<std::size_t>(opt.depth))) {
     key.append(line).push_back('\n');
   }
