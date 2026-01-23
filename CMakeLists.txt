@@ -189,6 +189,8 @@ add_library(vglog-filter-lib
   src/canonicalization.cpp
   src/log_parser.cpp
   src/log_writer.cpp
+  src/options_builder.cpp
+  src/cli_parser.cpp
 )
 target_link_libraries(vglog-filter-lib PUBLIC project_options project_warnings)
 target_compile_features(vglog-filter-lib PUBLIC cxx_std_23)
@@ -295,6 +297,7 @@ if (BUILD_TESTING)
   add_test_exe(test_features_iter2    "test/test_features_iter2.cpp")
   add_test_exe(test_features_iter3    "test/test_features_iter3.cpp")
   add_test_exe(test_json_modes        "test/test_json_modes.cpp")
+  add_test_exe(test_options_builder   "test/test_options_builder.cpp")
 
   # Convenience target to run tests with nice output
   add_custom_target(run-tests

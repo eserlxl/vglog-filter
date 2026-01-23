@@ -103,6 +103,9 @@ struct LogWriter::Impl {
       if (entry.tid.has_value()) {
         buffer += ",\"tid\":" + std::to_string(*entry.tid);
       }
+      if (entry.timestamp.has_value()) {
+        buffer += ",\"timestamp\":\"" + json_utils::escape_string(*entry.timestamp) + "\"";
+      }
       if (!entry.stackTrace.empty()) {
         buffer += ",\"stackTrace\":[";
         for (size_t i = 0; i < entry.stackTrace.size(); ++i) {
