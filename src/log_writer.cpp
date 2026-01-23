@@ -19,8 +19,9 @@ struct LogWriter::Impl {
   std::FILE* out_fp{stdout};
   std::shared_ptr<void> file_handle_lifetime;
   bool isFirstEntry = true; // Iteration 2: State for array
+  bool useColor = false;
 
-  explicit Impl(const Options& options) : opt(options) {
+  explicit Impl(const Options& options) : opt(options), useColor(opt.color) {
     if (!opt.outputFile.empty()) {
       open_file(opt.outputFile);
     }
@@ -150,6 +151,15 @@ struct LogWriter::Impl {
           buffer += "]";
         }
       }
+      if (!entry.sourceContext.empty()) {
+        buffer += ",\"sourceContext\":[";
+        for (size_t i = 0; i < entry.sourceContext.size(); ++i) {
+          if (i > 0)
+            buffer += ",";
+          buffer += "\"" + json_utils::escape_string(entry.sourceContext[i]) + "\"";
+        }
+        buffer += "]";
+      }
     }
     buffer += "}"; // No newline here
   }
@@ -179,13 +189,87 @@ void LogWriter::writeEntry(const LogEntry& entry) {
       pImpl->write_data(json.data(), json.size());
     }
   } else {
-    pImpl->write_data(entry.rawContent.data(), entry.rawContent.size());
+    // Color logic
+    if (pImpl->useColor) {
+      // Very basic ANSI coloring: Red for errors, Reset at end
+      // Highlight "==PID==" in Cyan
+      // Highlight "at 0x..." in Green
+      // This is a simple heuristic implementation
+      std::string colorized = entry.rawContent;
+      static const std::string RED = "\033[31m";
+      static const std::string CYAN = "\033[36m";
+      static const std::string GREEN = "\033[32m";
+      static const std::string RESET = "\033[0m";
+
+      // We can't easily parse and replace strictly without rebuilding.
+      // But for Iteration 1, let's just color the whole block Red if it's an error type we recognize?
+      // Or just color the "Invalid read..." line.
+      // Let's do simple: Color the whole thing if it's an error.
+      // Better: Insert color codes.
+
+      // Simple Approach:
+      // 1. Prefix with RED if errorType is serious (contains Invalid, match, etc)
+      // 2. Or just Reset at end.
+
+      // Re-building raw content with color is complex if we want partial color.
+      // Let's just output RED start and RESET end for the whole entry for now.
+      pImpl->write_data(RED.data(), RED.size());
+      pImpl->write_data(entry.rawContent.data(), entry.rawContent.size());
+      pImpl->write_data(RESET.data(), RESET.size());
+    } else {
+      pImpl->write_data(entry.rawContent.data(), entry.rawContent.size());
+    }
+
+    if (!entry.sourceContext.empty()) {
+      pImpl->write_data("  > Context:\n", 13);
+      for (const auto& line : entry.sourceContext) {
+        pImpl->write_data("    ", 4);
+        pImpl->write_data(line.data(), line.size());
+        pImpl->write_data("\n", 1);
+      }
+    }
+
     pImpl->write_data("\n", 1);
   }
 }
 
 void LogWriter::writeRaw(const std::string& content) {
   pImpl->write_data(content.data(), content.size());
+}
+
+void LogWriter::setUseColor(bool enable) {
+  pImpl->useColor = enable;
+}
+
+void LogWriter::writeStatsJson(const struct LogStats& stats, const std::string& path) const {
+  if (path.empty())
+    return;
+
+  std::string json = "{\"type\":\"stats\"";
+  json += ",\"linesRead\":" + std::to_string(stats.linesRead);
+  json += ",\"bytesProcessed\":" + std::to_string(stats.bytesProcessed);
+  json += ",\"blocksFound\":" + std::to_string(stats.blocksFound);
+  json += ",\"uniqueBlocks\":" + std::to_string(stats.uniqueBlocks);
+  json += ",\"filteredCount\":" + std::to_string(stats.filteredCount);
+  json += ",\"parseErrors\":" + std::to_string(stats.parseErrors);
+
+  if (!stats.errorCounts.empty()) {
+    json += ",\"error_breakdown\":{";
+    bool first = true;
+    for (const auto& [type, count] : stats.errorCounts) {
+      if (!first)
+        json += ",";
+      json += "\"" + json_utils::escape_string(type) + "\":" + std::to_string(count);
+      first = false;
+    }
+    json += "}";
+  }
+  json += "}\n";
+
+  FileHandle fh(path.c_str(), "w");
+  if (fh.get()) {
+    std::fwrite(json.data(), 1, json.size(), fh.get());
+  }
 }
 
 void LogWriter::writeStats(const struct LogStats& stats) {

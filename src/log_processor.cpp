@@ -9,6 +9,8 @@
 
 #include "canonicalization.h"
 #include "log_parser.h"
+#include "log_writer.h"
+#include "source_loader.h"
 
 #include <array>
 #include <cstdio>
@@ -60,13 +62,14 @@ void validate_pending_blocks_count(std::size_t n) {
 
 } // namespace
 
-LogProcessor::LogProcessor(const Options& options) : opt(options), filter(options.filter), stats{} {
+LogProcessor::LogProcessor(const Options& options, std::unique_ptr<ILogWriter> writer)
+    : opt(options), filter(options.filter), stats{},
+      writer(writer ? std::move(writer)
+                    : std::unique_ptr<ILogWriter>(std::make_unique<LogWriter>(options))) {
   seen.reserve(RESERVE_SIZE_SEEN);
   pendingBlocks.reserve(opt.streamMode ? RESERVE_SIZE_PENDING : 0);
   sigLines.reserve(RESERVE_SIZE_SIGLINES);
   initializeStringPatterns();
-
-  writer = std::make_unique<LogWriter>(opt);
   // Regex compilation moved to LogFilter
 }
 
@@ -365,6 +368,8 @@ std::string LogProcessor::processRawLine(const std::string& processedLine) const
 }
 
 void LogProcessor::flush() {
+  std::cerr << "DEBUG: flush called. raw empty? " << raw.empty() << ", size: " << raw.size()
+            << "\n";
   if (raw.empty()) {
     clearCurrentState();
     return;
@@ -409,6 +414,28 @@ void LogProcessor::flush() {
       validate_pending_blocks_count(pendingBlocks.size());
       pendingBlocks.emplace_back(std::move(entry));
     } else {
+      // Source Context Logic
+      // Already deduped by outer block (seen.insert)
+
+      // Load Source Context
+      if (opt.contextLines > 0 && !entry.stackFrames.empty()) {
+        const auto& frame = entry.stackFrames[0];
+        if (!frame.location.empty()) {
+          auto colonPos = frame.location.find_last_of(':');
+          if (colonPos != std::string::npos) {
+            std::string file = frame.location.substr(0, colonPos);
+            int line = 0;
+            try {
+              line = std::stoi(frame.location.substr(colonPos + 1));
+            } catch (...) {
+            }
+            if (line > 0) {
+              entry.sourceContext = SourceLoader::loadContext(file, line, opt.contextLines);
+            }
+          }
+        }
+      }
+
       writer->writeEntry(entry);
     }
   }
@@ -516,4 +543,10 @@ void LogProcessor::printStats(std::FILE* out) const {
     return;
   // Use LogWriter to format stats (Iter 1 requirement)
   writer->writeStats(stats);
+}
+
+void LogProcessor::saveStatsJson() const {
+  if (!opt.statsFile.empty()) {
+    writer->writeStatsJson(stats, opt.statsFile);
+  }
 }

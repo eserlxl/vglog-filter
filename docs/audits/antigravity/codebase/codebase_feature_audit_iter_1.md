@@ -1,32 +1,33 @@
 # Codebase Feature Audit (Iteration 1)
 
-## Existing Capabilities (Under-Exposed or Incomplete)
-1.  **Thread Filtering**: `excludeThreads` exists, but there is no `includeThreads`. This makes "isolate thread X" workflows difficult.
-2.  **PID Filtering**: `LogEntry` has `pid`, but `FilterConfig` offers no way to filter by PID (neither include nor exclude).
-3.  **Timestamp Awareness**: The codebase ignores timestamps in Valgrind output (`--time-stamp=yes`), losing critical ordering/context vs other system logs.
-4.  **Structured Stats**: `LogStats` collects error counts by PID and TID, but the CLI only has a generic `--detailed-stats` flag which may not be fully granular in JSON mode.
+## 1. Existing Capabilities (Under-exposed or Incomplete)
+- **Filtering System**: valid `exclude` and `include` logic exists for Types, Functions, PIDs, Threads. However, `excludeStackPatterns` (regex on stack) exists, but **`includeStackPatterns`** is missing. This checks if *any* frame matches a regex to include the entry.
+- **Statistics**: The system collects stats (`linesRead`, `blocksFound`, `errorCounts`), but only prints them to `stderr` or a text format. There is no structured **JSON export for statistics**, limiting integration with dashboards.
+- **Input Processing**: The system handles large files and streams, but lacks **Time-based filtering** (e.g., "show errors after 10:00"). Timestamps are parsed into `LogEntry`, but not used for filtering.
+- **Output**: The output is plain text or basic JSON. **Colorized output** for TTY is missing, which is a standard feature for CLI log tools.
 
-## Missing Features Logically Implied by Current Design
-1.  **Symmetric Filtering**: If we can exclude threads, we should be able to include them. If we have PIDs, we should be able to filter them.
-2.  **Primary Blame Frame**: Users generally care about the "first frame in my code". `LogEntry` parses frames but doesn't offer a helper to find the "blame" frame (first non-library frame, or first frame with line number).
-3.  **Time Parsing**: `LogEntry` structure implies a faithful structured representation of the log, yet omits the timestamp field common in production runs.
+## 2. Missing Features Logically Implied
+- **Configuration File**: The tool relies entirely on CLI arguments. As options grow (exclusions, inclusions, limits), a **JSON/YAML config file** is a natural extension to share presets.
+- **Time Window**: `LogEntry` has a `timestamp` field. Users naturally expect to filter logs by time (after/before).
+- **Inverse Stack Matching**: Users often want to "find all errors passing through `my_function`". `includeFunctions` does exact substring match, but regex support for inclusion is implied by `excludeStackPatterns`.
 
-## High-Risk Correctness or Safety Issues
-1.  **Thread Safety**: `LogProcessor` is explicitly non-thread-safe. While acceptable for a CLI tool, this limits library usage.
-2.  **Parser Strictness**: `LogParser::parseHeader` uses "relaxed" checks. This might misidentify content as headers in mixed streams.
-3.  **Memory Limits**: `MAX_BLOCK_SIZE` is 10MB. Large monolithic blocks (e.g. from infinite recursion output) could trigger this, but the error message handling is basic exception throwing.
+## 3. High-Risk Correctness or Safety Issues
+- **Regex Performance**: `LogFilter` compiles regexes in constructor. If many regexes are provided, `std::regex` might be slow. No immediate fix needed for Iter/1, but worth noting.
+- **Input Validation**: `cli_parser` does basic validation, but complex combinations (e.g. `json` + `interactive`) might need stricter checks.
+- **Large Line Handling**: `MAX_LINE_LENGTH` is 1MB. This is safe, but could be configurable.
 
-## API Usability Gaps
-1.  **Configuration Construction**: `Options` is a large POD struct. Constructing it in tests or library usage is verbose. Builder pattern or fluent helpers would be better (Iteration 2 candidate).
-2.  **LogEntry Inspection**: `hasFrameMatching` is good, but `getPrimaryFrame` is better for reporting.
+## 4. API Usability Gaps and Misuse Risks
+- **Verbose CLI**: The number of exclusion flags is growing. Helper to load from file is needed.
+- **Stats Visibility**: `monitorMemory` prints to stderr but isn't very structured.
 
-## Missing Tests
-1.  **Timestamp Parsing**: No tests for timestamped logs.
-2.  **Complex Filter Combinations**: Need to verify `includeTypes` AND `excludeFunctions` behavior logic (AND vs OR vs Precedence).
+## 5. Missing Tests
+- **Time Filtering Tests**: usage of timestamp parsing needs verification.
+- **Color Output Tests**: Need to verify ANSI codes are not emitted when not a TTY (or forced).
+- **Config File Tests**: Need to verify priority (CLI overrides Config).
 
-## Areas Maintaining Status Quo
-- **File I/O**: `std::istream` and `FILE*` dual support is good, efficient enough. No need to change to `mmap` or similar unless performance issues arise.
-- **Regex Backend**: `std::regex` is used. Do not switch to `ctre` or `re2` unless performance is proven bottleneck (Iteration 2 optimization if needed).
+## 6. Areas to Remain Unchanged
+- **Core Parsing Logic (`LogParser`)**: Stable and handles Valgrind format well.
+- **Canonicalization**: well-tested integration.
 
-## Changes Since Last Iteration
-(N/A - This is Iteration 1)
+## 7. Changes Since Last Iteration
+- N/A (Iteration 1)

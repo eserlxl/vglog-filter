@@ -30,6 +30,11 @@ struct FilterConfig {
   std::vector<int32_t> excludePids;    // Iteration 1: Explicit exclude by PID
   std::vector<int32_t> includePids;    // Iteration 1: Only include these PIDs
   std::vector<int32_t> includeThreads; // Iteration 1: Only include these Threads
+
+  // Iteration 1 Extensions
+  std::vector<std::string> includeStackPatterns;
+  std::optional<std::string> timeAfter;
+  std::optional<std::string> timeBefore;
 };
 
 struct RotationConfig {
@@ -39,7 +44,7 @@ struct RotationConfig {
 
 struct Options {
   int depth = DEFAULT_DEPTH;
-  bool trim = true;
+  bool trim = false;
   bool scrubRaw = true; // Renamed from scrub_raw
   bool streamMode = false;
   bool showProgress = false;
@@ -53,6 +58,18 @@ struct Options {
   bool detailedJson = false;
   bool detailedStats = false;
   bool strictMode = false;
+
+  // Iteration 1 Extensions
+  std::string timeAfter;
+  std::string timeBefore;
+  std::string statsFile;
+  std::string configFile;
+  bool color = false;
+
+  // Iteration 2 Extensions
+  bool uniqueOutput = false;
+  int contextLines = 0;
+  std::vector<std::string> inputFiles;
 
   // Nested Configs
   FilterConfig filter;

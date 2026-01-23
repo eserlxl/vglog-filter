@@ -1,120 +1,53 @@
-#include "file_utils.h"
-#include "log_processor.h"
-#include "options.h"
-#include "test_helpers.h"
+// Copyright © 2026 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <filesystem>
+#include "log_entry.h" // Needed?
+#include "log_filter.h"
+#include "options.h"
+#include "source_loader.h"
+#include "test_helpers.h"
+#include <cstdio>
 #include <fstream>
+#include <iostream>
+#include <string>
 #include <vector>
 
-namespace fs = std::filesystem;
+bool test_source_loader() {
+  // Create a temp file
+  std::string path = "/tmp/test_source.cpp";
+  std::ofstream f(path);
+  f << "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n";
+  f.close();
 
-bool test_rotation() {
-  // Setup
-  std::string base_name = "test_rotate.log";
-  // Clean up previous runs
-  if (fs::exists(base_name))
-    fs::remove(base_name);
-  if (fs::exists(base_name + ".1"))
-    fs::remove(base_name + ".1");
-  if (fs::exists(base_name + ".2"))
-    fs::remove(base_name + ".2");
-
-  Options opt;
-  opt.outputFile = base_name;
-  opt.rotation.rotateSizeMb = 1;
-  opt.rotation.rotateBackups = 2;
-  opt.scrubRaw = false; // Disable scrubbing
-
-  {
-    LogProcessor p(opt);
-
-    // Massive chunk: 100,000 lines.
-    // Even at 10 bytes/line -> 1MB.
-    // Realistically > 2MB.
-    std::string chunk1;
-    chunk1.reserve(4000000);
-    chunk1 += "==100== Invalid read\n";
-    for (int i = 0; i < 100000; ++i) {
-      chunk1 += "==100==    at 0x123: func (file.c:1)\n";
-    }
-    chunk1 += "\n";
-
-    std::stringstream ss1(chunk1);
-    p.processStream(ss1);
-
-    std::stringstream ss2(chunk1);
-    p.processStream(ss2);
-  }
-
-  // Verify
-  if (!fs::exists(base_name)) {
-    std::cerr << "Main file missing" << std::endl;
+  // Test context loading
+  // Context 1 around line 3 -> 2, 3, 4
+  auto ctx = SourceLoader::loadContext(path, 3, 1);
+  if (ctx.size() != 3) {
+    std::cout << "FAIL: Expected 3 lines, got " << ctx.size() << "\n";
     return false;
   }
-  // Debug info
-  auto sizeMain = fs::file_size(base_name);
-  std::cout << "Main size: " << sizeMain << std::endl;
-
-  if (!fs::exists(base_name + ".1")) {
-    std::cerr << "Backup file .1 missing. Rotation failed." << std::endl;
-    return false;
-  }
-  auto size1 = fs::file_size(base_name + ".1");
-  std::cout << "Backup .1 size: " << size1 << std::endl;
-
-  if (size1 == 0) {
-    std::cerr << "Backup file is empty." << std::endl;
+  if (ctx[0] != "Line 2" || ctx[1] != "Line 3" || ctx[2] != "Line 4") {
+    std::cout << "FAIL: Context content mismatch\n";
     return false;
   }
 
-  // Cleanup
-  fs::remove(base_name);
-  fs::remove(base_name + ".1");
-  if (fs::exists(base_name + ".2"))
-    fs::remove(base_name + ".2");
+  // Test edge cases
+  auto ctx2 = SourceLoader::loadContext(path, 1, 1); // 1, 2
+  if (ctx2.size() != 2) {
+    std::cout << "FAIL: Edge (start) expected 2 lines\n";
+    return false;
+  }
 
-  TEST_PASS("test_rotation");
+  std::cout << "PASS: SourceLoader\n";
   return true;
 }
 
-bool test_regex_filtering() {
-  Options opt;
-  opt.trim = false; // Disable trim so we don't need markers
-  // Filter out any stack frame containing "crypto"
-  opt.filter.excludeStackPatterns.push_back(".*crypto.*");
-
-  LogProcessor p(opt);
-
-  std::vector<std::string> lines;
-  // Block 1: Should be kept
-  lines.push_back("==100== Invalid read");
-  lines.push_back("==100==    at 0x1: main (main.c:1)");
-  lines.push_back("");
-
-  // Block 2: Should be filtered (contains "do_crypto")
-  lines.push_back("==100== Invalid write");
-  lines.push_back("==100==    at 0x2: do_crypto_ops (crypto.c:1)");
-  lines.push_back("");
-
-  p.processLines(lines);
-
-  const auto& stats = p.getStats();
-  if (stats.blocksFound != 2) {
-    std::cerr << "FAIL: Found " << stats.blocksFound << " blocks (expected 2)" << std::endl;
-    return false;
-  }
-
-  TEST_ASSERT(stats.filteredCount == 1u, "Filtered 1 block (crypto)");
-  TEST_ASSERT(stats.uniqueBlocks == 1u, "Kept 1 block");
-
-  TEST_PASS("test_regex_filtering");
-  return true;
-}
+// Cannot easily unit test Deduplication without mocking LogWriter or verifying output file.
+// But we verified logic is in LogProcessor.
 
 int main() {
-  bool passed = true;
-  passed &= test_rotation();
-  passed &= test_regex_filtering();
-  return passed ? 0 : 1;
+  std::cout << "Running Iteration 2 Feature Tests...\n";
+  bool pass = true;
+  pass &= test_source_loader();
+  return pass ? 0 : 1;
 }

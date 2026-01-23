@@ -29,4 +29,5 @@ public:
 private:
   const FilterConfig& config;
   std::vector<std::regex> stackRegexes;
+  std::vector<std::regex> includeStackRegexes; // Iteration 1
 };

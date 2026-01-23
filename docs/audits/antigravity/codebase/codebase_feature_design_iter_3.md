@@ -1,31 +1,29 @@
-# Codebase Feature Design (Iteration 3)
+# Refactoring Design (Iteration 3)
 
-## 1. Naming Standardization
-- **Namespace**: `cli`
-- **Function**: `parse_args` -> `ParseArgs` (to match `LogProcessor::ProcessLines` style if it existed, or just consistency).
-  - Actually, `LogProcessor` uses `processLines` (camelCase).
-  - So `cli::parseArgs` (camelCase).
-  
-## 2. Constants extraction
-**File**: `src/log_writer.cpp`
-```cpp
-constexpr size_t JSON_BUFFER_RESERVE = 128;
-constexpr size_t MB_IN_BYTES = 1024 * 1024;
-```
+## 1. Config Loader Extraction
+**Goal**: Decouple configuration logic from `main.cpp`.
+**Design**:
+- Create `include/config_loader.h` and `src/config_loader.cpp`.
+- Class `ConfigLoader`.
+- Method: `static void load(Options& opt)`.
+- Logic moves verbatim from `main.cpp` anonymous namespace.
 
-**File**: `src/cli_parser.cpp`
-```cpp
-constexpr size_t ERROR_MSG_BUFFER = 64;
-```
+## 2. ILogWriter Interface
+**Goal**: Enable mocking of output for `LogProcessor` testing.
+**Design**:
+- `include/ilog_writer.h`: Interface with virtual destructor and pure virtual methods:
+  - `writeEntry(const LogEntry&)`
+  - `printStats(FILE*)` -> `writeStats`
+  - `writeStatsJson(...)`
+- Update `LogWriter` to inherit `ILogWriter`.
+- Update `LogProcessor`:
+  - Member `std::unique_ptr<ILogWriter> writer`.
+  - Constructor overload: `LogProcessor(const Options&, std::unique_ptr<ILogWriter>)`.
+  - Default constructor creates `LogWriter` impl.
 
-## 3. Include Cleanup
-- Remove `<iostream>` where not used.
-- Remove `<file_utils.h>` from `cli_parser.cpp`.
-
-## 4. Type Safety
-- `parse_nonneg_int` should return `int` (as is), but usage should `static_cast<size_t>` explicitly where target is `size_t`.
-
-## Validation
-- `cmake --build`
-- `ctest`
-- Manual check of `build/build.log` for reduced warning noise.
+## 3. Mock Testing
+**Goal**: specific unit test for `LogProcessor` logic without file I/O.
+**Design**:
+- `test/test_features_iter3.cpp`:
+  - Define `MockLogWriter : public ILogWriter`.
+  - Test `LogProcessor` deduplication by counting calls to `MockLogWriter::writeEntry`.

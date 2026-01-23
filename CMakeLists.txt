@@ -191,6 +191,8 @@ add_library(vglog-filter-lib
   src/log_writer.cpp
   src/options_builder.cpp
   src/cli_parser.cpp
+  src/source_loader.cpp
+  src/config_loader.cpp
 )
 target_link_libraries(vglog-filter-lib PUBLIC project_options project_warnings)
 target_compile_features(vglog-filter-lib PUBLIC cxx_std_23)

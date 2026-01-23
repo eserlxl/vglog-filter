@@ -1,57 +1,52 @@
 # Codebase Feature Design (Iteration 2)
 
-## 1. Options Builder (Usability)
+## 1. Deduplication (--unique)
+**Goal**: Suppress duplicate error blocks.
+**Design**:
+- `Options`: Add `bool uniqueOutput = false`.
+- `LogProcessor`: In `processLine` (or where entries are finalized), check `options.uniqueOutput`.
+- Logic:
+  - Existing `seen` set tracks signatures.
+  - If `options.uniqueOutput` is true AND signature is already in `seen` -> Skip `writer->writeEntry`.
+  - Ensure `uniqueBlocks` stat is still incremented correctly (it tracks *uniqueness*, not printed count? Actually uniqueBlocks counts distinct signatures encountered. `blocksFound` counts total).
+  - So logic: `if (is_new) { seen.insert; unique++; write(); } else { if (!uniqueOutput) write(); }`.
 
-**Header**: `include/options_builder.h`
+## 2. Source Context (--context N)
+**Goal**: Show source code around the error.
+**Design**:
+- `Options`: Add `int contextLines = 0`.
+- `LogProcessor`:
+  - Identify primary stack frame (Frame 0 usually).
+  - If `contextLines > 0` and entry has valid file/line:
+    - Call `SourceLoader::loadContext(file, line, N)`.
+    - Returns `vector<string>` or formatted string.
+    - Append to `LogEntry`.
+- `LogEntry`: Add `std::vector<std::string> sourceContext`.
+- `LogWriter`:
+  - JSON: Output array `sourceContext`.
+  - Raw: Print lines prefixed with `>` or similar.
 
+## 3. Multiple Inputs
+**Goal**: Process list of files.
+**Design**:
+- `Options`: Add `std::vector<std::string> inputFiles`.
+- `cli_parser`: Collect non-option arguments into `inputFiles`.
+- `main.cpp`:
+  - Iterate `inputFiles`.
+  - Reuse `LogProcessor` instance (so stats and deduplication work across files).
+  - Extract file processing logic to `process_file(processor, path)`.
+
+## 4. API Changes
 ```cpp
-#pragma once
-#include "options.h"
+struct Options {
+    // ...
+    bool uniqueOutput = false; // --unique
+    int contextLines = 0;      // --context N
+    std::vector<std::string> inputFiles; 
+};
 
-class OptionsBuilder {
-public:
-  OptionsBuilder() = default;
-
-  OptionsBuilder& setJsonOutput(bool enabled);
-  OptionsBuilder& setDetailedJson(bool enabled);
-  OptionsBuilder& setOutputFile(const std::string& path);
-  OptionsBuilder& addExcludePid(int pid);
-  OptionsBuilder& addIncludePid(int pid);
-  OptionsBuilder& addIncludeThread(int tid);
-  // ... other methods ...
-
-  Options build() const;
-
-private:
-  Options opts;
+struct LogEntry {
+    // ...
+    std::vector<std::string> sourceContext;
 };
 ```
-
-## 2. CLI Refactoring (Refactoring)
-
-**Header**: `include/cli_parser.h`
-
-```cpp
-#pragma once
-#include "options.h"
-#include <optional>
-
-namespace cli {
-  std::optional<Options> parse_args(int argc, char* argv[]);
-}
-```
-
-**Implementation**: `src/cli_parser.cpp`
-- Move `parse_command_line` logic from `main.cpp` to here.
-- Clean up `main.cpp` to just call `cli::parse_args`.
-
-## 3. JSON Output Updates (Consistency)
-
-**File**: `src/log_writer.cpp`
-- Update `format_json` to serialization `timestamp` field if present.
-- Use `json_utils::escape_string`.
-
-## Validation Plan
-- **Unit Test**: `test_cli_options.cpp` (refactored to use `cli_parser`).
-- **Unit Test**: `test_log_writer.cpp` (verify timestamp field in JSON).
-- **Unit Test**: `test_options_builder.cpp` (new test).

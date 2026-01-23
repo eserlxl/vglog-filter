@@ -10,8 +10,11 @@ LogFilter::LogFilter(const FilterConfig& cfg) : config(cfg) {
     for (const auto& pat : config.excludeStackPatterns) {
       stackRegexes.emplace_back(pat, std::regex::optimize);
     }
+    for (const auto& pat : config.includeStackPatterns) {
+      includeStackRegexes.emplace_back(pat, std::regex::optimize);
+    }
   } catch (const std::regex_error& e) {
-    throw std::runtime_error("Invalid regex in exclude-stack: " + std::string(e.what()));
+    throw std::runtime_error("Invalid regex in stack patterns: " + std::string(e.what()));
   }
 }
 
@@ -74,9 +77,27 @@ bool LogFilter::shouldKeep(const LogEntry& entry) const {
     }
   }
 
+  // Time Filter (Iteration 1)
+  if (config.timeAfter.has_value() || config.timeBefore.has_value()) {
+    if (!entry.timestamp.has_value()) {
+      // If time filter is requested but entry has no timestamp, exclude it?
+      // Or strictly follow "if present"?
+      // Design decision: If time filtering is strictly requested, missing timestamp = drop.
+      return false;
+    }
+    const auto& ts = *entry.timestamp;
+    if (config.timeAfter.has_value() && ts < *config.timeAfter) {
+      return false;
+    }
+    if (config.timeBefore.has_value() && ts > *config.timeBefore) {
+      return false;
+    }
+  }
+
   // Include-Only Logic (OR logic within category, AND across categories)
   bool includesActive = !config.includeTypes.empty() || !config.includeFunctions.empty() ||
-                        !config.includePids.empty() || !config.includeThreads.empty();
+                        !config.includePids.empty() || !config.includeThreads.empty() ||
+                        !config.includeStackPatterns.empty();
   if (includesActive) {
     // Check Types
     if (!config.includeTypes.empty()) {
@@ -133,6 +154,23 @@ bool LogFilter::shouldKeep(const LogEntry& entry) const {
             break;
           }
         }
+      }
+      if (!matched)
+        return false;
+    }
+
+    // Check Stack Patterns (Include)
+    if (!includeStackRegexes.empty()) {
+      bool matched = false;
+      for (const auto& re : includeStackRegexes) {
+        for (const auto& frame : entry.stackTrace) {
+          if (std::regex_search(frame, re)) {
+            matched = true;
+            break;
+          }
+        }
+        if (matched)
+          break;
       }
       if (!matched)
         return false;

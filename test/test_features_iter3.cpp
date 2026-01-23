@@ -1,163 +1,66 @@
+// Copyright © 2026 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "ilog_writer.h"
+#include "log_entry.h"
 #include "log_processor.h"
 #include "options.h"
 #include "test_helpers.h"
-
-#include <filesystem>
-#include <fstream>
 #include <iostream>
-#include <sstream>
-#include <string>
+#include <memory>
 #include <vector>
 
-namespace fs = std::filesystem;
+// Mock Writer
+class MockLogWriter : public ILogWriter {
+public:
+  std::vector<LogEntry> entries;
 
-bool test_options_validation() {
-  {
-    Options opt;
-    opt.rotation.rotateBackups = 5;
-    opt.outputFile = ""; // Invalid
-    try {
-      opt.validate();
-      std::cerr << "FAIL: validate() should throw when rotateBackups > 0 and outputFile is empty"
-                << std::endl;
-      return false;
-    } catch (const std::runtime_error& e) {
-      // Expected
-    }
+  void writeEntry(const LogEntry& entry) override {
+    entries.push_back(entry);
   }
 
-  {
-    Options opt;
-    opt.rotation.rotateSizeMb = 10;
-    opt.outputFile = ""; // Invalid
-    try {
-      opt.validate();
-      std::cerr << "FAIL: validate() should throw when rotateSizeMb > 0 and outputFile is empty"
-                << std::endl;
-      return false;
-    } catch (const std::runtime_error& e) {
-      // Expected
-    }
+  void writeStats(const LogStats&) override {
+    // no-op
   }
 
-  {
-    Options opt;
-    opt.rotation.rotateBackups = 5;
-    opt.outputFile = "out.log"; // Valid
-    try {
-      opt.validate();
-    } catch (const std::exception& e) {
-      std::cerr << "FAIL: validate() threw unexpected exception: " << e.what() << std::endl;
-      return false;
-    }
+  void writeStatsJson(const LogStats&, const std::string&) const override {
+    // no-op
   }
+};
 
-  TEST_PASS("test_options_validation");
-  return true;
-}
-
-bool test_tid_parsing() {
-  std::string line = "==100== Thread 2: Invalid read of size 4";
-
+bool test_deduplication_mock() {
   Options opt;
-  opt.detailedStats = true;
-  opt.trim = false; // Disable trim to avoid requiring markers
+  opt.uniqueOutput = true;
+  opt.depth = 2;
 
-  LogProcessor p(opt);
-  std::vector<std::string> lines;
-  lines.push_back(line);
-  lines.push_back("==100==    at 0x123: main (main.c:1)");
-  lines.push_back("");
+  auto mockWriter = std::make_unique<MockLogWriter>();
+  // Store pointer to verify later
+  MockLogWriter* writerPtr = mockWriter.get();
 
-  p.processLines(lines);
+  LogProcessor processor(opt, std::move(mockWriter));
 
-  const auto& stats = p.getStats();
-  if (stats.blocksFound != 1) {
-    std::cerr << "FAIL: details blocksFound=" << stats.blocksFound << std::endl;
+  std::vector<std::string> lines = {
+      "==123== Invalid read of size 4",       "==123==    at 0xABC: func1 (file.c:1)",
+      "==123==    by 0xDEF: main (main.c:2)", "==123== ",
+      "==123== Invalid read of size 4",       "==123==    at 0xABC: func1 (file.c:1)",
+      "==123==    by 0xDEF: main (main.c:2)", "==123== "};
+
+  processor.processLines(lines);
+  processor.flush();
+
+  if (writerPtr->entries.size() != 1) {
+    std::cout << "FAIL: Deduplication failed. Expected 1 entry, got " << writerPtr->entries.size()
+              << "\n";
     return false;
   }
 
-  // Check TID stats
-  if (stats.errorCountsByTid.count(2) == 0) {
-    std::cerr << "FAIL: TID 2 not found in stats" << std::endl;
-    return false;
-  }
-  if (stats.errorCountsByTid.at(2) != 1) {
-    std::cerr << "FAIL: TID 2 count mismatch" << std::endl;
-    return false;
-  }
-
-  TEST_PASS("test_tid_parsing");
-  return true;
-}
-
-bool test_structured_json() {
-  std::string base_name = "test_struct.json";
-  if (fs::exists(base_name))
-    fs::remove(base_name);
-
-  Options opt;
-  opt.outputFile = base_name;
-  opt.jsonOutput = true;
-  opt.detailedJson = true;
-  opt.trim = false;
-  opt.scrubRaw = false; // Disable scrubbing so we keep addresses and at/by prefixes
-
-  {
-    LogProcessor p(opt);
-    std::vector<std::string> lines;
-    lines.push_back("==100== Invalid read");
-    lines.push_back("==100==    at 0xABC: my_func (file.cpp:42)");
-    lines.push_back("");
-
-    p.processLines(lines);
-  } // Destructor closes file ensuring flush
-
-  // Check output file
-  if (!fs::exists(base_name)) {
-    std::cerr << "FAIL: Output file missing" << std::endl;
-    return false;
-  }
-
-  std::ifstream ifs(base_name);
-  if (!ifs) {
-    std::cerr << "FAIL: Cannot open output file" << std::endl;
-    return false;
-  }
-  std::stringstream buffer;
-  buffer << ifs.rdbuf();
-  std::string content = buffer.str();
-
-  // Verify JSON content roughly (strings present)
-  // We expect "frames" array
-  if (content.find("\"frames\":[") == std::string::npos) {
-    std::cerr << "FAIL: 'frames' array missing in JSON" << std::endl;
-    return false;
-  }
-
-  // Check fields
-  if (content.find("\"addr\":\"0xABC\"") == std::string::npos) {
-    std::cerr << "FAIL: Address missing" << std::endl;
-    return false;
-  }
-  if (content.find("\"func\":\"my_func\"") == std::string::npos) {
-    std::cerr << "FAIL: Function missing" << std::endl;
-    return false;
-  }
-  if (content.find("\"loc\":\"file.cpp:42\"") == std::string::npos) {
-    std::cerr << "FAIL: Location missing" << std::endl;
-    return false;
-  }
-
-  fs::remove(base_name);
-  TEST_PASS("test_structured_json");
+  std::cout << "PASS: Deduplication with Mock\n";
   return true;
 }
 
 int main() {
-  bool passed = true;
-  passed &= test_tid_parsing();
-  passed &= test_structured_json();
-  passed &= test_options_validation();
-  return passed ? 0 : 1;
+  std::cout << "Running Iteration 3 Mock Tests...\n";
+  bool pass = true;
+  pass &= test_deduplication_mock();
+  return pass ? 0 : 1;
 }

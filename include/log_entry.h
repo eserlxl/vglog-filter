@@ -36,6 +36,9 @@ struct LogEntry {
   /// Timestamp if present (e.g. from "==PID== 01:23:45")
   std::optional<std::string> timestamp;
 
+  /// Source code context lines (if file read enabled)
+  std::vector<std::string> sourceContext;
+
   struct StackFrame {
     std::string raw;
     std::string address;

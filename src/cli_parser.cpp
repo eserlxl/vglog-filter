@@ -35,7 +35,15 @@ enum {
   OPT_JSON_ARRAY,
   OPT_EXCLUDE_PID,
   OPT_INCLUDE_PID,
-  OPT_INCLUDE_THREAD
+  OPT_INCLUDE_THREAD,
+  OPT_AFTER,
+  OPT_BEFORE,
+  OPT_STATS_JSON,
+  OPT_INCLUDE_STACK,
+  OPT_CONFIG,
+  OPT_COLOR,
+  OPT_UNIQUE,
+  OPT_CONTEXT
 };
 
 // getopt_long table
@@ -67,6 +75,14 @@ constinit option LONG_OPTS[] = {
     {"exclude-pid", required_argument, nullptr, OPT_EXCLUDE_PID},
     {"include-pid", required_argument, nullptr, OPT_INCLUDE_PID},
     {"include-thread", required_argument, nullptr, OPT_INCLUDE_THREAD},
+    {"after", required_argument, nullptr, OPT_AFTER},
+    {"before", required_argument, nullptr, OPT_BEFORE},
+    {"stats-json", required_argument, nullptr, OPT_STATS_JSON},
+    {"include-stack", required_argument, nullptr, OPT_INCLUDE_STACK},
+    {"config", required_argument, nullptr, OPT_CONFIG},
+    {"color", no_argument, nullptr, OPT_COLOR},
+    {"unique", no_argument, nullptr, OPT_UNIQUE},
+    {"context", required_argument, nullptr, OPT_CONTEXT},
     {nullptr, 0, nullptr, 0}};
 
 inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
@@ -223,6 +239,37 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
         if (optarg && *optarg) {
           opt.filter.includeThreads.push_back(
               parse_nonneg_int(optarg, std::numeric_limits<int>::max()));
+        }
+        break;
+      case OPT_AFTER:
+        if (optarg && *optarg)
+          opt.timeAfter = optarg;
+        break;
+      case OPT_BEFORE:
+        if (optarg && *optarg)
+          opt.timeBefore = optarg;
+        break;
+      case OPT_STATS_JSON:
+        if (optarg && *optarg)
+          opt.statsFile = optarg;
+        break;
+      case OPT_INCLUDE_STACK:
+        if (optarg && *optarg)
+          opt.filter.includeStackPatterns.emplace_back(optarg);
+        break;
+      case OPT_CONFIG:
+        if (optarg && *optarg)
+          opt.configFile = optarg;
+        break;
+      case OPT_COLOR:
+        opt.color = true;
+        break;
+      case OPT_UNIQUE:
+        opt.uniqueOutput = true;
+        break;
+      case OPT_CONTEXT:
+        if (optarg && *optarg) {
+          opt.contextLines = parse_nonneg_int(optarg, 100);
         }
         break;
       default:

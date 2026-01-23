@@ -8,9 +8,10 @@
 #pragma once
 
 #include "file_utils.h"
+#include "ilog_writer.h"
 #include "log_entry.h"
 #include "log_filter.h"
-#include "log_writer.h"
+#include "log_writer.h" // Keep for default impl creation? Or prefer ILogWriter?
 #include "options.h"
 
 #include <algorithm>
@@ -55,8 +56,9 @@ public:
   /**
    * @brief Constructs a new Log Processor.
    * @param options Configuration options. Must remain valid for object lifetime.
+   * @param writer Optional custom writer (dependency injection). If null, creates default LogWriter.
    */
-  explicit LogProcessor(const Options& options);
+  explicit LogProcessor(const Options& options, std::unique_ptr<ILogWriter> writer = nullptr);
   ~LogProcessor();
 
   /**
@@ -90,10 +92,11 @@ public:
    * @param out Output C file pointer.
    */
   void printStats(std::FILE* out) const;
+  void saveStatsJson() const; // Iteration 1
+  void flush();
 
 private:
   void processLine(std::string_view line);
-  void flush();
   void clearCurrentState() noexcept;
   void resetEpoch() noexcept;
   [[nodiscard]] std::size_t findMarker(const VecS& lines) const;
@@ -137,7 +140,7 @@ private:
   LogStats stats;
 
   // Writer
-  std::unique_ptr<LogWriter> writer;
+  std::unique_ptr<ILogWriter> writer;
 
   // pattern placeholders
   std::string vgPattern;

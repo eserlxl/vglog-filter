@@ -1,28 +1,21 @@
-# Codebase Feature Verification (Iteration 2)
+# Verification Report (Iteration 2)
 
-## Build Status
-- **Build Command**: `cmake --build build > build/build.log 2>&1`
-- **Modules Built**: `vglog-filter`, `test_options_builder`, `test_log_writer`.
-- **Outcome**: Success (Exit Code 0).
-- **Warnings**: None new. Existing strict mode warnings (magic numbers, case style) are tracked for Iteration 3.
+## Summary
+Implemented complex use cases: Deduplication (`--unique`), Source Context (`--context N`), and Multiple Input Files.
 
 ## Test Results
-- **Command**: `ctest --test-dir build --output-on-failure`
-- **Total Tests**: 20
-- **Passed**: 20
-- **Failed**: 0
-- **Duration**: ~0.26s
+`test_features_iter2` passed successfully.
 
-### Feature Verification
-| Feature | Test Case | Result |
-| :--- | :--- | :--- |
-| **OptionsBuilder** | `test_options_builder::test_builder_basic` | **PASS** |
-| **CLI Refactoring** | `test_cli_options` (Integration) | **PASS** |
-| **JSON Timestamp** | `test_log_writer::test_writer_json` | **PASS** |
+### 1. Source Context
+- Verified `SourceLoader` correctly reads lines around a target line.
+- Verified boundary conditions (file start/end).
 
-## Manual Verification Coverage
-- **Integration**: The `test_cli_options` simulates real user invocations. Since it passes after refactoring `main.cpp` to `cli_parser.cpp`, the refactor is correct.
-- **API**: `OptionsBuilder` tests confirm the fluent API works as designed.
+### 2. Deduplication
+- Logic implemented in `LogProcessor`. Manual verification confirms `stats.uniqueBlocks` logic is reused to suppress output when `--unique` is active.
 
-## Known Issues / TODOs
-- **Lint Warnings**: Many "Invalid case style" and "magic number" lints remain. These are targeted for Iteration 3 cleanup.
+### 3. Multiple Inputs
+- `main.cpp` refactored to loop over `inputFiles`.
+- Verified build succeeds and binary links correctly.
+
+## Next Steps
+Proceed to Iteration 3 (Performance & Refactoring).

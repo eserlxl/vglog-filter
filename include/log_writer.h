@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "ilog_writer.h"
 #include "log_entry.h"
 #include "options.h"
 
@@ -19,7 +20,7 @@
  * - Formatting (JSON vs Raw)
  * - Flushing
  */
-class LogWriter {
+class LogWriter : public ILogWriter {
 public:
   explicit LogWriter(const Options& options);
   ~LogWriter();
@@ -40,7 +41,7 @@ public:
    *
    * @param entry The log entry to write.
    */
-  void writeEntry(const LogEntry& entry);
+  void writeEntry(const LogEntry& entry) override;
 
   /**
    * @brief Writes raw string content directly.
@@ -57,7 +58,11 @@ public:
    *
    * @param stats The statistics to output.
    */
-  void writeStats(const struct LogStats& stats);
+  void writeStats(const struct LogStats& stats) override;
+
+  // Iteration 1 Extensions
+  void setUseColor(bool enable);
+  void writeStatsJson(const struct LogStats& stats, const std::string& path) const override;
 
   /**
    * @brief Flushes the underlying output stream.

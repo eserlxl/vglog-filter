@@ -1,36 +1,21 @@
-# Codebase Feature Audit (Iteration 3)
+# Codebase Audit (Iteration 3)
 
-## Focus Area: Stability & Cleanup
+## 1. Refactoring Opportunities
+- **Config Loading**: `load_config` is currently a free function in `main.cpp`. It parses JSON using regex. It validates options directly.
+    - *Improvement*: Move to `OptionsBuilder` or a new `ConfigLoader` class. This cleans up `main.cpp` and makes config loading testable.
+- **LogWriter Coupling**: `LogProcessor` depends on the concrete `LogWriter` class. This makes unit testing `LogProcessor` difficult (requires file I/O).
+    - *Improvement*: Extract `ILogWriter` interface. Allows mocking output in tests.
 
-## Identified Issues
-### 1. Lint Warnings (Code Quality)
-- **Magic Numbers**:
-    - `log_writer.cpp`: `1024` (KB/MB conversion?).
-    - `cli_parser.cpp`: `64` (buffer size?), `MAX_MARKER_LENGTH`.
-    - Tests: `100`, `200`, `1024*1024`.
-- **Naming Conventions**:
-    - `parse_args` -> `ParseArgs` (if following LLVM/Google style? or project style?). Project style seems mixed. `LogProcessor` is CamelCase. `parse_header` is snake_case. `parse_marker` is snake_case. 
-    - `LONG_OPTS` / `SHORT_OPTS`: Global constants.
-    - `OPT_ROTATE_SIZE`: Enum constants.
-- **Unused Headers**:
-    - `iostream` in `log_writer.cpp` (using `fprintf`).
-    - `file_utils.h` in `cli_parser.cpp` (if unused).
+## 2. Performance
+- **String Copies**: `LogProcessor::processLine` and `parseEntry` create many temporary strings.
+    - *Improvement*: Use `std::string_view` where possible, though `LogEntry` needs ownership.
+    - *Low hanging fruit*: Pass strings by const ref (already doing this?).
 
-### 2. Semantic Stability
-- **Implicit Conversions**: `parse_nonneg_int` (returns int) assigned to `size_t` (e.g. `opt.depth`). Should cast or change return type.
-- **Error Handling**: `cli_parser` throws `runtime_error`. Main catches `std::exception`. This is good, but messages should be user-friendly.
+## 3. Reliability
+- **Error Handling**: `load_config` prints to stderr but doesn't throw or return error codes clearly.
+- **Path Validation**: `sanitize_path` is basic.
 
-## Proposed Plan for Iteration 3
-1.  **Refactor Constants**: Move magic numbers to named constants.
-2.  **Fix Lints**:
-    - Remove unused headers.
-    - safe_cast or explicit cast for numeric conversions.
-    - Harmonize naming (Stick to snake_case for free functions if that's the pattern, or update to CamelCase if class methods).
-        - `LogParser` uses `camelCase` methods (`parseHeader`).
-        - `cli_parser` uses `snake_case` (`parse_args`).
-        - Decision: Normalize to `camelCase` for public APIs to match `LogProcessor`/`LogParser`.
-3.  **Documentation**: Ensure public headers have Doxygen-style comments.
-
-## Verification
-- Build should ideally have ZERO warnings in standard mode.
-- `clang-tidy` warnings should be reduced (though 100% elimination might be overkill for this iteration, we target high-priority ones).
+## 4. Plan
+- **Phase A**: Refactor `load_config` into `src/config_loader.cpp`.
+- **Phase B**: Extract `ILogWriter` interface. Update `LogWriter` to implement it. Update `LogProcessor` to use it.
+- **Phase C**: Add unit tests using `MockLogWriter`.
