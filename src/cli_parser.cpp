@@ -43,7 +43,14 @@ enum {
   OPT_CONFIG,
   OPT_COLOR,
   OPT_UNIQUE,
-  OPT_CONTEXT
+  OPT_CONTEXT,
+  OPT_DUMP_CONFIG,
+  OPT_INCLUDE_SOURCE,
+  OPT_STATS_FORMAT,
+  OPT_EXCLUDE_TYPE_RX,
+  OPT_INCLUDE_TYPE_RX,
+  OPT_EXCLUDE_FUNCTION_RX,
+  OPT_INCLUDE_FUNCTION_RX
 };
 
 // getopt_long table
@@ -83,6 +90,13 @@ constinit option LONG_OPTS[] = {
     {"color", no_argument, nullptr, OPT_COLOR},
     {"unique", no_argument, nullptr, OPT_UNIQUE},
     {"context", required_argument, nullptr, OPT_CONTEXT},
+    {"dump-config", required_argument, nullptr, OPT_DUMP_CONFIG},
+    {"include-source", required_argument, nullptr, OPT_INCLUDE_SOURCE},
+    {"stats-format", required_argument, nullptr, OPT_STATS_FORMAT},
+    {"exclude-type-rx", required_argument, nullptr, OPT_EXCLUDE_TYPE_RX},
+    {"include-type-rx", required_argument, nullptr, OPT_INCLUDE_TYPE_RX},
+    {"exclude-function-rx", required_argument, nullptr, OPT_EXCLUDE_FUNCTION_RX},
+    {"include-function-rx", required_argument, nullptr, OPT_INCLUDE_FUNCTION_RX},
     {nullptr, 0, nullptr, 0}};
 
 inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
@@ -271,6 +285,44 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
         if (optarg && *optarg) {
           opt.contextLines = parse_nonneg_int(optarg, 100);
         }
+        break;
+      case OPT_DUMP_CONFIG:
+        if (optarg && *optarg) {
+          opt.dumpConfig = optarg;
+        }
+        break;
+      case OPT_INCLUDE_SOURCE:
+        if (optarg && *optarg) {
+          opt.filter.includeSourcePaths.emplace_back(optarg);
+        }
+        break;
+      case OPT_STATS_FORMAT:
+        if (optarg && *optarg) {
+          std::string_view val = optarg;
+          if (val == "json") {
+            opt.statsFormat = Options::StatsFormat::json;
+          } else if (val == "text") {
+            opt.statsFormat = Options::StatsFormat::text;
+          } else {
+            throw std::runtime_error("Invalid stats-format: must be 'text' or 'json'");
+          }
+        }
+        break;
+      case OPT_EXCLUDE_TYPE_RX:
+        if (optarg && *optarg)
+          opt.filter.excludeTypesRegex.emplace_back(optarg);
+        break;
+      case OPT_INCLUDE_TYPE_RX:
+        if (optarg && *optarg)
+          opt.filter.includeTypesRegex.emplace_back(optarg);
+        break;
+      case OPT_EXCLUDE_FUNCTION_RX:
+        if (optarg && *optarg)
+          opt.filter.excludeFunctionsRegex.emplace_back(optarg);
+        break;
+      case OPT_INCLUDE_FUNCTION_RX:
+        if (optarg && *optarg)
+          opt.filter.includeFunctionsRegex.emplace_back(optarg);
         break;
       default:
         usage(argv[0]);

@@ -48,7 +48,7 @@ public:
    *
    * @param content Raw data to write.
    */
-  void writeRaw(const std::string& content);
+  void writeRaw(const std::string& content) override;
 
   /**
    * @brief Writes statistics block.
@@ -61,13 +61,13 @@ public:
   void writeStats(const struct LogStats& stats) override;
 
   // Iteration 1 Extensions
-  void setUseColor(bool enable);
+  void setUseColor(bool enable) override;
   void writeStatsJson(const struct LogStats& stats, const std::string& path) const override;
 
   /**
    * @brief Flushes the underlying output stream.
    */
-  void flush();
+  void flush() override;
 
 private:
   struct Impl;

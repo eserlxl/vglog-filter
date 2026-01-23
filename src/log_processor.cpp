@@ -368,8 +368,6 @@ std::string LogProcessor::processRawLine(const std::string& processedLine) const
 }
 
 void LogProcessor::flush() {
-  std::cerr << "DEBUG: flush called. raw empty? " << raw.empty() << ", size: " << raw.size()
-            << "\n";
   if (raw.empty()) {
     clearCurrentState();
     return;
@@ -397,28 +395,55 @@ void LogProcessor::flush() {
     return;
   }
 
-  if (seen.insert(key).second) {
+  bool isUnique = seen.insert(key).second;
+  if (isUnique) {
     stats.uniqueBlocks++;
+  }
+
+  // Decide whether to count details?
+  // Current logic counts details only for unique blocks.
+  // We can keep it that way for stats consistency, or count all.
+  // Let's count all details if we found a block, regardless of uniqueness?
+  // No, let's strictly follow previous logic for stats to avoid breaking expectations,
+  // ONLY change OUTPUT behavior.
+
+  // Actually, if we output all, we should probably count all?
+  // But let's stick to: Stats track "What did we find".
+  // "blocksFound" is total.
+  // "uniqueBlocks" is unique.
+  // "errorCounts" map currently counts unique.
+  // Let's keep stats logic tied to uniqueness for now (minimal change),
+  // but relax the WRITER guard.
+
+  // Wait, if I don't increment errorCounts for duplicates, the stats will only show 1.
+  // If I output 10 logs, and stats say "Invalid read: 1", that's weird.
+  // But changing stats behavior is a bigger audit question.
+  // "blocksFound" covers total.
+  // Let's stick to modifying the WRITE condition.
+
+  if (isUnique) {
     stats.errorCounts[entry.errorType]++;
     if (!entry.pid.empty()) {
       try {
         stats.errorCountsByPid[std::stoi(entry.pid)]++;
       } catch (...) {
-        // Ignore non-numeric PID if any
       }
     }
     if (entry.tid.has_value()) {
       stats.errorCountsByTid[*entry.tid]++;
     }
+  }
+
+  // Write Condition:
+  // Write if it is unique OR if uniqueOutput is FALSE (meaning print duplicates)
+  if (isUnique || !opt.uniqueOutput) {
     if (opt.streamMode) {
       validate_pending_blocks_count(pendingBlocks.size());
       pendingBlocks.emplace_back(std::move(entry));
     } else {
-      // Source Context Logic
-      // Already deduped by outer block (seen.insert)
-
-      // Load Source Context
+      // Context loading using instance
       if (opt.contextLines > 0 && !entry.stackFrames.empty()) {
+        // ... (same logic)
         const auto& frame = entry.stackFrames[0];
         if (!frame.location.empty()) {
           auto colonPos = frame.location.find_last_of(':');
@@ -430,7 +455,7 @@ void LogProcessor::flush() {
             } catch (...) {
             }
             if (line > 0) {
-              entry.sourceContext = SourceLoader::loadContext(file, line, opt.contextLines);
+              entry.sourceContext = sourceLoader.loadContext(file, line, opt.contextLines);
             }
           }
         }

@@ -192,7 +192,9 @@ add_library(vglog-filter-lib
   src/options_builder.cpp
   src/cli_parser.cpp
   src/source_loader.cpp
+  src/source_loader.cpp
   src/config_loader.cpp
+  src/time_utils.cpp
 )
 target_link_libraries(vglog-filter-lib PUBLIC project_options project_warnings)
 target_compile_features(vglog-filter-lib PUBLIC cxx_std_23)
@@ -295,6 +297,7 @@ if (BUILD_TESTING)
   add_test_exe(test_log_parser        "test/test_log_parser.cpp")
   add_test_exe(test_log_writer        "test/test_log_writer.cpp")
   add_test_exe(test_new_features_iter1 "test/test_new_features_iter1.cpp")
+  add_test_exe(test_new_features_iter1_v2 "test/test_new_features_iter1_v2.cpp")
   add_test_exe(test_cli_invocations   "test/test_cli_invocations.cpp")
   add_test_exe(test_features_iter2    "test/test_features_iter2.cpp")
   add_test_exe(test_features_iter3    "test/test_features_iter3.cpp")

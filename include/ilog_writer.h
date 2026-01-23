@@ -13,6 +13,9 @@ public:
   virtual ~ILogWriter() = default;
 
   virtual void writeEntry(const LogEntry& entry) = 0;
+  virtual void writeRaw(const std::string& content) = 0;
   virtual void writeStats(const LogStats& stats) = 0;
   virtual void writeStatsJson(const LogStats& stats, const std::string& filename) const = 0;
+  virtual void setUseColor(bool enable) = 0;
+  virtual void flush() = 0;
 };

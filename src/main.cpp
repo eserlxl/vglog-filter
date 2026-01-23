@@ -8,6 +8,7 @@
 #include "cli_parser.h"
 #include "config_loader.h"
 #include "file_utils.h"
+#include "json_utils.h"
 #include "log_processor.h"
 #include "options.h"
 #include "path_validation.h"
@@ -108,6 +109,41 @@ void process_input_files(Options& opt) {
 
 } // namespace
 
+void dump_config_to_file(const Options& opt, const std::string& path) {
+  std::string json = "{\n";
+  json += "  \"depth\": " + std::to_string(opt.depth) + ",\n";
+  json += "  \"trim\": " + std::string(opt.trim ? "true" : "false") + ",\n";
+  json += "  \"scrubRaw\": " + std::string(opt.scrubRaw ? "true" : "false") + ",\n";
+  json += "  \"lines\": " + std::to_string(opt.contextLines) + ",\n";
+  json += "  \"unique\": " + std::string(opt.uniqueOutput ? "true" : "false") + ",\n";
+  json += "  \"jsonArray\": " + std::string(opt.jsonArray ? "true" : "false") + ",\n";
+  json += "  \"maxErrors\": " + std::to_string(opt.filter.maxErrors) + ",\n";
+
+  auto vec_to_json = [](const std::vector<std::string>& v) {
+    std::string s = "[";
+    for (size_t i = 0; i < v.size(); ++i) {
+      if (i > 0)
+        s += ",";
+      s += "\"" + json_utils::escape_string(v[i]) + "\"";
+    }
+    s += "]";
+    return s;
+  };
+
+  json += "  \"filter\": {\n";
+  json += "    \"excludeTypes\": " + vec_to_json(opt.filter.excludeTypes) + ",\n";
+  json += "    \"includeSourcePaths\": " + vec_to_json(opt.filter.includeSourcePaths) + "\n";
+  json += "  }\n";
+  json += "}\n";
+
+  FileHandle fh(path.c_str(), "w");
+  if (fh.get()) {
+    std::fwrite(json.data(), 1, json.size(), fh.get());
+  } else {
+    throw std::runtime_error("Failed to open dump file: " + path);
+  }
+}
+
 int main(int argc, char* argv[]) {
   // Favor performance and avoid libstdc++ locale initialization paths flagged by MSan
   std::ios::sync_with_stdio(false);
@@ -123,6 +159,12 @@ int main(int argc, char* argv[]) {
           opt.inputFiles.emplace_back(argv[i]);
       }
       setup_input_source(opt, argc, argv); // Still needed for defaults (stdin) logic
+
+      if (!opt.dumpConfig.empty()) {
+        dump_config_to_file(opt, opt.dumpConfig);
+        return 0;
+      }
+
       opt.validate();
       process_input_files(opt);
     } else {

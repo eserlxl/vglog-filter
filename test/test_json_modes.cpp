@@ -45,13 +45,20 @@ void test_json_lines() {
   std::string content = read_file(out_file);
   // Expect: {"type":"record",...}\n{"type":"record",...}\n
   // Should NOT start with [
-  assert(content.front() != '[');
+  if (content.front() == '[') {
+    std::cerr << "FAIL: JSON Lines output started with [\n";
+    std::exit(1);
+  }
   // Should count 2 newlines (minimum)
   int newlines = 0;
   for (char c : content)
     if (c == '\n')
       newlines++;
-  assert(newlines >= 2);
+  if (newlines < 2) {
+    std::cerr << "FAIL: Expected at least 2 newlines in JSON Lines output, got " << newlines
+              << "\n";
+    std::exit(1);
+  }
 
   std::cout << "PASS" << std::endl;
   std::filesystem::remove(out_file);

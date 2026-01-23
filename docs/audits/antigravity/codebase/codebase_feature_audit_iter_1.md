@@ -1,33 +1,55 @@
 # Codebase Feature Audit (Iteration 1)
 
-## 1. Existing Capabilities (Under-exposed or Incomplete)
-- **Filtering System**: valid `exclude` and `include` logic exists for Types, Functions, PIDs, Threads. However, `excludeStackPatterns` (regex on stack) exists, but **`includeStackPatterns`** is missing. This checks if *any* frame matches a regex to include the entry.
-- **Statistics**: The system collects stats (`linesRead`, `blocksFound`, `errorCounts`), but only prints them to `stderr` or a text format. There is no structured **JSON export for statistics**, limiting integration with dashboards.
-- **Input Processing**: The system handles large files and streams, but lacks **Time-based filtering** (e.g., "show errors after 10:00"). Timestamps are parsed into `LogEntry`, but not used for filtering.
-- **Output**: The output is plain text or basic JSON. **Colorized output** for TTY is missing, which is a standard feature for CLI log tools.
+## 1. Existing capabilities that are under-exposed or incomplete
 
-## 2. Missing Features Logically Implied
-- **Configuration File**: The tool relies entirely on CLI arguments. As options grow (exclusions, inclusions, limits), a **JSON/YAML config file** is a natural extension to share presets.
-- **Time Window**: `LogEntry` has a `timestamp` field. Users naturally expect to filter logs by time (after/before).
-- **Inverse Stack Matching**: Users often want to "find all errors passing through `my_function`". `includeFunctions` does exact substring match, but regex support for inclusion is implied by `excludeStackPatterns`.
+### 1.1 Color Output
+- **Status**: Basic "all-red" or "all-reset" logic exists in `LogWriter::writeEntry`.
+- **Gap**: No semantic highlighting. Key elements like file paths, line numbers, function names, and addresses are not visually distinct, making manual reading difficult.
+- **Proposal**: Implement a `Colorizer` utility to apply semantic coloring (e.g., specific colors for headers, source paths, memory addresses).
 
-## 3. High-Risk Correctness or Safety Issues
-- **Regex Performance**: `LogFilter` compiles regexes in constructor. If many regexes are provided, `std::regex` might be slow. No immediate fix needed for Iter/1, but worth noting.
-- **Input Validation**: `cli_parser` does basic validation, but complex combinations (e.g. `json` + `interactive`) might need stricter checks.
-- **Large Line Handling**: `MAX_LINE_LENGTH` is 1MB. This is safe, but could be configurable.
+### 1.2 Configuration Management
+- **Status**: `Options` structure exists and is populated via CLI. `config_loader` handles loading from file.
+- **Gap**: No way to export the *current* effective configuration to a file. Users debugging strictly configured pipelines cannot easily "snapshot" the config.
+- **Proposal**: Add `--dump-config <file>` to serialize the full `Options` state (including defaults and CLI overrides) to JSON.
 
-## 4. API Usability Gaps and Misuse Risks
-- **Verbose CLI**: The number of exclusion flags is growing. Helper to load from file is needed.
-- **Stats Visibility**: `monitorMemory` prints to stderr but isn't very structured.
+### 1.3 Time Filtering
+- **Status**: `timeAfter`/`timeBefore` exist as strings. Comparison is lexicographical.
+- **Gap**: Lexicographical comparison relies on the log's timestamp format being sortable (e.g., "HH:MM:SS"). If Valgrind format varies or includes dates/microseconds in non-standard ways, this fails.
+- **Proposal**: Formalize timestamp parsing in `LogParser` and use a comparable type (or normalized string) for filtering.
 
-## 5. Missing Tests
-- **Time Filtering Tests**: usage of timestamp parsing needs verification.
-- **Color Output Tests**: Need to verify ANSI codes are not emitted when not a TTY (or forced).
-- **Config File Tests**: Need to verify priority (CLI overrides Config).
+## 2. Missing features logically implied by current design
 
-## 6. Areas to Remain Unchanged
-- **Core Parsing Logic (`LogParser`)**: Stable and handles Valgrind format well.
-- **Canonicalization**: well-tested integration.
+### 2.1 Symmetric Source Filtering
+- **Status**: `excludeSourcePaths` exists in `FilterConfig`.
+- **Implied Feature**: `includeSourcePaths` (Include only *specific* source files/directories). This is a natural counterpart for focused debugging.
 
-## 7. Changes Since Last Iteration
-- N/A (Iteration 1)
+### 2.2 Stats Output Flexibility
+- **Status**: Stats can be written to a dedicated JSON file (`--stats-json`) or printed as text to stdout/file.
+- **Implied Feature**: Allow printing stats in JSON format to *stdout* (e.g. `--stats-format=json`). This enables piping stats to other tools like `jq` without intermediate files.
+
+## 3. High-risk correctness or safety issues
+
+### 3.1 Strict timestamp dependency
+- **Risk**: If functionality depends on `entry.timestamp` being present and it is missing (common in some Valgrind outputs or partial lines), behavior is to either drop or keep based on implicit logic.
+- **Fix**: Define explicit behavior for missing timestamps when time filtering is active (e.g., "keep if missing" vs "drop if missing" mode, default to "drop" for strict time bounds).
+
+## 4. API usability gaps and misuse risks
+
+### 4.1 `LogEntry` Structure
+- `startPattern`, `bytesHeadPattern` etc. are hardcoded in `LogProcessor`. They should be centralized or configurable constants to avoid drift if Valgrind output formats change.
+
+## 5. Missing tests blocking safe feature expansion
+
+- **Color Logic**: No tests for color codes (likely because it writes directly to stream). Need a test that captures output and verifies ANSI codes.
+- **Config Dump**: New feature, will need tests.
+- **Time Parsing**: Need specific unit tests for edge-case timestamp formats.
+
+## 6. Areas that must remain unchanged
+- **Core Loop**: `LogProcessor::processStream` handles buffering and logic efficiently. Do not rewrite the main loop unless necessary for correctness.
+- **Regex Logic**: `LogFilter` regex compilation is correct (using `std::regex::optimize`).
+
+## 7. Plan for Iteration 1
+1.  **Refine Color**: Implement semantic syntax highlighting.
+2.  **Config**: Implement `--dump-config`.
+3.  **Filter**: Implement `includeSourcePaths`.
+4.  **Time**: Hardening timestamp comparison.

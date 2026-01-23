@@ -30,4 +30,8 @@ private:
   const FilterConfig& config;
   std::vector<std::regex> stackRegexes;
   std::vector<std::regex> includeStackRegexes; // Iteration 1
+  std::vector<std::regex> excludeTypesRegexes;
+  std::vector<std::regex> includeTypesRegexes;
+  std::vector<std::regex> excludeFunctionsRegexes;
+  std::vector<std::regex> includeFunctionsRegexes;
 };

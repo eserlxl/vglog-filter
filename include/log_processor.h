@@ -13,6 +13,7 @@
 #include "log_filter.h"
 #include "log_writer.h" // Keep for default impl creation? Or prefer ILogWriter?
 #include "options.h"
+#include "source_loader.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -152,4 +153,6 @@ private:
   std::string qPattern;
 
   std::string pendingPid;
+
+  mutable SourceLoader sourceLoader; // Iteration 2: Cache source files
 };

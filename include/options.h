@@ -21,6 +21,7 @@ struct FilterConfig {
   std::vector<std::string> excludeTypes;
   std::vector<std::string> excludeStackPatterns;
   std::vector<std::string> excludeSourcePaths;
+  std::vector<std::string> includeSourcePaths; // Iteration 1: Include specific sources
   std::vector<int32_t> excludeThreads;
   // Iteration 1 Extension
   size_t maxErrors = 0; // 0 = unlimited
@@ -35,6 +36,12 @@ struct FilterConfig {
   std::vector<std::string> includeStackPatterns;
   std::optional<std::string> timeAfter;
   std::optional<std::string> timeBefore;
+
+  // Iteration 3 Extensions (Regex)
+  std::vector<std::string> excludeTypesRegex;
+  std::vector<std::string> includeTypesRegex;
+  std::vector<std::string> excludeFunctionsRegex;
+  std::vector<std::string> includeFunctionsRegex;
 };
 
 struct RotationConfig {
@@ -58,6 +65,10 @@ struct Options {
   bool detailedJson = false;
   bool detailedStats = false;
   bool strictMode = false;
+
+  enum class StatsFormat : std::uint8_t { text, json };
+  StatsFormat statsFormat = StatsFormat::text;
+  std::string dumpConfig; // Empty if disabled
 
   // Iteration 1 Extensions
   std::string timeAfter;

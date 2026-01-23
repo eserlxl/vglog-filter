@@ -1,94 +1,56 @@
 # Codebase Feature Design (Iteration 1)
 
-## 1. Proposed New APIs & Extensions
+## 1. Proposed APIs
 
-### 1.1 Time Filtering
-**Goal**: Filter logs based on the timestamp present in the log entry.
-**API Changes**:
-- `FilterConfig` struct:
-    - Adds `std::optional<std::string> timeAfter;`
-    - Adds `std::optional<std::string> timeBefore;`
-- `Options` struct:
-    - Adds `std::string timeAfter;`
-    - Adds `std::string timeBefore;`
+### 1.1 `Options::dumpConfig` and CLI
+- **New Flag**: `--dump-config <file>`
 - **Behavior**:
-    - Performs string comparison against `LogEntry::timestamp`.
-    - If `timeAfter` is set, entry is kept ONLY if `entry.timestamp >= timeAfter`.
-    - If `timeBefore` is set, entry is kept ONLY if `entry.timestamp <= timeBefore`.
-    - Entries without timestamps are excluded if time filtering is active.
+  - If specified, the tool parses all arguments.
+  - Before running processing, it serializes the final `Options` object to JSON.
+  - Writes to `<file>` and exits (or continues? Standard practice is exit, but maybe useful to dump and run. Let's make it exit to be safe as a "dry run" inspection).
 
-### 1.2 Inverse Stack Matching
-**Goal**: Include entries where *ANY* stack frame matches a regex.
-**API Changes**:
-- `FilterConfig` struct:
-    - Adds `std::vector<std::string> includeStackPatterns;`
-- `LogFilter`:
-    - Compiles these patterns to `std::regex`.
-    - In `shouldKeep`: checks if *any* frame matches *any* start pattern.
-    - Logic: Update "Include-Only Logic" to consider `includeStackPatterns`.
+### 1.2 `FilterConfig::includeSourcePaths`
+- **Field**: `std::vector<std::string> includeSourcePaths;`
+- **Behavior**:
+  - If NOT empty, *only* entries involving at least one of these paths are kept.
+  - Works via `LogEntry::involvesSourceFile`.
+  - Logic: `keep = (exclude check passed) AND (include check passed)`.
+  - `include check passed` = `includeSourcePaths.empty() || OR(matches)`.
 
-### 1.3 Color Output
-**Goal**: Improve TTY visibility.
-**API Changes**:
-- `Options` struct:
-    - Adds `bool color = false;` (auto-detected if TTY, or forced via flag).
-- `LogWriter`:
-    - Adds `enableColor(bool)`.
-    - Implementation: Use ANSI escape codes for `errorType`, `PID`, `Source File`.
-    - Codes: Red for errors, detailed colors for locations.
+### 1.3 Semantic Coloring
+- **Class**: `LogWriter::Colorizer` (internal helper or standalone).
+- **Function**: `std::string colorize(const LogEntry& entry)`
+- **Scheme**:
+  - **Error Type**: Red (if high severity), Yellow (if warning).
+  - **PID**: Cyan.
+  - **Address (0x...)**: Green.
+  - **File Path**: Blue.
+  - **Line Number**: Yellow.
+  - **Function**: Magenta.
+- **API**: `LogWriter::setUseColor(bool)` already exists. It needs to enable this advanced mode.
 
-### 1.4 JSON Statistics Export
-**Goal**: Export summary stats to a file.
-**API Changes**:
-- `Options` struct:
-    - Adds `std::string statsFile;`
-- `LogWriter`:
-    - Adds `writeStatsJson(const Stats& stats, const std::string& filename)`.
+### 1.4 Time Parsing `TimeUtils`
+- **New Helper**: `include/time_utils.h` (or inside `json_utils.h` if small, but `time` is distinct).
+- **Capabilities**:
+  - `std::string normalizeTimestamp(std::string_view ts)`: Ensures "HH:MM:SS" format padding for string comparison.
+  - `bool isAfter(string_view ts, string_view target)`
+  - `bool isBefore(string_view ts, string_view target)`
+- **Integration**: `LogFilter` uses these helpers instead of raw string comparison.
 
-### 1.5 Configuration File
-**Goal**: Load options from a file.
-**API Changes**:
-- `cli::parseArgs`: implementation detail.
-- Support `--config <file>`.
-- Format: JSON. (Since we already have `json_utils`, use it to parse config).
-- **Behavior**: CLI args override Config file values.
+### 1.5 Stats Format
+- **New Flag**: `--stats-format=json|text` (default text).
+- **Behavior**: Defines how stats are printed to stdout if no `--stats-json` file is given (or even if it is).
+- **API**: `Options::statsFormat` enum.
 
 ## 2. Backward Compatibility
-- All new options are optional.
-- Default behavior remains unchanged.
-- Existing CLI flags work as before.
+- All new flags are optional. Default behavior matches current behavior.
+- JSON output for logs remains compatible.
 
-## 3. Interfaces & Signatures
-
-```cpp
-// include/options.h
-struct FilterConfig {
-    // ... existing ...
-    std::vector<std::string> includeStackPatterns;
-    std::optional<std::string> timeAfter;
-    std::optional<std::string> timeBefore;
-};
-
-struct Options {
-    // ... existing ...
-    std::string timeAfter;
-    std::string timeBefore;
-    std::string statsFile;
-    std::string configFile;
-    bool color = false;
-};
-
-// include/log_writer.h
-class LogWriter {
-    public:
-        void setUseColor(bool enable);
-        void writeStatsJson(const Stats& stats, const std::string& path) const;
-};
-```
+## 3. Behavioral Contracts
+- `includeSourcePaths`: If an entry has NO source context (e.g. no symbols), it fails the inclusion filter if the filter is active. This matches expectation: "I want to see logs from *this file*". If undefined, it's not that file.
 
 ## 4. Required Tests
-- `test/test_new_features_iter1.cpp`:
-    - Test `timeAfter` / `timeBefore` filtering.
-    - Test `includeStackPatterns` (regex matching).
-    - Test `writeStatsJson` (verify file content).
-    - Test Config file loading (mock file, parse options).
+- **Test Config Dump**: Run with `--dump-config out.json`. load `out.json` and verify fields match.
+- **Test Color**: Capture stdout. Verify ANSI codes appear around known tokens.
+- **Test Time**: Feed logs with "1:00:00" vs "01:00:00" and ensure normalization allows correct comparison.
+- **Test Include Source**: Feed logs with mixed files. Verify only target file remains.
