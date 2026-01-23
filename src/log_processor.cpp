@@ -8,18 +8,13 @@
 #include "log_processor.h"
 
 #include "canonicalization.h"
-#include "file_utils.h"
-#include "json_utils.h"
 #include "log_parser.h"
 
 #include <array>
-#include <chrono>
 #include <cstdio>
-#include <filesystem>
 #include <iostream>
 #include <ranges>
 #include <string>
-#include <thread>
 
 using namespace canonicalization;
 
@@ -68,11 +63,7 @@ LogProcessor::LogProcessor(const Options& options) : opt(options), stats{} {
   sigLines.reserve(RESERVE_SIZE_SIGLINES);
   initialize_string_patterns();
 
-  if (!opt.output_file.empty()) {
-    auto fh = std::make_shared<FileHandle>(opt.output_file.c_str(), "w");
-    out_fp = fh->get();
-    file_handle_lifetime = std::static_pointer_cast<void>(fh);
-  }
+  writer = std::make_unique<LogWriter>(opt);
 
   // Pre-compile regexes
   try {
@@ -174,10 +165,6 @@ bool LogProcessor::matches_q_pattern(std::string_view line) const noexcept {
     }
   }
   return false;
-}
-
-std::string LogProcessor::replace_prefix(std::string_view line) const {
-  return std::string{LogParser::remove_prefix(line)};
 }
 
 std::string LogProcessor::replace_patterns(const std::string& line) const {
@@ -294,12 +281,7 @@ bool LogProcessor::should_report_progress(std::size_t bytes_processed,
 void LogProcessor::output_pending_blocks() {
   if (!opt.trim || marker_found) {
     for (const auto& b : pending_blocks) {
-      if (opt.json_output) {
-        write_json_record(b);
-      } else {
-        write_output(b.raw_content.data(), b.raw_content.size());
-        write_output('\n');
-      }
+      writer->write_entry(b);
     }
   }
 }
@@ -333,7 +315,7 @@ void LogProcessor::process_line(std::string_view line) {
   if (!matches_vg_line(line))
     return;
 
-  std::string processed = replace_prefix(line);
+  std::string processed{LogParser::remove_prefix(line)};
 
   if (matches_start_pattern(processed)) {
     flush();
@@ -403,12 +385,7 @@ void LogProcessor::flush() {
       validate_pending_blocks_count(pending_blocks.size());
       pending_blocks.emplace_back(std::move(entry));
     } else {
-      if (opt.json_output) {
-        write_json_record(entry);
-      } else {
-        write_output(entry.raw_content.data(), entry.raw_content.size());
-        write_output('\n');
-      }
+      writer->write_entry(entry);
     }
   }
   clear_current_state();
@@ -448,57 +425,6 @@ std::size_t LogProcessor::find_marker(const VecS& lines) const {
   return 0;
 }
 
-void LogProcessor::write_output(const void* data, size_t size) {
-  if (out_fp && data && size > 0) {
-    if (opt.rotate_size_mb > 0) {
-      long pos = std::ftell(out_fp);
-      if (pos >= 0 && static_cast<size_t>(pos) + size > opt.rotate_size_mb * 1024 * 1024) {
-        rotate_log();
-      }
-    }
-    std::fwrite(data, 1, size, out_fp);
-  }
-}
-void LogProcessor::write_output(char c) {
-  if (out_fp) {
-    if (opt.rotate_size_mb > 0) {
-      long pos = std::ftell(out_fp);
-      if (pos >= 0 && static_cast<size_t>(pos) + 1 > opt.rotate_size_mb * 1024 * 1024) {
-        rotate_log();
-      }
-    }
-    std::fputc(c, out_fp);
-  }
-}
-
-void LogProcessor::write_json_record(const LogEntry& entry) {
-  if (!out_fp)
-    return;
-  std::string json = "{\"type\":\"record\"";
-  json += ",\"raw\":\"" + json_utils::escape_string(entry.raw_content) + "\"";
-  json += ",\"signature\":\"" + json_utils::escape_string(entry.signature) + "\"";
-
-  if (opt.detailed_json) {
-    if (!entry.error_type.empty()) {
-      json += ",\"error_type\":\"" + json_utils::escape_string(entry.error_type) + "\"";
-    }
-    if (!entry.pid.empty()) {
-      json += ",\"pid\":\"" + json_utils::escape_string(entry.pid) + "\"";
-    }
-    if (!entry.stack_trace.empty()) {
-      json += ",\"stack_trace\":[";
-      for (size_t i = 0; i < entry.stack_trace.size(); ++i) {
-        if (i > 0)
-          json += ",";
-        json += "\"" + json_utils::escape_string(entry.stack_trace[i]) + "\"";
-      }
-      json += "]";
-    }
-  }
-  json += "}\n";
-  write_output(json.data(), json.size());
-}
-
 LogEntry LogProcessor::parse_entry(const std::string& raw_block,
                                    const std::string& signature) const {
   LogEntry entry;
@@ -518,7 +444,7 @@ LogEntry LogProcessor::parse_entry(const std::string& raw_block,
     entry.error_type = std::move(header->second);
   } else {
     // Fallback
-    entry.error_type = replace_prefix(first_line);
+    entry.error_type = LogParser::remove_prefix(first_line);
   }
   // Trim EOL from type
   while (!entry.error_type.empty() &&
@@ -557,13 +483,19 @@ void LogProcessor::print_stats(std::FILE* out) const {
   if (!out)
     return;
   if (opt.json_output) {
-    if (out_fp) {
-      std::fprintf(out_fp,
-                   "{\"type\":\"stats\",\"lines_read\":%zu,\"bytes_processed\":%zu,\"blocks_"
-                   "found\":%zu,\"unique_blocks\":%zu,\"filtered_count\":%zu,\"parse_errors\":%zu}"
-                   "\n",
-                   stats.lines_read, stats.bytes_processed, stats.blocks_found, stats.unique_blocks,
-                   stats.filtered_count, stats.parse_errors);
+    // Use helper buffer to avoid exposing LogWriter internals, or just build the string here.
+    // LogWriter doesn't have a "write_stats" method yet.
+    // We can use write_raw.
+    char buf[512];
+    int n = std::snprintf(
+        buf, sizeof(buf),
+        "{\"type\":\"stats\",\"lines_read\":%zu,\"bytes_processed\":%zu,\"blocks_"
+        "found\":%zu,\"unique_blocks\":%zu,\"filtered_count\":%zu,\"parse_errors\":%zu}"
+        "\n",
+        stats.lines_read, stats.bytes_processed, stats.blocks_found, stats.unique_blocks,
+        stats.filtered_count, stats.parse_errors);
+    if (n > 0) {
+      writer->write_raw(std::string(buf, static_cast<size_t>(n)));
     }
   } else {
     std::fprintf(out, "--- Statistics ---\n");
@@ -576,37 +508,4 @@ void LogProcessor::print_stats(std::FILE* out) const {
       std::fprintf(out, "Parse errors    : %zu\n", stats.parse_errors);
     }
   }
-}
-
-void LogProcessor::rotate_log() {
-  if (opt.output_file.empty())
-    return;
-
-  // Close current
-  // Note: we must ensure we don't close stdout if that was used,
-  // but output_file implies not stdout.
-  // Resetting file_handle_lifetime closes the file.
-  file_handle_lifetime.reset();
-  out_fp = nullptr;
-
-  namespace fs = std::filesystem;
-  std::error_code ec;
-
-  // Shift backups: .N -> .N+1
-  for (size_t i = opt.rotate_backups; i > 0; --i) {
-    // If i=1, source is file. dest is file.1
-    // If i=2, source is file.1. dest is file.2
-    std::string old_name =
-        (i == 1) ? opt.output_file : (opt.output_file + "." + std::to_string(i - 1));
-    std::string new_name = opt.output_file + "." + std::to_string(i);
-
-    if (fs::exists(old_name, ec)) {
-      fs::rename(old_name, new_name, ec);
-    }
-  }
-
-  // Open new file
-  auto fh = std::make_shared<FileHandle>(opt.output_file.c_str(), "w");
-  out_fp = fh->get();
-  file_handle_lifetime = std::static_pointer_cast<void>(fh);
 }

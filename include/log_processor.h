@@ -9,6 +9,7 @@
 
 #include "file_utils.h"
 #include "log_entry.h"
+#include "log_writer.h"
 #include "options.h"
 
 #include <algorithm>
@@ -64,11 +65,8 @@ private:
   [[nodiscard]] bool should_report_progress(std::size_t bytes_processed,
                                             std::size_t total_bytes) const;
 
-  void output_pending_blocks();
-  void write_output(const void* data, size_t size);
-  void write_output(char c);
-  void write_json_record(const LogEntry& entry);
-  void rotate_log();
+  void output_pending_blocks(); // Kept as it manages pending_blocks vector logic
+  // Removed: write_output, write_json_record, rotate_log (moved to LogWriter)
 
   [[nodiscard]] LogEntry parse_entry(const std::string& raw_block,
                                      const std::string& signature) const;
@@ -84,8 +82,7 @@ private:
   [[nodiscard]] bool matches_by_pattern(std::string_view line) const noexcept;
   [[nodiscard]] bool matches_q_pattern(std::string_view line) const noexcept;
 
-  [[nodiscard]] std::string replace_prefix(std::string_view line) const;
-  [[nodiscard]] std::string replace_patterns(const std::string& line) const;
+  std::string replace_patterns(const std::string& line) const;
 
   const Options& opt;
   std::string raw;
@@ -97,11 +94,11 @@ private:
   std::vector<LogEntry> pending_blocks;
   bool marker_found{false};
 
-  // Stats and output
+  // Stats
   LogStats stats;
-  std::FILE* out_fp{stdout};
-  // Used to keep the file handle alive if we opened it
-  std::shared_ptr<void> file_handle_lifetime;
+
+  // Writer
+  std::unique_ptr<LogWriter> writer;
 
   // pattern placeholders
   std::string vg_pattern;
