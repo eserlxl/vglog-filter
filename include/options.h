@@ -31,6 +31,7 @@ struct Options {
   bool use_stdin = false;
   std::vector<std::string> exclude_types;
   std::vector<std::string> exclude_stack_patterns;
+  std::vector<std::string> exclude_source_paths;
   std::vector<int32_t> exclude_threads;
   bool detailed_json = false;
 

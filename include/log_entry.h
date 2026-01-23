@@ -32,4 +32,12 @@ struct LogEntry {
 
   /// Thread ID if present (e.g. from "Thread 1:")
   std::optional<int32_t> tid;
+
+  struct StackFrame {
+    std::string raw;
+    std::string address;
+    std::string function;
+    std::string location;
+  };
+  std::vector<StackFrame> stack_frames;
 };

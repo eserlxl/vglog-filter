@@ -92,6 +92,42 @@ bool test_remove_prefix() {
   return true;
 }
 
+bool test_stack_frame_structured() {
+  // Case 1: Standard at
+  auto res1 = LogParser::parse_frame_structured(
+      "==123==    at 0x4C29F73: malloc (vg_replace_malloc.c:299)");
+  TEST_ASSERT(res1.has_value(), "Should parse case 1");
+  TEST_ASSERT(res1->address == "0x4C29F73", "Address 1 mismatch");
+  TEST_ASSERT(res1->function == "malloc", "Function 1 mismatch");
+  TEST_ASSERT(res1->location == "vg_replace_malloc.c:299", "Location 1 mismatch");
+
+  // Case 2: Standard by
+  auto res2 = LogParser::parse_frame_structured("==123==    by 0x4005B6: main (test.c:10)");
+  TEST_ASSERT(res2.has_value(), "Should parse case 2");
+  TEST_ASSERT(res2->address == "0x4005B6", "Address 2 mismatch");
+  TEST_ASSERT(res2->function == "main", "Function 2 mismatch");
+  TEST_ASSERT(res2->location == "test.c:10", "Location 2 mismatch");
+
+  // Case 3: Library (no line)
+  auto res3 = LogParser::parse_frame_structured("==123==    by 0x500: ??? (in /usr/lib/libc.so)");
+  TEST_ASSERT(res3.has_value(), "Should parse case 3");
+  TEST_ASSERT(res3->function == "???", "Function 3 mismatch");
+  TEST_ASSERT(res3->location == "in /usr/lib/libc.so", "Location 3 mismatch");
+
+  // Case 3b: Vendor path
+  auto res3b =
+      LogParser::parse_frame_structured("==123==    at 0x500: bad (vendor/lib3rd/bad.c:20)");
+  TEST_ASSERT(res3b.has_value(), "Should parse vendor case");
+  TEST_ASSERT(res3b->location == "vendor/lib3rd/bad.c:20", "Location vendor mismatch");
+
+  // Case 4: Invalid
+  auto res4 = LogParser::parse_frame_structured("Not a stack frame");
+  TEST_ASSERT(!res4.has_value(), "Should fail invalid frame");
+
+  TEST_PASS("Structured stack frame parsing");
+  return true;
+}
+
 int main() {
   bool all_passed = true;
   all_passed &= test_parse_header_simple();
@@ -100,6 +136,7 @@ int main() {
   all_passed &= test_stack_frame();
   all_passed &= test_remove_prefix();
   all_passed &= test_parse_header_tid();
+  all_passed &= test_stack_frame_structured();
 
   if (all_passed) {
     std::cout << "All LogParser tests passed!" << std::endl;

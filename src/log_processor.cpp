@@ -390,6 +390,19 @@ void LogProcessor::flush() {
     }
   }
 
+  // Path Filter (Structured Stack)
+  if (!opt.exclude_source_paths.empty()) {
+    for (const auto& frame : entry.stack_frames) {
+      for (const auto& path : opt.exclude_source_paths) {
+        if (frame.location.find(path) != std::string::npos) {
+          stats.filtered_count++;
+          clear_current_state();
+          return;
+        }
+      }
+    }
+  }
+
   if (seen.insert(key).second) {
     stats.unique_blocks++;
     if (opt.stream_mode) {
@@ -482,6 +495,10 @@ LogEntry LogProcessor::parse_entry(const std::string& raw_block,
         s_content.pop_back();
       }
       if (!s_content.empty()) {
+        auto structured = LogParser::parse_frame_structured(s_content);
+        if (structured) {
+          entry.stack_frames.push_back(std::move(*structured));
+        }
         entry.stack_trace.push_back(std::move(s_content));
       }
     }

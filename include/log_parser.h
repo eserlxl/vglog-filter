@@ -24,6 +24,12 @@ public:
   static std::optional<HeaderResult> parse_header(std::string_view line);
 
   /**
+   * @brief Parses a stack frame line into components.
+   * @return LogEntry::StackFrame if valid, or std::nullopt.
+   */
+  static std::optional<LogEntry::StackFrame> parse_frame_structured(std::string_view line);
+
+  /**
    * @brief Parses a stack frame line.
    *
    * @param line The line to parse (e.g. "   at 0x4C2...: malloc (vg_replace_malloc.c:299)")

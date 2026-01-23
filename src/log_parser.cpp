@@ -66,6 +66,74 @@ std::optional<LogParser::HeaderResult> LogParser::parse_header(std::string_view 
   return HeaderResult{std::move(pid), std::move(error_type), tid};
 }
 
+std::optional<LogEntry::StackFrame> LogParser::parse_frame_structured(std::string_view line) {
+  auto content = remove_prefix(line);
+  if (content.empty())
+    return std::nullopt;
+
+  size_t start = 0;
+  while (start < content.size() && std::isspace(static_cast<unsigned char>(content[start])))
+    start++;
+
+  std::string_view trimmed = content.substr(start);
+  bool has_prefix = false;
+
+  if (trimmed.starts_with("at ")) {
+    trimmed.remove_prefix(3);
+    has_prefix = true;
+  } else if (trimmed.starts_with("by ")) {
+    trimmed.remove_prefix(3);
+    has_prefix = true;
+  }
+
+  // Parse address ONLY if has_prefix is true (standard format)
+  // If scrubbed, it might just be "func (loc)"
+
+  std::string address;
+  std::string_view rest = trimmed;
+
+  if (has_prefix) {
+    size_t colon = trimmed.find(':');
+    if (colon != std::string_view::npos) {
+      address = std::string(trimmed.substr(0, colon));
+      size_t func_start = colon + 1;
+      while (func_start < trimmed.size() &&
+             std::isspace(static_cast<unsigned char>(trimmed[func_start])))
+        func_start++;
+      rest = trimmed.substr(func_start);
+    }
+  }
+
+  // Find location in parens
+  size_t last_paren_close = rest.rfind(')');
+  size_t last_paren_open = rest.rfind('(');
+
+  std::string function;
+  std::string location;
+
+  if (last_paren_close != std::string_view::npos && last_paren_open != std::string_view::npos &&
+      last_paren_open < last_paren_close) {
+
+    function = std::string(rest.substr(0, last_paren_open));
+    while (!function.empty() && std::isspace(static_cast<unsigned char>(function.back())))
+      function.pop_back();
+
+    location =
+        std::string(rest.substr(last_paren_open + 1, last_paren_close - last_paren_open - 1));
+  } else {
+    if (has_prefix) {
+      // If we had a prefix but no parens, treat rest as function
+      function = std::string(rest);
+    } else {
+      // If no prefix and no parens, it's just raw text, not a frame
+      return std::nullopt;
+    }
+  }
+
+  return LogEntry::StackFrame{std::string(content), std::move(address), std::move(function),
+                              std::move(location)};
+}
+
 std::optional<std::string> LogParser::parse_stack_frame(std::string_view line) {
   // Expected: "   at 0x..." or "   by 0x..."
   // But processed line might have prefix removed already.

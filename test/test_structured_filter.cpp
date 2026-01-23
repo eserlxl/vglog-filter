@@ -143,11 +143,55 @@ bool test_filter_tid() {
   return true;
 }
 
+bool test_filter_source_path() {
+  std::string output_file = "test_filter_path.json";
+  Options opt;
+  opt.json_output = true;
+  opt.trim = false;
+  // Note: scrub_raw is true by default, verifying parser handles scrubbed lines.
+  opt.output_file = output_file;
+  opt.exclude_source_paths.push_back("vendor/lib3rd");
+
+  {
+    LogProcessor processor(opt);
+
+    std::string block1 = "==123== Invalid read\n==123==    at 0x400: main (test.c:10)\n";
+    std::string block2 =
+        "==123== Invalid write\n==123==    at 0x500: bad (vendor/lib3rd/bad.c:20)\n";
+
+    std::vector<std::string> lines;
+    std::stringstream ss(block1 + block2);
+    std::string line;
+    while (std::getline(ss, line))
+      lines.push_back(line);
+
+    processor.process_lines(lines);
+  }
+
+  int count = count_blocks_in_file(output_file);
+  if (count != 1) {
+    std::cerr << "test_filter_source_path: Expected 1 block, got " << count << "\n";
+    std::ifstream f(output_file);
+    std::cout << "File Content:\n" << f.rdbuf() << "\n";
+  }
+  TEST_ASSERT(count == 1, "Should filter out vendor path");
+
+  std::ifstream f(output_file);
+  std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  TEST_ASSERT(content.find("Invalid read") != std::string::npos, "Should keep Block 1");
+  TEST_ASSERT(content.find("Invalid write") == std::string::npos, "Should exclude Block 2");
+
+  std::remove(output_file.c_str());
+  TEST_PASS("Source Path filtering");
+  return true;
+}
+
 int main() {
   bool passed = true;
   passed &= test_filter_types();
   passed &= test_filter_stack_regex();
   passed &= test_filter_tid();
+  passed &= test_filter_source_path();
 
   if (passed) {
     std::cout << "All structured filter tests passed\n";
