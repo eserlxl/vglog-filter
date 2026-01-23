@@ -220,6 +220,10 @@ void LogProcessor::process_stream(std::istream& in) {
     if (should_report_progress(bytes_processed, total_bytes)) {
       report_progress(bytes_processed, total_bytes, opt.filename);
     }
+    if (opt.maxErrors > 0 && stats.blocks_found >= opt.maxErrors) {
+      clear_current_state();
+      break;
+    }
     process_line(line);
   }
   stats.bytes_processed = bytes_processed;
@@ -255,6 +259,10 @@ void LogProcessor::process_stream_cfile(std::FILE* fp) {
     validate_line_length(line);
     if (should_report_progress(bytes_processed, total_bytes)) {
       report_progress(bytes_processed, total_bytes, opt.filename);
+    }
+    if (opt.maxErrors > 0 && stats.blocks_found >= opt.maxErrors) {
+      clear_current_state();
+      break;
     }
     process_line(line);
   }
@@ -403,6 +411,47 @@ void LogProcessor::flush() {
     }
   }
 
+  // Iteration 1 Extension: Function Name Exclusion
+  if (!opt.excludeFunctions.empty()) {
+    for (const auto& func : opt.excludeFunctions) {
+      if (entry.hasFrameMatching(func)) {
+        stats.filtered_count++;
+        clear_current_state();
+        return;
+      }
+    }
+  }
+
+  // Iteration 1 Extension: Include-Only Logic
+  bool includesActive = !opt.includeTypes.empty() || !opt.includeFunctions.empty();
+  if (includesActive) {
+    bool matched = false;
+    // Check Types
+    if (!opt.includeTypes.empty()) {
+      for (const auto& type : opt.includeTypes) {
+        if (entry.matchesErrorType(type)) {
+          matched = true;
+          break;
+        }
+      }
+    }
+    // Check Functions (if not already matched)
+    if (!matched && !opt.includeFunctions.empty()) {
+      for (const auto& func : opt.includeFunctions) {
+        if (entry.hasFrameMatching(func)) {
+          matched = true;
+          break;
+        }
+      }
+    }
+
+    if (!matched) {
+      stats.filtered_count++;
+      clear_current_state();
+      return;
+    }
+  }
+
   if (seen.insert(key).second) {
     stats.unique_blocks++;
     if (opt.stream_mode) {
@@ -511,30 +560,6 @@ LogEntry LogProcessor::parse_entry(const std::string& raw_block,
 void LogProcessor::print_stats(std::FILE* out) const {
   if (!out)
     return;
-  if (opt.json_output) {
-    // Use helper buffer to avoid exposing LogWriter internals, or just build the string here.
-    // LogWriter doesn't have a "write_stats" method yet.
-    // We can use write_raw.
-    char buf[512];
-    int n = std::snprintf(
-        buf, sizeof(buf),
-        "{\"type\":\"stats\",\"lines_read\":%zu,\"bytes_processed\":%zu,\"blocks_"
-        "found\":%zu,\"unique_blocks\":%zu,\"filtered_count\":%zu,\"parse_errors\":%zu}"
-        "\n",
-        stats.lines_read, stats.bytes_processed, stats.blocks_found, stats.unique_blocks,
-        stats.filtered_count, stats.parse_errors);
-    if (n > 0) {
-      writer->write_raw(std::string(buf, static_cast<size_t>(n)));
-    }
-  } else {
-    std::fprintf(out, "--- Statistics ---\n");
-    std::fprintf(out, "Lines read      : %zu\n", stats.lines_read);
-    std::fprintf(out, "Bytes processed : %zu\n", stats.bytes_processed);
-    std::fprintf(out, "Blocks found    : %zu\n", stats.blocks_found);
-    std::fprintf(out, "Unique blocks   : %zu\n", stats.unique_blocks);
-    std::fprintf(out, "Filtered blocks : %zu\n", stats.filtered_count);
-    if (opt.strict_mode) {
-      std::fprintf(out, "Parse errors    : %zu\n", stats.parse_errors);
-    }
-  }
+  // Use LogWriter to format stats (Iter 1 requirement)
+  writer->writeStats(stats);
 }

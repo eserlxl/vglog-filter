@@ -41,30 +41,39 @@ enum {
   OPT_ROTATE_BACKUPS,
   OPT_STRICT,
   OPT_DETAILED_JSON,
-  OPT_EXCLUDE_STACK
+  OPT_EXCLUDE_STACK,
+  OPT_MAX_ERRORS,
+  OPT_INCLUDE_TYPE,
+  OPT_INCLUDE_FUNCTION,
+  OPT_EXCLUDE_FUNCTION
 };
 
 // getopt_long table
 // NOLINTNEXTLINE(modernize-avoid-c-arrays)
-constinit option LONG_OPTS[] = {{"keep-debug-info", no_argument, nullptr, 'k'},
-                                {"verbose", no_argument, nullptr, 'v'},
-                                {"json", no_argument, nullptr, 'j'},
-                                {"output", required_argument, nullptr, 'o'},
-                                {"depth", required_argument, nullptr, 'd'},
-                                {"marker", required_argument, nullptr, 'm'},
-                                {"stream", no_argument, nullptr, 's'},
-                                {"progress", no_argument, nullptr, 'p'},
-                                {"memory", no_argument, nullptr, 'M'},
-                                {"version", no_argument, nullptr, 'V'},
-                                {"help", no_argument, nullptr, 'h'},
-                                {"exclude-type", required_argument, nullptr, 'e'},
-                                {"rotate-size-mb", required_argument, nullptr, OPT_ROTATE_SIZE},
-                                {"rotate-backups", required_argument, nullptr, OPT_ROTATE_BACKUPS},
-                                {"rotate-backups", required_argument, nullptr, OPT_ROTATE_BACKUPS},
-                                {"strict", no_argument, nullptr, OPT_STRICT},
-                                {"detailed-json", no_argument, nullptr, OPT_DETAILED_JSON},
-                                {"exclude-stack", required_argument, nullptr, OPT_EXCLUDE_STACK},
-                                {nullptr, 0, nullptr, 0}};
+constinit option LONG_OPTS[] = {
+    {"keep-debug-info", no_argument, nullptr, 'k'},
+    {"verbose", no_argument, nullptr, 'v'},
+    {"json", no_argument, nullptr, 'j'},
+    {"output", required_argument, nullptr, 'o'},
+    {"depth", required_argument, nullptr, 'd'},
+    {"marker", required_argument, nullptr, 'm'},
+    {"stream", no_argument, nullptr, 's'},
+    {"progress", no_argument, nullptr, 'p'},
+    {"memory", no_argument, nullptr, 'M'},
+    {"version", no_argument, nullptr, 'V'},
+    {"help", no_argument, nullptr, 'h'},
+    {"exclude-type", required_argument, nullptr, 'e'},
+    {"rotate-size-mb", required_argument, nullptr, OPT_ROTATE_SIZE},
+    {"rotate-backups", required_argument, nullptr, OPT_ROTATE_BACKUPS},
+    {"rotate-backups", required_argument, nullptr, OPT_ROTATE_BACKUPS},
+    {"strict", no_argument, nullptr, OPT_STRICT},
+    {"detailed-json", no_argument, nullptr, OPT_DETAILED_JSON},
+    {"exclude-stack", required_argument, nullptr, OPT_EXCLUDE_STACK},
+    {"max-errors", required_argument, nullptr, OPT_MAX_ERRORS},
+    {"include-type", required_argument, nullptr, OPT_INCLUDE_TYPE},
+    {"include-function", required_argument, nullptr, OPT_INCLUDE_FUNCTION},
+    {"exclude-function", required_argument, nullptr, OPT_EXCLUDE_FUNCTION},
+    {nullptr, 0, nullptr, 0}};
 
 inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
 
@@ -181,6 +190,26 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
       case OPT_EXCLUDE_STACK:
         if (optarg && *optarg) {
           opt.exclude_stack_patterns.emplace_back(optarg);
+        }
+        break;
+      case OPT_MAX_ERRORS:
+        opt.maxErrors = static_cast<size_t>(
+            parse_nonneg_int(optarg ? std::string_view{optarg} : std::string_view{},
+                             std::numeric_limits<int>::max()));
+        break;
+      case OPT_INCLUDE_TYPE:
+        if (optarg && *optarg) {
+          opt.includeTypes.emplace_back(optarg);
+        }
+        break;
+      case OPT_INCLUDE_FUNCTION:
+        if (optarg && *optarg) {
+          opt.includeFunctions.emplace_back(optarg);
+        }
+        break;
+      case OPT_EXCLUDE_FUNCTION:
+        if (optarg && *optarg) {
+          opt.excludeFunctions.emplace_back(optarg);
         }
         break;
       default:

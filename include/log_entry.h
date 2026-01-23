@@ -40,4 +40,31 @@ struct LogEntry {
     std::string location;
   };
   std::vector<StackFrame> stack_frames;
+
+  /**
+   * @brief Checks if the error type matches a pattern (substring).
+   */
+  [[nodiscard]] bool matchesErrorType(std::string_view typePattern) const {
+    return error_type.find(typePattern) != std::string::npos;
+  }
+
+  /**
+   * @brief Checks if any stack frame matches the given patterns.
+   * @param functionPattern Substring to find in function name (if non-empty)
+   * @param locationPattern Substring to find in location/file (if non-empty)
+   * @return true if both patterns (when provided) match in the SAME frame.
+   */
+  [[nodiscard]] bool hasFrameMatching(std::string_view functionPattern,
+                                      std::string_view locationPattern = "") const {
+    for (const auto& frame : stack_frames) {
+      bool funcMatch =
+          functionPattern.empty() || frame.function.find(functionPattern) != std::string::npos;
+      bool locMatch =
+          locationPattern.empty() || frame.location.find(locationPattern) != std::string::npos;
+      if (funcMatch && locMatch) {
+        return true;
+      }
+    }
+    return false;
+  }
 };

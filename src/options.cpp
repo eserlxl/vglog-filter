@@ -29,6 +29,18 @@ void usage(std::string_view prog) {
                DEFAULT_DEPTH);
   std::fprintf(stdout, "  -m S, --marker S        Marker string (default: \"%.*s\").\n",
                static_cast<int>(DEFAULT_MARKER.size()), DEFAULT_MARKER.data());
+  std::fputs("  --max-errors N          Limit the number of error blocks output (default: 0 = "
+             "unlimited).\n",
+             stdout);
+  std::fputs("  --include-type S        Include only errors with types containing S (can occur "
+             "multiple times).\n",
+             stdout);
+  std::fputs("  --include-function S    Include only errors with stack frames containing S (can "
+             "occur multiple times).\n",
+             stdout);
+  std::fputs("  --exclude-function S    Exclude errors with stack frames containing S (can occur "
+             "multiple times).\n",
+             stdout);
   std::fputs(
       "  -s, --stream            Force stream processing mode (auto-detected for files >5MB).\n",
       stdout);

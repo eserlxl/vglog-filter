@@ -50,6 +50,11 @@ public:
   void write_raw(const std::string& content);
 
   /**
+   * @brief Writes statistics block.
+   */
+  void writeStats(const struct LogStats& stats);
+
+  /**
    * @brief Flushes the underlying output stream.
    */
   void flush();

@@ -4,6 +4,7 @@
 #include "log_writer.h"
 #include "file_utils.h"
 #include "json_utils.h"
+#include "log_processor.h"
 
 #include <filesystem>
 #include <iostream>
@@ -124,6 +125,37 @@ void LogWriter::write_entry(const LogEntry& entry) {
 
 void LogWriter::write_raw(const std::string& content) {
   pImpl->write_data(content.data(), content.size());
+}
+
+void LogWriter::writeStats(const struct LogStats& stats) {
+  if (pImpl->opt.json_output) {
+    // Manually construct JSON to avoid dependency on LogProcessor internals or complex serialization libs
+    // Note: This duplicates logic slightly but keeps LogWriter self-contained.
+    // In a larger system, we'd use a shared JSON builder.
+    std::string json = "{\"type\":\"stats\"";
+    json += ",\"lines_read\":" + std::to_string(stats.lines_read);
+    json += ",\"bytes_processed\":" + std::to_string(stats.bytes_processed);
+    json += ",\"blocks_found\":" + std::to_string(stats.blocks_found);
+    json += ",\"unique_blocks\":" + std::to_string(stats.unique_blocks);
+    json += ",\"filtered_count\":" + std::to_string(stats.filtered_count);
+    json += ",\"parse_errors\":" + std::to_string(stats.parse_errors);
+    json += "}\n";
+    pImpl->write_data(json.data(), json.size());
+  } else {
+    // We need to write to the file handle if it's not stdout
+    // Using intermediate buffer or direct fwrite only if we have format access
+    if (pImpl->out_fp) {
+      std::fprintf(pImpl->out_fp, "--- Statistics ---\n");
+      std::fprintf(pImpl->out_fp, "Lines read      : %zu\n", stats.lines_read);
+      std::fprintf(pImpl->out_fp, "Bytes processed : %zu\n", stats.bytes_processed);
+      std::fprintf(pImpl->out_fp, "Blocks found    : %zu\n", stats.blocks_found);
+      std::fprintf(pImpl->out_fp, "Unique blocks   : %zu\n", stats.unique_blocks);
+      std::fprintf(pImpl->out_fp, "Filtered blocks : %zu\n", stats.filtered_count);
+      if (pImpl->opt.strict_mode) {
+        std::fprintf(pImpl->out_fp, "Parse errors    : %zu\n", stats.parse_errors);
+      }
+    }
+  }
 }
 
 void LogWriter::flush() {
