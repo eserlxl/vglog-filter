@@ -58,7 +58,8 @@ enum {
   OPT_EXCLUDE_FUNC_FILE,
   OPT_INCLUDE_FUNC_FILE,
   OPT_SANITIZER,
-  OPT_HTML_REPORT // Iteration 1
+  OPT_HTML_REPORT, // Iteration 1
+  OPT_DIFF // Iteration 2
 };
 
 
@@ -114,6 +115,7 @@ constinit option LONG_OPTS[] = {
     {"include-function-file", required_argument, nullptr, OPT_INCLUDE_FUNC_FILE},
     {"sanitizer", required_argument, nullptr, OPT_SANITIZER},
     {"html-report", required_argument, nullptr, OPT_HTML_REPORT}, // Iteration 1
+    {"diff", required_argument, nullptr, OPT_DIFF}, // Iteration 2
     {nullptr, 0, nullptr, 0}};
 
 
@@ -399,6 +401,11 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
       case OPT_HTML_REPORT:
         if (optarg && *optarg) {
              opt.htmlReport = optarg;
+        }
+        break;
+      case OPT_DIFF:
+        if (optarg && *optarg) {
+             opt.diffBaseline = optarg;
         }
         break;
       default:

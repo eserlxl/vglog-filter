@@ -202,6 +202,8 @@ add_library(vglog-filter-lib
   src/signal_handler.cpp
   src/stats_printer.cpp
   src/html_log_writer.cpp
+  src/store_log_writer.cpp
+  src/diff_engine.cpp
   src/parsers/valgrind_parser.cpp
   src/parsers/asan_parser.cpp
 )
@@ -422,3 +424,7 @@ add_test(NAME test_features_iter2_loader COMMAND test_features_iter2_loader)
 add_executable(test_compression_html test/test_compression_html.cpp)
 target_link_libraries(test_compression_html PRIVATE vglog-filter-lib)
 add_test(NAME test_compression_html COMMAND test_compression_html)
+
+add_executable(test_diff_engine test/test_diff_engine.cpp)
+target_link_libraries(test_diff_engine PRIVATE vglog-filter-lib)
+add_test(NAME test_diff_engine COMMAND test_diff_engine)

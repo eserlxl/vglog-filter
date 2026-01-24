@@ -27,12 +27,15 @@
 
 #include "composite_log_writer.h"
 #include "html_log_writer.h"
+#include "store_log_writer.h"
+#include "diff_engine.h"
 
 namespace {
 
 inline constexpr auto STDIN_SENTINEL = std::string_view{"-"};
 
 void setup_input_source(Options& opt, int argc, char* argv[]) {
+  // ... (unchanged)
   if (optind >= argc) {
     opt.useStdin = true;
     opt.filename = std::string{STDIN_SENTINEL};
@@ -46,6 +49,97 @@ void setup_input_source(Options& opt, int argc, char* argv[]) {
        opt.filename = path_validation::sanitize_path_for_file_access(arg);
     }
   }
+}
+
+// Helper to load into a writer
+void load_into_writer(Options optCopy, const std::string& input, ILogWriter& writer) {
+    optCopy.uniqueOutput = true; // Force unique for diff
+    // Don't show progress for internal loading
+    optCopy.showProgress = false; 
+    
+    // We cannot move the writer into LogProcessor because we passed a reference.
+    // So we use a wrapper or generic LogProcessor that accepts raw pointer?
+    // LogProcessor takes unique_ptr.
+    // Hack: LogProcessor only TAKES ownership.
+    // Solution: Create LogProcessor with a "ProxyWriter" that forwards to our reference?
+    // Or just change LogProcessor to take generic reference? It owns it.
+    // Actually LogProcessor(Options, unique_ptr) is explicit.
+    
+    // Better: StoreLogWriter is cheap to move? No, vector.
+    // But we need the RESULT back.
+    // So we need to keep the pointer.
+    
+    // Let's make a "ReferenceLogWriter" that holds T& and implements ILogWriter.
+    class ReferenceLogWriter : public ILogWriter {
+        ILogWriter& ref_;
+    public:
+        explicit ReferenceLogWriter(ILogWriter& ref) : ref_(ref) {}
+        void writeEntry(const LogEntry& e) override { ref_.writeEntry(e); }
+        void writeRaw(const std::string& s) override { ref_.writeRaw(s); }
+        void writeStats(const LogStats& s) override { ref_.writeStats(s); }
+        void setUseColor(bool b) override { ref_.setUseColor(b); }
+        void writeStatsJson(const LogStats& s, const std::string& p) const override { ref_.writeStatsJson(s, p); }
+        void flush() override { ref_.flush(); }
+    };
+    
+    auto proxy = std::make_unique<ReferenceLogWriter>(writer);
+    LogProcessor processor(optCopy, std::move(proxy));
+    
+    if (input == STDIN_SENTINEL) {
+        processor.processStreamCFile(stdin);
+    } else {
+        auto stream = openInputFile(input);
+        processor.processStream(*stream);
+    }
+}
+
+void processDiff(const Options& opt) {
+    StoreLogWriter baselineWriter;
+    std::cout << "Loading baseline: " << opt.diffBaseline << "...\n";
+    try {
+        load_into_writer(opt, opt.diffBaseline, baselineWriter);
+    } catch (const std::exception& e) {
+        std::cerr << "Error loading baseline: " << e.what() << "\n";
+        return;
+    }
+
+    StoreLogWriter targetWriter;
+    std::string targetInput = opt.filename; // From positional
+    if (opt.inputFiles.size() > 0) targetInput = opt.inputFiles[0];
+    
+    std::cout << "Loading target: " << targetInput << "...\n";
+    try {
+        load_into_writer(opt, targetInput, targetWriter);
+    } catch (const std::exception& e) {
+        std::cerr << "Error loading target: " << e.what() << "\n";
+        return;
+    }
+
+    std::cout << "Comparing...\n";
+    auto result = DiffEngine::compare(baselineWriter.getEntries(), targetWriter.getEntries());
+
+    std::cout << "\n=== Diff Report ===\n";
+    std::cout << "Baseline: " << baselineWriter.getEntries().size() << " errors\n";
+    std::cout << "Target:   " << targetWriter.getEntries().size() << " errors\n";
+    std::cout << "-------------------\n";
+    
+    if (!result.newErrors.empty()) {
+        std::cout << "NEW ERRORS (" << result.newErrors.size() << "):\n";
+        for (const auto& e : result.newErrors) {
+            std::cout << "  [" << e.errorType << "] " << e.pid << "/" << (e.tid ? std::to_string(*e.tid) : "-") << "\n";
+            // Print top frame?
+            if (!e.stackTrace.empty()) std::cout << "    " << e.stackTrace[0] << "\n";
+        }
+    } else {
+        std::cout << "No new errors.\n";
+    }
+    
+    if (!result.fixedErrors.empty()) {
+        std::cout << "\nFIXED ERRORS (" << result.fixedErrors.size() << "):\n";
+        for (const auto& e : result.fixedErrors) {
+             std::cout << "  [" << e.errorType << "]\n";
+        }
+    }
 }
 
 void processInputFiles(Options& opt) {
@@ -167,6 +261,12 @@ int main(int argc, char* argv[]) {
       }
 
       opt.validate();
+
+      if (!opt.diffBaseline.empty()) {
+          processDiff(opt);
+          return exit_codes::SUCCESS;
+      }
+
       processInputFiles(opt);
     } else {
       // Help printed (parseArgs checks help and returns nullopt); normal exit.
