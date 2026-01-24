@@ -17,10 +17,10 @@ namespace cli {
 
 namespace {
 
-inline constexpr int MAX_DEPTH = 1000;
+inline constexpr int maxDepth = 1000;
 // VERSION_STRING moved to options.h
-inline constexpr int MAX_MARKER_LENGTH = 1024;
-inline constexpr size_t ERROR_MSG_BUFFER_SIZE = 64;
+inline constexpr int maxMarkerLength = 1024;
+inline constexpr size_t errorMsgBufferSize = 64;
 
 enum {
   OPT_ROTATE_SIZE = 1000,
@@ -119,7 +119,7 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
 
 [[nodiscard]] std::string make_range_error(std::string_view what, int lo, int hi) {
   std::string msg;
-  msg.reserve(ERROR_MSG_BUFFER_SIZE);
+  msg.reserve(errorMsgBufferSize);
   msg.append(what)
       .append(" out of valid range [")
       .append(std::to_string(lo))
@@ -150,8 +150,8 @@ inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
 [[nodiscard]] std::string parse_marker(std::string_view sv) {
   if (sv.empty())
     throw std::runtime_error("Marker string cannot be empty");
-  if (sv.size() > static_cast<size_t>(MAX_MARKER_LENGTH)) {
-    throw std::runtime_error("Marker string too long (max " + std::to_string(MAX_MARKER_LENGTH) +
+  if (sv.size() > static_cast<size_t>(maxMarkerLength)) {
+    throw std::runtime_error("Marker string too long (max " + std::to_string(maxMarkerLength) +
                              " characters)");
   }
   if (sv.find('\0') != std::string_view::npos) {
@@ -191,7 +191,7 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
         break;
       case 'd':
         opt.depth =
-            parse_nonneg_int(optarg ? std::string_view{optarg} : std::string_view{}, MAX_DEPTH);
+            parse_nonneg_int(optarg ? std::string_view{optarg} : std::string_view{}, maxDepth);
         break;
       case 'm':
         opt.markers.push_back(parse_marker(optarg ? std::string_view{optarg} : std::string_view{}));

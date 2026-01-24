@@ -43,12 +43,12 @@ constinit inline std::size_t MAX_PENDING_BLOCKS = 1000u;
 constexpr size_t RESERVE_SIZE_SEEN = 256;
 constexpr size_t RESERVE_SIZE_PENDING = 64;
 constexpr size_t RESERVE_SIZE_SIGLINES = 64;
-constexpr size_t VG_LINE_MIN_LEN = 4;
-constexpr size_t MATCH_BYTES_HEAD_LEN = 10; // " bytes in "
-constexpr size_t MATCH_BLOCKS_LEN = 7;      // " blocks"
+// constexpr size_t VG_LINE_MIN_LEN = 4;
+// constexpr size_t MATCH_BYTES_HEAD_LEN = 10; // " bytes in "
+// constexpr size_t MATCH_BLOCKS_LEN = 7;      // " blocks"
 constexpr size_t RESERVE_LINE_SIZE = 1024;
 constexpr size_t RESERVE_KEY_SIZE = 256;
-constexpr size_t NUM_START_KEYS = 10;
+// constexpr size_t NUM_START_KEYS = 10;
 
 void validateLineLength(std::string_view line) {
   if (line.size() > MAX_LINE_LENGTH) {

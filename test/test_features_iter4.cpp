@@ -95,11 +95,11 @@ bool test_config_dump() {
     opt.dump(ss);
     std::string out = ss.str();
     
-    if (out.find("\"depth\": 42") == std::string::npos) {
+    if (out.find("\"depth\":42") == std::string::npos) { // Compact JSON
         std::cerr << "FAIL: Config dump missing depth" << std::endl;
         return false;
     }
-    if (out.find("\"trim\": true") == std::string::npos) {
+    if (out.find("\"trim\":true") == std::string::npos) { // Compact JSON
         std::cerr << "FAIL: Config dump missing trim" << std::endl;
         return false;
     }

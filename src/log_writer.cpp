@@ -24,13 +24,13 @@ struct LogWriter::Impl {
   bool useColor = false;
 
   // ANSI Colors
-  static constexpr auto RED = "\033[31m";
-  static constexpr auto GREEN = "\033[32m";
-  static constexpr auto YELLOW = "\033[33m";
-  static constexpr auto BLUE = "\033[34m";
-  static constexpr auto MAGENTA = "\033[35m";
-  static constexpr auto CYAN = "\033[36m";
-  static constexpr auto RESET = "\033[0m";
+  static constexpr auto red = "\033[31m";
+  static constexpr auto green = "\033[32m";
+  static constexpr auto yellow = "\033[33m";
+  static constexpr auto blue = "\033[34m";
+  static constexpr auto magenta = "\033[35m";
+  static constexpr auto cyan = "\033[36m";
+  static constexpr auto reset = "\033[0m";
 
   explicit Impl(const Options& options) : opt(options) {
     if (opt.colorMode == ColorMode::Always) useColor = true;
@@ -261,14 +261,14 @@ void LogWriter::writeEntry(const LogEntry& entry) {
         bool isHeader = (line.find("Invalid") != std::string::npos ||
                          line.find("blocks are") != std::string::npos);
         if (isHeader) {
-          buffer += Impl::RED;
+          buffer += Impl::red;
           buffer += line;
-          buffer += Impl::RESET;
+          buffer += Impl::reset;
         } else if (line.find("at 0x") != std::string::npos ||
                    line.find("by 0x") != std::string::npos) {
-          buffer += Impl::GREEN;
+          buffer += Impl::green;
           buffer += line;
-          buffer += Impl::RESET;
+          buffer += Impl::reset;
         } else {
           buffer += line;
         }
