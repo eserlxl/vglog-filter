@@ -24,7 +24,8 @@ using namespace canonicalization;
 namespace {
 
 // MSan-safe digit/space checks
-constexpr bool is_digit(char c) noexcept {
+// MSan-safe digit/space checks
+constexpr bool isDigit(char c) noexcept {
   return std::isdigit(static_cast<unsigned char>(c)) != 0;
 }
 
@@ -44,17 +45,17 @@ constexpr size_t RESERVE_LINE_SIZE = 1024;
 constexpr size_t RESERVE_KEY_SIZE = 256;
 constexpr size_t NUM_START_KEYS = 10;
 
-void validate_line_length(std::string_view line) {
+void validateLineLength(std::string_view line) {
   if (line.size() > MAX_LINE_LENGTH) {
     throw std::runtime_error("Line too long (max " + std::to_string(MAX_LINE_LENGTH) + " bytes)");
   }
 }
-void validate_block_size(std::size_t s) {
+void validateBlockSize(std::size_t s) {
   if (s > MAX_BLOCK_SIZE) {
     throw std::runtime_error("Block too large (max " + std::to_string(MAX_BLOCK_SIZE) + " bytes)");
   }
 }
-void validate_pending_blocks_count(std::size_t n) {
+void validatePendingBlocksCount(std::size_t n) {
   if (n > MAX_PENDING_BLOCKS) {
     throw std::runtime_error("Too many pending blocks (max " + std::to_string(MAX_PENDING_BLOCKS) +
                              ")");
@@ -94,7 +95,7 @@ bool LogProcessor::matchesVgLine(std::string_view line) const noexcept {
   if (line[0] != '=' || line[1] != '=')
     return false;
   std::size_t i = 2;
-  while (i < line.size() && is_digit(line[i]))
+  while (i < line.size() && isDigit(line[i]))
     ++i;
   if (i < VG_LINE_MIN_LEN || i + 1 >= line.size())
     return false;
@@ -105,7 +106,7 @@ bool LogProcessor::matchesPrefix(std::string_view line) const noexcept {
   if (!matchesVgLine(line))
     return false;
   std::size_t i = 2;
-  while (i < line.size() && is_digit(line[i]))
+  while (i < line.size() && isDigit(line[i]))
     ++i;
   i += 2; // ==
   while (i < line.size() && std::isspace(static_cast<unsigned char>(line[i])))
@@ -128,19 +129,19 @@ bool LogProcessor::matchesStartPattern(std::string_view line) const noexcept {
 bool LogProcessor::matchesBytesHead(std::string_view line) const noexcept {
   // [digits] bytes in [digits] blocks
   std::size_t pos = 0;
-  while (pos < line.size() && !is_digit(line[pos]))
+  while (pos < line.size() && !isDigit(line[pos]))
     ++pos;
   if (pos == line.size())
     return false;
-  while (pos < line.size() && is_digit(line[pos]))
+  while (pos < line.size() && isDigit(line[pos]))
     ++pos;
   if (pos + MATCH_BYTES_HEAD_LEN >= line.size() ||
       line.substr(pos, MATCH_BYTES_HEAD_LEN) != " bytes in ")
     return false;
   pos += MATCH_BYTES_HEAD_LEN;
-  if (pos >= line.size() || !is_digit(line[pos]))
+  if (pos >= line.size() || !isDigit(line[pos]))
     return false;
-  while (pos < line.size() && is_digit(line[pos]))
+  while (pos < line.size() && isDigit(line[pos]))
     ++pos;
   if (pos + MATCH_BLOCKS_LEN > line.size())
     return false;
@@ -214,12 +215,12 @@ void LogProcessor::processStream(std::istream& in) {
   std::string line;
   while (std::getline(in, line)) {
     stats.linesRead++;
-    validate_line_length(line);
+    validateLineLength(line);
     bytesProcessed += line.size() + 1;
     if (shouldReportProgress(bytesProcessed, totalBytes)) {
-      report_progress(bytesProcessed, totalBytes, opt.filename);
+      reportProgress(bytesProcessed, totalBytes, opt.filename);
     }
-    if (signal_handler::is_stop_requested()) {
+    if (SignalHandler::isStopRequested()) {
       break;
     }
     if (opt.filter.maxErrors > 0 && stats.blocksFound >= opt.filter.maxErrors) {
@@ -230,11 +231,18 @@ void LogProcessor::processStream(std::istream& in) {
   }
   stats.bytesProcessed = bytesProcessed;
   if (opt.showProgress && totalBytes > 0) {
-    report_progress(bytesProcessed, totalBytes, opt.filename);
+    reportProgress(bytesProcessed, totalBytes, opt.filename);
   }
   flush();
   outputPendingBlocks();
 }
+
+// RAII wrapper for getline buffer
+struct LineBuffer {
+    char* data = nullptr;
+    size_t cap = 0;
+    ~LineBuffer() { std::free(data); }
+};
 
 void LogProcessor::processStreamCFile(std::FILE* fp) {
   if (fp == nullptr)
@@ -244,27 +252,25 @@ void LogProcessor::processStreamCFile(std::FILE* fp) {
   if (opt.showProgress && !opt.useStdin) {
     totalBytes = getFileSizeForProgress();
   }
-  // ... (content mostly same, just method calls) ...
   std::string line;
   line.reserve(RESERVE_LINE_SIZE);
-  char* buf = nullptr;
-  size_t buf_size = 0;
+  
+  LineBuffer buf;
   ssize_t read = -1;
-  while ((read = ::getline(&buf, &buf_size, fp)) != -1) {
-    // ...
-    if (read > 0 && buf[read - 1] == '\n') {
-      line.assign(buf, static_cast<std::size_t>(read - 1));
+  while ((read = ::getline(&buf.data, &buf.cap, fp)) != -1) {
+    if (read > 0 && buf.data[read - 1] == '\n') {
+      line.assign(buf.data, static_cast<std::size_t>(read - 1));
       bytesProcessed += static_cast<std::size_t>(read);
     } else {
-      line.assign(buf, static_cast<std::size_t>(read));
+      line.assign(buf.data, static_cast<std::size_t>(read));
       bytesProcessed += static_cast<std::size_t>(read);
     }
     stats.linesRead++;
-    validate_line_length(line);
+    validateLineLength(line);
     if (shouldReportProgress(bytesProcessed, totalBytes)) {
-      report_progress(bytesProcessed, totalBytes, opt.filename);
+      reportProgress(bytesProcessed, totalBytes, opt.filename);
     }
-    if (signal_handler::is_stop_requested()) {
+    if (SignalHandler::isStopRequested()) {
       break;
     }
     if (opt.filter.maxErrors > 0 && stats.blocksFound >= opt.filter.maxErrors) {
@@ -273,18 +279,17 @@ void LogProcessor::processStreamCFile(std::FILE* fp) {
     }
     processLine(line);
   }
-  if (buf)
-    std::free(buf);
+  // buf destructor handles free
   stats.bytesProcessed = bytesProcessed;
   if (opt.showProgress && totalBytes > 0) {
-    report_progress(bytesProcessed, totalBytes, opt.filename);
+    reportProgress(bytesProcessed, totalBytes, opt.filename);
   }
   flush();
   outputPendingBlocks();
 }
 
 std::size_t LogProcessor::getFileSizeForProgress() const {
-  return get_file_size_bytes(opt.filename);
+  return getFileSizeBytes(opt.filename);
 }
 
 bool LogProcessor::shouldReportProgress(std::size_t bytesProcessed, std::size_t totalBytes) const {
@@ -309,14 +314,14 @@ void LogProcessor::processLines(const VecS& lines) {
   }
   for (std::size_t i = start_index; i < lines.size(); ++i) {
     stats.linesRead++;
-    validate_line_length(lines[i]);
+    validateLineLength(lines[i]);
     processLine(lines[i]);
   }
   flush();
 }
 
 void LogProcessor::processLine(std::string_view line) {
-  std::cerr << "DEBUG: " << line << "\n";
+  logDebug(line);
   if (opt.trim && opt.streamMode) {
     for (const auto& m : opt.markers) {
       if (line.find(m) != std::string_view::npos) {
@@ -376,13 +381,13 @@ std::string LogProcessor::processRawLine(const std::string& processedLine) const
 }
 
 void LogProcessor::flush() {
-  std::cerr << "DEBUG: Flushing...\n";
+  logDebug("Flushing...");
   if (raw.empty()) {
     clearCurrentState();
     return;
   }
 
-  validate_block_size(raw.size());
+  validateBlockSize(raw.size());
   stats.blocksFound++;
 
   const std::string key = generateSignatureKey();
@@ -447,7 +452,7 @@ void LogProcessor::flush() {
   // Write if it is unique OR if uniqueOutput is FALSE (meaning print duplicates)
   if (isUnique || !opt.uniqueOutput) {
     if (opt.streamMode) {
-      validate_pending_blocks_count(pendingBlocks.size());
+      validatePendingBlocksCount(pendingBlocks.size());
       pendingBlocks.emplace_back(std::move(entry));
     } else {
       // Context loading using instance
@@ -470,7 +475,7 @@ void LogProcessor::flush() {
         }
       }
 
-      std::cerr << "DEBUG: Writing entry type=" << entry.errorType << "\n";
+      logDebug(std::string("Writing entry type=") + entry.errorType);
       writer->writeEntry(entry);
     }
   }
@@ -587,5 +592,13 @@ void LogProcessor::printStats(std::FILE* out) const {
 void LogProcessor::saveStatsJson() const {
   if (!opt.statsFile.empty()) {
     writer->writeStatsJson(stats, opt.statsFile);
+  }
+}
+
+void LogProcessor::logDebug(std::string_view msg) const noexcept {
+  if (opt.verbose) {
+    try {
+      std::cerr << "DEBUG: " << msg << "\n";
+    } catch (...) {}
   }
 }

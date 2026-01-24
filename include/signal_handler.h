@@ -1,6 +1,6 @@
 #pragma once
 
-namespace signal_handler {
+namespace SignalHandler {
 
 /**
  * @brief Installs signal handlers for SIGINT and SIGTERM.
@@ -13,6 +13,6 @@ void install();
  * @brief Checks if a stop signal has been received.
  * @return true if SIGINT/SIGTERM was caught.
  */
-bool is_stop_requested();
+bool isStopRequested();
 
-} // namespace signal_handler
+} // namespace SignalHandler

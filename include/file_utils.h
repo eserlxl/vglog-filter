@@ -36,19 +36,19 @@ private:
 };
 
 // Formatted error text
-[[nodiscard]] std::string create_error_message(std::string_view operation,
+[[nodiscard]] std::string createErrorMessage(std::string_view operation,
                                                std::string_view filename,
                                                std::string_view details = {}) noexcept;
 
 // Progress helpers
-void report_progress(std::size_t bytesProcessed, std::size_t total_bytes, std::string_view filename);
-[[nodiscard]] std::size_t get_memory_usage_mb() noexcept;
-void report_memory_usage(std::string_view operation, std::string_view filename = {});
+void reportProgress(std::size_t bytesProcessed, std::size_t totalBytes, std::string_view filename);
+[[nodiscard]] std::size_t getMemoryUsageMb() noexcept;
+void reportMemoryUsage(std::string_view operation, std::string_view filename = {});
 
 // File helpers
-[[nodiscard]] std::vector<std::string> read_file_lines(std::string_view fname);
-[[nodiscard]] bool is_large_file(std::string_view fname);
-[[nodiscard]] std::size_t get_file_size_bytes(std::string_view fname);
+[[nodiscard]] std::vector<std::string> readFileLines(std::string_view fname);
+[[nodiscard]] bool isLargeFile(std::string_view fname);
+[[nodiscard]] std::size_t getFileSizeBytes(std::string_view fname);
 
 // Stream processing wrapper
-void process_file_stream(std::string_view fname, const Options& opt);
+void processFileStream(std::string_view fname, const Options& opt);

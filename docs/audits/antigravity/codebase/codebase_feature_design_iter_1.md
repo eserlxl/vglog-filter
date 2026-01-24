@@ -1,74 +1,76 @@
-# Codebase Feature Design (Iteration 1)
+# Codebase Feature Design - Iteration 1
 
-## 1. Correctness: `is_digit` Fix
-### Problem
-`std::isdigit` is not `constexpr` and has UB for negative chars on some platforms.
-### Proposal
-Replace with:
+## 1. Goal
+Formalize the codebase by enforcing `camelCase` consistency, eliminating `kPascalCase` (if any), removing `std::cerr` pollution, and fixing critical safety issues (memory leaks).
+
+## 2. Proposed API Changes
+
+### 2.1. File Utils (`include/file_utils.h`)
+Refactor snake_case to camelCase:
 ```cpp
-constexpr bool is_digit(char c) noexcept {
-  return c >= '0' && c <= '9';
+// [MODIFY]
+size_t getFileSizeBytes(const std::string& filename); // was get_file_size_bytes
+void reportProgress(size_t current, size_t total, const std::string& task); // was report_progress
+```
+
+### 2.2. Signal Handler (`include/signal_handler.h`)
+Refactor snake_case to camelCase:
+```cpp
+// [MODIFY]
+namespace SignalHandler { // Ensure Namespace/Class consistent naming
+    void install();
+    bool isStopRequested(); // was is_stop_requested
 }
 ```
-This is safe, locale-independent (for digits), and valid `constexpr`.
 
-## 2. API Hardening
-### Problem
-Return values of `LogParser` are ignored in some call sites, or at least not enforced.
-### Proposal
-Add `[[nodiscard]]` to:
-- `LogParser::parseHeader`
-- `LogParser::parseFrameStructured`
-- `LogParser::parseStackFrame`
-- `LogParser::removePrefix`
-
-## 3. Signal Handling (Graceful Shutdown)
-### Problem
-`Ctrl+C` kills the process immediately. If `jsonArray` is enabled, the closing `]` is never written, resulting in invalid JSON.
-### Proposal
-Introduce `src/signal_handler.h`:
+### 2.3. Options (`include/options.h`)
+Add verbosity control:
 ```cpp
-#include <functional>
-#include <vector>
+// [MODIFY] struct Options
+bool verbose = false; // New field
+```
 
-class SignalHandler {
-public:
-    using Callback = std::function<void()>;
-    static void register_handler();
-    static void add_cleanup_task(Callback task);
+### 2.4. Log Processor (`include/log_processor.h`)
+Add debug logging helper and clean up.
+```cpp
+// [MODIFY]
+class LogProcessor {
+    // ...
 private:
-    static void handle_signal(int signal);
-    static std::vector<Callback> cleanup_tasks;
+    void logDebug(std::string_view msg) const;
+    // ...
 };
 ```
-Integration:
-- `main.cpp` calls `SignalHandler::register_handler()`.
-- `LogWriter` registers a cleanup task in its constructor (or `main.cpp` lambda capturing `LogWriter`) to call `pImpl->finalize()`.
-- *Refinement*: `LogWriter` shouldn't depend on `SignalHandler`. `main.cpp` should bind them.
 
-## 4. GitHub Actions Integration
-### Problem
-CI pipelines need machine-readable errors to annotate PRs.
-### Proposal
-Add `--github-actions` flag to `Options`.
-Update `LogWriter::writeEntry`:
-If enabled, emit:
-`::error file=<FILE>,line=<LINE>,title=<TYPE>::<MESSAGE>`
+## 3. Implementation Details
 
-Logic:
-- `<TYPE>`: `entry.errorType`
-- `<FILE>`, `<LINE>`: Parse from `entry.stackFrames[0].location` if available.
-- `<MESSAGE>`: First line of stack or summary.
+### 3.1. Memory Safety (`src/log_processor.cpp`)
+Fix memory leak in `processStreamCFile`.
+Construct a custom RAII wrapper for the `char* buf` used by `::getline`.
+```cpp
+struct LineBuffer {
+    char* data = nullptr;
+    size_t cap = 0;
+    ~LineBuffer() { free(data); }
+};
+// Loop:
+LineBuffer lb;
+ssize_t read = ::getline(&lb.data, &lb.cap, fp);
+// ...
+```
+This guarantees `free` is called even if `validate_line_length` throws.
 
-New Option:
-- `bool githubActions = false;` in `Options`.
-- CLI flag: `--github-actions`.
+### 3.2. Standardizing Internal Helpers
+Rename all `snake_case` static functions in `src/*.cpp` to `camelCase`:
+- `is_digit` -> `isDigit`
+- `validate_line_length` -> `validateLineLength`
+- etc.
 
-## 5. Backward Compatibility
-- New flags are optional.
-- Signal handling is transparent improvement.
-- `is_digit` fix is internal.
+## 4. Backend Compatibility
+- **API Breakage**: Yes, for `file_utils` and `signal_handler`. Since these are internal libraries, we update all call sites within the repo (global search/replace).
+- **Behavior**: No functional change desired, strictly refactoring + safety.
 
-## 6. Required Tests
-- `test_signal_handling.cpp`: Mock signal (if possible) or unit test the handler logic.
-- `test_github_output.cpp`: Verify format strings.
+## 5. Required Tests
+- **Compilation Check**: `make` must pass.
+- **Regression**: `ctest` must pass (all existing tests).
+- **Safety Verification**: No new test file needed strictly if we verify via code inspection, but ensuring `test_memory_leaks` runs is crucial.

@@ -2,7 +2,7 @@
 #include <atomic>
 #include <csignal>
 
-namespace signal_handler {
+namespace SignalHandler {
 
 namespace {
 std::atomic_bool g_stop_requested{false};
@@ -25,8 +25,8 @@ void install() {
   sigaction(SIGTERM, &sa, nullptr);
 }
 
-bool is_stop_requested() {
+bool isStopRequested() {
   return g_stop_requested.load(std::memory_order_relaxed);
 }
 
-} // namespace signal_handler
+} // namespace SignalHandler

@@ -65,6 +65,7 @@ struct Options {
   bool detailedJson = false;
   bool detailedStats = false;
   bool strictMode = false;
+  bool verbose = false; // Iteration 1 Extension
 
   enum class StatsFormat : std::uint8_t { text, json };
   StatsFormat statsFormat = StatsFormat::text;

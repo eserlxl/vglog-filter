@@ -50,14 +50,14 @@ void setup_input_source(Options& opt, int argc, char* argv[]) {
 
   // Auto-detect streaming when not explicitly requested
   if (!opt.streamMode) {
-    opt.streamMode = opt.useStdin ? true : is_large_file(opt.filename);
+    opt.streamMode = opt.useStdin ? true : isLargeFile(opt.filename);
     if (opt.streamMode && !opt.useStdin) {
       std::fputs("Info: Large file detected, using stream processing mode\n", stderr);
     }
   }
 }
 
-void process_input_files(Options& opt) {
+void processInputFiles(Options& opt) {
   if (opt.inputFiles.empty()) {
     opt.inputFiles.push_back(opt.filename.empty() ? std::string(STDIN_SENTINEL) : opt.filename);
   }
@@ -66,7 +66,7 @@ void process_input_files(Options& opt) {
   LogProcessor processor(opt);
 
   if (opt.monitorMemory) {
-    report_memory_usage("starting processing", "all_inputs");
+    reportMemoryUsage("starting processing", "all_inputs");
   }
 
   for (const auto& file : opt.inputFiles) {
@@ -76,10 +76,10 @@ void process_input_files(Options& opt) {
       if (opt.useStdin || file == STDIN_SENTINEL) {
         processor.processStreamCFile(stdin);
       } else {
-        process_file_stream(file,
-                            opt); // Note: process_file_stream creates its own Processor usually?
-        // Wait, process_file_stream is a helper in main.cpp?
-        // I need to check `process_file_stream` implementation.
+        processFileStream(file,
+                            opt); // Note: processFileStream creates its own Processor usually?
+        // Wait, processFileStream is a helper in main.cpp?
+        // I need to check `processFileStream` implementation.
         // If it creates its own processor, dedup won't work across files.
         // Ideally `processStream` should be called on OUR processor.
         std::cerr << "Warning: Multi-file stream mode sharing state not fully implemented in "
@@ -91,7 +91,7 @@ void process_input_files(Options& opt) {
         // LogProcessor::processStreamCFile exists.
         processor.processStreamCFile(stdin);
       } else {
-        const std::vector<std::string> lines = read_file_lines(file);
+        const std::vector<std::string> lines = readFileLines(file);
         if (lines.empty())
           continue; // Warn?
         processor.processLines(lines);
@@ -100,7 +100,7 @@ void process_input_files(Options& opt) {
   }
 
   if (opt.monitorMemory) {
-    report_memory_usage("completed processing", "all_inputs");
+    reportMemoryUsage("completed processing", "all_inputs");
   }
 
   if (opt.showProgress || opt.monitorMemory) {
@@ -151,7 +151,7 @@ int main(int argc, char* argv[]) {
   std::ios::sync_with_stdio(false);
   std::cin.tie(nullptr);
 
-  signal_handler::install();
+  SignalHandler::install();
 
   try {
     if (auto parsed = cli::parseArgs(argc, argv)) {
@@ -170,7 +170,7 @@ int main(int argc, char* argv[]) {
       }
 
       opt.validate();
-      process_input_files(opt);
+      processInputFiles(opt);
     } else {
       // Help/version printed; normal exit.
       return 0;

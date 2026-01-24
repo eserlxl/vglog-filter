@@ -1,32 +1,45 @@
-# Codebase Feature Audit (Iteration 1)
+# Codebase Feature Expansion - Iteration 1 Audit
 
-## Existing Capabilities
-- **Filtering**: Types, Functions, Source Paths, PIDs, Threads, Time (String-based), Regex.
-- **Output**: Raw, Colorized, JSON (Array/Lines), Stats.
-- **Input**: Stdin, Files, Multi-file.
-- **Safety**: File rotation, Max errors limit.
+## 1. Existing Capabilities & Status
+The codebase has undergone previous expansion attempts (up to Iteration 3), resulting in a functional but partially verified state.
+- **Core Processing**: `LogProcessor` handles Valgrind log parsing with `LogParser`.
+- **Filtering**: `LogFilter` supports type, stack, source, and regex-based filtering (added in prev Iter 3).
+- **Output**: `LogWriter` supports text, JSON, and GitHub Actions formats.
+- **Testing**: A comprehensive suite exists (`test_features_iter3` passes), but `codebase_feature_verification_iter_3.md` is missing, implying incomplete formal verification.
 
-## Missing Features / Gaps
-1.  **CI Integration**: No native support for GitHub Actions logging commands.
-2.  **Signal Safety**: JSON arrays are not closed if the process is interrupted (Ctrl+C), invalidating the entire output.
-3.  **Correctness**: `is_digit` in `log_parser.cpp` uses `std::isdigit` in a `constexpr` function. `std::isdigit` is not `constexpr`. This is technically ill-formed or relys on compiler extensions.
-4.  **API Hardening**: `LogParser` methods return `std::optional` but lack `[[nodiscard]]`.
-5.  **Config Scalability**: Lists (excludes/includes) must be passed via CLI args or a single config file. Large exclusion lists (e.g. 1000s of types) are clumsy.
+## 2. Coding Standard Violations
+The `USER_REQUEST` mandates `camelCase` and explicitly forbids `kPascalCase`.
+- **Snake Case**: The `src/log_processor.cpp` file contains several internal helper functions using `snake_case`:
+  - `is_digit`
+  - `validate_line_length`
+  - `validate_block_size`
+  - `validate_pending_blocks_count`
+  - `report_progress` (inferred from usage, need to check def)
+- **Action**: These must be renamed to `camelCase` (e.g., `isDigit`, `validateLineLength`) to meet the formalization goal.
 
-## High-Risk Issues
-- **`is_digit` Constexpr Violation**: `std::isdigit` has undefined behavior if char is negative and not EOF, and is not constexpr.
-    - *Fix*: Implement a custom range check `c >= '0' && c <= '9'`.
-- **JSON Corruption**: Interruption handling is missing.
+## 3. API Usability & Design Gaps
+- **Hardcoded Debug Output**: `LogProcessor` writes directly to `std::cerr` ("DEBUG: ...").
+  - This pollutes standard error and makes the library unusable in quiet tools.
+  - **Proposed Fix**: Introduce a `verbose` or `debug` flag in `Options` and wrap debug prints in a conditional helper.
+- **Member Encapsulation**: `LogProcessor` members like `raw`, `sig`, `pendingPid` are `private` but the internal state management (`clearCurrentState`, `resetEpoch`) is somewhat scattered.
 
-## API Usability
-- **Naming**: No `kPascalCase` violations found in public headers, but `DEFAULT_DEPTH` etc. use SCREAMING_CASE which is standard for macros but maybe user prefers `DefaultDepth`? Given the strict "check for kPascalCase" instruction, I will assume constants should be `camelCase` if they are static members, or stay SCREAMING if macros. Since they are `inline constexpr`, `defaultDepth` would be more "modern C++". I will NOT change them yet to avoid churn unless confirmed, as `kPascalCase` was the specific prohibition.
+## 4. Safety & Correctness
+- **Lifetime Safety**: `LogProcessor` holds `const Options& opt`. This requires `Options` to outlive the processor. While valid for `main.cpp`, it's a constraint that should be documented or guarded.
+- **Raw Pointers**: `processStreamCFile` takes `std::FILE*`. This is necessary for C-interop but usage of `::getline` with `std::free(buf)` is manual memory management.
+  - **Action**: Verify exception safety. If `validate_line_length` throws, `buf` might leak?
+  - `buf` is managed by `::getline`. If exception is thrown inside the loop, `std::free(buf)` at the end is SKIPPED.
+  - **Critical Issue**: **Memory Leak on Exception**. If `validate_line_length` throws, `buf` (allocated by `getline`) is never freed.
+  - **Fix**: Use `std::unique_ptr` with custom deleter or `defer` pattern (RAII) for `buf`.
 
-## Missing Tests
-- **Signal Handling**: Hard to test, but we can verify the handler is registered.
-- **Github Actions Output**: Need verification of format.
+## 5. Missing Test Coverage
+- **Exception Safety**: No tests seem to cover the memory leak scenario in `processStreamCFile` upon exception.
+- **Regex Edge Cases**: `test_features_iter3.cpp` covers basic inclusion/exclusion, but complex regexes or invalid regex handling (throwing `std::regex_error`?) need verification.
 
-## Plan for Iteration 1
-1.  Fix `is_digit`.
-2.  Add `[[nodiscard]]` to `LogParser`.
-3.  Implement `SignalHandler` for graceful JSON closure.
-4.  Add `GithubActions` output mode.
+## 6. Plan for Iteration 1
+- **Fix**: Memory leak in `processStreamCFile`.
+- **Refactor**: Rename `snake_case` helpers to `camelCase`.
+- **Enhance**: Add `Options::verbose` and silence `std::cerr`.
+- **Verify**: Re-run all tests and add a test for the memory leak fix (using a mock or analyzing code).
+
+## 7. What Changed Since Last Iteration
+(Applicable for N > 1).

@@ -105,13 +105,13 @@ private:
   void initializeStringPatterns();
   [[nodiscard]] std::size_t getFileSizeForProgress() const;
   [[nodiscard]] bool shouldReportProgress(std::size_t bytesProcessed,
-                                          std::size_t total_bytes) const;
+                                          std::size_t totalBytes) const;
 
   void outputPendingBlocks();
 
-  [[nodiscard]] LogEntry parseEntry(const std::string& raw_block,
+  [[nodiscard]] LogEntry parseEntry(const std::string& rawBlock,
                                     const std::string& signature) const;
-  [[nodiscard]] std::string processRawLine(const std::string& processed_line) const;
+  [[nodiscard]] std::string processRawLine(const std::string& processedLine) const;
   [[nodiscard]] std::string generateSignatureKey() const;
 
   // String matching helpers (regex-free)
@@ -124,6 +124,9 @@ private:
   [[nodiscard]] bool matchesQPattern(std::string_view line) const noexcept;
 
   std::string replacePatterns(const std::string& line) const;
+
+  // Helper for debug logging
+  void logDebug(std::string_view msg) const noexcept;
 
   const Options& opt;
   LogFilter filter; // New encapsulated filter

@@ -340,27 +340,27 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
         break;
       case OPT_EXCLUDE_TYPE_FILE:
         if (optarg && *optarg) {
-          auto lines = read_file_lines(optarg);
+          auto lines = readFileLines(optarg);
           std::cerr << "DEBUG: Read " << lines.size() << " lines from " << optarg << "\n";
           opt.filter.excludeTypes.insert(opt.filter.excludeTypes.end(), lines.begin(), lines.end());
         }
         break;
       case OPT_INCLUDE_TYPE_FILE:
         if (optarg && *optarg) {
-          auto lines = read_file_lines(optarg);
+          auto lines = readFileLines(optarg);
           opt.filter.includeTypes.insert(opt.filter.includeTypes.end(), lines.begin(), lines.end());
         }
         break;
       case OPT_EXCLUDE_FUNC_FILE:
         if (optarg && *optarg) {
-          auto lines = read_file_lines(optarg);
+          auto lines = readFileLines(optarg);
           opt.filter.excludeFunctions.insert(opt.filter.excludeFunctions.end(), lines.begin(),
                                              lines.end());
         }
         break;
       case OPT_INCLUDE_FUNC_FILE:
         if (optarg && *optarg) {
-          auto lines = read_file_lines(optarg);
+          auto lines = readFileLines(optarg);
           opt.filter.includeFunctions.insert(opt.filter.includeFunctions.end(), lines.begin(),
                                              lines.end());
         }

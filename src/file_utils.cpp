@@ -52,7 +52,8 @@ void validate_line_count(std::size_t n) {
 
 } // namespace
 
-std::string create_error_message(std::string_view operation, std::string_view filename,
+
+std::string createErrorMessage(std::string_view operation, std::string_view filename,
                                  std::string_view details) noexcept {
   std::string m = "Error during ";
   m.append(operation);
@@ -65,18 +66,18 @@ std::string create_error_message(std::string_view operation, std::string_view fi
   return m;
 }
 
-void report_progress(std::size_t bytesProcessed, std::size_t total_bytes,
+void reportProgress(std::size_t bytesProcessed, std::size_t totalBytes,
                      std::string_view filename) {
-  if (total_bytes == 0 || bytesProcessed > total_bytes)
+  if (totalBytes == 0 || bytesProcessed > totalBytes)
     return;
   std::fprintf(stderr, "\rProcessing %.*s: %s%% (%s/%s MB)", static_cast<int>(filename.size()),
-               filename.data(), pct(bytesProcessed, total_bytes).c_str(),
-               to_mb(bytesProcessed).c_str(), to_mb(total_bytes).c_str());
-  if (bytesProcessed >= total_bytes)
+               filename.data(), pct(bytesProcessed, totalBytes).c_str(),
+               to_mb(bytesProcessed).c_str(), to_mb(totalBytes).c_str());
+  if (bytesProcessed >= totalBytes)
     std::fputc('\n', stderr);
 }
 
-std::size_t get_memory_usage_mb() noexcept {
+std::size_t getMemoryUsageMb() noexcept {
 #if defined(__linux__)
   rusage u{};
   if (getrusage(RUSAGE_SELF, &u) == 0) {
@@ -86,8 +87,8 @@ std::size_t get_memory_usage_mb() noexcept {
   return 0;
 }
 
-void report_memory_usage(std::string_view operation, std::string_view filename) {
-  const auto mb = get_memory_usage_mb();
+void reportMemoryUsage(std::string_view operation, std::string_view filename) {
+  const auto mb = getMemoryUsageMb();
   if (mb > 0) {
     if (!filename.empty()) {
       std::fprintf(stderr, "Memory usage during %.*s for %.*s: %zu MB\n",
@@ -100,7 +101,7 @@ void report_memory_usage(std::string_view operation, std::string_view filename) 
   }
 }
 
-std::vector<std::string> read_file_lines(std::string_view fname) {
+std::vector<std::string> readFileLines(std::string_view fname) {
   if (fname.empty())
     throw std::invalid_argument("Filename cannot be empty");
 
@@ -119,7 +120,7 @@ std::vector<std::string> read_file_lines(std::string_view fname) {
   return lines;
 }
 
-bool is_large_file(std::string_view fname) {
+bool isLargeFile(std::string_view fname) {
   if (fname.empty())
     return false;
   try {
@@ -136,7 +137,7 @@ bool is_large_file(std::string_view fname) {
   }
 }
 
-void process_file_stream(std::string_view fname, const Options& opt) {
+void processFileStream(std::string_view fname, const Options& opt) {
   if (fname.empty())
     throw std::invalid_argument("Filename cannot be empty");
   LogProcessor processor(opt);
@@ -183,7 +184,7 @@ FileHandle::operator bool() const noexcept {
   return fp != nullptr;
 }
 
-std::size_t get_file_size_bytes(std::string_view fname) {
+std::size_t getFileSizeBytes(std::string_view fname) {
   if (fname.empty())
     return 0;
   try {
