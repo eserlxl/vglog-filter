@@ -79,6 +79,8 @@ void ConfigLoader::load(Options& opt) {
       appendList("types", opt.filter.excludeTypes);
       appendList("functions", opt.filter.excludeFunctions);
       appendList("files", opt.filter.excludeSourcePaths);
+      appendList("typesRegex", opt.filter.excludeTypesRegex);
+      appendList("functionsRegex", opt.filter.excludeFunctionsRegex);
   }
   
   if (root.count("include") && root.at("include").isObject()) {
@@ -97,6 +99,8 @@ void ConfigLoader::load(Options& opt) {
       appendList("types", opt.filter.includeTypes);
       appendList("functions", opt.filter.includeFunctions);
       appendList("files", opt.filter.includeSourcePaths);
+      appendList("typesRegex", opt.filter.includeTypesRegex);
+      appendList("functionsRegex", opt.filter.includeFunctionsRegex);
       
       // PIDs (numbers)
       if (incl.count("pids") && incl.at("pids").isArray()) {

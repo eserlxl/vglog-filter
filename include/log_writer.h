@@ -60,6 +60,8 @@ public:
    */
   void writeStats(const struct LogStats& stats) override;
 
+  void writeDiffSummary(const DiffEngine::DiffStats& stats) override;
+
   // Iteration 1 Extensions
   void setUseColor(bool enable) override;
   void writeStatsJson(const struct LogStats& stats, const std::string& path) const override;

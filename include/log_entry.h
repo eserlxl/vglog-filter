@@ -149,6 +149,18 @@ struct LogEntry {
     return tid.has_value();
   }
 
+  enum class Severity { High, Medium, Low, Unknown };
+
+  [[nodiscard]] Severity getSeverity() const {
+      if (matchesErrorType("Invalid read") || matchesErrorType("Invalid write") || matchesErrorType("Uninitialised"))
+          return Severity::High;
+      if (matchesErrorType("Leak") || matchesErrorType("lost"))
+          return Severity::Medium;
+      if (matchesErrorType("ThreadSanitizer"))
+          return Severity::High;
+      return Severity::Unknown;
+  }
+
     bool operator==(const LogEntry& other) const {
         return signature == other.signature &&
                timestamp == other.timestamp &&

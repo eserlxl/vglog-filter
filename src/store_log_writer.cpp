@@ -31,6 +31,10 @@ void StoreLogWriter::writeStats(const LogStats& /*unused*/) {
     // Ignore stats
 }
 
+void StoreLogWriter::writeDiffSummary(const DiffEngine::DiffStats& /*stats*/) {
+    // No-op
+}
+
 void StoreLogWriter::setUseColor(bool /*unused*/) {
     // No-op
 }

@@ -8,6 +8,8 @@ struct LogStats;
 #include <cstdio>
 #include <string>
 
+#include "diff_engine.h"
+
 class ILogWriter {
 public:
   virtual ~ILogWriter() = default;
@@ -16,6 +18,7 @@ public:
   virtual void writeRaw(const std::string& content) = 0;
   virtual void writeStats(const LogStats& stats) = 0;
   virtual void writeStatsJson(const LogStats& stats, const std::string& filename) const = 0;
+  virtual void writeDiffSummary(const DiffEngine::DiffStats& stats) = 0;
   virtual void setUseColor(bool enable) = 0;
   virtual void flush() = 0;
 };

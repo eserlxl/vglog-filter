@@ -30,6 +30,7 @@ public:
   void writeRaw(const std::string&) override {}
   void setUseColor(bool) override {}
   void flush() override {}
+  void writeDiffSummary(const DiffEngine::DiffStats&) override {}
 };
 
 bool test_deduplication_mock() {

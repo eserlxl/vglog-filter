@@ -305,6 +305,14 @@ void LogWriter::writeStats(const struct LogStats& stats) {
   }
 }
 
+void LogWriter::writeDiffSummary(const DiffEngine::DiffStats& stats) {
+    std::string summary = "\n=== Diff Summary ===\n";
+    summary += "New: " + std::to_string(stats.totalNew) + " (" + std::to_string(stats.regressionRate) + "%)\n";
+    summary += "Fixed: " + std::to_string(stats.totalFixed) + " (" + std::to_string(stats.fixRate) + "%)\n";
+    summary += "Common: " + std::to_string(stats.totalCommon) + "\n";
+    pImpl->write_data(summary.data(), summary.size());
+}
+
 void LogWriter::flush() {
   if (pImpl->out_fp) {
     std::fflush(pImpl->out_fp);

@@ -27,7 +27,7 @@ public:
                       // Easier to include diff_engine.h in header or use void* (bad).
                       // We'll perform include of diff_engine.h in the header.
 
-    void writeDiffSummary(const DiffEngine::DiffStats& stats);
+    void writeDiffSummary(const DiffEngine::DiffStats& stats) override;
 
 private:
     void writeHeader();

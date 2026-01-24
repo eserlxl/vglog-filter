@@ -86,6 +86,15 @@ void HtmlLogWriter::writeEntry(const LogEntry& entry) {
     ofs_ << "</td>\n";
     
     ofs_ << "<td class=\"stack\">";
+    if (!entry.sourceContext.empty()) {
+        ofs_ << "<div class=\"context\" style=\"background: #f8f9fa; padding: 5px; margin-bottom: 5px; border-bottom: 1px solid #ddd; font-family: monospace; font-size: 0.85em; color: #555;\">";
+        ofs_ << "<strong>Context:</strong><br>";
+        for (const auto& line : entry.sourceContext) {
+             ofs_ << escape(line) << "<br>";
+        }
+        ofs_ << "</div>";
+    }
+
     if (!entry.stackFrames.empty()) {
         for (const auto& line : entry.stackTrace) {
              ofs_ << escape(line) << "\n";

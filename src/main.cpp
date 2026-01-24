@@ -28,6 +28,7 @@
 #include "composite_log_writer.h"
 #include "html_log_writer.h"
 #include "store_log_writer.h"
+#include "markdown_log_writer.h"
 #include "diff_engine.h"
 
 namespace {
@@ -35,7 +36,6 @@ namespace {
 inline constexpr auto STDIN_SENTINEL = std::string_view{"-"};
 
 void setup_input_source(Options& opt, int argc, char* argv[]) {
-  // ... (unchanged)
   if (optind >= argc) {
     opt.useStdin = true;
     opt.filename = std::string{STDIN_SENTINEL};
@@ -57,19 +57,6 @@ void load_into_writer(Options optCopy, const std::string& input, ILogWriter& wri
     // Don't show progress for internal loading
     optCopy.showProgress = false; 
     
-    // We cannot move the writer into LogProcessor because we passed a reference.
-    // So we use a wrapper or generic LogProcessor that accepts raw pointer?
-    // LogProcessor takes unique_ptr.
-    // Hack: LogProcessor only TAKES ownership.
-    // Solution: Create LogProcessor with a "ProxyWriter" that forwards to our reference?
-    // Or just change LogProcessor to take generic reference? It owns it.
-    // Actually LogProcessor(Options, unique_ptr) is explicit.
-    
-    // Better: StoreLogWriter is cheap to move? No, vector.
-    // But we need the RESULT back.
-    // So we need to keep the pointer.
-    
-    // Let's make a "ReferenceLogWriter" that holds T& and implements ILogWriter.
     class ReferenceLogWriter : public ILogWriter {
         ILogWriter& ref_;
     public:
@@ -80,6 +67,7 @@ void load_into_writer(Options optCopy, const std::string& input, ILogWriter& wri
         void setUseColor(bool b) override { ref_.setUseColor(b); }
         void writeStatsJson(const LogStats& s, const std::string& p) const override { ref_.writeStatsJson(s, p); }
         void flush() override { ref_.flush(); }
+        void writeDiffSummary(const DiffEngine::DiffStats& stats) override { ref_.writeDiffSummary(stats); }
     };
     
     auto proxy = std::make_unique<ReferenceLogWriter>(writer);
@@ -118,26 +106,44 @@ void processDiff(const Options& opt) {
     std::cout << "Comparing...\n";
     auto result = DiffEngine::compare(baselineWriter.getEntries(), targetWriter.getEntries());
 
+    // We can use a proper writer here too if we want formatted output!
+    // But mostly Diff involves printing to stdout.
+    
+    // Create a temporary writer for stdout reporting?
+    // LogWriter(opt) writes to stdout/file.
+    // Let's reuse LogWriter logic for stats?
+    
+    auto stats = DiffEngine::computeStats(result);
+    
+    // If output file configured, maybe write there?
+    // For now stick to stdout text + Markdown/HTML if configured.
+    
+    std::unique_ptr<ILogWriter> reportWriter;
+    if (!opt.markdownReport.empty()) {
+        reportWriter = std::make_unique<MarkdownLogWriter>(opt.markdownReport);
+    } else if (!opt.htmlReport.empty()) {
+        reportWriter = std::make_unique<HtmlLogWriter>(opt.htmlReport);
+    }
+    
+    if (reportWriter) {
+        reportWriter->writeDiffSummary(stats);
+        // Also write new errors?
+        for (const auto& e : result.newErrors) {
+            reportWriter->writeEntry(e);
+        }
+    }
+
     std::cout << "\n=== Diff Report ===\n";
     std::cout << "Baseline: " << baselineWriter.getEntries().size() << " errors\n";
     std::cout << "Target:   " << targetWriter.getEntries().size() << " errors\n";
     std::cout << "-------------------\n";
+    std::cout << "New Errors: " << stats.totalNew << "\n";
+    std::cout << "Fixed Errors: " << stats.totalFixed << "\n";
     
     if (!result.newErrors.empty()) {
-        std::cout << "NEW ERRORS (" << result.newErrors.size() << "):\n";
+        std::cout << "\nNEW ERRORS LIST:\n";
         for (const auto& e : result.newErrors) {
-            std::cout << "  [" << e.errorType << "] " << e.pid << "/" << (e.tid ? std::to_string(*e.tid) : "-") << "\n";
-            // Print top frame?
-            if (!e.stackTrace.empty()) std::cout << "    " << e.stackTrace[0] << "\n";
-        }
-    } else {
-        std::cout << "No new errors.\n";
-    }
-    
-    if (!result.fixedErrors.empty()) {
-        std::cout << "\nFIXED ERRORS (" << result.fixedErrors.size() << "):\n";
-        for (const auto& e : result.fixedErrors) {
-             std::cout << "  [" << e.errorType << "]\n";
+            std::cout << "  [" << e.errorType << "] " << e.pid << "\n";
         }
     }
 }
@@ -149,12 +155,13 @@ void processInputFiles(Options& opt) {
 
   // Setup Writer(s)
   auto writer = std::make_unique<CompositeLogWriter>();
-  // improved: always add default writer unless user explicitly suppressed standard output?
-  // Current logic implies standard output is always desired unless specific flags set.
   writer->add(std::make_unique<LogWriter>(opt));
 
   if (!opt.htmlReport.empty()) {
       writer->add(std::make_unique<HtmlLogWriter>(opt.htmlReport));
+  }
+  if (!opt.markdownReport.empty()) {
+      writer->add(std::make_unique<MarkdownLogWriter>(opt.markdownReport));
   }
 
   // Create processor once to maintain stats/deduplication state across files
@@ -175,8 +182,6 @@ void processInputFiles(Options& opt) {
             processor.processStream(*stream);
         } catch (const std::exception& e) {
             std::cerr << "Error processing file " << file << ": " << e.what() << "\n";
-            // Continue with next file? Or abort? 
-            // Systems tool: usually continue but report error.
         }
     }
   }
@@ -231,7 +236,6 @@ void dump_config_to_file(const Options& opt, const std::string& path) {
 #include "exit_codes.h"
 
 int main(int argc, char* argv[]) {
-  // Favor performance and avoid libstdc++ locale initialization paths flagged by MSan
   std::ios::sync_with_stdio(false);
   std::cin.tie(nullptr);
 
@@ -241,19 +245,17 @@ int main(int argc, char* argv[]) {
     if (auto parsed = cli::parseArgs(argc, argv)) {
       auto& opt = *parsed;
       
-      // Iteration 1: Version check
       if (opt.version) {
           std::fprintf(stdout, "vglog-filter version %s\n", VERSION_STRING);
           return exit_codes::SUCCESS;
       }
 
       ConfigLoader::load(opt);
-      // Collect positional args
       for (int i = optind; i < argc; ++i) {
         if (argv[i])
           opt.inputFiles.emplace_back(argv[i]);
       }
-      setup_input_source(opt, argc, argv); // Still needed for defaults (stdin) logic
+      setup_input_source(opt, argc, argv);
 
       if (!opt.dumpConfig.empty()) {
         dump_config_to_file(opt, opt.dumpConfig);
@@ -269,13 +271,10 @@ int main(int argc, char* argv[]) {
 
       processInputFiles(opt);
     } else {
-      // Help printed (parseArgs checks help and returns nullopt); normal exit.
       return exit_codes::SUCCESS;
     }
   } catch (const std::exception& e) {
     std::fprintf(stderr, "Error: %s\n", e.what());
-    // Try to guess error type? For now GENERIC_ERROR.
-    // Ideally we catch strict mode errors specifically.
     return exit_codes::GENERIC_ERROR;
   }
 

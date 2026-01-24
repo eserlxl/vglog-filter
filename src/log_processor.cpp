@@ -560,10 +560,24 @@ void LogProcessor::processStreamParallel(std::istream& in) {
           
           if (isUnique || !opt.uniqueOutput) {
               if (opt.contextLines > 0) {
-                  // Context load needs valid file reading, assumed safe?
-                  // SourceLoader uses cache, might need mutex if parallel?
-                  // But here we are sequential in main thread.
-                  // ... context logic ...
+              if (opt.contextLines > 0 && !res.entry.stackFrames.empty()) {
+                  const auto& frame = res.entry.stackFrames[0];
+                  if (!frame.location.empty()) {
+                      auto colonPos = frame.location.find_last_of(':');
+                      if (colonPos != std::string::npos) {
+                          std::string file = frame.location.substr(0, colonPos);
+                          int line = 0;
+                          try {
+                              line = std::stoi(frame.location.substr(colonPos + 1));
+                          } catch (...) {}
+                          
+                          if (line > 0) {
+                              // SourceLoader is effectively single-threaded here (main thread)
+                              res.entry.sourceContext = sourceLoader.loadContext(file, line, opt.contextLines);
+                          }
+                      }
+                  }
+              }
               }
               writer->writeEntry(res.entry);
           }

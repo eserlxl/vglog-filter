@@ -207,6 +207,8 @@ add_library(vglog-filter-lib
   src/parsers/valgrind_parser.cpp
   src/parsers/asan_parser.cpp
   src/filter_config.cpp
+  src/markdown_log_writer.cpp
+  src/parsers/suppression_parser.cpp
 
 )
 
@@ -434,4 +436,16 @@ add_test(NAME test_diff_engine COMMAND test_diff_engine)
 add_executable(test_features_iter2_new test/test_features_iter2.cpp)
 target_link_libraries(test_features_iter2_new PRIVATE vglog-filter-lib)
 add_test(NAME test_features_iter2_new COMMAND test_features_iter2_new)
+
+add_executable(test_markdown_writer test/test_markdown_writer.cpp src/markdown_log_writer.cpp)
+target_link_libraries(test_markdown_writer PRIVATE vglog-filter-lib)
+add_test(NAME test_markdown_writer COMMAND test_markdown_writer)
+
+add_executable(test_suppression_parser test/test_suppression_parser.cpp src/parsers/suppression_parser.cpp)
+target_link_libraries(test_suppression_parser PRIVATE vglog-filter-lib)
+add_test(NAME test_suppression_parser COMMAND test_suppression_parser)
+
+add_executable(test_json_writer test/test_json_writer.cpp)
+target_link_libraries(test_json_writer PRIVATE vglog-filter-lib)
+add_test(NAME test_json_writer COMMAND test_json_writer)
 

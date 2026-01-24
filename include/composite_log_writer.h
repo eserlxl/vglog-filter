@@ -27,6 +27,10 @@ public:
         for (auto& w : writers_) w->writeStats(stats);
     }
 
+    void writeDiffSummary(const DiffEngine::DiffStats& stats) override {
+        for (auto& w : writers_) w->writeDiffSummary(stats);
+    }
+
     void setUseColor(bool enable) override {
         for (auto& w : writers_) w->setUseColor(enable);
     }

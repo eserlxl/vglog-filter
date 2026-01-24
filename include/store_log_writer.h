@@ -18,6 +18,7 @@ public:
     void writeEntry(const LogEntry& entry) override;
     void writeRaw(const std::string& content) override;
     void writeStats(const LogStats& stats) override;
+    void writeDiffSummary(const DiffEngine::DiffStats& stats) override;
     void setUseColor(bool enable) override;
     void writeStatsJson(const LogStats& stats, const std::string& path) const override;
     void flush() override;

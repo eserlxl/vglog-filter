@@ -3,6 +3,7 @@
 
 #include "cli_parser.h"
 #include "file_utils.h"
+#include "parsers/suppression_parser.h"
 
 #include <charconv>
 #include <cstdio>
@@ -59,7 +60,8 @@ enum {
   OPT_INCLUDE_FUNC_FILE,
   OPT_SANITIZER,
   OPT_HTML_REPORT, // Iteration 1
-  OPT_DIFF // Iteration 2
+  OPT_DIFF, // Iteration 2
+  OPT_SUPPRESSIONS // Iteration 2
 };
 
 
@@ -116,6 +118,7 @@ constinit option LONG_OPTS[] = {
     {"sanitizer", required_argument, nullptr, OPT_SANITIZER},
     {"html-report", required_argument, nullptr, OPT_HTML_REPORT}, // Iteration 1
     {"diff", required_argument, nullptr, OPT_DIFF}, // Iteration 2
+    {"suppressions", required_argument, nullptr, OPT_SUPPRESSIONS}, // Iteration 2
     {nullptr, 0, nullptr, 0}};
 
 
@@ -406,6 +409,11 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
       case OPT_DIFF:
         if (optarg && *optarg) {
              opt.diffBaseline = optarg;
+        }
+        break;
+      case OPT_SUPPRESSIONS:
+        if (optarg && *optarg) {
+             SuppressionParser::parseFile(optarg, opt.filter);
         }
         break;
       default:

@@ -19,6 +19,7 @@ public:
     void writeStats(const LogStats&) override {}
     void setUseColor(bool) override {}
     void flush() override {}
+    void writeDiffSummary(const DiffEngine::DiffStats&) override {}
 
     
     std::vector<LogEntry> entries;
