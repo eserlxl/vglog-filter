@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <iosfwd>
+#include <memory> 
 #include <span>
 #include <string>
 #include <string_view>
@@ -52,3 +53,6 @@ void reportMemoryUsage(std::string_view operation, std::string_view filename = {
 
 // Stream processing wrapper
 void processFileStream(std::string_view fname, const Options& opt);
+
+// Opens a file for reading. Handles .gz files transparently.
+[[nodiscard]] std::unique_ptr<std::istream> openInputFile(const std::string& path);

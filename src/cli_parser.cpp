@@ -57,7 +57,8 @@ enum {
   OPT_INCLUDE_TYPE_FILE,
   OPT_EXCLUDE_FUNC_FILE,
   OPT_INCLUDE_FUNC_FILE,
-  OPT_SANITIZER
+  OPT_SANITIZER,
+  OPT_HTML_REPORT // Iteration 1
 };
 
 
@@ -112,6 +113,7 @@ constinit option LONG_OPTS[] = {
     {"exclude-function-file", required_argument, nullptr, OPT_EXCLUDE_FUNC_FILE},
     {"include-function-file", required_argument, nullptr, OPT_INCLUDE_FUNC_FILE},
     {"sanitizer", required_argument, nullptr, OPT_SANITIZER},
+    {"html-report", required_argument, nullptr, OPT_HTML_REPORT}, // Iteration 1
     {nullptr, 0, nullptr, 0}};
 
 
@@ -392,6 +394,11 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
           else if (s == "valgrind") opt.sanitizerType = SanitizerType::Valgrind;
           else if (s == "asan") opt.sanitizerType = SanitizerType::Asan;
           else throw std::runtime_error("Invalid sanitizer type: " + std::string(s));
+        }
+        break;
+      case OPT_HTML_REPORT:
+        if (optarg && *optarg) {
+             opt.htmlReport = optarg;
         }
         break;
       default:

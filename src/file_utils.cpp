@@ -197,3 +197,60 @@ std::size_t getFileSizeBytes(std::string_view fname) {
     return 0;
   }
 }
+
+// ---- Pipe / Compression Support ----
+
+namespace {
+
+class PipeStreamBuf : public std::streambuf {
+public:
+  explicit PipeStreamBuf(FILE* fp) : fp_(fp), buffer_(8192) {
+      // Basic buffering
+  }
+
+  ~PipeStreamBuf() override {
+    if (fp_) {
+      pclose(fp_);
+    }
+  }
+
+protected:
+  int_type underflow() override {
+    if (gptr() < egptr()) {
+      return traits_type::to_int_type(*gptr());
+    }
+    const size_t n = std::fread(buffer_.data(), 1, buffer_.size(), fp_);
+    if (n == 0) {
+      return traits_type::eof();
+    }
+    setg(buffer_.data(), buffer_.data(), buffer_.data() + n);
+    return traits_type::to_int_type(*gptr());
+  }
+
+private:
+  FILE* fp_;
+  std::vector<char> buffer_;
+};
+
+class PipeStream : public std::istream {
+public:
+  explicit PipeStream(FILE* fp) : std::istream(nullptr), buf_(fp) {
+    rdbuf(&buf_);
+  }
+private:
+  PipeStreamBuf buf_;
+};
+
+} // namespace
+
+std::unique_ptr<std::istream> openInputFile(const std::string& path) {
+  if (path.length() > 3 && path.substr(path.length() - 3) == ".gz") {
+    std::string cmd = "gzip -dc '" + path + "'";
+    FILE* fp = popen(cmd.c_str(), "r");
+    if (!fp) {
+      throw std::runtime_error("Failed to open pipe for " + path);
+    }
+    return std::make_unique<PipeStream>(fp);
+  }
+  return std::make_unique<std::ifstream>(path_validation::safe_ifstream(path));
+}

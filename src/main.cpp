@@ -25,6 +25,9 @@
 #include <string>
 #include <string_view>
 
+#include "composite_log_writer.h"
+#include "html_log_writer.h"
+
 namespace {
 
 inline constexpr auto STDIN_SENTINEL = std::string_view{"-"};
@@ -34,25 +37,13 @@ void setup_input_source(Options& opt, int argc, char* argv[]) {
     opt.useStdin = true;
     opt.filename = std::string{STDIN_SENTINEL};
   } else {
+    // Basic sanitization
     const char* arg = argv[optind];
-    if (!arg)
-      throw std::runtime_error("Invalid filename argument");
-
-    const std::string_view name{arg};
-    if (name == STDIN_SENTINEL) {
-      opt.useStdin = true;
-      opt.filename = std::string{STDIN_SENTINEL};
-    } else {
-      // Prefer string-based sanitization first; canonicalization happens in file helpers.
-      opt.filename = path_validation::sanitize_path_for_file_access(name);
-    }
-  }
-
-  // Auto-detect streaming when not explicitly requested
-  if (!opt.streamMode) {
-    opt.streamMode = opt.useStdin ? true : isLargeFile(opt.filename);
-    if (opt.streamMode && !opt.useStdin) {
-      std::fputs("Info: Large file detected, using stream processing mode\n", stderr);
+    if (arg && std::string_view(arg) == STDIN_SENTINEL) {
+        opt.useStdin = true;
+        opt.filename = std::string{STDIN_SENTINEL};
+    } else if (arg) {
+       opt.filename = path_validation::sanitize_path_for_file_access(arg);
     }
   }
 }
@@ -62,8 +53,18 @@ void processInputFiles(Options& opt) {
     opt.inputFiles.push_back(opt.filename.empty() ? std::string(STDIN_SENTINEL) : opt.filename);
   }
 
+  // Setup Writer(s)
+  auto writer = std::make_unique<CompositeLogWriter>();
+  // improved: always add default writer unless user explicitly suppressed standard output?
+  // Current logic implies standard output is always desired unless specific flags set.
+  writer->add(std::make_unique<LogWriter>(opt));
+
+  if (!opt.htmlReport.empty()) {
+      writer->add(std::make_unique<HtmlLogWriter>(opt.htmlReport));
+  }
+
   // Create processor once to maintain stats/deduplication state across files
-  LogProcessor processor(opt);
+  LogProcessor processor(opt, std::move(writer));
 
   if (opt.monitorMemory) {
     reportMemoryUsage("starting processing", "all_inputs");
@@ -72,30 +73,17 @@ void processInputFiles(Options& opt) {
   for (const auto& file : opt.inputFiles) {
     opt.filename = file; // Update for error messages/logging
 
-    if (opt.streamMode) {
-      if (opt.useStdin || file == STDIN_SENTINEL) {
+    if (opt.useStdin || file == STDIN_SENTINEL) {
         processor.processStreamCFile(stdin);
-      } else {
-        processFileStream(file,
-                            opt); // Note: processFileStream creates its own Processor usually?
-        // Wait, processFileStream is a helper in main.cpp?
-        // I need to check `processFileStream` implementation.
-        // If it creates its own processor, dedup won't work across files.
-        // Ideally `processStream` should be called on OUR processor.
-        std::cerr << "Warning: Multi-file stream mode sharing state not fully implemented in "
-                     "helper function.\n";
-      }
     } else {
-      if (file == STDIN_SENTINEL) {
-        // Non-stream stdin? Load all lines?
-        // LogProcessor::processStreamCFile exists.
-        processor.processStreamCFile(stdin);
-      } else {
-        const std::vector<std::string> lines = readFileLines(file);
-        if (lines.empty())
-          continue; // Warn?
-        processor.processLines(lines);
-      }
+        try {
+            auto stream = openInputFile(file); // Support .gz transparently
+            processor.processStream(*stream);
+        } catch (const std::exception& e) {
+            std::cerr << "Error processing file " << file << ": " << e.what() << "\n";
+            // Continue with next file? Or abort? 
+            // Systems tool: usually continue but report error.
+        }
     }
   }
 

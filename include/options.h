@@ -61,6 +61,7 @@ struct Options {
   ColorMode colorMode = ColorMode::Auto; // Iteration 1
   bool githubActions = false; // Iteration 1: GitHub Actions output
   bool version = false; // Iteration 1: Print version and exit
+  std::string htmlReport; // Iteration 1: HTML Output file
 
   // Iteration 2 Extensions
   bool uniqueOutput = false;
