@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "cli_parser.h"
+#include "file_utils.h"
 
 #include <charconv>
 #include <cstdio>
@@ -50,7 +51,12 @@ enum {
   OPT_EXCLUDE_TYPE_RX,
   OPT_INCLUDE_TYPE_RX,
   OPT_EXCLUDE_FUNCTION_RX,
-  OPT_INCLUDE_FUNCTION_RX
+  OPT_INCLUDE_FUNCTION_RX,
+  OPT_GITHUB_ACTIONS,    // Iteration 1
+  OPT_EXCLUDE_TYPE_FILE, // Iteration 2
+  OPT_INCLUDE_TYPE_FILE,
+  OPT_EXCLUDE_FUNC_FILE,
+  OPT_INCLUDE_FUNC_FILE
 };
 
 // getopt_long table
@@ -97,6 +103,11 @@ constinit option LONG_OPTS[] = {
     {"include-type-rx", required_argument, nullptr, OPT_INCLUDE_TYPE_RX},
     {"exclude-function-rx", required_argument, nullptr, OPT_EXCLUDE_FUNCTION_RX},
     {"include-function-rx", required_argument, nullptr, OPT_INCLUDE_FUNCTION_RX},
+    {"github-actions", no_argument, nullptr, OPT_GITHUB_ACTIONS},             // Iteration 1
+    {"exclude-type-file", required_argument, nullptr, OPT_EXCLUDE_TYPE_FILE}, // Iteration 2
+    {"include-type-file", required_argument, nullptr, OPT_INCLUDE_TYPE_FILE},
+    {"exclude-function-file", required_argument, nullptr, OPT_EXCLUDE_FUNC_FILE},
+    {"include-function-file", required_argument, nullptr, OPT_INCLUDE_FUNC_FILE},
     {nullptr, 0, nullptr, 0}};
 
 inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
@@ -323,6 +334,36 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
       case OPT_INCLUDE_FUNCTION_RX:
         if (optarg && *optarg)
           opt.filter.includeFunctionsRegex.emplace_back(optarg);
+        break;
+      case OPT_GITHUB_ACTIONS:
+        opt.githubActions = true;
+        break;
+      case OPT_EXCLUDE_TYPE_FILE:
+        if (optarg && *optarg) {
+          auto lines = read_file_lines(optarg);
+          std::cerr << "DEBUG: Read " << lines.size() << " lines from " << optarg << "\n";
+          opt.filter.excludeTypes.insert(opt.filter.excludeTypes.end(), lines.begin(), lines.end());
+        }
+        break;
+      case OPT_INCLUDE_TYPE_FILE:
+        if (optarg && *optarg) {
+          auto lines = read_file_lines(optarg);
+          opt.filter.includeTypes.insert(opt.filter.includeTypes.end(), lines.begin(), lines.end());
+        }
+        break;
+      case OPT_EXCLUDE_FUNC_FILE:
+        if (optarg && *optarg) {
+          auto lines = read_file_lines(optarg);
+          opt.filter.excludeFunctions.insert(opt.filter.excludeFunctions.end(), lines.begin(),
+                                             lines.end());
+        }
+        break;
+      case OPT_INCLUDE_FUNC_FILE:
+        if (optarg && *optarg) {
+          auto lines = read_file_lines(optarg);
+          opt.filter.includeFunctions.insert(opt.filter.includeFunctions.end(), lines.begin(),
+                                             lines.end());
+        }
         break;
       default:
         usage(argv[0]);

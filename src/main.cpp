@@ -13,6 +13,8 @@
 #include "options.h"
 #include "path_validation.h"
 
+#include "signal_handler.h"
+
 #include <cstdio>
 #include <exception>
 #include <fstream>
@@ -148,6 +150,8 @@ int main(int argc, char* argv[]) {
   // Favor performance and avoid libstdc++ locale initialization paths flagged by MSan
   std::ios::sync_with_stdio(false);
   std::cin.tie(nullptr);
+
+  signal_handler::install();
 
   try {
     if (auto parsed = cli::parseArgs(argc, argv)) {

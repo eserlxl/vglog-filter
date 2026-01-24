@@ -48,6 +48,10 @@ struct LogWriter::Impl {
   void open_file(const std::string& path) {
     auto fh = std::make_shared<FileHandle>(path.c_str(), "w");
     out_fp = fh->get();
+    if (!out_fp)
+      std::fprintf(stderr, "DEBUG: Failed to open %s\n", path.c_str());
+    else
+      std::fprintf(stderr, "DEBUG: Opened %s\n", path.c_str());
     file_handle_lifetime = std::static_pointer_cast<void>(fh);
   }
 
@@ -100,7 +104,9 @@ struct LogWriter::Impl {
       return;
     }
     check_rotation(size);
+    std::fprintf(stderr, "DEBUG: fwrite size=%zu\n", size);
     std::fwrite(data, 1, size, out_fp);
+    std::fflush(out_fp);
   }
 
   void format_json(const LogEntry& entry, std::string& buffer) const {
@@ -199,6 +205,34 @@ void LogWriter::writeEntry(const LogEntry& entry) {
     }
   } else {
     // Color logic
+    // GitHub Actions Annotation
+    if (pImpl->opt.githubActions) {
+      std::string ghMsg = "::error";
+      std::string file;
+      std::string line;
+
+      if (!entry.stackFrames.empty()) {
+        std::string_view loc = entry.stackFrames[0].location;
+        auto colon = loc.rfind(':');
+        if (colon != std::string_view::npos) {
+          file = std::string(loc.substr(0, colon));
+          line = std::string(loc.substr(colon + 1));
+        } else {
+          file = std::string(loc);
+        }
+      }
+
+      if (!file.empty())
+        ghMsg += " file=" + file;
+      if (!line.empty())
+        ghMsg += ",line=" + line;
+
+      ghMsg += ",title=" + entry.errorType + "::" +
+               entry.rawContent.substr(0, std::min(entry.rawContent.find('\n'), size_t(200)));
+      ghMsg += "\n";
+      pImpl->write_data(ghMsg.data(), ghMsg.size());
+    }
+
     if (pImpl->useColor) {
       // Very basic ANSI coloring: Red for errors, Reset at end
       // Highlight "==PID==" in Cyan
@@ -229,7 +263,7 @@ void LogWriter::writeEntry(const LogEntry& entry) {
         // If line contains "at 0x", color parts.
 
         bool isHeader = (line.find("Invalid") != std::string::npos ||
-                         line.find("bytes in") != std::string::npos);
+                         line.find("blocks are") != std::string::npos);
         if (isHeader) {
           buffer += Impl::RED;
           buffer += line;

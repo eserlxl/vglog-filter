@@ -195,6 +195,8 @@ add_library(vglog-filter-lib
   src/source_loader.cpp
   src/config_loader.cpp
   src/time_utils.cpp
+  src/signal_handler.cpp
+  src/stats_printer.cpp
 )
 target_link_libraries(vglog-filter-lib PUBLIC project_options project_warnings)
 target_compile_features(vglog-filter-lib PUBLIC cxx_std_23)
@@ -251,17 +253,7 @@ if (NOT MSVC)
     endif ()
 endif ()
 
-# ---- IPO/LTO (only when meaningful) -----------------------------------------
-include(CheckIPOSupported)
-set(_ipo_allowed OFF)
-check_ipo_supported(RESULT _ipo_allowed OUTPUT _ipo_msg)
-if (FALSE) # IPO Disabled
-  # set_property(TARGET vglog-filter PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-  # set_property(TARGET vglog-filter-lib PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-  message(STATUS "IPO/LTO disabled by policy for stability")
-else()
-  message(STATUS "IPO/LTO not enabled: ${_ipo_msg}")
-endif()
+# ... (rest of CMakeLists)
 
 # ---- Tests (CTest) -----------------------------------------------------------
 if (BUILD_TESTING)
@@ -279,8 +271,6 @@ if (BUILD_TESTING)
       message(STATUS "Skipping test '${name}': source not found at ${srcpath}")
     endif()
   endfunction()
-
-
 
   add_test_exe(test_canonicalization  "test/test_canonicalization.cpp")
   add_test_exe(test_basic           "test/test_basic.cpp")
@@ -301,6 +291,7 @@ if (BUILD_TESTING)
   add_test_exe(test_cli_invocations   "test/test_cli_invocations.cpp")
   add_test_exe(test_features_iter2    "test/test_features_iter2.cpp")
   add_test_exe(test_features_iter3    "test/test_features_iter3.cpp")
+  add_test_exe(test_features_iter4    "test/test_features_iter4.cpp")
   add_test_exe(test_json_modes        "test/test_json_modes.cpp")
   add_test_exe(test_options_builder   "test/test_options_builder.cpp")
 

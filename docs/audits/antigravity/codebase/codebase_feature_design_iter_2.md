@@ -1,37 +1,42 @@
 # Codebase Feature Design (Iteration 2)
 
-## 1. `Options::uniqueOutput` Semantics
-- **Issues**: Currently `LogProcessor` dedoubles by default (using `seen`). Flag is ignored (defaults to false).
-- **Proposal**:
-    - If `uniqueOutput` is `true` (default should be false in options, but user must enable it?), we print unique.
-    - **Change**: `LogProcessor::processEntry` uses `seen` *only* if `opt.uniqueOutput` is true.
-    - **Default**: Since `uniqueOutput` initializes to `false` in `Options.h`, standard behavior becomes "Print All". This is a change from current behavior (which defaults to dedup).
-    - **Mitigation**: Update `Options` default to `true`? Or accept that currently `Options::uniqueOutput` is just unused.
-    - **Decision**: Set `uniqueOutput` default to `true` in `Options`. Rename flag to `--no-unique` / `--all` if strictly needed, but `unique` flag exists.
-    - **Actually**: The existing flag is `--unique`. It presumably means "turn on uniqueness".
-    - So if `uniqueOutput` is false (default), it *should* print everything.
-    - We will implement this: `writeEntry` unconditionally if `!uniqueOutput`. If `uniqueOutput`, check `seen`.
+## 1. Correct Time Filtering
+### Problem
+Lexicographical comparison of timestamps (`9:00` > `10:00`) is incorrect.
+### Proposal
+Implement `parseTimestampMs`:
+- Parse `HH:MM:SS.mmm` or `HH:MM:SS` into `int64_t` milliseconds from midnight.
+- Handle flexible formats (optional hours, optional ms).
+- Use `std::chrono` or simple math.
+- Update `isAfter`/`isBefore` to compare integers.
 
-## 2. Source Loading Optimization (`SourceCache`)
-- **Problem**: `SourceLoader::loadContext` opens file on every call.
-- **Design**:
-    - `SourceLoader` becomes stateful or uses a static cache?
-    - `LogProcessor` owns `SourceLoader` instance? Currently `SourceLoader` has static method `loadContext`.
-    - **Change**: Convert `SourceLoader` to a class with instance state (LRU cache of file contents).
-    - **Integration**: `LogProcessor` holds a `SourceLoader` instance.
+## 2. Scalable Configuration (File Lists)
+### Problem
+Passing dozens of types to exclude via CLI (`-e Type1 -e Type2 ...`) is cumbersome. The JSON config file is hard to update dynamically.
+### Proposal
+Add CLI flags to read lists from files:
+- `--exclude-types-file <path>`
+- `--include-types-file <path>`
+- `--exclude-functions-file <path>`
+- `--include-functions-file <path>`
 
-## 3. Config Dump Update
-- **Goal**: Export `jsonArray`, `deduplicate`, `contextLines`.
-- **Implementation**: Add fields to `dump_config_to_file`.
+Implementation:
+- `cli_parser.cpp`: Add new flags.
+- `options.cpp`: In `validate()` or helper, read files and append to `FilterConfig` vectors.
+- Reuse `file_utils::read_file_lines`.
 
-## 4. Input Validity
-- **Check**: Verify files exist in `process_input_files` before passing to processor, to warn early.
+## 3. Help Message Improvement
+### Problem
+`usage()` is manually maintained and often out of sync.
+### Proposal
+Centralize option definitions. But for this iteration (Iter 2), just manual update is fine, but make it formatted better.
+Actually, let's focus on the Lists and Time.
 
-## 5. Updates to `Options`
-- `uniqueOutput` default is `false`. We will NOT change it to `true` to match current behavior. Instead, we will implement the flag. If user runs without `--unique`, they get ALL duplicates. This matches "cat file | vglog-filter" expectation (stream processing usually doesn't dedup unless asked).
-- **Note**: Current behavior (dedup always) might be considered a "bug" regarding the flag existence.
+## 4. Helper Abstractions
+- `TimeParser`: Dedicated class/namespace.
+- `ListLoader`: Helper to load unique non-empty lines from file.
 
-## 6. Testing
-- **New Test**: `test_features_iter2.cpp`
-    - Test unique vs non-unique output.
-    - Test SourceLoader caching (mock or performance test? Basic logic test is fine).
+## Plan
+1.  Implement `src/time_utils.cpp`: `timestampToMillis()`.
+2.  Update `cli_parser.cpp` with new flags.
+3.  Update `main.cpp`/`options.cpp` to load files.

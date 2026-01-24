@@ -76,6 +76,7 @@ struct Options {
   std::string statsFile;
   std::string configFile;
   bool color = false;
+  bool githubActions = false; // Iteration 1: GitHub Actions output
 
   // Iteration 2 Extensions
   bool uniqueOutput = false;
@@ -91,6 +92,9 @@ struct Options {
    * @throws std::runtime_error if invalid.
    */
   void validate() const;
+
+  void dump(std::ostream& out) const;
+  void load(std::istream& in);
 };
 
 void usage(std::string_view prog);

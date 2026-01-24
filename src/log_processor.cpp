@@ -10,6 +10,7 @@
 #include "canonicalization.h"
 #include "log_parser.h"
 #include "log_writer.h"
+#include "signal_handler.h"
 #include "source_loader.h"
 
 #include <array>
@@ -218,6 +219,9 @@ void LogProcessor::processStream(std::istream& in) {
     if (shouldReportProgress(bytesProcessed, totalBytes)) {
       report_progress(bytesProcessed, totalBytes, opt.filename);
     }
+    if (signal_handler::is_stop_requested()) {
+      break;
+    }
     if (opt.filter.maxErrors > 0 && stats.blocksFound >= opt.filter.maxErrors) {
       clearCurrentState();
       break;
@@ -259,6 +263,9 @@ void LogProcessor::processStreamCFile(std::FILE* fp) {
     validate_line_length(line);
     if (shouldReportProgress(bytesProcessed, totalBytes)) {
       report_progress(bytesProcessed, totalBytes, opt.filename);
+    }
+    if (signal_handler::is_stop_requested()) {
+      break;
     }
     if (opt.filter.maxErrors > 0 && stats.blocksFound >= opt.filter.maxErrors) {
       clearCurrentState();
@@ -309,6 +316,7 @@ void LogProcessor::processLines(const VecS& lines) {
 }
 
 void LogProcessor::processLine(std::string_view line) {
+  std::cerr << "DEBUG: " << line << "\n";
   if (opt.trim && opt.streamMode) {
     for (const auto& m : opt.markers) {
       if (line.find(m) != std::string_view::npos) {
@@ -368,6 +376,7 @@ std::string LogProcessor::processRawLine(const std::string& processedLine) const
 }
 
 void LogProcessor::flush() {
+  std::cerr << "DEBUG: Flushing...\n";
   if (raw.empty()) {
     clearCurrentState();
     return;
@@ -461,6 +470,7 @@ void LogProcessor::flush() {
         }
       }
 
+      std::cerr << "DEBUG: Writing entry type=" << entry.errorType << "\n";
       writer->writeEntry(entry);
     }
   }
@@ -563,11 +573,15 @@ LogEntry LogProcessor::parseEntry(const std::string& rawBlock, const std::string
   return entry;
 }
 
+#include "stats_printer.h"
+
 void LogProcessor::printStats(std::FILE* out) const {
   if (!out)
     return;
-  // Use LogWriter to format stats (Iter 1 requirement)
-  writer->writeStats(stats);
+  StatsPrinter::Format fmt = (opt.statsFormat == Options::StatsFormat::json) 
+                             ? StatsPrinter::Format::Json 
+                             : StatsPrinter::Format::Text;
+  StatsPrinter::print(stats, out, fmt);
 }
 
 void LogProcessor::saveStatsJson() const {

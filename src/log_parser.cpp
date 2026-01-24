@@ -4,7 +4,7 @@
 
 namespace {
 constexpr bool is_digit(char c) noexcept {
-  return std::isdigit(static_cast<unsigned char>(c)) != 0;
+  return c >= '0' && c <= '9';
 }
 } // namespace
 

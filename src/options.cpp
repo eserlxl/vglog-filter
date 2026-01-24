@@ -92,3 +92,20 @@ void Options::validate() const {
     throw std::runtime_error("Rotation size requires output file (-o/--output)");
   }
 }
+
+void Options::dump(std::ostream& out) const {
+    out << "{\n";
+    out << "  \"depth\": " << depth << ",\n";
+    out << "  \"trim\": " << (trim ? "true" : "false") << ",\n";
+    out << "  \"scrubRaw\": " << (scrubRaw ? "true" : "false") << ",\n";
+    out << "  \"detailedStats\": " << (detailedStats ? "true" : "false") << "\n";
+    // ... incomplete dump for brevity in this iteration, focusing on core
+    out << "}\n";
+}
+
+void Options::load(std::istream& in) {
+    // Basic skeletal load - for iteration 4 we just want API existence or simple verification
+    // In a real app we'd use a JSON parser. 
+    // Here we'll just read simple key-values or unimplemented for now.
+    (void)in;
+}

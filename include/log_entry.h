@@ -132,4 +132,20 @@ struct LogEntry {
     }
     return nullptr;
   }
+  // Semantic Helpers
+  [[nodiscard]] bool isLeak() const {
+    return matchesErrorType("leak") || matchesErrorType("lost");
+  }
+
+  [[nodiscard]] bool isInvalidAccess() const {
+    return matchesErrorType("Invalid read") || matchesErrorType("Invalid write");
+  }
+
+  [[nodiscard]] bool isUninitialized() const {
+    return matchesErrorType("uninitialised") || matchesErrorType("Uninitialised");
+  }
+
+  [[nodiscard]] bool hasThreadInfo() const {
+    return tid.has_value();
+  }
 };
