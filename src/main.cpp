@@ -153,7 +153,7 @@ int main(int argc, char* argv[]) {
   std::ios::sync_with_stdio(false);
   std::cin.tie(nullptr);
 
-  SignalHandler::install();
+  signalHandler::install();
 
   try {
     if (auto parsed = cli::parseArgs(argc, argv)) {

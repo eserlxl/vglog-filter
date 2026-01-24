@@ -38,7 +38,7 @@ bool test_json_builder_safety() {
 // 2. Test SignalHandler Default State
 bool test_signal_handler_state() {
     // Should be false by default
-    if (SignalHandler::isStopRequested()) {
+    if (signalHandler::isStopRequested()) {
         std::cerr << "FAIL: SignalHandler stopped at start" << std::endl;
         return false;
     }

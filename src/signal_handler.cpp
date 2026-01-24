@@ -2,7 +2,7 @@
 #include <atomic>
 #include <csignal>
 
-namespace SignalHandler {
+namespace signalHandler {
 
 namespace {
 std::atomic_bool g_stop_requested{false};
@@ -29,4 +29,4 @@ bool isStopRequested() {
   return g_stop_requested.load(std::memory_order_relaxed);
 }
 
-} // namespace SignalHandler
+} // namespace signalHandler

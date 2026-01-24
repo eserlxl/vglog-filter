@@ -30,11 +30,12 @@ namespace {
 // MSan-safe digit/space checks
 
 
-constinit inline std::size_t PROGRESS_REPORT_INTERVAL = 1024u * 1024u; // 1MB
+constexpr std::size_t kOneMB = 1024 * 1024;
 
-constinit inline std::size_t MAX_LINE_LENGTH = 1024u * 1024u;      // 1MB per line
-constinit inline std::size_t MAX_BLOCK_SIZE = 10u * 1024u * 1024u; // 10MB per block
-constinit inline std::size_t MAX_PENDING_BLOCKS = 1000u;
+constexpr std::size_t PROGRESS_REPORT_INTERVAL = kOneMB; // 1MB
+constexpr std::size_t MAX_LINE_LENGTH = kOneMB;      // 1MB per line
+constexpr std::size_t MAX_BLOCK_SIZE = 10 * kOneMB; // 10MB per block
+constexpr std::size_t MAX_PENDING_BLOCKS = 1000;
 
 constexpr size_t RESERVE_SIZE_SEEN = 256;
 constexpr size_t RESERVE_SIZE_PENDING = 64;
@@ -118,7 +119,7 @@ void LogProcessor::processStream(std::istream& in) {
     if (shouldReportProgress(bytesProcessed, totalBytes)) {
       reportProgress(bytesProcessed, totalBytes, opt.filename);
     }
-    if (SignalHandler::isStopRequested()) {
+    if (signalHandler::isStopRequested()) {
       break;
     }
     if (opt.filter.maxErrors > 0 && stats.blocksFound >= opt.filter.maxErrors) {
@@ -168,7 +169,7 @@ void LogProcessor::processStreamCFile(std::FILE* fp) {
     if (shouldReportProgress(bytesProcessed, totalBytes)) {
       reportProgress(bytesProcessed, totalBytes, opt.filename);
     }
-    if (SignalHandler::isStopRequested()) {
+    if (signalHandler::isStopRequested()) {
       break;
     }
     if (opt.filter.maxErrors > 0 && stats.blocksFound >= opt.filter.maxErrors) {
@@ -213,7 +214,7 @@ void LogProcessor::processLines(const VecS& lines) {
   for (std::size_t i = start_index; i < lines.size(); ++i) {
     stats.linesRead++;
     validateLineLength(lines[i]);
-    if (SignalHandler::isStopRequested()) {
+    if (signalHandler::isStopRequested()) {
         break;
     }
     processLine(lines[i]);
@@ -516,7 +517,7 @@ void LogProcessor::processStreamParallel(std::istream& in) {
       auto pidOpt = parser->extractPid(line);
       std::string linePid = pidOpt.value_or("");
       
-      if (SignalHandler::isStopRequested()) break;
+      if (signalHandler::isStopRequested()) break;
 
       if (parser->isBlockStart(line)) {
           flushBlock();

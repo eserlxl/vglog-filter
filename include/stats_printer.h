@@ -5,8 +5,19 @@
 
 class StatsPrinter {
 public:
-  enum class Format { Text, Json };
+  /**
+   * @brief Output format for the statistics.
+   */
+  enum class Format : std::uint8_t { Text, Json };
 
+  /**
+   * @brief Prints the collected statistics to the specified stream.
+   *
+   * @param stats The statistics to print.
+   * @param out The output stream (e.g. stdout).
+   * @param format The output format (Text or JSON).
+   * @param detailed Whether to include detailed PID/TID breakdowns.
+   */
   static void print(const LogStats& stats, std::FILE* out, Format format, bool detailed = false);
 
 private:

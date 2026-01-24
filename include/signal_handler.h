@@ -1,6 +1,6 @@
 #pragma once
 
-namespace SignalHandler {
+namespace signalHandler {
 
 /**
  * @brief Installs signal handlers for SIGINT and SIGTERM.
@@ -15,4 +15,4 @@ void install();
  */
 [[nodiscard]] bool isStopRequested();
 
-} // namespace SignalHandler
+} // namespace signalHandler

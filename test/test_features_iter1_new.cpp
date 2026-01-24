@@ -47,8 +47,8 @@ bool test_file_utils_api() {
 
 // Check SignalHandler API
 bool test_signal_handler_api() {
-  SignalHandler::install();
-  if (SignalHandler::isStopRequested()) {
+  signalHandler::install();
+  if (signalHandler::isStopRequested()) {
     std::cerr << "FAIL: SignalHandler reported stop without signal\n";
     return false;
   }
