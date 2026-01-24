@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "diff_engine.h"
+#include "json_utils.h"
+#include <iostream>
 #include <string>
 #include <unordered_set>
 
@@ -50,4 +52,33 @@ DiffEngine::DiffStats DiffEngine::computeStats(const DiffResult& result) {
     }
     
     return stats;
+}
+
+void DiffEngine::writeDiffJson(const DiffResult& result, const DiffStats& stats, std::ostream& out) {
+    out << "{\n";
+    out << "  \"stats\": {\n";
+    out << "    \"totalNew\": " << stats.totalNew << ",\n";
+    out << "    \"totalFixed\": " << stats.totalFixed << ",\n";
+    out << "    \"totalCommon\": " << stats.totalCommon << ",\n";
+    out << "    \"regressionRate\": " << stats.regressionRate << ",\n";
+    out << "    \"fixRate\": " << stats.fixRate << "\n";
+    out << "  },\n";
+    
+    auto writeEntries = [&](const char* key, const std::vector<LogEntry>& entries) {
+        out << "  \"" << key << "\": [\n";
+        for (size_t i = 0; i < entries.size(); ++i) {
+            const auto& e = entries[i];
+            out << "    {\n";
+            out << "      \"type\": \"" << json_utils::escape_string(e.errorType) << "\",\n";
+            out << "      \"pid\": \"" << e.pid << "\"\n";
+            out << "    }" << (i < entries.size() - 1 ? "," : "") << "\n";
+        }
+        out << "  ]\n"; // End array
+    };
+
+    writeEntries("newErrors", result.newErrors);
+    out << ",\n";
+    writeEntries("fixedErrors", result.fixedErrors);
+    
+    out << "}\n";
 }

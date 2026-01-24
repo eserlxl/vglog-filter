@@ -44,5 +44,10 @@ public:
      * @brief Computes statistics from a DiffResult.
      */
     static DiffStats computeStats(const DiffResult& result);
+
+    /**
+     * @brief Exports diff results as JSON.
+     */
+    static void writeDiffJson(const DiffResult& result, const DiffStats& stats, std::ostream& out);
 };
 

@@ -208,6 +208,9 @@ add_library(vglog-filter-lib
   src/parsers/asan_parser.cpp
   src/filter_config.cpp
   src/markdown_log_writer.cpp
+  src/csv_log_writer.cpp
+  src/yaml_log_writer.cpp
+  src/log_writer_factory.cpp
   src/parsers/suppression_parser.cpp
 
 )
@@ -312,8 +315,9 @@ if (BUILD_TESTING)
   add_test_exe(test_parallel_consistency "test/test_parallel_consistency.cpp")
   add_test_exe(test_json_parser          "test/test_json_parser.cpp")
   add_test_exe(test_config_loading       "test/test_config_loading.cpp")
-  add_test_exe(test_features_iter1_redux "test/test_features_iter1_redux.cpp")
   add_test_exe(test_features_iter2_refactor "test/test_features_iter2_refactor.cpp")
+  add_test_exe(test_writers_iter1 "test/test_writers_iter1.cpp")
+  add_test_exe(test_diff_json "test/test_diff_json.cpp")
 
 
 

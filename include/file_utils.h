@@ -57,3 +57,6 @@ void processFileStream(std::string_view fname, const Options& opt);
 
 // Opens a file for reading. Handles .gz files transparently.
 [[nodiscard]] std::unique_ptr<std::istream> openInputFile(const std::string& path);
+
+// Opens a file for writing. Handles .gz files transparently via pipe.
+[[nodiscard]] std::unique_ptr<std::ostream> openOutputFile(const std::string& path);

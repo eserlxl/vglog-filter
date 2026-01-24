@@ -63,6 +63,8 @@ struct Options {
   bool version = false; // Iteration 1: Print version and exit
   std::string htmlReport; // Iteration 1: HTML Output file
   std::string markdownReport; // Iteration 1: Markdown Output file
+  std::string csvOutput;      // Iteration 1: CSV Output file
+  std::string yamlOutput;     // Iteration 1: YAML Output file
   std::string diffBaseline; // Iteration 2: Baseline file for diff
 
   // Iteration 2 Extensions

@@ -277,6 +277,61 @@ private:
   PipeStreamBuf buf_;
 };
 
+class PipeOutStreamBuf : public std::streambuf {
+public:
+  explicit PipeOutStreamBuf(FILE* fp) : fp_(fp), buffer_(kPipeBufferSize) {
+      setp(buffer_.data(), buffer_.data() + buffer_.size());
+  }
+
+  ~PipeOutStreamBuf() override {
+    sync();
+    if (fp_) {
+      pclose(fp_);
+    }
+  }
+
+protected:
+  int_type overflow(int_type ch) override {
+      if (ch != traits_type::eof()) {
+          *pptr() = static_cast<char>(ch);
+          pbump(1);
+          if (flush_buffer() == traits_type::eof()) {
+              return traits_type::eof();
+          }
+          return ch;
+      }
+      return traits_type::eof();
+  }
+
+  int sync() override {
+      return (flush_buffer() == traits_type::eof()) ? -1 : 0;
+  }
+
+private:
+  int flush_buffer() {
+      const size_t n = pptr() - pbase();
+      if (n > 0) {
+          if (std::fwrite(pbase(), 1, n, fp_) != n) {
+              return traits_type::eof();
+          }
+          pbump(-static_cast<int>(n));
+      }
+      return 0;
+  }
+
+  FILE* fp_;
+  std::vector<char> buffer_;
+};
+
+class PipeOutStream : public std::ostream {
+public:
+  explicit PipeOutStream(FILE* fp) : std::ostream(nullptr), buf_(fp) {
+    rdbuf(&buf_);
+  }
+private:
+  PipeOutStreamBuf buf_;
+};
+
 } // namespace
 
 std::unique_ptr<std::istream> openInputFile(const std::string& path) {
@@ -289,4 +344,20 @@ std::unique_ptr<std::istream> openInputFile(const std::string& path) {
     return std::make_unique<PipeStream>(fp);
   }
   return std::make_unique<std::ifstream>(path_validation::safe_ifstream(path));
+}
+
+std::unique_ptr<std::ostream> openOutputFile(const std::string& path) {
+  if (path.length() > 3 && path.substr(path.length() - 3) == ".gz") {
+    // Escape for shell safety (basic)
+    // path_validation::sanitize? path is mostly safe, but for system() call...
+    // We already have generic sanitization. 
+    // Just wrap in single quotes.
+    std::string cmd = "gzip > '" + path + "'";
+    FILE* fp = popen(cmd.c_str(), "w");
+    if (!fp) {
+      throw std::runtime_error("Failed to open output pipe for " + path);
+    }
+    return std::make_unique<PipeOutStream>(fp);
+  }
+  return std::make_unique<std::ofstream>(path);
 }

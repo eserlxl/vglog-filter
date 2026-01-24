@@ -30,6 +30,7 @@
 #include "store_log_writer.h"
 #include "markdown_log_writer.h"
 #include "diff_engine.h"
+#include "log_writer_factory.h"
 
 namespace {
 
@@ -118,6 +119,13 @@ void processDiff(const Options& opt) {
     // If output file configured, maybe write there?
     // For now stick to stdout text + Markdown/HTML if configured.
     
+    if (opt.jsonOutput) {
+        // Output detailed JSON diff to stdout or file?
+        // Usually stdout for piping, unless output file specified.
+        DiffEngine::writeDiffJson(result, stats, std::cout);
+        return; // Skip text report
+    }
+
     std::unique_ptr<ILogWriter> reportWriter;
     if (!opt.markdownReport.empty()) {
         reportWriter = std::make_unique<MarkdownLogWriter>(opt.markdownReport);
@@ -154,15 +162,7 @@ void processInputFiles(Options& opt) {
   }
 
   // Setup Writer(s)
-  auto writer = std::make_unique<CompositeLogWriter>();
-  writer->add(std::make_unique<LogWriter>(opt));
-
-  if (!opt.htmlReport.empty()) {
-      writer->add(std::make_unique<HtmlLogWriter>(opt.htmlReport));
-  }
-  if (!opt.markdownReport.empty()) {
-      writer->add(std::make_unique<MarkdownLogWriter>(opt.markdownReport));
-  }
+  auto writer = LogWriterFactory::create(opt);
 
   // Create processor once to maintain stats/deduplication state across files
   LogProcessor processor(opt, std::move(writer));

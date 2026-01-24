@@ -61,7 +61,9 @@ enum {
   OPT_SANITIZER,
   OPT_HTML_REPORT, // Iteration 1
   OPT_DIFF, // Iteration 2
-  OPT_SUPPRESSIONS // Iteration 2
+  OPT_SUPPRESSIONS, // Iteration 2
+  OPT_CSV_OUTPUT, // Iteration 1
+  OPT_YAML_OUTPUT // Iteration 1
 };
 
 
@@ -119,6 +121,8 @@ constinit option LONG_OPTS[] = {
     {"html-report", required_argument, nullptr, OPT_HTML_REPORT}, // Iteration 1
     {"diff", required_argument, nullptr, OPT_DIFF}, // Iteration 2
     {"suppressions", required_argument, nullptr, OPT_SUPPRESSIONS}, // Iteration 2
+    {"csv-output", required_argument, nullptr, OPT_CSV_OUTPUT}, // Iteration 1
+    {"yaml-output", required_argument, nullptr, OPT_YAML_OUTPUT}, // Iteration 1
     {nullptr, 0, nullptr, 0}};
 
 
@@ -414,6 +418,16 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
       case OPT_SUPPRESSIONS:
         if (optarg && *optarg) {
              SuppressionParser::parseFile(optarg, opt.filter);
+        }
+        break;
+      case OPT_CSV_OUTPUT:
+        if (optarg && *optarg) {
+            opt.csvOutput = optarg;
+        }
+        break;
+      case OPT_YAML_OUTPUT:
+        if (optarg && *optarg) {
+            opt.yamlOutput = optarg;
         }
         break;
       default:
