@@ -19,6 +19,7 @@ public:
   Builder& addNull(std::string_view key);
   
   Builder& startObject(std::string_view key); // Start named object
+  Builder& startObject(); // Start anonymous object (for arrays)
   Builder& endObject();
   
   Builder& startArray(std::string_view key);
@@ -31,7 +32,7 @@ private:
   void ensureComma();
   
   std::string buffer;
-  bool needsComma = false;
+// bool needsComma = false; // Removed unused field
   std::vector<bool> commaStack; // Stack to track comma state for nested objects/arrays
 };
 

@@ -32,18 +32,16 @@ LogFilter::LogFilter(const FilterConfig& cfg) : config(cfg) {
 }
 
 bool LogFilter::shouldKeep(const LogEntry& entry) const {
-  std::fprintf(stderr, "DEBUG: Checking filter for '%s'\n", entry.errorType.c_str());
+  // Debug prints removed for production
+
   // Exclude Types
   for (const auto& ex : config.excludeTypes) {
     if (entry.errorType.find(ex) != std::string::npos) {
-      std::fprintf(stderr, "DEBUG: Filter match type='%s' rule='%s'\n", entry.errorType.c_str(),
-                   ex.c_str());
       return false;
     }
   }
   for (const auto& re : excludeTypesRegexes) {
     if (std::regex_search(entry.errorType, re)) {
-      std::fprintf(stderr, "DEBUG: RE Type Match\n");
       return false;
     }
   }
@@ -161,7 +159,6 @@ bool LogFilter::shouldKeep(const LogEntry& entry) const {
         }
       }
       if (!typeMatched) {
-        std::fprintf(stderr, "DEBUG: Include Type Failed\n");
         return false;
       }
     }
@@ -208,7 +205,6 @@ bool LogFilter::shouldKeep(const LogEntry& entry) const {
         }
       }
       if (!matched) {
-        std::fprintf(stderr, "DEBUG: Include PID Failed\n");
         return false;
       }
     }
@@ -225,7 +221,6 @@ bool LogFilter::shouldKeep(const LogEntry& entry) const {
         }
       }
       if (!matched) {
-        std::fprintf(stderr, "DEBUG: Include PID Failed\n");
         return false;
       }
     }
@@ -244,7 +239,6 @@ bool LogFilter::shouldKeep(const LogEntry& entry) const {
           break;
       }
       if (!matched) {
-        std::fprintf(stderr, "DEBUG: Include PID Failed\n");
         return false;
       }
     }

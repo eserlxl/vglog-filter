@@ -9,13 +9,7 @@ namespace time_utils {
 
 namespace {
 
-int64_t parseComponent(std::string_view sv) {
-  int64_t val = 0;
-  auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), val);
-  if (ec != std::errc())
-    return 0; // Failure indistinguishable from 0? Context matters. But local helper.
-  return val;
-}
+
 
 std::optional<int64_t> parseComponentSafe(std::string_view sv) {
   int64_t val = 0;
@@ -108,8 +102,12 @@ bool isAfter(std::string_view ts, std::string_view reference) {
   auto rVal = timestampToMsSafe(normalizeTimestamp(reference));
   
   // Lexicographical fallback if parsing fails (legacy behavior maintained but cleaned)
-  if (!tVal || !rVal)
-    return normalizeTimestamp(ts) > normalizeTimestamp(reference);
+  if (!tVal || !rVal) {
+    // If numeric parsing fails, verify format before string compare?
+    // String compare fails for "9:00" vs "10:00".
+    // Safe fallback: return false to be conservative?
+    return false; 
+  }
     
   return *tVal > *rVal;
 }
@@ -119,7 +117,7 @@ bool isBefore(std::string_view ts, std::string_view reference) {
   auto rVal = timestampToMsSafe(normalizeTimestamp(reference));
   
   if (!tVal || !rVal)
-    return normalizeTimestamp(ts) < normalizeTimestamp(reference);
+    return false;
     
   return *tVal < *rVal;
 }

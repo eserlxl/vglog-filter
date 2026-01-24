@@ -67,6 +67,13 @@ Builder& Builder::startObject(std::string_view key) {
   return *this;
 }
 
+Builder& Builder::startObject() {
+  ensureComma();
+  buffer += "{";
+  commaStack.push_back(false);
+  return *this;
+}
+
 Builder& Builder::endObject() {
   buffer += "}";
   commaStack.pop_back();

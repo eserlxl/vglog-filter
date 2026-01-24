@@ -11,8 +11,6 @@
 #include "log_parser.h"
 #include "log_writer.h"
 #include "signal_handler.h"
-#include "log_writer.h"
-#include "signal_handler.h"
 #include "source_loader.h"
 #include "parsers/valgrind_parser.h"
 #include "parsers/asan_parser.h"
@@ -515,7 +513,7 @@ void LogProcessor::processStreamParallel(std::istream& in) {
 
   while (std::getline(in, line)) {
       currentLineNum++;
-      // Progress update skipped for simplicity in parallel loop draft, or add later
+      validateLineLength(line);
       
       auto pidOpt = parser->extractPid(line);
       std::string linePid = pidOpt.value_or("");
@@ -534,10 +532,11 @@ void LogProcessor::processStreamParallel(std::istream& in) {
       }
       
       if (parser->isRelevant(line)) {
-          auto rawLine = parser->cleanRaw(line);
-          if (!rawLine.empty()) { // trim check omitted for speed
+          std::string rawLine = parser->cleanRaw(line);
+          if (!trim_view(rawLine).empty()) {
              currentBlock.content.append(rawLine).push_back('\n');
              if (currentBlock.startLine == 0) currentBlock.startLine = currentLineNum;
+             validateBlockSize(currentBlock.content.size());
           }
       }
   }

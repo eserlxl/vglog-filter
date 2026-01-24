@@ -148,20 +148,11 @@ struct LogWriter::Impl {
         if (!entry.stackFrames.empty()) {
             b.startArray("frames");
             for (const auto& frame : entry.stackFrames) {
-                // b.addStringToArray ? No, frames are objects.
-                // SimpleJsonBuilder doesn't have startObject in array helper directly?
-                // Actually startObject(key) requires key.
-                // For Array of Objects, we need startObject without key?
-                // Design flaw in SimpleJsonBuilder?
-                // Let's check design: "startArray(key)".
-                // I need "startObject" (anon).
-                // I should add `startObject()` (no key) for array elements.
-                // I will add it to the header/cpp in next step or hack it if not possible?
-                // "New functions MAY be introduced".
-                // I will patch SimpleJsonBuilder first.
-                // But for now, let's assume I can add it.
-                // Wait, I cannot use it if I haven't implemented it.
-                // So I must enhance SimpleJsonBuilder.
+                b.startObject(); // Anonymous object
+                b.add("address", frame.address);
+                if (!frame.function.empty()) b.add("function", frame.function);
+                if (!frame.location.empty()) b.add("location", frame.location);
+                b.endObject();
             }
             b.endArray();
         }
