@@ -13,9 +13,12 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <limits>
-#include <optional>
-#include <sstream>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <string_view>
 #include <string>
 #include <string_view>
 #include <sys/resource.h> // Linux
@@ -24,27 +27,30 @@
 
 namespace {
 
-constinit inline std::size_t MB_TO_BYTES = 1024u * 1024u;
-constinit inline std::size_t MAX_FILE_SIZE_BYTES = 1024ull * 1024ull * 1024ull * 1024ull; // 1 TB
-constinit inline std::size_t INITIAL_LINE_CAPACITY = 1024;
-constinit inline std::size_t MAX_LINES = 1'000'000;
+constexpr std::size_t KB_TO_BYTES = 1024;
+constexpr std::size_t MB_TO_BYTES = 1024 * KB_TO_BYTES;
+constexpr std::size_t TB_TO_BYTES = 1024ULL * 1024ULL * 1024ULL * 1024ULL; // 1 TB
+constexpr std::size_t MAX_FILE_SIZE_BYTES = TB_TO_BYTES; 
+constexpr std::size_t INITIAL_LINE_CAPACITY = 1024;
+constexpr std::size_t MAX_LINES = 1'000'000;
+constexpr int PCT_MULTIPLIER = 100;
 
-[[nodiscard]] std::string to_mb(std::size_t bytes) {
+[[nodiscard]] std::string toMb(std::size_t bytes) {
   return std::to_string(bytes / MB_TO_BYTES);
 }
 
 [[nodiscard]] std::string pct(std::size_t done, std::size_t total) {
   if (total == 0)
     return "0";
-  return std::to_string(static_cast<int>((done * 100) / total));
+  return std::to_string(static_cast<int>((done * PCT_MULTIPLIER) / total));
 }
 
-void validate_file_size(std::size_t s) {
+void validateFileSize(std::size_t s) {
   if (s > MAX_FILE_SIZE_BYTES) {
-    throw std::runtime_error("File too large (max " + to_mb(MAX_FILE_SIZE_BYTES) + " MB)");
+    throw std::runtime_error("File too large (max " + toMb(MAX_FILE_SIZE_BYTES) + " MB)");
   }
 }
-void validate_line_count(std::size_t n) {
+void validateLineCount(std::size_t n) {
   if (n > MAX_LINES) {
     throw std::runtime_error("Too many lines (max " + std::to_string(MAX_LINES) + ")");
   }
@@ -72,16 +78,18 @@ void reportProgress(std::size_t bytesProcessed, std::size_t totalBytes,
     return;
   std::fprintf(stderr, "\rProcessing %.*s: %s%% (%s/%s MB)", static_cast<int>(filename.size()),
                filename.data(), pct(bytesProcessed, totalBytes).c_str(),
-               to_mb(bytesProcessed).c_str(), to_mb(totalBytes).c_str());
+               toMb(bytesProcessed).c_str(), toMb(totalBytes).c_str());
   if (bytesProcessed >= totalBytes)
     std::fputc('\n', stderr);
 }
+
+constexpr std::size_t KB_PER_MB = 1024;
 
 std::size_t getMemoryUsageMb() noexcept {
 #if defined(__linux__)
   rusage u{};
   if (getrusage(RUSAGE_SELF, &u) == 0) {
-    return static_cast<std::size_t>(u.ru_maxrss) / 1024u; // KB → MB
+    return static_cast<std::size_t>(u.ru_maxrss) / KB_PER_MB; // KB -> MB
   }
 #endif
   return 0;
@@ -114,14 +122,13 @@ std::vector<std::string> readFileLines(std::string_view fname) {
   std::string line;
   std::size_t count = 0;
   while (std::getline(ifs, line)) {
-    validate_line_count(++count);
+    validateLineCount(++count);
     lines.push_back(line);
   }
   return lines;
 }
 
 std::string readFileContent(std::string_view fname) {
-
   if (fname.empty())
     throw std::invalid_argument("Filename cannot be empty");
 
@@ -155,7 +162,7 @@ bool isLargeFile(std::string_view fname) {
     if (::stat(p.c_str(), &st) != 0)
       return false;
     const auto s = static_cast<std::uintmax_t>(st.st_size);
-    validate_file_size(static_cast<std::size_t>(s));
+    validateFileSize(static_cast<std::size_t>(s));
     return s >= static_cast<std::uintmax_t>(LARGE_FILE_THRESHOLD_MB) * MB_TO_BYTES;
   } catch (...) {
     return false;
