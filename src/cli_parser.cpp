@@ -18,7 +18,7 @@ namespace cli {
 namespace {
 
 inline constexpr int MAX_DEPTH = 1000;
-inline constexpr auto VERSION_STRING = "10.5.0";
+// VERSION_STRING moved to options.h
 inline constexpr int MAX_MARKER_LENGTH = 1024;
 inline constexpr size_t ERROR_MSG_BUFFER_SIZE = 64;
 
@@ -56,8 +56,11 @@ enum {
   OPT_EXCLUDE_TYPE_FILE, // Iteration 2
   OPT_INCLUDE_TYPE_FILE,
   OPT_EXCLUDE_FUNC_FILE,
-  OPT_INCLUDE_FUNC_FILE
+  OPT_INCLUDE_FUNC_FILE,
+  OPT_SANITIZER
 };
+
+
 
 // getopt_long table
 // NOLINTNEXTLINE(modernize-avoid-c-arrays)
@@ -93,7 +96,7 @@ constinit option LONG_OPTS[] = {
     {"stats-json", required_argument, nullptr, OPT_STATS_JSON},
     {"include-stack", required_argument, nullptr, OPT_INCLUDE_STACK},
     {"config", required_argument, nullptr, OPT_CONFIG},
-    {"color", no_argument, nullptr, OPT_COLOR},
+    {"color", optional_argument, nullptr, OPT_COLOR},
     {"unique", no_argument, nullptr, OPT_UNIQUE},
     {"context", required_argument, nullptr, OPT_CONTEXT},
     {"dump-config", required_argument, nullptr, OPT_DUMP_CONFIG},
@@ -108,7 +111,9 @@ constinit option LONG_OPTS[] = {
     {"include-type-file", required_argument, nullptr, OPT_INCLUDE_TYPE_FILE},
     {"exclude-function-file", required_argument, nullptr, OPT_EXCLUDE_FUNC_FILE},
     {"include-function-file", required_argument, nullptr, OPT_INCLUDE_FUNC_FILE},
+    {"sanitizer", required_argument, nullptr, OPT_SANITIZER},
     {nullptr, 0, nullptr, 0}};
+
 
 inline constexpr auto SHORT_OPTS = std::string_view{"kvjo:d:m:spMVhe:"};
 
@@ -201,8 +206,12 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
         opt.monitorMemory = true;
         break;
       case 'V':
-        std::fprintf(stdout, "vglog-filter version %s\n", VERSION_STRING);
-        return std::nullopt;
+        // Just set the flag, let main handle distinct exit
+        opt.version = true;
+        return opt; // Return opt to let main handle it, or exit here? 
+        // Design: Main handles it to use standard exit codes.
+        // But parseArgs returns optional. If we return nullopt, main usually shows help/error.
+        // Better: return opt with version=true.
       case 'h':
         usage(argv[0]);
         return std::nullopt;
@@ -287,7 +296,16 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
           opt.configFile = optarg;
         break;
       case OPT_COLOR:
-        opt.color = true;
+        if (optarg && *optarg) {
+            std::string_view val = optarg;
+            if (val == "always") opt.colorMode = ColorMode::Always;
+            else if (val == "never") opt.colorMode = ColorMode::Never;
+            else if (val == "auto") opt.colorMode = ColorMode::Auto;
+            else throw std::runtime_error("Invalid color mode: " + std::string(val));
+        } else {
+            opt.colorMode = ColorMode::Always;
+        }
+        opt.color = (opt.colorMode == ColorMode::Always); // Sync for compat
         break;
       case OPT_UNIQUE:
         opt.uniqueOutput = true;
@@ -363,9 +381,21 @@ std::optional<Options> parseArgs(int argc, char* argv[]) {
           auto lines = readFileLines(optarg);
           opt.filter.includeFunctions.insert(opt.filter.includeFunctions.end(), lines.begin(),
                                              lines.end());
+          opt.filter.includeFunctions.insert(opt.filter.includeFunctions.end(), lines.begin(),
+                                             lines.end());
+        }
+        break;
+      case OPT_SANITIZER:
+        if (optarg && *optarg) {
+          std::string_view s = optarg;
+          if (s == "auto") opt.sanitizerType = SanitizerType::Auto;
+          else if (s == "valgrind") opt.sanitizerType = SanitizerType::Valgrind;
+          else if (s == "asan") opt.sanitizerType = SanitizerType::Asan;
+          else throw std::runtime_error("Invalid sanitizer type: " + std::string(s));
         }
         break;
       default:
+
         usage(argv[0]);
         throw std::runtime_error("Invalid option. Use -h for help.");
     }

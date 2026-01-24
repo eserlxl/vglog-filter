@@ -183,7 +183,9 @@ add_library(vglog-filter-lib
   src/options.cpp
   src/file_utils.cpp
   src/json_utils.cpp
+  src/json/json_parser.cpp
   src/log_processor.cpp
+
   src/log_filter.cpp
   src/path_validation.cpp
   src/canonicalization.cpp
@@ -197,7 +199,10 @@ add_library(vglog-filter-lib
   src/time_utils.cpp
   src/signal_handler.cpp
   src/stats_printer.cpp
+  src/parsers/valgrind_parser.cpp
+  src/parsers/asan_parser.cpp
 )
+
 target_link_libraries(vglog-filter-lib PUBLIC project_options project_warnings)
 target_compile_features(vglog-filter-lib PUBLIC cxx_std_23)
 
@@ -294,6 +299,13 @@ if (BUILD_TESTING)
   add_test_exe(test_features_iter4    "test/test_features_iter4.cpp")
   add_test_exe(test_json_modes        "test/test_json_modes.cpp")
   add_test_exe(test_options_builder   "test/test_options_builder.cpp")
+  add_test_exe(test_parsers_feature   "test/test_parsers_feature.cpp")
+  add_test_exe(test_parallel_consistency "test/test_parallel_consistency.cpp")
+  add_test_exe(test_json_parser          "test/test_json_parser.cpp")
+  add_test_exe(test_config_loading       "test/test_config_loading.cpp")
+
+
+
 
   # Convenience target to run tests with nice output
   add_custom_target(run-tests

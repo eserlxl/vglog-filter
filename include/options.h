@@ -16,6 +16,12 @@
 inline constexpr int DEFAULT_DEPTH = 1;
 inline constexpr auto DEFAULT_MARKER = std::string_view{"Successfully downloaded debug"};
 inline constexpr size_t LARGE_FILE_THRESHOLD_MB = 5;
+inline constexpr auto VERSION_STRING = "10.5.0"; // Iteration 1
+
+
+
+enum class SanitizerType { Auto, Valgrind, Asan };
+enum class ColorMode { Auto, Always, Never }; // Iteration 1
 
 struct FilterConfig {
   std::vector<std::string> excludeTypes;
@@ -76,13 +82,20 @@ struct Options {
   std::string timeBefore;
   std::string statsFile;
   std::string configFile;
-  bool color = false;
+  bool color = false; // Kept for compat/sync, master source is colorMode
+  ColorMode colorMode = ColorMode::Auto; // Iteration 1
   bool githubActions = false; // Iteration 1: GitHub Actions output
+  bool version = false; // Iteration 1: Print version and exit
 
   // Iteration 2 Extensions
   bool uniqueOutput = false;
   int contextLines = 0;
+  size_t jobs = 1;
   std::vector<std::string> inputFiles;
+
+
+  SanitizerType sanitizerType = SanitizerType::Auto;
+
 
   // Nested Configs
   FilterConfig filter;

@@ -13,13 +13,21 @@ int64_t parseComponent(std::string_view sv) {
   int64_t val = 0;
   auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), val);
   if (ec != std::errc())
-    return 0;
+    return 0; // Failure indistinguishable from 0? Context matters. But local helper.
   return val;
 }
 
-int64_t timestampToMs(std::string_view ts) {
+std::optional<int64_t> parseComponentSafe(std::string_view sv) {
+  int64_t val = 0;
+  auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), val);
+  if (ec != std::errc())
+    return std::nullopt;
+  return val;
+}
+
+std::optional<int64_t> timestampToMsInternal(std::string_view ts) {
   if (ts.empty())
-    return -1;
+    return std::nullopt;
 
   // Split by ':'
   std::vector<std::string_view> parts;
@@ -34,33 +42,34 @@ int64_t timestampToMs(std::string_view ts) {
   int64_t hours = 0, mins = 0, secs = 0, ms = 0;
 
   if (parts.size() >= 3) {
-    hours = parseComponent(parts[0]);
-    mins = parseComponent(parts[1]);
+    if (auto h = parseComponentSafe(parts[0])) hours = *h; else return std::nullopt;
+    if (auto m = parseComponentSafe(parts[1])) mins = *m; else return std::nullopt;
+    
     std::string_view secPart = parts[2];
     auto dot = secPart.find('.');
     if (dot != std::string_view::npos) {
-      secs = parseComponent(secPart.substr(0, dot));
-      auto msPart = secPart.substr(dot + 1);
-      ms = parseComponent(msPart);
-      // Pad/truncate ms to 3 digits?
-      // If "1" -> 1ms? Or 100ms? Standard is usually digits.
-      // Let's treat as value.
+      if (auto s = parseComponentSafe(secPart.substr(0, dot))) secs = *s; else return std::nullopt;
+      // Handle MS: if ".1" -> 100ms? Standard strptime behavior or custom?
+      // Assuming digits are ms value for now to match legacy.
+      if (auto m = parseComponentSafe(secPart.substr(dot + 1))) ms = *m; else return std::nullopt;
     } else {
-      secs = parseComponent(secPart);
+      if (auto s = parseComponentSafe(secPart)) secs = *s; else return std::nullopt;
     }
   } else if (parts.size() == 2) {
-    mins = parseComponent(parts[0]);
-    // seconds logic same...
+    if (auto m = parseComponentSafe(parts[0])) mins = *m; else return std::nullopt;
+    
     std::string_view secPart = parts[1];
     auto dot = secPart.find('.');
     if (dot != std::string_view::npos) {
-      secs = parseComponent(secPart.substr(0, dot));
-      ms = parseComponent(secPart.substr(dot + 1));
+      if (auto s = parseComponentSafe(secPart.substr(0, dot))) secs = *s; else return std::nullopt;
+      if (auto m = parseComponentSafe(secPart.substr(dot + 1))) ms = *m; else return std::nullopt;
     } else {
-      secs = parseComponent(secPart);
+      if (auto s = parseComponentSafe(secPart)) secs = *s; else return std::nullopt;
     }
   } else {
-    return -1; // Unknown format
+    // Attempt Date-style? "day HH:MM:SS" is already handled by normalizeTimestamp stripping "day".
+    // If it's just raw number?
+    return std::nullopt;
   }
 
   return (hours * 3600000) + (mins * 60000) + (secs * 1000) + ms;
@@ -70,9 +79,6 @@ int64_t timestampToMs(std::string_view ts) {
 
 std::string normalizeTimestamp(std::string_view ts) {
   // Try to find HH:MM:SS pattern for display/storage
-  // Keep existing heuristic logic for normalization output,
-  // but maybe refine it.
-
   auto firstColon = ts.find(':');
   if (firstColon == std::string_view::npos)
     return std::string(ts);
@@ -88,21 +94,34 @@ std::string normalizeTimestamp(std::string_view ts) {
   return std::string(ts.substr(start, end - start));
 }
 
+int64_t timestampToMs(std::string_view ts) {
+  auto res = timestampToMsInternal(ts);
+  return res.value_or(-1);
+}
+
+std::optional<int64_t> timestampToMsSafe(std::string_view ts) {
+  return timestampToMsInternal(ts);
+}
+
 bool isAfter(std::string_view ts, std::string_view reference) {
-  int64_t tVal = timestampToMs(normalizeTimestamp(ts));
-  int64_t rVal = timestampToMs(normalizeTimestamp(reference));
-  // Fallback to lex if parsing failed
-  if (tVal < 0 || rVal < 0)
+  auto tVal = timestampToMsSafe(normalizeTimestamp(ts));
+  auto rVal = timestampToMsSafe(normalizeTimestamp(reference));
+  
+  // Lexicographical fallback if parsing fails (legacy behavior maintained but cleaned)
+  if (!tVal || !rVal)
     return normalizeTimestamp(ts) > normalizeTimestamp(reference);
-  return tVal > rVal;
+    
+  return *tVal > *rVal;
 }
 
 bool isBefore(std::string_view ts, std::string_view reference) {
-  int64_t tVal = timestampToMs(normalizeTimestamp(ts));
-  int64_t rVal = timestampToMs(normalizeTimestamp(reference));
-  if (tVal < 0 || rVal < 0)
+  auto tVal = timestampToMsSafe(normalizeTimestamp(ts));
+  auto rVal = timestampToMsSafe(normalizeTimestamp(reference));
+  
+  if (!tVal || !rVal)
     return normalizeTimestamp(ts) < normalizeTimestamp(reference);
-  return tVal < rVal;
+    
+  return *tVal < *rVal;
 }
 
 } // namespace time_utils

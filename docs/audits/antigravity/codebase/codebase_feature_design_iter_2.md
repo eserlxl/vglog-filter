@@ -1,42 +1,69 @@
-# Codebase Feature Design (Iteration 2)
+# Codebase Feature Design (Iteration 2: Parallel Processing)
 
-## 1. Correct Time Filtering
-### Problem
-Lexicographical comparison of timestamps (`9:00` > `10:00`) is incorrect.
-### Proposal
-Implement `parseTimestampMs`:
-- Parse `HH:MM:SS.mmm` or `HH:MM:SS` into `int64_t` milliseconds from midnight.
-- Handle flexible formats (optional hours, optional ms).
-- Use `std::chrono` or simple math.
-- Update `isAfter`/`isBefore` to compare integers.
+## Goal
+Improve throughput for large log files by parallelizing the parsing and filtering of independent error blocks.
 
-## 2. Scalable Configuration (File Lists)
-### Problem
-Passing dozens of types to exclude via CLI (`-e Type1 -e Type2 ...`) is cumbersome. The JSON config file is hard to update dynamically.
-### Proposal
-Add CLI flags to read lists from files:
-- `--exclude-types-file <path>`
-- `--include-types-file <path>`
-- `--exclude-functions-file <path>`
-- `--include-functions-file <path>`
+## Audit
+- **Current State**: `LogProcessor::processStream` reads line-by-line, appends to `raw`, calls `flush` (which parses and filters), then clears state.
+- **Bottleneck**: Single-threaded parsing. Regex (if used) and string manipulation (`scrubLine`) are CPU intensive.
+- **State**: `LogProcessor` maintains `raw`, `sig`, `seen`, `pendingBlocks`, `stats`. `seen` (unordered_set) is the main synchronization point for uniqueness.
 
-Implementation:
-- `cli_parser.cpp`: Add new flags.
-- `options.cpp`: In `validate()` or helper, read files and append to `FilterConfig` vectors.
-- Reuse `file_utils::read_file_lines`.
+## Architecture: Producer-Consumer Pipeline
 
-## 3. Help Message Improvement
-### Problem
-`usage()` is manually maintained and often out of sync.
-### Proposal
-Centralize option definitions. But for this iteration (Iter 2), just manual update is fine, but make it formatted better.
-Actually, let's focus on the Lists and Time.
+### 1. `BlockReader` (Producer)
+- Reads the stream line-by-line.
+- Detects `isBlockStart` using the configured `IParser`.
+- Accummulates lines into a `RawBlock` struct (std::string content, line number start).
+- Pushes `RawBlock` to a thread-safe Queue.
 
-## 4. Helper Abstractions
-- `TimeParser`: Dedicated class/namespace.
-- `ListLoader`: Helper to load unique non-empty lines from file.
+### 2. `BlockProcessor` (Consumer/Worker)
+- Pops `RawBlock` from Queue.
+- Executes `parser->parseBlock()`.
+- Executes `filter.shouldKeep()`.
+- Returns `ProcessedResult` (LogEntry, bool kept).
 
-## Plan
-1.  Implement `src/time_utils.cpp`: `timestampToMillis()`.
-2.  Update `cli_parser.cpp` with new flags.
-3.  Update `main.cpp`/`options.cpp` to load files.
+### 3. `ResultCollector` (main thread or separate)
+- Collects `ProcessedResult`.
+- Checks `seen` set (uniqueness).
+- Updates `stats`.
+- Writes to `ILogWriter`.
+
+## Data Structures
+```cpp
+struct RawBlock {
+    std::string content;
+    std::string pid; // Captured from context if needed
+    size_t startLine;
+};
+
+struct ProcessingResult {
+    LogEntry entry;
+    bool kept;
+    // Stats info
+};
+```
+
+## Implementation Plan
+1.  **Refactor `LogProcessor`**:
+    - Extract `readLoop` that identifies blocks.
+    - Extract `processBlock(RawBlock)` that returns result.
+2.  **Concurrency**:
+    - Use `std::deque` + `mutex` + `condition_variable` or a simple thread pool.
+    - Since `LogFilter` is read-only (mostly), it can be shared or copied. `seen` modification must be serialized.
+3.  **Output Ordering**:
+    - Parallel processing may reorder blocks.
+    - If order matters (it usually does for logs), the collector must re-sequence based on `startLine` or sequence ID.
+    - *Simplification*: For Iteration 2, strict order might not be critical, but `vglog-filter` output is usually linear.
+    - *Re-sequencing*: Use a priority queue in Collector or just process in batches?
+    - *Alternative*: `std::async` for each block? Overhead might be high.
+    - *Selected Strategy*: Dedicated `WorkQueue` and `ResultQueue`. Collector pops from `ResultQueue` (which might be out of order).
+    - If strict order is required, we tag each block with `seqId`. Collector expects `nextSeqId`. If `ResultQueue` has `seqId > next`, buffer it.
+
+## Changes
+- Modify `Options`: Add `size_t jobs = 1`.
+- Modify `LogProcessor`:
+    - `processStreamParallel(std::istream&, size_t jobs)`.
+    - Internal `Queue` class.
+
+## Verification
+- `test_parallel_consistency.cpp`: Process a large file with `jobs=1` and `jobs=4`. Verify output (json/text) content is identical (order might differ slightly if not enforced, but we will target enforced order).

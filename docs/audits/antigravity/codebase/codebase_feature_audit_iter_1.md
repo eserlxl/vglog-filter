@@ -1,45 +1,30 @@
-# Codebase Feature Expansion - Iteration 1 Audit
+# Codebase Feature Audit (Iteration 1)
 
-## 1. Existing Capabilities & Status
-The codebase has undergone previous expansion attempts (up to Iteration 3), resulting in a functional but partially verified state.
-- **Core Processing**: `LogProcessor` handles Valgrind log parsing with `LogParser`.
-- **Filtering**: `LogFilter` supports type, stack, source, and regex-based filtering (added in prev Iter 3).
-- **Output**: `LogWriter` supports text, JSON, and GitHub Actions formats.
-- **Testing**: A comprehensive suite exists (`test_features_iter3` passes), but `codebase_feature_verification_iter_3.md` is missing, implying incomplete formal verification.
+## 1. Existing capabilities that are under-exposed or incomplete
+- **Time Filtering**: `time_utils` supports basic `HH:MM:SS` parsing but lacks robust date handling or relative time formats. It returns `-1` on failure which is fragile.
+- **Color Output**: `LogWriter` has a "simple heuristic" for color. It's hardcoded to specific keywords ("Invalid read", "at 0x"). Lacks configuration for color themes or semantic coloring customization.
+- **Signal Handling**: basic `SIGINT`/`SIGTERM` handler exists but `LogProcessor` does not appear to explicitly check `SignalHandler::isStopRequested()` in its main `processStream` loop, potentially leading to slow shutdowns on large files.
+- **Configuration**: `Options` has `configFile` field but CLI integration needs verification. `ConfigLoader` exists but needs to be robust against malformed JSON.
 
-## 2. Coding Standard Violations
-The `USER_REQUEST` mandates `camelCase` and explicitly forbids `kPascalCase`.
-- **Snake Case**: The `src/log_processor.cpp` file contains several internal helper functions using `snake_case`:
-  - `is_digit`
-  - `validate_line_length`
-  - `validate_block_size`
-  - `validate_pending_blocks_count`
-  - `report_progress` (inferred from usage, need to check def)
-- **Action**: These must be renamed to `camelCase` (e.g., `isDigit`, `validateLineLength`) to meet the formalization goal.
+## 2. Missing features logically implied by current design
+- **Version Flag**: No `--version` flag to print build information/version.
+- **Structured Exit Codes**: The application likely exits with 0 or 1. It should define standard exit codes for "Success", "Parse Error", "File Error", "Signal Interruption".
+- **Usage Help**: `usage()` function exists but could be enhanced with better formatting or categorization given the growing number of flags.
 
-## 3. API Usability & Design Gaps
-- **Hardcoded Debug Output**: `LogProcessor` writes directly to `std::cerr` ("DEBUG: ...").
-  - This pollutes standard error and makes the library unusable in quiet tools.
-  - **Proposed Fix**: Introduce a `verbose` or `debug` flag in `Options` and wrap debug prints in a conditional helper.
-- **Member Encapsulation**: `LogProcessor` members like `raw`, `sig`, `pendingPid` are `private` but the internal state management (`clearCurrentState`, `resetEpoch`) is somewhat scattered.
+## 3. High-risk correctness or safety issues
+- **Thread Safety in `LogProcessor`**: Header says "Not thread-safe", yet it contains `processStreamParallel`, `ThreadPool`, and `mutex`. This contradiction suggests potential data races or unclear contracts.
+- **Input Stream Handling**: `processStream` reads from `std::istream` without explicit signal checks in the inner loop (check `getline` loop).
+- **Hardcoded Limits**: `DEFAULT_DEPTH` (1), `LARGE_FILE_THRESHOLD_MB` (5) are constants. They should probably be configurable or at least clearly documented limits.
 
-## 4. Safety & Correctness
-- **Lifetime Safety**: `LogProcessor` holds `const Options& opt`. This requires `Options` to outlive the processor. While valid for `main.cpp`, it's a constraint that should be documented or guarded.
-- **Raw Pointers**: `processStreamCFile` takes `std::FILE*`. This is necessary for C-interop but usage of `::getline` with `std::free(buf)` is manual memory management.
-  - **Action**: Verify exception safety. If `validate_line_length` throws, `buf` might leak?
-  - `buf` is managed by `::getline`. If exception is thrown inside the loop, `std::free(buf)` at the end is SKIPPED.
-  - **Critical Issue**: **Memory Leak on Exception**. If `validate_line_length` throws, `buf` (allocated by `getline`) is never freed.
-  - **Fix**: Use `std::unique_ptr` with custom deleter or `defer` pattern (RAII) for `buf`.
+## 4. API usability gaps and misuse risks
+- **`Options` struct**: Public members are directly modified. A builder pattern exists (`OptionsBuilder`) but direct struct access remains.
+- **`LogWriter` dependency**: `LogProcessor` owns `LogWriter`. Dependency injection is partial (can pass `unique_ptr`).
 
-## 5. Missing Test Coverage
-- **Exception Safety**: No tests seem to cover the memory leak scenario in `processStreamCFile` upon exception.
-- **Regex Edge Cases**: `test_features_iter3.cpp` covers basic inclusion/exclusion, but complex regexes or invalid regex handling (throwing `std::regex_error`?) need verification.
+## 5. Missing tests blocking safe feature expansion
+- **Signal Integration Tests**: Tests for graceful shutdown are likely missing or mocked.
+- **Malformed Config Tests**: Need verification of `ConfigLoader` with invalid JSON.
+- **Time Parsing Regex**: Need to verify `time_utils` against varied log timestamps (e.g. `day HH:MM:SS`).
 
-## 6. Plan for Iteration 1
-- **Fix**: Memory leak in `processStreamCFile`.
-- **Refactor**: Rename `snake_case` helpers to `camelCase`.
-- **Enhance**: Add `Options::verbose` and silence `std::cerr`.
-- **Verify**: Re-run all tests and add a test for the memory leak fix (using a mock or analyzing code).
-
-## 7. What Changed Since Last Iteration
-(Applicable for N > 1).
+## 6. Areas that must remain unchanged
+- **`LogEntry` structure**: Core data structure, seems stable.
+- **`ThreadPool`**: Logic seems isolated in `src/threading`.

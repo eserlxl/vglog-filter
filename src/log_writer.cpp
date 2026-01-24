@@ -7,6 +7,7 @@
 #include "log_processor.h"
 
 #include <filesystem>
+#include <unistd.h> // for isatty
 // #include <iostream> - Removed (unused)
 
 namespace {
@@ -30,7 +31,21 @@ struct LogWriter::Impl {
   static constexpr auto CYAN = "\033[36m";
   static constexpr auto RESET = "\033[0m";
 
-  explicit Impl(const Options& options) : opt(options), useColor(opt.color) {
+  explicit Impl(const Options& options) : opt(options) {
+    if (opt.colorMode == ColorMode::Always) useColor = true;
+    else if (opt.colorMode == ColorMode::Never) useColor = false;
+    else {
+        // Auto: check isatty
+        // We need to know if output is tty.
+        // If outputFile is empty, we write to stdout (or out_fp provided?)
+        // LogWriter default out_fp is stdout.
+        if (opt.outputFile.empty()) {
+            useColor = static_cast<bool>(isatty(fileno(stdout)));
+        } else {
+            useColor = false;
+        }
+    }
+
     if (!opt.outputFile.empty()) {
       open_file(opt.outputFile);
     }

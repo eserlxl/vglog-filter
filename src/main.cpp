@@ -146,6 +146,8 @@ void dump_config_to_file(const Options& opt, const std::string& path) {
   }
 }
 
+#include "exit_codes.h"
+
 int main(int argc, char* argv[]) {
   // Favor performance and avoid libstdc++ locale initialization paths flagged by MSan
   std::ios::sync_with_stdio(false);
@@ -156,6 +158,13 @@ int main(int argc, char* argv[]) {
   try {
     if (auto parsed = cli::parseArgs(argc, argv)) {
       auto& opt = *parsed;
+      
+      // Iteration 1: Version check
+      if (opt.version) {
+          std::fprintf(stdout, "vglog-filter version %s\n", VERSION_STRING);
+          return exit_codes::SUCCESS;
+      }
+
       ConfigLoader::load(opt);
       // Collect positional args
       for (int i = optind; i < argc; ++i) {
@@ -166,19 +175,21 @@ int main(int argc, char* argv[]) {
 
       if (!opt.dumpConfig.empty()) {
         dump_config_to_file(opt, opt.dumpConfig);
-        return 0;
+        return exit_codes::SUCCESS;
       }
 
       opt.validate();
       processInputFiles(opt);
     } else {
-      // Help/version printed; normal exit.
-      return 0;
+      // Help printed (parseArgs checks help and returns nullopt); normal exit.
+      return exit_codes::SUCCESS;
     }
   } catch (const std::exception& e) {
     std::fprintf(stderr, "Error: %s\n", e.what());
-    return 1;
+    // Try to guess error type? For now GENERIC_ERROR.
+    // Ideally we catch strict mode errors specifically.
+    return exit_codes::GENERIC_ERROR;
   }
 
-  return 0;
+  return exit_codes::SUCCESS;
 }

@@ -13,7 +13,15 @@
 #include "log_filter.h"
 #include "log_writer.h" // Keep for default impl creation? Or prefer ILogWriter?
 #include "options.h"
+#include "options.h"
 #include "source_loader.h"
+#include "parsers/i_parser.h"
+#include "threading/thread_pool.h"
+#include <queue>
+#include <condition_variable>
+#include <mutex>
+
+
 
 #include <algorithm>
 #include <cstddef>
@@ -111,19 +119,12 @@ private:
 
   [[nodiscard]] LogEntry parseEntry(const std::string& rawBlock,
                                     const std::string& signature) const;
-  [[nodiscard]] std::string processRawLine(const std::string& processedLine) const;
   [[nodiscard]] std::string generateSignatureKey() const;
 
-  // String matching helpers (regex-free)
-  [[nodiscard]] bool matchesVgLine(std::string_view line) const noexcept;
-  [[nodiscard]] bool matchesPrefix(std::string_view line) const noexcept;
-  [[nodiscard]] bool matchesStartPattern(std::string_view line) const noexcept;
-  [[nodiscard]] bool matchesBytesHead(std::string_view line) const noexcept;
-  [[nodiscard]] bool matchesAtPattern(std::string_view line) const noexcept;
-  [[nodiscard]] bool matchesByPattern(std::string_view line) const noexcept;
-  [[nodiscard]] bool matchesQPattern(std::string_view line) const noexcept;
 
-  std::string replacePatterns(const std::string& line) const;
+  // String matching helpers (delegated to parser)
+  // Removed internal matching methods
+
 
   // Helper for debug logging
   void logDebug(std::string_view msg) const noexcept;
@@ -147,15 +148,33 @@ private:
   std::unique_ptr<ILogWriter> writer;
 
   // pattern placeholders
-  std::string vgPattern;
-  std::string prefixPattern;
-  std::string startPattern;
-  std::string bytesHeadPattern;
-  std::string atPattern;
-  std::string byPattern;
-  std::string qPattern;
+  std::unique_ptr<parsers::IParser> parser;
+
 
   std::string pendingPid;
 
   mutable SourceLoader sourceLoader; // Iteration 2: Cache source files
+
+  // Iteration 2: Parallel Processing
+  struct RawBlock {
+    std::string content;
+    std::string pid;
+    size_t startLine = 0;
+  };
+
+  struct ProcessedResult {
+    LogEntry entry;
+    bool kept;
+    bool error;
+    size_t linesProcessed = 0;
+  };
+
+  void processStreamParallel(std::istream& in);
+  void pushRawBlock(RawBlock&& block);
+  void workerLoop();
+  
+  std::unique_ptr<ThreadPool> threadPool;
+  std::queue<ProcessedResult> resultQueue;
+  std::mutex resultMutex;
+  std::condition_variable resultCv;
 };

@@ -1,26 +1,30 @@
-# Codebase Feature Verification - Iteration 2
+# Verification Report (Iteration 2)
 
-## 1. Summary
-**Status**: PASSED
-**Tests Run**: 24
-**Tests Passed**: 24
-**Tests Failed**: 0
+## Setup
+- **Feature**: Parallel Processing for Log Blocks.
+- **Components**: 
+  - `ThreadPool` (Worker Pool).
+  - `LogProcessor::processStreamParallel` (Producer-Consumer).
+  - `Options::jobs`.
+- **Test**: `test_parallel_consistency.cpp`.
 
-## 2. Changes Verified
-- **Optimized SourceLoader**: Added 50MB hard limit to file cache to prevent OOM. Verified with `test_features_iter2_loader`.
-- **Expanded OptionsBuilder**: Added `setVerbose`, `setStrictMode`, and `addMarker` to builder API. Verified via build integration (headers are valid).
-- **Usability**: `LogWriter` handles verbose JSON implicitly by consuming unscrubbed data from `LogProcessor`.
-
-## 3. Verification Details
-
-### 3.1. Automated Tests
-Command: `ctest --test-dir build --output-on-failure`
-Result:
+## Commands
+```bash
+ctest --test-dir build -R test_parallel_consistency --output-on-failure
 ```
-Start 24: test_features_iter2_loader
-24/24 Test #24: test_features_iter2_loader .......   Passed    0.10 sec
-```
-The test confirmed that loading data exceeding the cache limit triggers eviction (simulated by checking if a deleted file remains available - it shouldn't if evicted).
 
-## 4. Next Steps
-Iteration 3 (if any) would focus on further user-requested features or performance tuning. Current scope is complete.
+## Results
+- **Test Passed**: `test_parallel_consistency` passed.
+  - Verified 100 generated blocks.
+  - Compared `jobs=1` (Serial) vs `jobs=4` (Parallel).
+  - Confirmed output (LogEntries) is identical (after sorting by PID to handle non-deterministic order).
+
+## Performance
+- Parallel processing is enabled for file streams when `jobs > 1`.
+- Block detection happens in Main Thread.
+- Parsing and Filtering happen in Worker Threads.
+- Writing happens in Main Thread (collecting from `resultQueue`).
+
+## Notes
+- `CapturingWriter` mock was used for verification.
+- ThreadPool handles graceful shutdown.

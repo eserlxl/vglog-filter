@@ -19,6 +19,14 @@ namespace time_utils {
  */
 std::string normalizeTimestamp(std::string_view ts);
 
+// Returns -1 on failure (for compat), but prefer safely parsing
+int64_t timestampToMs(std::string_view ts);
+
+/**
+ * @brief Safely parses a timestamp, returning std::nullopt on failure.
+ */
+std::optional<int64_t> timestampToMsSafe(std::string_view ts);
+
 /**
  * @brief Checks if a timestamp is after a reference.
  */
