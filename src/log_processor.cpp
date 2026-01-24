@@ -28,9 +28,7 @@ namespace {
 
 // MSan-safe digit/space checks
 // MSan-safe digit/space checks
-constexpr bool isDigit(char c) noexcept {
-  return std::isdigit(static_cast<unsigned char>(c)) != 0;
-}
+
 
 constinit inline std::size_t PROGRESS_REPORT_INTERVAL = 1024u * 1024u; // 1MB
 
@@ -444,7 +442,7 @@ void LogProcessor::processStreamParallel(std::istream& in) {
   RawBlock currentBlock;
   std::string pendingPidForBlock;
   
-  auto flushBlock = [&](bool force = false) {
+  auto flushBlock = [&]() {
       if (currentBlock.content.empty()) return;
       
       if (currentBlock.pid.empty()) currentBlock.pid = pendingPidForBlock;
@@ -486,7 +484,7 @@ void LogProcessor::processStreamParallel(std::istream& in) {
                  std::string sigKey;
                  size_t count = 0;
                  for (const auto& traceLine : entry.stackTrace) {
-                     if (count++ >= opt.depth) break;
+                     if (count++ >= static_cast<size_t>(opt.depth)) break;
                      sigKey.append(parser->scrubLine(traceLine)).push_back('\n');
                  }
                  entry.signature = sigKey;

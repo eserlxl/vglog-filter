@@ -62,9 +62,9 @@ std::vector<std::string> SourceLoader::loadContext(const std::string& path, int 
   int endIdx = std::min(static_cast<int>(pLines->size()) - 1, line + contextLines - 1);
 
   if (startIdx <= endIdx) {
-    result.reserve(endIdx - startIdx + 1);
+    result.reserve(static_cast<std::size_t>(endIdx - startIdx + 1));
     for (int i = startIdx; i <= endIdx; ++i) {
-      result.push_back((*pLines)[i]);
+      result.push_back((*pLines)[static_cast<std::size_t>(i)]);
     }
   }
 
