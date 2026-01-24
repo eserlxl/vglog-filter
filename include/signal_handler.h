@@ -13,6 +13,6 @@ void install();
  * @brief Checks if a stop signal has been received.
  * @return true if SIGINT/SIGTERM was caught.
  */
-bool isStopRequested();
+[[nodiscard]] bool isStopRequested();
 
 } // namespace SignalHandler

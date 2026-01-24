@@ -12,10 +12,16 @@ public:
   Builder();
   
   Builder& add(std::string_view key, std::string_view value);
-  Builder& add(std::string_view key, const char* value); // Fix literal -> bool
+  Builder& add(std::string_view key, const char* value); 
   Builder& add(std::string_view key, int64_t value);
-  Builder& add(std::string_view key, int value); // Ambiguity fix
+  Builder& add(std::string_view key, int value); 
   Builder& add(std::string_view key, bool value);
+  
+  // Deleted dangerous overloads
+  Builder& add(std::string_view key, std::nullptr_t) = delete;
+  Builder& add(std::string_view key, float) = delete;
+  Builder& add(std::string_view key, double) = delete;
+
   Builder& addNull(std::string_view key);
   
   Builder& startObject(std::string_view key); // Start named object

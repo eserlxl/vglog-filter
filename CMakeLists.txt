@@ -304,6 +304,7 @@ if (BUILD_TESTING)
   add_test_exe(test_parallel_consistency "test/test_parallel_consistency.cpp")
   add_test_exe(test_json_parser          "test/test_json_parser.cpp")
   add_test_exe(test_config_loading       "test/test_config_loading.cpp")
+  add_test_exe(test_features_iter1_redux "test/test_features_iter1_redux.cpp")
 
 
 
