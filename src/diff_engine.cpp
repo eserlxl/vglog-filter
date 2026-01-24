@@ -70,7 +70,7 @@ void DiffEngine::writeDiffJson(const DiffResult& result, const DiffStats& stats,
             const auto& e = entries[i];
             out << "    {\n";
             out << "      \"type\": \"" << json_utils::escape_string(e.errorType) << "\",\n";
-            out << "      \"pid\": \"" << e.pid << "\"\n";
+            out << "      \"pid\": " << e.pid << "\n";
             out << "    }" << (i < entries.size() - 1 ? "," : "") << "\n";
         }
         out << "  ]\n"; // End array

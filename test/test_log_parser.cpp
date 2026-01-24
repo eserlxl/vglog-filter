@@ -8,7 +8,7 @@
 bool test_parseHeader_simple() {
   auto res = LogParser::parseHeader("==12345== Invalid read of size 4");
   TEST_ASSERT(res.has_value(), "Should parse valid header");
-  TEST_ASSERT(res->pid == "12345", "PID should be 12345");
+  TEST_ASSERT(res->pid == 12345, "PID should be 12345");
   TEST_ASSERT(res->errorType == "Invalid read of size 4", "Error type should match");
   TEST_ASSERT(!res->tid.has_value(), "Should not have TID");
   TEST_PASS("Simple header parsing");
@@ -19,7 +19,7 @@ bool test_parseHeader_whitespace() {
   auto res = LogParser::parseHeader(
       "==999==    Conditional jump or move depends on uninitialised value(s)  ");
   TEST_ASSERT(res.has_value(), "Should parse header with spacing");
-  TEST_ASSERT(res->pid == "999", "PID should be 999");
+  TEST_ASSERT(res->pid == 999, "PID should be 999");
   // Trailing whitespace should be trimmed by our logic
   TEST_ASSERT(res->errorType == "Conditional jump or move depends on uninitialised value(s)",
               "Error type trimmed");
@@ -30,7 +30,7 @@ bool test_parseHeader_whitespace() {
 bool test_parseHeader_tid() {
   auto res = LogParser::parseHeader("==123== Thread 2: Invalid read");
   TEST_ASSERT(res.has_value(), "Should parse TID header");
-  TEST_ASSERT(res->pid == "123", "PID 123");
+  TEST_ASSERT(res->pid == 123, "PID 123");
   TEST_ASSERT(res->tid.has_value() && *res->tid == 2, "TID should be 2");
   TEST_ASSERT(res->errorType == "Invalid read", "Error type should strip TID prefix");
 
@@ -51,7 +51,7 @@ bool test_parseHeader_relaxed() {
   // Relaxed: non-valgrind lines are treated as raw content headers with no PID/TID
   auto res = LogParser::parseHeader("Not a valgrind line");
   TEST_ASSERT(res.has_value(), "Should accept raw lines now");
-  TEST_ASSERT(res->pid.empty(), "No PID");
+  TEST_ASSERT(res->pid == 0, "No PID");
   TEST_ASSERT(res->errorType == "Not a valgrind line", "Content preserved");
 
   // Empty line check

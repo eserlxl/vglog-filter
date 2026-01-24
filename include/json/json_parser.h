@@ -10,8 +10,8 @@ namespace json {
 
 struct Value;
 
-using Object = std::map<std::string, Value>;
-using Array = std::vector<Value>;
+using ObjectMap = std::map<std::string, Value>;
+using ArrayVec = std::vector<Value>;
 
 struct Value {
   enum class Type { Null, Object, Array, String, Number, Boolean };
@@ -23,8 +23,8 @@ struct Value {
   // Let's use specific members
   
   std::string stringVal;
-  Object objectVal;
-  Array arrayVal;
+  ObjectMap objectVal;
+  ArrayVec arrayVal;
   long numberVal = 0;
   bool boolVal = false;
   

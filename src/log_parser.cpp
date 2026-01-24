@@ -13,13 +13,15 @@ std::optional<LogParser::HeaderResult> LogParser::parseHeader(std::string_view l
   bool has_prefix = (line.size() >= 2 && line[0] == '=' && line[1] == '=');
 
   std::string_view content_view = line;
-  std::string pid;
+  int32_t pid = 0;
 
   if (has_prefix) {
     content_view = removePrefix(line);
     size_t end_pid = line.find("==", 2);
     if (end_pid != std::string_view::npos) {
-      pid = std::string(line.substr(2, end_pid - 2));
+      try {
+          pid = std::stoi(std::string(line.substr(2, end_pid - 2)));
+      } catch (...) {}
     }
   }
 
@@ -84,7 +86,7 @@ std::optional<LogParser::HeaderResult> LogParser::parseHeader(std::string_view l
     errorType.pop_back();
   }
 
-  return HeaderResult{std::move(pid), std::move(errorType), tid, std::move(timestamp)};
+  return HeaderResult{pid, std::move(errorType), tid, std::move(timestamp)};
 }
 
 std::optional<LogEntry::StackFrame> LogParser::parseFrameStructured(std::string_view line) {

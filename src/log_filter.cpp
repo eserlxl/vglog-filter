@@ -67,15 +67,10 @@ bool LogFilter::shouldKeep(const LogEntry& entry) const {
   }
 
   // PID Filter (Exclude) - Iteration 1
-  if (!entry.pid.empty()) {
-    try {
-      int32_t pidVal = std::stoi(entry.pid);
-      for (auto p : config.excludePids) {
-        if (p == pidVal)
-          return false;
-      }
-    } catch (...) {
-      // Ignore non-numeric PID
+  if (entry.pid != 0) {
+    for (auto p : config.excludePids) {
+      if (p == entry.pid)
+        return false;
     }
   }
 
@@ -192,16 +187,12 @@ bool LogFilter::shouldKeep(const LogEntry& entry) const {
     // Check PIDs
     if (!config.includePids.empty()) {
       bool matched = false;
-      if (!entry.pid.empty()) {
-        try {
-          int32_t pidVal = std::stoi(entry.pid);
-          for (auto p : config.includePids) {
-            if (p == pidVal) {
-              matched = true;
-              break;
-            }
+      if (entry.pid != 0) {
+        for (auto p : config.includePids) {
+          if (p == entry.pid) {
+            matched = true;
+            break;
           }
-        } catch (...) {
         }
       }
       if (!matched) {

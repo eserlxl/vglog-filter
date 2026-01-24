@@ -121,7 +121,7 @@ LogEntry ValgrindParser::parseBlock(std::string_view rawBlock) const {
 
   auto header = LogParser::parseHeader(first_line);
   if (header) {
-    entry.pid = std::move(header->pid);
+    entry.pid = header->pid;
     entry.errorType = std::move(header->errorType);
     entry.tid = header->tid;
     entry.timestamp = std::move(header->timestamp);
@@ -231,11 +231,17 @@ std::string ValgrindParser::cleanRaw(const std::string& line) const {
 }
 
 
-std::optional<std::string> ValgrindParser::extractPid(std::string_view line) const {
+std::optional<int32_t> ValgrindParser::extractPid(std::string_view line) const {
   if (line.size() >= 4 && line[0] == '=' && line[1] == '=') {
     size_t end_pid = line.find("==", 2);
     if (end_pid != std::string_view::npos) {
-      return std::string(line.substr(2, end_pid - 2));
+      try {
+          // PID string is between 2 and end_pid
+          std::string pidStr(line.substr(2, end_pid - 2));
+          return std::stoi(pidStr);
+      } catch (...) {
+          return std::nullopt;
+      }
     }
   }
   return std::nullopt;

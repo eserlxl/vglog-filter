@@ -33,7 +33,7 @@ void MarkdownLogWriter::writeEntry(const LogEntry& entry) {
     // Columns: Type | key info | details
     
     std::string type = escape(entry.errorType);
-    std::string pid = entry.pid + (entry.tid ? ":" + std::to_string(*entry.tid) : "");
+    std::string pid = std::to_string(entry.pid) + (entry.tid ? ":" + std::to_string(*entry.tid) : "");
     
     ofs_ << "| **" << type << "** | " << pid << " | ";
     

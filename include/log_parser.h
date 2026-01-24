@@ -10,7 +10,7 @@
 class LogParser {
 public:
   struct HeaderResult {
-    std::string pid;
+    int32_t pid;
     std::string errorType;
     std::optional<int32_t> tid;
     std::optional<std::string> timestamp;

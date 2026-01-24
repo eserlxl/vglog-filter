@@ -51,7 +51,7 @@ bool test_writer_json() {
     entry.rawContent = "RawContent";
     entry.signature = "Sig";
     entry.errorType = "ErrType";
-    entry.pid = "123";
+    entry.pid = 123;
     entry.timestamp = "12:00:00";
     entry.stackTrace.push_back("Frame1");
     writer.writeEntry(entry);
@@ -62,7 +62,7 @@ bool test_writer_json() {
   // Simple check for JSON structure
   TEST_ASSERT(content.find("\"type\":\"record\"") != std::string::npos, "JSON type missing");
   TEST_ASSERT(content.find("\"raw\":\"RawContent\"") != std::string::npos, "JSON raw missing");
-  TEST_ASSERT(content.find("\"pid\":\"123\"") != std::string::npos, "JSON pid missing");
+  TEST_ASSERT(content.find("\"pid\":123") != std::string::npos, "JSON pid missing");
   TEST_ASSERT(content.find("\"timestamp\":\"12:00:00\"") != std::string::npos,
               "JSON timestamp missing");
   TEST_ASSERT(content.find("\"errorType\":\"ErrType\"") != std::string::npos,

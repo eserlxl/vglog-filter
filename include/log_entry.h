@@ -22,7 +22,7 @@ struct LogEntry {
   std::string errorType;
 
   /// Process ID extracted from the Valgrind marker "==PID=="
-  std::string pid;
+  int32_t pid = 0;
 
   /// Individual stack frames extracted from the block
   std::vector<std::string> stackTrace;

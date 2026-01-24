@@ -76,7 +76,7 @@ void CsvLogWriter::writeEntry(const LogEntry& entry) {
   }
 
   *out << escapeCsv(ts) << ","
-       << escapeCsv(entry.pid) << ","
+       << escapeCsv(std::to_string(entry.pid)) << ","
        << (entry.tid ? std::to_string(*entry.tid) : "") << ","
        << escapeCsv(entry.errorType) << ","
        << escapeCsv(file) << ","

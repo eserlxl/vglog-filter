@@ -138,17 +138,14 @@ std::string readFileContent(std::string_view fname) {
   std::string content;
   // Pre-allocate if size known
   try {
-      if (isLargeFile(fname)) {
-          // Skip pre-alloc for large files or handle differently?
-          // readFileContent implies loading all into memory, so size check matters.
-          // But isLargeFile checks > 1GB. We can just read.
+      ifs.seekg(0, std::ios::end);
+      auto sz = ifs.tellg();
+      if (sz > 0) {
+        content.resize(static_cast<std::size_t>(sz));
+        ifs.seekg(0, std::ios::beg);
+        ifs.read(content.data(), sz);
       }
-      auto sz = getFileSizeBytes(fname);
-      if (sz > 0) content.reserve(sz);
   } catch(...) {}
-
-  content.assign(std::istreambuf_iterator<char>(ifs),
-                 std::istreambuf_iterator<char>());
   return content;
 }
 

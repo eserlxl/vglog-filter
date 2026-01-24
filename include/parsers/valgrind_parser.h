@@ -16,7 +16,7 @@ public:
   [[nodiscard]] LogEntry parseBlock(std::string_view rawBlock) const override;
   [[nodiscard]] std::string scrubLine(const std::string& line) const override;
   [[nodiscard]] std::string cleanRaw(const std::string& line) const override;
-  [[nodiscard]] std::optional<std::string> extractPid(std::string_view line) const override;
+  [[nodiscard]] std::optional<int32_t> extractPid(std::string_view line) const override;
   [[nodiscard]] std::string_view name() const override { return "Valgrind"; }
 
 

@@ -10,7 +10,7 @@
 
 bool test_csv_output() {
     LogEntry entry;
-    entry.pid = "12345";
+    entry.pid = 12345;
     entry.tid = 99;
     entry.errorType = "InvalidRead";
     entry.signature = "sig123";
@@ -35,7 +35,7 @@ bool test_csv_output() {
 
 bool test_yaml_output() {
     LogEntry entry;
-    entry.pid = "12345";
+    entry.pid = 12345;
     entry.tid = 99;
     entry.errorType = "InvalidRead";
     

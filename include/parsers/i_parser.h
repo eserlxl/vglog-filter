@@ -42,7 +42,7 @@ public:
    * @brief Extracts PID from a single line if present.
    */
 
-  [[nodiscard]] virtual std::optional<std::string> extractPid(std::string_view line) const = 0;
+  [[nodiscard]] virtual std::optional<int32_t> extractPid(std::string_view line) const = 0;
 
   /**
    * @brief Returns the name of the parser strategy.

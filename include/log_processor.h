@@ -119,22 +119,13 @@ private:
 
   [[nodiscard]] LogEntry parseEntry(const std::string& rawBlock,
                                     const std::string& signature) const;
-  [[nodiscard]] std::string generateSignatureKey() const;
-
-
-  // String matching helpers (delegated to parser)
-  // Removed internal matching methods
-
-
   // Helper for debug logging
   void logDebug(std::string_view msg) const noexcept;
 
   const Options& opt;
-  LogFilter filter; // New encapsulated filter
+  LogFilter filter; 
 
   std::string raw;
-  std::string sig;
-  VecS sigLines;
   std::unordered_set<Str> seen;
 
   // stream-mode buffer
@@ -151,14 +142,14 @@ private:
   std::unique_ptr<parsers::IParser> parser;
 
 
-  std::string pendingPid;
+  int32_t pendingPid = 0;
 
   mutable SourceLoader sourceLoader; // Iteration 2: Cache source files
 
   // Iteration 2: Parallel Processing
   struct RawBlock {
     std::string content;
-    std::string pid;
+    int32_t pid = 0;
     size_t startLine = 0;
   };
 
@@ -168,6 +159,9 @@ private:
     bool error;
     size_t linesProcessed = 0;
   };
+
+  [[nodiscard]] ProcessedResult processBlock(RawBlock&& block);
+  void finalizeResult(ProcessedResult& res);
 
   void processStreamParallel(std::istream& in);
   // void pushRawBlock(RawBlock&& block); // Removed - unused

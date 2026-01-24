@@ -39,12 +39,9 @@ constexpr std::size_t MAX_PENDING_BLOCKS = 1000;
 
 constexpr size_t RESERVE_SIZE_SEEN = 256;
 constexpr size_t RESERVE_SIZE_PENDING = 64;
-constexpr size_t RESERVE_SIZE_SIGLINES = 64;
-// constexpr size_t VG_LINE_MIN_LEN = 4;
 // constexpr size_t MATCH_BYTES_HEAD_LEN = 10; // " bytes in "
 // constexpr size_t MATCH_BLOCKS_LEN = 7;      // " blocks"
 constexpr size_t RESERVE_LINE_SIZE = 1024;
-constexpr size_t RESERVE_KEY_SIZE = 256;
 // constexpr size_t NUM_START_KEYS = 10;
 
 void validateLineLength(std::string_view line) {
@@ -66,13 +63,13 @@ void validatePendingBlocksCount(std::size_t n) {
 
 } // namespace
 
-LogProcessor::LogProcessor(const Options& options, std::unique_ptr<ILogWriter> writer)
+LogProcessor::LogProcessor(const Options& options, std::unique_ptr<ILogWriter> logWriter)
     : opt(options), filter(options.filter), stats{},
-      writer(writer ? std::move(writer)
+      writer(logWriter ? std::move(logWriter)
                     : std::unique_ptr<ILogWriter>(std::make_unique<LogWriter>(options))) {
   seen.reserve(RESERVE_SIZE_SEEN);
   pendingBlocks.reserve(opt.streamMode ? RESERVE_SIZE_PENDING : 0);
-  sigLines.reserve(RESERVE_SIZE_SIGLINES);
+
   
   if (opt.sanitizerType == SanitizerType::Auto || opt.sanitizerType == SanitizerType::Valgrind) {
     parser = std::make_unique<parsers::ValgrindParser>();
@@ -234,8 +231,8 @@ void LogProcessor::processLine(std::string_view line) {
     }
   }
 
-  auto pidOpt = parser->extractPid(line);
-  std::string currentLinePid = pidOpt.value_or("");
+  auto pidOpt = parser->extractPid(line); // Returns optional<int32_t>
+  int32_t currentLinePid = pidOpt.value_or(0);
 
   if (parser->isBlockStart(line)) {
     flush();
@@ -244,7 +241,7 @@ void LogProcessor::processLine(std::string_view line) {
     }
   }
 
-  if (raw.empty() && pendingPid.empty() && !currentLinePid.empty()) {
+  if (raw.empty() && pendingPid == 0 && currentLinePid != 0) {
     pendingPid = currentLinePid;
   }
 
@@ -257,10 +254,6 @@ void LogProcessor::processLine(std::string_view line) {
     return;
 
   raw.append(rawLine).push_back('\n');
-
-  const auto cl = parser->scrubLine(sline);
-  sig.append(cl).push_back('\n');
-  sigLines.push_back(cl);
 }
 
 
@@ -273,121 +266,29 @@ void LogProcessor::flush() {
     return;
   }
 
-  validateBlockSize(raw.size());
+  RawBlock rb;
+  rb.content = std::move(raw);
+  rb.pid = pendingPid;
+
+  validateBlockSize(rb.content.size());
+  
+  // Note: blocksFound is incremented for every flushed block candidate, before filtering
   stats.blocksFound++;
 
-  const std::string key = generateSignatureKey();
-  LogEntry entry = parser->parseBlock(raw);
-  entry.signature = key;
+  ProcessedResult res = processBlock(std::move(rb));
+  finalizeResult(res);
 
-
-  if (entry.pid.empty()) {
-    entry.pid = pendingPid;
-  }
-
-  if (opt.strictMode && (entry.pid.empty() || entry.errorType.empty())) {
-    stats.parseErrors++;
-    throw std::runtime_error("Strict mode: Failed to parse valid Valgrind entry from block");
-  }
-
-  // Filter check
-  if (!filter.shouldKeep(entry)) {
-    stats.filteredCount++;
-    clearCurrentState();
-    return;
-  }
-
-  bool isUnique = seen.insert(key).second;
-  if (isUnique) {
-    stats.uniqueBlocks++;
-  }
-
-  // Decide whether to count details?
-  // Current logic counts details only for unique blocks.
-  // We can keep it that way for stats consistency, or count all.
-  // Let's count all details if we found a block, regardless of uniqueness?
-  // No, let's strictly follow previous logic for stats to avoid breaking expectations,
-  // ONLY change OUTPUT behavior.
-
-  // Actually, if we output all, we should probably count all?
-  // But let's stick to: Stats track "What did we find".
-  // "blocksFound" is total.
-  // "uniqueBlocks" is unique.
-  // "errorCounts" map currently counts unique.
-  // Let's keep stats logic tied to uniqueness for now (minimal change),
-  // but relax the WRITER guard.
-
-  // Wait, if I don't increment errorCounts for duplicates, the stats will only show 1.
-  // If I output 10 logs, and stats say "Invalid read: 1", that's weird.
-  // But changing stats behavior is a bigger audit question.
-  // "blocksFound" covers total.
-  // Let's stick to modifying the WRITE condition.
-
-  if (isUnique) {
-    stats.errorCounts[entry.errorType]++;
-    if (!entry.pid.empty()) {
-      try {
-        stats.errorCountsByPid[std::stoi(entry.pid)]++;
-      } catch (...) {
-      }
-    }
-    if (entry.tid.has_value()) {
-      stats.errorCountsByTid[*entry.tid]++;
-    }
-  }
-
-  // Write Condition:
-  // Write if it is unique OR if uniqueOutput is FALSE (meaning print duplicates)
-  if (isUnique || !opt.uniqueOutput) {
-    if (opt.streamMode) {
-      validatePendingBlocksCount(pendingBlocks.size());
-      pendingBlocks.emplace_back(std::move(entry));
-    } else {
-      // Context loading using instance
-      if (opt.contextLines > 0 && !entry.stackFrames.empty()) {
-        // ... (same logic)
-        const auto& frame = entry.stackFrames[0];
-        if (!frame.location.empty()) {
-          auto colonPos = frame.location.find_last_of(':');
-          if (colonPos != std::string::npos) {
-            std::string file = frame.location.substr(0, colonPos);
-            int line = 0;
-            try {
-              line = std::stoi(frame.location.substr(colonPos + 1));
-            } catch (...) {
-            }
-            if (line > 0) {
-              entry.sourceContext = sourceLoader.loadContext(file, line, opt.contextLines);
-            }
-          }
-        }
-      }
-
-      logDebug(std::string("Writing entry type=") + entry.errorType);
-      writer->writeEntry(entry);
-    }
-  }
   clearCurrentState();
 }
 
 // shouldKeepEntry removed (moved to LogFilter)
 
-std::string LogProcessor::generateSignatureKey() const {
-  if (opt.depth <= 0)
-    return sig;
-  std::string key;
-  key.reserve(RESERVE_KEY_SIZE);
-  for (const auto& line : sigLines | std::views::take(static_cast<std::size_t>(opt.depth))) {
-    key.append(line).push_back('\n');
-  }
-  return key;
-}
+
 
 void LogProcessor::clearCurrentState() noexcept {
   raw.clear();
-  sig.clear();
-  sigLines.clear();
-  pendingPid.clear();
+
+  pendingPid = 0;
 }
 
 void LogProcessor::resetEpoch() noexcept {
@@ -435,78 +336,28 @@ void LogProcessor::logDebug(std::string_view msg) const noexcept {
 }
 
 void LogProcessor::processStreamParallel(std::istream& in) {
-  // Parallel Implementation
-  // 1. Reader Loop (Main Thread)
   size_t currentLineNum = 0;
   std::string line;
   
   RawBlock currentBlock;
-  std::string pendingPidForBlock;
+  int32_t pendingPidForBlock = 0;
   
   auto flushBlock = [&]() {
       if (currentBlock.content.empty()) return;
       
-      if (currentBlock.pid.empty()) currentBlock.pid = pendingPidForBlock;
+      if (currentBlock.pid == 0) currentBlock.pid = pendingPidForBlock;
       
-      // Enqueue to ThreadPool
-      // Detailed logic: The parser, filter are presumed thread-safe or we need copies?
-      // LogFilter uses std::regex which is thread-safe for matching (const).
-      // IParser is const.
-      // So we can capture 'this' safely if we don't mutate state.
-      
-      // Copy block for lambda
       auto blockCopy = std::move(currentBlock); 
-      // Reset currentBlock for next
       currentBlock = RawBlock{};
-      // Preserve PID logic? pendingPidForBlock persists until new block starts? 
-      // Actually standard logic: pendingPid updates when starting new block.
       
-      threadPool->enqueue([this, b = std::move(blockCopy)]() {
-          ProcessedResult existingRes;
-          try {
-             LogEntry entry = parser->parseBlock(b.content);
-             entry.pid = b.pid;
-             
-             // Generate signature
-             // We need to re-generate signature from raw content or parsed?
-             // Existing logic generates sig from 'sigLines'.
-             // We need to replicate that. Or move sig generation into parseBlock/scrub?
-             // 'parseBlock' returns LogEntry.
-             // We need signature for 'seen' check.
-             
-             // Replicate signature generation:
-             std::string signature;
-             if (opt.depth > 0) {
-                 // We need to split content lines again? That's wasteful.
-                 // Ideally parseBlock returns frames and we can build signature from them.
-                 // But signature uses 'scrubLine' on raw-ish lines?
-                 // Let's use the stackTrace in LogEntry which carries the lines!
-                 
-                 std::string sigKey;
-                 size_t count = 0;
-                 for (const auto& traceLine : entry.stackTrace) {
-                     if (count++ >= static_cast<size_t>(opt.depth)) break;
-                     sigKey.append(parser->scrubLine(traceLine)).push_back('\n');
-                 }
-                 entry.signature = sigKey;
-             }
-             
-             bool keep = filter.shouldKeep(entry);
-             
-             ProcessedResult res;
-             res.entry = std::move(entry);
-             res.kept = keep;
-             res.linesProcessed = 0; // estimation
-             
-             {
-                 std::unique_lock<std::mutex> lock(resultMutex);
-                 resultQueue.push(std::move(res));
-             }
-             resultCv.notify_one();
-             
-          } catch (...) {
-             // Handle error
+      threadPool->enqueue([this, b = std::move(blockCopy)]() mutable {
+          ProcessedResult res = this->processBlock(std::move(b));
+          
+          {
+              std::unique_lock<std::mutex> lock(resultMutex);
+              resultQueue.push(std::move(res));
           }
+          resultCv.notify_one();
       });
   };
 
@@ -515,7 +366,7 @@ void LogProcessor::processStreamParallel(std::istream& in) {
       validateLineLength(line);
       
       auto pidOpt = parser->extractPid(line);
-      std::string linePid = pidOpt.value_or("");
+      int32_t linePid = pidOpt.value_or(0);
       
       if (signalHandler::isStopRequested()) break;
 
@@ -526,7 +377,7 @@ void LogProcessor::processStreamParallel(std::istream& in) {
           }
       }
       
-      if (currentBlock.content.empty() && pendingPidForBlock.empty() && !linePid.empty()) {
+      if (currentBlock.content.empty() && pendingPidForBlock == 0 && linePid != 0) {
           pendingPidForBlock = linePid;
       }
       
@@ -539,50 +390,116 @@ void LogProcessor::processStreamParallel(std::istream& in) {
           }
       }
   }
-  flushBlock(); // Flush last
+  flushBlock(); 
   
-  // Wait for completion?
-  // We need to know when all tasks are done.
-  // ThreadPool doesn't transparently support "wait until empty".
-  // We can push a "null" result or use a counter.
-  // Or just destruct ThreadPool? Destructor waits.
-  threadPool.reset(); // Joins all workers.
+  threadPool.reset(); 
   
-  // Process Results
-  // Since we joined, all results are in queue.
   while (!resultQueue.empty()) {
       auto& res = resultQueue.front();
-      
-      if (res.kept) {
-          bool isUnique = seen.insert(res.entry.signature).second;
-          if (isUnique) stats.uniqueBlocks++;
-          stats.blocksFound++; // Approximate
-          
-          if (isUnique || !opt.uniqueOutput) {
-              if (opt.contextLines > 0) {
-              if (opt.contextLines > 0 && !res.entry.stackFrames.empty()) {
-                  const auto& frame = res.entry.stackFrames[0];
-                  if (!frame.location.empty()) {
-                      auto colonPos = frame.location.find_last_of(':');
-                      if (colonPos != std::string::npos) {
-                          std::string file = frame.location.substr(0, colonPos);
-                          int line = 0;
-                          try {
-                              line = std::stoi(frame.location.substr(colonPos + 1));
-                          } catch (...) {}
-                          
-                          if (line > 0) {
-                              // SourceLoader is effectively single-threaded here (main thread)
-                              res.entry.sourceContext = sourceLoader.loadContext(file, line, opt.contextLines);
-                          }
-                      }
+      stats.blocksFound++; 
+      finalizeResult(res);
+      resultQueue.pop();
+  }
+}
+
+LogProcessor::ProcessedResult LogProcessor::processBlock(RawBlock&& block) {
+  ProcessedResult res;
+  res.kept = false;
+  res.error = false;
+  
+  try {
+    LogEntry entry = parser->parseBlock(block.content);
+    if (entry.pid == 0) {
+      entry.pid = block.pid;
+    }
+
+    if (opt.strictMode && (entry.pid == 0 || entry.errorType.empty())) {
+       throw std::runtime_error("Strict mode: Failed to parse valid Valgrind entry from block");
+    }
+
+    // Generate Signature (Stateless)
+    std::string signature;
+    if (opt.depth > 0) {
+        size_t count = 0;
+        for (const auto& traceLine : entry.stackTrace) {
+            if (count++ >= static_cast<size_t>(opt.depth)) break;
+            signature.append(parser->scrubLine(traceLine)).push_back('\n');
+        }
+        if (signature.empty()) signature = entry.errorType;
+    } else {
+        for (const auto& traceLine : entry.stackTrace) {
+            signature.append(parser->scrubLine(traceLine)).push_back('\n');
+        }
+        if (signature.empty()) signature = entry.errorType; 
+    }
+    entry.signature = signature;
+
+    if (filter.shouldKeep(entry)) {
+        res.kept = true;
+    }
+
+    res.entry = std::move(entry);
+
+  } catch (const std::exception& e) {
+      logDebug(std::string("Error processing block: ") + e.what());
+      res.error = true;
+      if (opt.strictMode) throw; 
+  }
+
+  return res;
+}
+
+void LogProcessor::finalizeResult(ProcessedResult& res) {
+  if (res.error) {
+      stats.parseErrors++; 
+      return; 
+  }
+  
+  if (!res.kept) {
+      stats.filteredCount++;
+      return;
+  }
+  
+  bool isUnique = seen.insert(res.entry.signature).second;
+  if (isUnique) {
+      stats.uniqueBlocks++;
+  }
+  
+  if (isUnique) {
+      stats.errorCounts[res.entry.errorType]++;
+      if (res.entry.pid != 0) {
+          stats.errorCountsByPid[res.entry.pid]++;
+      }
+      if (res.entry.tid.has_value()) {
+          stats.errorCountsByTid[*res.entry.tid]++;
+      }
+  }
+
+  if (isUnique || !opt.uniqueOutput) {
+    if (opt.streamMode) {
+      validatePendingBlocksCount(pendingBlocks.size());
+      pendingBlocks.emplace_back(std::move(res.entry));
+    } else {
+      if (opt.contextLines > 0 && !res.entry.stackFrames.empty()) {
+          const auto& frame = res.entry.stackFrames[0];
+          if (!frame.location.empty()) {
+              auto colonPos = frame.location.find_last_of(':');
+              if (colonPos != std::string::npos) {
+                  std::string file = frame.location.substr(0, colonPos);
+                  int lineNum = 0;
+                  try {
+                      lineNum = std::stoi(frame.location.substr(colonPos + 1));
+                  } catch (...) {}
+                  
+                  if (lineNum > 0) {
+                       res.entry.sourceContext = sourceLoader.loadContext(file, lineNum, opt.contextLines);
                   }
               }
-              }
-              writer->writeEntry(res.entry);
           }
       }
-      resultQueue.pop();
+      
+      writer->writeEntry(res.entry);
+    }
   }
 }
 

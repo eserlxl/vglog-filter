@@ -133,7 +133,7 @@ struct LogWriter::Impl {
 
     if (opt.detailedJson) {
         if (!entry.errorType.empty()) b.add("errorType", entry.errorType);
-        if (!entry.pid.empty()) b.add("pid", entry.pid);
+        if (entry.pid != 0) b.add("pid", entry.pid);
         if (entry.tid.has_value()) b.add("tid", *entry.tid);
         if (entry.timestamp.has_value()) b.add("timestamp", *entry.timestamp);
         
@@ -229,7 +229,7 @@ void LogWriter::writeEntry(const LogEntry& entry) {
       std::istringstream stream(entry.rawContent);
       std::string line;
       while (std::getline(stream, line)) {
-        if (entry.pid.size() > 0 && line.find(entry.pid) != std::string::npos) {
+        if (entry.pid != 0 && line.find(std::to_string(entry.pid)) != std::string::npos) {
         }
         bool isHeader = (line.find("Invalid") != std::string::npos ||
                          line.find("blocks are") != std::string::npos);

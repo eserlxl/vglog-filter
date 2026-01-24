@@ -31,7 +31,11 @@ std::optional<AsanParser::ParsedHeader> AsanParser::parseHeader(std::string_view
   
   ParsedHeader h;
   auto pid_str = line.substr(first_eq + 2, second_eq - (first_eq + 2));
-  h.pid = std::string(pid_str);
+  try {
+      h.pid = std::stoi(std::string(pid_str));
+  } catch (...) {
+      return std::nullopt;
+  }
   
   size_t type_start = err_pos + 24; // "ERROR: AddressSanitizer:".length()
   // Trim spaces
@@ -123,11 +127,13 @@ std::string AsanParser::cleanRaw(const std::string& line) const {
 }
 
 
-std::optional<std::string> AsanParser::extractPid(std::string_view line) const {
+std::optional<int32_t> AsanParser::extractPid(std::string_view line) const {
   if (line.size() >= 4 && line[0] == '=' && line[1] == '=') {
      size_t end_pid = line.find("==", 2);
      if (end_pid != std::string_view::npos) {
-        return std::string(line.substr(2, end_pid - 2));
+        try {
+            return std::stoi(std::string(line.substr(2, end_pid - 2)));
+        } catch (...) { return std::nullopt; }
      }
   }
   return std::nullopt;

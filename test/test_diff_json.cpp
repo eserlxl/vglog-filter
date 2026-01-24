@@ -8,12 +8,12 @@
 bool test_diff_json_export() {
     LogEntry e1;
     e1.errorType = "Leak";
-    e1.pid = "100";
+    e1.pid = 100;
     e1.signature = "sig1";
     
     LogEntry e2;
     e2.errorType = "InvalidRead";
-    e2.pid = "101";
+    e2.pid = 101;
     e2.signature = "sig2";
     
     std::vector<LogEntry> baseline = {e1};

@@ -30,7 +30,7 @@ bool test_valgrind_parser() {
   
   // Test PID Extraction
   auto pid = parser.extractPid("==12345== Error");
-  TEST_ASSERT(pid.has_value() && *pid == "12345", "Should extract PID 12345");
+  TEST_ASSERT(pid.has_value() && *pid == 12345, "Should extract PID 12345");
   
   TEST_PASS("ValgrindParser");
   return true;
@@ -58,7 +58,7 @@ bool test_asan_parser() {
       "    #1 0x456 in _start /lib/libc.so\n";
       
   auto entry = parser.parseBlock(block);
-  TEST_ASSERT(entry.pid == "1", "Parsed PID 1");
+  TEST_ASSERT(entry.pid == 1, "Parsed PID 1");
   TEST_ASSERT(entry.errorType == "heap-buffer-overflow", "Parsed Type");
   TEST_ASSERT(entry.stackFrames.size() == 2, "Parsed 2 frames");
   TEST_ASSERT(entry.stackFrames[0].function == "main", "Parsed function main");

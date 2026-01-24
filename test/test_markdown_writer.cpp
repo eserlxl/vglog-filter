@@ -36,7 +36,7 @@ void test_markdown_entry() {
         MarkdownLogWriter writer(path);
         LogEntry entry;
         entry.errorType = "InvalidRead";
-        entry.pid = "12345";
+        entry.pid = 12345;
         entry.rawContent = "Raw Content";
         entry.stackTrace.push_back("main (main.cpp:10)");
         

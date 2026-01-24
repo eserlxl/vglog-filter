@@ -16,6 +16,7 @@
 void createGzipFile(const std::string& path, const std::string& content) {
     std::string cmd = "echo \"" + content + "\" | gzip > " + path;
     int ret = std::system(cmd.c_str());
+    (void)ret;
     assert(ret == 0);
 }
 
@@ -44,7 +45,7 @@ void testHtmlOutput() {
         HtmlLogWriter writer(path);
         LogEntry entry;
         entry.errorType = "InvalidRead";
-        entry.pid = "1234";
+        entry.pid = 1234;
         entry.tid = 1; // tid is optional<int32_t>
         entry.stackTrace.push_back("at main (main.cpp:10)");
         
