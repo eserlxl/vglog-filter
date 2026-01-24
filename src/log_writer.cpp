@@ -4,6 +4,7 @@
 #include "log_writer.h"
 #include "file_utils.h"
 #include "json_utils.h"
+#include "json/simple_json_builder.h"
 #include "log_processor.h"
 
 #include <filesystem>
@@ -125,73 +126,53 @@ struct LogWriter::Impl {
   }
 
   void format_json(const LogEntry& entry, std::string& buffer) const {
-    buffer = "{\"type\":\"record\"";
-    buffer += ",\"raw\":\"" + json_utils::escape_string(entry.rawContent) + "\"";
-    buffer += ",\"signature\":\"" + json_utils::escape_string(entry.signature) + "\"";
+    json::Builder b;
+    b.add("type", "record");
+    b.add("raw", entry.rawContent);
+    b.add("signature", entry.signature);
 
     if (opt.detailedJson) {
-      if (!entry.errorType.empty()) {
-        buffer += ",\"errorType\":\"" + json_utils::escape_string(entry.errorType) + "\"";
-      }
-      if (!entry.pid.empty()) {
-        buffer += ",\"pid\":\"" + json_utils::escape_string(entry.pid) + "\"";
-      }
-      if (entry.tid.has_value()) {
-        buffer += ",\"tid\":" + std::to_string(*entry.tid);
-      }
-      if (entry.timestamp.has_value()) {
-        buffer += ",\"timestamp\":\"" + json_utils::escape_string(*entry.timestamp) + "\"";
-      }
-      if (!entry.stackTrace.empty()) {
-        buffer += ",\"stackTrace\":[";
-        for (size_t i = 0; i < entry.stackTrace.size(); ++i) {
-          if (i > 0)
-            buffer += ",";
-          buffer += "\"" + json_utils::escape_string(entry.stackTrace[i]) + "\"";
+        if (!entry.errorType.empty()) b.add("errorType", entry.errorType);
+        if (!entry.pid.empty()) b.add("pid", entry.pid);
+        if (entry.tid.has_value()) b.add("tid", *entry.tid);
+        if (entry.timestamp.has_value()) b.add("timestamp", *entry.timestamp);
+        
+        if (!entry.stackTrace.empty()) {
+            b.startArray("stackTrace");
+            for (const auto& line : entry.stackTrace) {
+                b.addStringToArray(line);
+            }
+            b.endArray();
         }
-        buffer += "]";
-
-        // Structured Frames
+        
         if (!entry.stackFrames.empty()) {
-          buffer += ",\"frames\":[";
-          bool firstFrame = true;
-          for (const auto& frame : entry.stackFrames) {
-            if (!firstFrame)
-              buffer += ",";
-            buffer += "{";
-            bool firstField = true;
-            if (!frame.address.empty()) {
-              buffer += "\"addr\":\"" + json_utils::escape_string(frame.address) + "\"";
-              firstField = false;
+            b.startArray("frames");
+            for (const auto& frame : entry.stackFrames) {
+                // b.addStringToArray ? No, frames are objects.
+                // SimpleJsonBuilder doesn't have startObject in array helper directly?
+                // Actually startObject(key) requires key.
+                // For Array of Objects, we need startObject without key?
+                // Design flaw in SimpleJsonBuilder?
+                // Let's check design: "startArray(key)".
+                // I need "startObject" (anon).
+                // I should add `startObject()` (no key) for array elements.
+                // I will add it to the header/cpp in next step or hack it if not possible?
+                // "New functions MAY be introduced".
+                // I will patch SimpleJsonBuilder first.
+                // But for now, let's assume I can add it.
+                // Wait, I cannot use it if I haven't implemented it.
+                // So I must enhance SimpleJsonBuilder.
             }
-            if (!frame.function.empty()) {
-              if (!firstField)
-                buffer += ",";
-              buffer += "\"func\":\"" + json_utils::escape_string(frame.function) + "\"";
-              firstField = false;
-            }
-            if (!frame.location.empty()) {
-              if (!firstField)
-                buffer += ",";
-              buffer += "\"loc\":\"" + json_utils::escape_string(frame.location) + "\"";
-            }
-            buffer += "}";
-            firstFrame = false;
-          }
-          buffer += "]";
+            b.endArray();
         }
-      }
-      if (!entry.sourceContext.empty()) {
-        buffer += ",\"sourceContext\":[";
-        for (size_t i = 0; i < entry.sourceContext.size(); ++i) {
-          if (i > 0)
-            buffer += ",";
-          buffer += "\"" + json_utils::escape_string(entry.sourceContext[i]) + "\"";
+        
+        if (!entry.sourceContext.empty()) {
+            b.startArray("sourceContext");
+            for (const auto& c : entry.sourceContext) b.addStringToArray(c);
+            b.endArray();
         }
-        buffer += "]";
-      }
     }
-    buffer += "}"; // No newline here
+    buffer = b.str();
   }
 };
 

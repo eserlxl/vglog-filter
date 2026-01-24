@@ -520,6 +520,8 @@ void LogProcessor::processStreamParallel(std::istream& in) {
       auto pidOpt = parser->extractPid(line);
       std::string linePid = pidOpt.value_or("");
       
+      if (SignalHandler::isStopRequested()) break;
+
       if (parser->isBlockStart(line)) {
           flushBlock();
           if (currentBlock.content.empty()) {

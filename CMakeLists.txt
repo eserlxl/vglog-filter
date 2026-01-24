@@ -184,6 +184,7 @@ add_library(vglog-filter-lib
   src/file_utils.cpp
   src/json_utils.cpp
   src/json/json_parser.cpp
+  src/json/simple_json_builder.cpp
   src/log_processor.cpp
 
   src/log_filter.cpp

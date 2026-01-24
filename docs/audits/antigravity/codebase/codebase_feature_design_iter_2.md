@@ -1,69 +1,51 @@
-# Codebase Feature Design (Iteration 2: Parallel Processing)
+# Codebase Feature Design (Iteration 2)
 
-## Goal
-Improve throughput for large log files by parallelizing the parsing and filtering of independent error blocks.
+## 1. Proposed APIs
 
-## Audit
-- **Current State**: `LogProcessor::processStream` reads line-by-line, appends to `raw`, calls `flush` (which parses and filters), then clears state.
-- **Bottleneck**: Single-threaded parsing. Regex (if used) and string manipulation (`scrubLine`) are CPU intensive.
-- **State**: `LogProcessor` maintains `raw`, `sig`, `seen`, `pendingBlocks`, `stats`. `seen` (unordered_set) is the main synchronization point for uniqueness.
-
-## Architecture: Producer-Consumer Pipeline
-
-### 1. `BlockReader` (Producer)
-- Reads the stream line-by-line.
-- Detects `isBlockStart` using the configured `IParser`.
-- Accummulates lines into a `RawBlock` struct (std::string content, line number start).
-- Pushes `RawBlock` to a thread-safe Queue.
-
-### 2. `BlockProcessor` (Consumer/Worker)
-- Pops `RawBlock` from Queue.
-- Executes `parser->parseBlock()`.
-- Executes `filter.shouldKeep()`.
-- Returns `ProcessedResult` (LogEntry, bool kept).
-
-### 3. `ResultCollector` (main thread or separate)
-- Collects `ProcessedResult`.
-- Checks `seen` set (uniqueness).
-- Updates `stats`.
-- Writes to `ILogWriter`.
-
-## Data Structures
+### 1.1 `include/json/simple_json_builder.h` (New Helper)
+A small abstraction to construct JSON safely.
 ```cpp
-struct RawBlock {
-    std::string content;
-    std::string pid; // Captured from context if needed
-    size_t startLine;
+namespace json {
+class Builder {
+public:
+    Builder& add(std::string_view key, std::string_view value);
+    Builder& add(std::string_view key, int64_t value);
+    Builder& add(std::string_view key, bool value);
+    Builder& startObject(std::string_view key);
+    Builder& endObject();
+    Builder& startArray(std::string_view key);
+    Builder& endArray();
+    std::string str() const;
+    // ...
 };
-
-struct ProcessingResult {
-    LogEntry entry;
-    bool kept;
-    // Stats info
-};
+}
 ```
+*Justification*: Eliminates repetitive `\"` escaping and manual comma handling in `LogWriter` and `Options::dump`.
 
-## Implementation Plan
-1.  **Refactor `LogProcessor`**:
-    - Extract `readLoop` that identifies blocks.
-    - Extract `processBlock(RawBlock)` that returns result.
-2.  **Concurrency**:
-    - Use `std::deque` + `mutex` + `condition_variable` or a simple thread pool.
-    - Since `LogFilter` is read-only (mostly), it can be shared or copied. `seen` modification must be serialized.
-3.  **Output Ordering**:
-    - Parallel processing may reorder blocks.
-    - If order matters (it usually does for logs), the collector must re-sequence based on `startLine` or sequence ID.
-    - *Simplification*: For Iteration 2, strict order might not be critical, but `vglog-filter` output is usually linear.
-    - *Re-sequencing*: Use a priority queue in Collector or just process in batches?
-    - *Alternative*: `std::async` for each block? Overhead might be high.
-    - *Selected Strategy*: Dedicated `WorkQueue` and `ResultQueue`. Collector pops from `ResultQueue` (which might be out of order).
-    - If strict order is required, we tag each block with `seqId`. Collector expects `nextSeqId`. If `ResultQueue` has `seqId > next`, buffer it.
+### 1.2 `ConfigLoader` Enhancement
+- Enable `files` key mapping to `includeSourcePaths` / `excludeSourcePaths`.
+- Ensure strict type checking for JSON values.
 
-## Changes
-- Modify `Options`: Add `size_t jobs = 1`.
-- Modify `LogProcessor`:
-    - `processStreamParallel(std::istream&, size_t jobs)`.
-    - Internal `Queue` class.
+### 1.3 `LogProcessor` Parallel Safety
+- Inject `if (SignalHandler::isStopRequested()) break;` into `processStreamParallel` reader loop.
 
-## Verification
-- `test_parallel_consistency.cpp`: Process a large file with `jobs=1` and `jobs=4`. Verify output (json/text) content is identical (order might differ slightly if not enforced, but we will target enforced order).
+### 1.4 `Options::validate` Refinement
+- Add check: If `detailedJson` is true, ensure `jsonOutput` is true (or auto-enable it).
+
+## 2. Behavioral Contracts
+- **SimpleJsonBuilder**:
+  - Handles commas automatically between fields.
+  - Escapes strings automatically.
+  - Does NOT validate schema, just formatting.
+- **ConfigLoader**:
+  - Should not crash on invalid keys, just warn (existing behavior).
+  - Add support for `files` -> `sourcePaths`.
+
+## 3. Backward Compatibility
+- JSON Output format must remain exactly identical byte-for-byte (or semantically equivalent) to Iteration 1 to avoid breaking verifiers.
+- `Options::dump` format improved but compatible structure.
+
+## 4. Required Tests
+- `TestJsonBuilder`: Unit test for the new helper.
+- `TestParallelSignal`: (Hard to test deterministically without mock, but manual verification via `processStreamParallel` review).
+- `TestConfigFiles`: Verify `files` key loading.

@@ -1,39 +1,22 @@
-# Codebase Feature Expansion - Iteration 2 Audit
+# Codebase Feature Audit (Iteration 2)
 
-## 1. Existing Capabilities & Status
-Iteration 1 formalized the codebase with `camelCase` and fixed a critical memory leak.
-- **SourceLoader**: Basic in-memory caching is implemented (`std::map<string, CachedFile>`).
-- **Options**: Struct-based configuration with some validation logic mixed in.
-- **LogProcessor**: Uses `LineBuffer` for safety.
+## 1. Existing capabilities that are under-exposed or incomplete
+- **Configuration Loading**: `ConfigLoader` supports basic keys but ignores `includeSourcePaths` (commented out as "files").
+- **Options Dump**: `Options::dump` is marked as "incomplete". It manually prints JSON. It should drive off a serializer or helper.
+- **JSON Construction**: `LogWriter` and `LogProcessor` manually concat strings for JSON. This is error-prone and repetitive. A `JsonBuilder` abstraction is implied.
+- **CLI Usage**: `usage()` function is a long sequence of `fputs`/`fprintf`. It's hard to read and maintain.
 
-## 2. Capability Gaps and Issues
-- **SourceLoader Caching**: The current implementation loads the *entire file* into memory (`CachedFile::lines`). For large source files (e.g., 100MB generated C++), this is inefficient if only 5 lines are needed.
-  - **Risk**: OOM on large source trees.
-  - **Refinement**: Implement a "smart" loader or at least an LRU eviction or limit the cache size. But given the scope "Add optional features that improve correctness, safety, or usability", preventing OOM is a safety feature.
-- **Options API**: `Options` is a raw struct. `OptionsBuilder` exists (saw in file list) but isn't widely used? `include/options_builder.h` should be checked.
-- **Usability**: `Options::validate` throws `runtime_error`. We might want `Options::isValid()` or more granular errors.
+## 2. Missing features logically implied by current design
+- **Signal Safety in Parallel Mode**: `LogProcessor::processStreamParallel` (if enabled via `--jobs`) does not appear to check `SignalHandler::isStopRequested()` in its reader loop, unlike the sequential `processStream`.
+- **JSON Helper**: `LogWriter` constructs JSON manually. A helper class `SimpleJsonBuilder` would clean this up significantly.
 
-## 3. Design Proposal for Iteration 2
-### 3.1. SourceLoader Hardening
-- **Feature**: Add `maxCacheBytes` limit to `SourceLoader`.
-- **Logic**: Track total bytes loaded. If > limit, clear cache (simple sweep) or LRU.
-- **Implementation**:
-  ```cpp
-  class SourceLoader {
-      size_t totalBytes = 0;
-      static constexpr size_t MAX_CACHE_BYTES = 50 * 1024 * 1024; // 50MB
-      // ...
-  };
-  ```
+## 3. API usability gaps and misuse risks
+- **`Options` Validation**: `validate()` checks rotation but could check conflicting flags (e.g. `json` vs `text` stats format consistency).
 
-### 3.2. Options Builder Integraiton
-- Check `include/options_builder.h`. If it's incomplete, finalize it.
-- **Goal**: Fluent API for `Options` creation in tests and library usage.
+## 4. Areas that must remain unchanged
+- **`LogEntry`**: Stable.
+- **`ThreadPool`**: Stable.
 
-### 3.3. Refinement
-- **LogProcessor**: Ensure `logDebug` is used consistently.
-- **Output**: Ensure JSON output correctly handles the new `verbose` flag if applicable (maybe verbose means including raw lines in JSON too?). Inspect `LogWriter`.
-
-## 4. What Changed Since Last Iteration
-- `file_utils` and `signal_handler` renamed.
-- `verbose` flag added.
+## 5. What changed since last iteration
+- Added `ColorMode`, `Version`, `ExitCodes`. All working.
+- `TimeUtils` is now robust.
