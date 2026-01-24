@@ -17,7 +17,12 @@ public:
 private:
   struct CachedFile {
     std::vector<std::string> lines;
-    // timestamp? size? For now simple cache.
+    std::size_t sizeBytes = 0;
   };
   std::map<std::string, CachedFile> fileCache;
+  std::size_t currentCacheSize = 0;
+  // 50 MB limit
+  static constexpr std::size_t MAX_CACHE_BYTES = 50 * 1024 * 1024;
+
+  void evictIfNeeded(std::size_t requiredBytes);
 };

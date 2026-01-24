@@ -61,6 +61,22 @@ public:
     return *this;
   }
 
+  OptionsBuilder& setVerbose(bool enabled = true) {
+    opts.verbose = enabled;
+    opts.scrubRaw = !enabled; // Consistency
+    return *this;
+  }
+
+  OptionsBuilder& setStrictMode(bool enabled = true) {
+    opts.strictMode = enabled;
+    return *this;
+  }
+
+  OptionsBuilder& addMarker(const std::string& marker) {
+    opts.markers.push_back(marker);
+    return *this;
+  }
+
   [[nodiscard]] Options build() const {
     return opts;
   }
