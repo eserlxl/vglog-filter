@@ -202,9 +202,13 @@ std::size_t getFileSizeBytes(std::string_view fname) {
 
 namespace {
 
+namespace {
+    constexpr size_t kPipeBufferSize = 8192;
+}
+
 class PipeStreamBuf : public std::streambuf {
 public:
-  explicit PipeStreamBuf(FILE* fp) : fp_(fp), buffer_(8192) {
+  explicit PipeStreamBuf(FILE* fp) : fp_(fp), buffer_(kPipeBufferSize) {
       // Basic buffering
   }
 

@@ -6,14 +6,29 @@
 #include "log_entry.h"
 #include <vector>
 
+/**
+ * @brief Container for the results of a diff operation.
+ */
 struct DiffResult {
-    std::vector<LogEntry> newErrors;
-    std::vector<LogEntry> fixedErrors;
-    std::vector<LogEntry> commonErrors;
+    std::vector<LogEntry> newErrors;    ///< Errors present in target but not baseline
+    std::vector<LogEntry> fixedErrors;  ///< Errors present in baseline but not target
+    std::vector<LogEntry> commonErrors; ///< Errors present in both
 };
 
+/**
+ * @brief Logic for comparing two sets of log entries.
+ */
 class DiffEngine {
 public:
+    /**
+     * @brief Compares a baseline set of errors against a target set.
+     * 
+     * Uses LogEntry::signature for matching.
+     * 
+     * @param baseline The reference set of errors (e.g. from main branch).
+     * @param target The current set of errors (e.g. from local run).
+     * @return DiffResult containing categorized errors.
+     */
     static DiffResult compare(const std::vector<LogEntry>& baseline,
                               const std::vector<LogEntry>& target);
 };

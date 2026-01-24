@@ -7,6 +7,12 @@
 #include "log_entry.h"
 #include <vector>
 
+/**
+ * @brief Accumulates LogEntry objects in memory.
+ * 
+ * Used for multi-pass analysis like Diff Generation.
+ * Does NOT perform file I/O or JSON formatting.
+ */
 class StoreLogWriter : public ILogWriter {
 public:
     void writeEntry(const LogEntry& entry) override;
