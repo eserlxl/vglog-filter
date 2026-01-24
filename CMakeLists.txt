@@ -430,3 +430,8 @@ add_test(NAME test_compression_html COMMAND test_compression_html)
 add_executable(test_diff_engine test/test_diff_engine.cpp)
 target_link_libraries(test_diff_engine PRIVATE vglog-filter-lib)
 add_test(NAME test_diff_engine COMMAND test_diff_engine)
+
+add_executable(test_features_iter2_new test/test_features_iter2.cpp)
+target_link_libraries(test_features_iter2_new PRIVATE vglog-filter-lib)
+add_test(NAME test_features_iter2_new COMMAND test_features_iter2_new)
+

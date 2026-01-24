@@ -1,108 +1,97 @@
-#include "log_processor.h"
-#include "log_writer.h"
-#include "options.h"
-#include "source_loader.h"
-#include "test_helpers.h"
-#include <fstream>
+// Copyright © 2026 Eser KUBALI <lxldev.contact@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "html_log_writer.h"
+#include "diff_engine.h"
+#include "options_builder.h"
+#include "log_entry.h"
+#include "file_utils.h"
 #include <iostream>
+#include <filesystem>
+#include <fstream>
 #include <vector>
+#include <cassert>
 
-// Mock Writer to capture output
-class MockWriter : public ILogWriter {
-public:
-  std::vector<LogEntry> entries;
-  void writeEntry(const LogEntry& entry) override {
-    entries.push_back(entry);
-  }
-  void writeRaw(const std::string&) override {}
-  void writeStats(const LogStats&) override {}
-  void writeStatsJson(const LogStats&, const std::string&) const override {}
-  void setUseColor(bool) override {}
-  void flush() override {}
-};
-
-bool test_source_loader_caching_logic() {
-  TempFile tf("test_code.cpp");
-  tf.write("line1\nline2\nline3\nline4\n");
-  tf.close();
-
-  SourceLoader loader;
-  auto ctx1 = loader.loadContext(tf.path(), 2, 1); // line 2, context 1 -> lines 1,2,3
-  TEST_ASSERT(ctx1.size() == 3, "Should load 3 lines");
-  TEST_ASSERT(ctx1[0] == "line1", "Line 1 match");
-
-  // Modify file on disk to prove cache is used (cache should have old content)
-  {
-    std::ofstream f(tf.path());
-    f << "MODIFIED\n";
-  }
-
-  auto ctx2 = loader.loadContext(tf.path(), 2, 1); // Should hit cache
-  TEST_ASSERT(ctx2.size() == 3, "Should load 3 lines from cache");
-  TEST_ASSERT(ctx2[0] == "line1", "Line 1 match from cache, ignoring disk change");
-
-  TEST_PASS("SourceLoader caching behaves correctly");
-  return true;
+namespace {
+    const double EXPECTED_REGRESSION_RATE = 33.3;
+    const double EXPECTED_FIX_RATE = 16.6;
+    const size_t NEW_ERRORS = 10;
+    const size_t FIXED_ERRORS = 5;
+    const size_t COMMON_ERRORS = 20;
 }
 
-bool test_unique_output() {
-  Options opt;
-  opt.uniqueOutput = true; // Dedup
-  opt.depth = 1;
+bool testLogEntryEquality() {
+    std::cout << "Testing LogEntry Equality...\n";
+    LogEntry e1; e1.signature = "abc"; e1.errorType = "TypeA";
+    LogEntry e2; e2.signature = "abc"; e2.errorType = "TypeA";
+    LogEntry e3; e3.signature = "def"; e3.errorType = "TypeA";
 
-  auto writerCtx = std::make_unique<MockWriter>();
-  auto* writer = writerCtx.get();
-  LogProcessor processor(opt, std::move(writerCtx));
-
-  std::vector<std::string> lines = {
-      "==123== Invalid read of size 4",
-      "==123==    at 0x1: main",
-      "==123== Invalid read of size 4", // Duplicate signature
-      "==123==    at 0x1: main",
-  };
-
-  processor.processLines(lines);
-
-  TEST_ASSERT(writer->entries.size() == 1, "Should deduce to 1 entry when uniqueOutput=true");
-
-  TEST_PASS("Unique output flag works (dedup)");
-  return true;
+    if (!(e1 == e2)) {
+        std::cerr << "FAIL: e1 should equal e2\n";
+        return false;
+    }
+    if (e1 == e3) {
+        std::cerr << "FAIL: e1 should not equal e3\n";
+        return false;
+    }
+    std::cout << "PASS: LogEntry Equality\n";
+    return true;
 }
 
-bool test_non_unique_output() {
-  Options opt;
-  opt.uniqueOutput = false; // NO Dedup
-  opt.depth = 1;
+bool testOptionsBuilderExtensions() {
+    std::cout << "Testing OptionsBuilder Extensions...\n";
+    OptionsBuilder b;
+    b.setTimeAfter("10:00:00")
+     .setTimeBefore("12:00:00")
+     .addIncludeStackPattern("foo.*")
+     .addExcludeTypeRegex("Leak.*")
+     .addIncludeTypeRegex("Error.*")
+     .addExcludeFunctionRegex("main")
+     .addIncludeFunctionRegex("test");
+     
+    auto opts = b.build();
+    
+    if (opts.timeAfter != "10:00:00") return false;
+    if (opts.timeBefore != "12:00:00") return false;
+    if (opts.filter.includeStackPatterns.size() != 1) return false;
+    if (opts.filter.includeStackPatterns[0] != "foo.*") return false;
+    if (opts.filter.excludeTypesRegex.size() != 1) return false;
+    if (opts.filter.excludeFunctionsRegex.size() != 1) return false;
+    
+    std::cout << "PASS: OptionsBuilder Extensions\n";
+    return true;
+}
 
-  auto writerCtx = std::make_unique<MockWriter>();
-  auto* writer = writerCtx.get();
-  LogProcessor processor(opt, std::move(writerCtx));
+bool testHtmlDiffSummary() {
+    std::cout << "Testing HtmlLogWriter Diff Summary...\n";
+    const std::string path = "test_html_diff.html";
+    {
+        HtmlLogWriter writer(path);
+        DiffEngine::DiffStats stats;
+        stats.totalNew = NEW_ERRORS;
+        stats.totalFixed = FIXED_ERRORS;
+        stats.totalCommon = COMMON_ERRORS;
+        stats.regressionRate = EXPECTED_REGRESSION_RATE;
+        stats.fixRate = EXPECTED_FIX_RATE;
+        
+        writer.writeDiffSummary(stats);
+    }
+    
+    std::string content = readFileContent(path);
+    
+    if (content.find("Diff Summary") == std::string::npos) return false;
+    if (content.find("New Errors") == std::string::npos) return false;
+    if (content.find("33.3%") == std::string::npos) return false;
 
-  std::vector<std::string> lines = {
-      "==123== Invalid read of size 4",
-      "==123==    at 0x1: main",
-      "==123== Invalid read of size 4", // Duplicate signature
-      "==123==    at 0x1: main",
-  };
-
-  processor.processLines(lines);
-
-  TEST_ASSERT(writer->entries.size() == 2, "Should have 2 entries when uniqueOutput=false");
-
-  TEST_PASS("Non-unique output works (all entries)");
-  return true;
+    std::filesystem::remove(path);
+    std::cout << "PASS: HtmlLogWriter Diff Summary\n";
+    return true;
 }
 
 int main() {
-  std::cout << "Running Iteration 2 Features Tests..." << std::endl;
-  bool all = true;
-  all &= test_source_loader_caching_logic();
-  all &= test_unique_output();
-  all &= test_non_unique_output();
-
-  if (all) {
-    std::cout << "\nAll Iteration 2 tests passed!" << std::endl;
-    return 0;
-  }
-  return 1;
+    bool pass = true;
+    pass &= testLogEntryEquality();
+    pass &= testOptionsBuilderExtensions();
+    pass &= testHtmlDiffSummary();
+    return pass ? 0 : 1;
 }

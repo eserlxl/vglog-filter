@@ -47,6 +47,7 @@ void reportProgress(std::size_t bytesProcessed, std::size_t totalBytes, std::str
 void reportMemoryUsage(std::string_view operation, std::string_view filename = {});
 
 // File helpers
+[[nodiscard]] std::string readFileContent(std::string_view fname);
 [[nodiscard]] std::vector<std::string> readFileLines(std::string_view fname);
 [[nodiscard]] bool isLargeFile(std::string_view fname);
 [[nodiscard]] std::size_t getFileSizeBytes(std::string_view fname);

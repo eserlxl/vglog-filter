@@ -148,4 +148,21 @@ struct LogEntry {
   [[nodiscard]] bool hasThreadInfo() const {
     return tid.has_value();
   }
+
+    bool operator==(const LogEntry& other) const {
+        return signature == other.signature &&
+               timestamp == other.timestamp &&
+               pid == other.pid &&
+               tid == other.tid &&
+               errorType == other.errorType &&
+               stackTrace == other.stackTrace &&
+               rawContent == other.rawContent;
+    }
+    
+    // Explicit inequality for strict compliance
+    bool operator!=(const LogEntry& other) const {
+        return !(*this == other);
+    }
 };
+
+

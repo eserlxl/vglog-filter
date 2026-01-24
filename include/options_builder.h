@@ -72,9 +72,52 @@ public:
     return *this;
   }
 
-  OptionsBuilder& addMarker(const std::string& marker) {
+    OptionsBuilder& addMarker(const std::string& marker) {
     opts.markers.push_back(marker);
     return *this;
+  }
+
+  // Iteration 2 Extensions
+  OptionsBuilder& setTimeAfter(const std::string& time) {
+    opts.timeAfter = time;
+    return *this;
+  }
+
+  OptionsBuilder& setTimeBefore(const std::string& time) {
+    opts.timeBefore = time;
+    return *this;
+  }
+
+  OptionsBuilder& addIncludeStackPattern(const std::string& pattern) {
+    opts.filter.includeStackPatterns.push_back(pattern);
+    return *this;
+  }
+
+  // Note: addExcludeStackPattern existed in config but not builder? 
+  // Config had excludeStackPatterns.
+  OptionsBuilder& addExcludeStackPattern(const std::string& pattern) {
+      opts.filter.excludeStackPatterns.push_back(pattern);
+      return *this;
+  }
+
+  OptionsBuilder& addExcludeTypeRegex(const std::string& regex) {
+    opts.filter.excludeTypesRegex.push_back(regex);
+    return *this;
+  }
+
+  OptionsBuilder& addIncludeTypeRegex(const std::string& regex) {
+    opts.filter.includeTypesRegex.push_back(regex);
+    return *this;
+  }
+
+  OptionsBuilder& addExcludeFunctionRegex(const std::string& regex) {
+    opts.filter.excludeFunctionsRegex.push_back(regex);
+    return *this;
+  }
+
+  OptionsBuilder& addIncludeFunctionRegex(const std::string& regex) {
+      opts.filter.includeFunctionsRegex.push_back(regex);
+      return *this;
   }
 
   [[nodiscard]] Options build() const {

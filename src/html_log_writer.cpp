@@ -118,8 +118,8 @@ void HtmlLogWriter::writeStats(const LogStats& stats) {
     footerWritten_ = true;
 }
 
-void HtmlLogWriter::setUseColor(bool) { /* No-op */ }
-void HtmlLogWriter::writeStatsJson(const LogStats&, const std::string&) const { /* No-op */ }
+void HtmlLogWriter::setUseColor(bool /*unused*/) { /* No-op */ }
+void HtmlLogWriter::writeStatsJson(const LogStats& /*unused*/, const std::string& /*unused*/) const { /* No-op */ }
 
 void HtmlLogWriter::flush() {
     if (ofs_.is_open()) ofs_.flush();
@@ -139,4 +139,30 @@ std::string HtmlLogWriter::escape(std::string_view s) const {
         }
     }
     return res;
+}
+
+void HtmlLogWriter::writeDiffSummary(const DiffEngine::DiffStats& stats) {
+    if (!ofs_.is_open()) return;
+    
+    // Inject summary before footer if possible, or just append if footer not written
+    // But HTML structure matters. If we call this, we assume we want it inside BODY.
+    // If footerWritten_ is true, we are outside body.
+    
+    ofs_ << R"(
+<div class="summary-box" style="margin-top: 30px; background: white; padding: 20px; border-radius: 5px; border-left: 5px solid #6c5ce7;">
+  <h3>Diff Summary</h3>
+  <table style="width: auto;">
+    <tr><th>Category</th><th>Count</th><th>Rate</th></tr>
+)";
+    
+    auto row = [&](const char* label, size_t count, double rate) {
+        ofs_ << "    <tr><td>" << label << "</td><td>" << count << "</td><td>" 
+             << std::fixed << std::setprecision(1) << rate << "%</td></tr>\n";
+    };
+
+    row("New Errors", stats.totalNew, stats.regressionRate);
+    row("Fixed Errors", stats.totalFixed, stats.fixRate);
+    row("Common Errors", stats.totalCommon, 0.0);
+
+    ofs_ << "  </table>\n</div>\n";
 }

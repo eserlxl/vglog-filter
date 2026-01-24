@@ -120,6 +120,31 @@ std::vector<std::string> readFileLines(std::string_view fname) {
   return lines;
 }
 
+std::string readFileContent(std::string_view fname) {
+
+  if (fname.empty())
+    throw std::invalid_argument("Filename cannot be empty");
+
+  auto ifs = path_validation::safe_ifstream(fname);
+  ifs.exceptions(std::ios::badbit);
+
+  std::string content;
+  // Pre-allocate if size known
+  try {
+      if (isLargeFile(fname)) {
+          // Skip pre-alloc for large files or handle differently?
+          // readFileContent implies loading all into memory, so size check matters.
+          // But isLargeFile checks > 1GB. We can just read.
+      }
+      auto sz = getFileSizeBytes(fname);
+      if (sz > 0) content.reserve(sz);
+  } catch(...) {}
+
+  content.assign(std::istreambuf_iterator<char>(ifs),
+                 std::istreambuf_iterator<char>());
+  return content;
+}
+
 bool isLargeFile(std::string_view fname) {
   if (fname.empty())
     return false;
