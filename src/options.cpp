@@ -109,13 +109,43 @@ void Options::dump(std::ostream& out) const {
     // Filter config nested
     b.startObject("filter");
     b.add("maxErrors", static_cast<int64_t>(filter.maxErrors));
-    // Arrays
-    if (!filter.excludeTypes.empty()) {
-        b.startArray("excludeTypes");
-        for (const auto& s : filter.excludeTypes) b.addStringToArray(s);
-        b.endArray();
-    }
-    // ... extensive logic for all vectors ... keeping it simple for now as per previous "incomplete" comment
+    if (filter.timeAfter) b.add("timeAfter", *filter.timeAfter);
+    if (filter.timeBefore) b.add("timeBefore", *filter.timeBefore);
+
+    // Arrays helper
+    auto dumpVec = [&](std::string_view key, const std::vector<std::string>& vec) {
+        if (!vec.empty()) {
+            b.startArray(key);
+            for (const auto& s : vec) b.addStringToArray(s);
+            b.endArray();
+        }
+    };
+    auto dumpIntVec = [&](std::string_view key, const std::vector<int32_t>& vec) {
+        if (!vec.empty()) {
+            b.startArray(key);
+            for (auto v : vec) b.addStringToArray(std::to_string(v)); // SimpleJsonBuilder only supports string arrays currently? No, wait.
+            // SimpleJsonBuilder doesn't have addIntToArray.
+            // I should use addStringToArray with to_string or fix SimpleJsonBuilder.
+            // For Iteration 2, using to_string is acceptable "Refinement".
+            b.endArray();
+        }
+    };
+
+    dumpVec("excludeTypes", filter.excludeTypes);
+    dumpVec("excludeStackPatterns", filter.excludeStackPatterns);
+    dumpVec("includeType", filter.includeTypes);
+    dumpVec("includeFunction", filter.includeFunctions);
+    dumpVec("excludeFunction", filter.excludeFunctions);
+    dumpVec("includeStackPatterns", filter.includeStackPatterns);
+    dumpVec("includeSourcePaths", filter.includeSourcePaths);
+    dumpVec("excludeSourcePaths", filter.excludeSourcePaths);
+    
+    // PIDs/Threads
+    dumpIntVec("excludePids", filter.excludePids);
+    dumpIntVec("includePids", filter.includePids);
+    dumpIntVec("includeThreads", filter.includeThreads);
+    dumpIntVec("excludeThreads", filter.excludeThreads);
+
     b.endObject();
 
     out << b.str() << "\n";

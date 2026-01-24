@@ -20,35 +20,10 @@ inline constexpr auto VERSION_STRING = "10.5.0"; // Iteration 1
 
 
 
+#include "filter_config.h"
+
 enum class SanitizerType { Auto, Valgrind, Asan };
 enum class ColorMode { Auto, Always, Never }; // Iteration 1
-
-struct FilterConfig {
-  std::vector<std::string> excludeTypes;
-  std::vector<std::string> excludeStackPatterns;
-  std::vector<std::string> excludeSourcePaths;
-  std::vector<std::string> includeSourcePaths; // Iteration 1: Include specific sources
-  std::vector<int32_t> excludeThreads;
-  // Iteration 1 Extension
-  size_t maxErrors = 0; // 0 = unlimited
-  std::vector<std::string> includeTypes;
-  std::vector<std::string> includeFunctions;
-  std::vector<std::string> excludeFunctions;
-  std::vector<int32_t> excludePids;    // Iteration 1: Explicit exclude by PID
-  std::vector<int32_t> includePids;    // Iteration 1: Only include these PIDs
-  std::vector<int32_t> includeThreads; // Iteration 1: Only include these Threads
-
-  // Iteration 1 Extensions
-  std::vector<std::string> includeStackPatterns;
-  std::optional<std::string> timeAfter;
-  std::optional<std::string> timeBefore;
-
-  // Iteration 3 Extensions (Regex)
-  std::vector<std::string> excludeTypesRegex;
-  std::vector<std::string> includeTypesRegex;
-  std::vector<std::string> excludeFunctionsRegex;
-  std::vector<std::string> includeFunctionsRegex;
-};
 
 struct RotationConfig {
   size_t rotateSizeMb = 0;

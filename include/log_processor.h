@@ -170,8 +170,8 @@ private:
   };
 
   void processStreamParallel(std::istream& in);
-  void pushRawBlock(RawBlock&& block);
-  void workerLoop();
+  // void pushRawBlock(RawBlock&& block); // Removed - unused
+  // void workerLoop(); // Removed - unused
   
   std::unique_ptr<ThreadPool> threadPool;
   std::queue<ProcessedResult> resultQueue;
