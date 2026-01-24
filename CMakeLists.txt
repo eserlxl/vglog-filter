@@ -206,6 +206,8 @@ add_library(vglog-filter-lib
   src/diff_engine.cpp
   src/parsers/valgrind_parser.cpp
   src/parsers/asan_parser.cpp
+  src/filter_config.cpp
+
 )
 
 target_link_libraries(vglog-filter-lib PUBLIC project_options project_warnings)

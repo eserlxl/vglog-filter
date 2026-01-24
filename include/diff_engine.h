@@ -31,4 +31,18 @@ public:
      */
     static DiffResult compare(const std::vector<LogEntry>& baseline,
                               const std::vector<LogEntry>& target);
+
+    struct DiffStats {
+        size_t totalNew;
+        size_t totalFixed;
+        size_t totalCommon;
+        double regressionRate; // new / baseline * 100
+        double fixRate;        // fixed / baseline * 100
+    };
+
+    /**
+     * @brief Computes statistics from a DiffResult.
+     */
+    static DiffStats computeStats(const DiffResult& result);
 };
+

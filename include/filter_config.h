@@ -33,4 +33,11 @@ struct FilterConfig {
   std::vector<std::string> includeTypesRegex;
   std::vector<std::string> excludeFunctionsRegex;
   std::vector<std::string> includeFunctionsRegex;
+
+  /**
+   * @brief Validates the configuration consistency.
+   * @return A list of error messages. Empty if valid.
+   */
+  [[nodiscard]] std::vector<std::string> validate() const;
 };
+

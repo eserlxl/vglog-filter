@@ -22,8 +22,14 @@ public:
     void writeStatsJson(const LogStats& stats, const std::string& path) const override;
     void flush() override;
 
+    void clear();
+    void setCapacity(size_t maxEntries);
+    [[nodiscard]] bool isFull() const;
+
     [[nodiscard]] const std::vector<LogEntry>& getEntries() const;
 
 private:
     std::vector<LogEntry> entries_;
+    size_t capacity_ = 0; // 0 = unlimited
 };
+

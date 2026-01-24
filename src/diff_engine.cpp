@@ -32,3 +32,22 @@ DiffResult DiffEngine::compare(const std::vector<LogEntry>& baseline,
 
     return result;
 }
+
+DiffEngine::DiffStats DiffEngine::computeStats(const DiffResult& result) {
+    DiffStats stats;
+    stats.totalNew = result.newErrors.size();
+    stats.totalFixed = result.fixedErrors.size();
+    stats.totalCommon = result.commonErrors.size();
+
+    size_t baselineTotal = stats.totalFixed + stats.totalCommon;
+    
+    if (baselineTotal > 0) {
+        stats.regressionRate = (static_cast<double>(stats.totalNew) / static_cast<double>(baselineTotal)) * 100.0;
+        stats.fixRate = (static_cast<double>(stats.totalFixed) / static_cast<double>(baselineTotal)) * 100.0;
+    } else {
+        stats.regressionRate = 0.0;
+        stats.fixRate = 0.0;
+    }
+    
+    return stats;
+}
