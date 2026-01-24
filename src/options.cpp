@@ -92,6 +92,12 @@ void Options::validate() const {
   if (rotation.rotateSizeMb > 0 && outputFile.empty()) {
     throw std::runtime_error("Rotation size requires output file (-o/--output)");
   }
+  if (depth < 0) {
+      throw std::runtime_error("Depth cannot be negative");
+  }
+  if (jobs < 1) {
+      throw std::runtime_error("Jobs must be at least 1");
+  }
 }
 
 void Options::dump(std::ostream& out) const {
@@ -116,17 +122,14 @@ void Options::dump(std::ostream& out) const {
     auto dumpVec = [&](std::string_view key, const std::vector<std::string>& vec) {
         if (!vec.empty()) {
             b.startArray(key);
-            for (const auto& s : vec) b.addStringToArray(s);
+            for (const auto& s : vec) b.addElement(s);
             b.endArray();
         }
     };
     auto dumpIntVec = [&](std::string_view key, const std::vector<int32_t>& vec) {
         if (!vec.empty()) {
             b.startArray(key);
-            for (auto v : vec) b.addStringToArray(std::to_string(v)); // SimpleJsonBuilder only supports string arrays currently? No, wait.
-            // SimpleJsonBuilder doesn't have addIntToArray.
-            // I should use addStringToArray with to_string or fix SimpleJsonBuilder.
-            // For Iteration 2, using to_string is acceptable "Refinement".
+            for (auto v : vec) b.addElement(static_cast<int64_t>(v));
             b.endArray();
         }
     };

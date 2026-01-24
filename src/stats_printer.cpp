@@ -3,9 +3,12 @@
 #include <vector>
 #include <map>
 
-void StatsPrinter::print(const LogStats& stats, std::FILE* out, Format format) {
+#include "json/simple_json_builder.h"
+#include "json_utils.h"
+
+void StatsPrinter::print(const LogStats& stats, std::FILE* out, Format format, bool detailed) {
   if (format == Format::Json) {
-    printJson(stats, out);
+    printJson(stats, out, detailed);
   } else {
     printText(stats, out);
   }
@@ -41,30 +44,40 @@ void StatsPrinter::printText(const LogStats& stats, std::FILE* out) {
   }
 }
 
-void StatsPrinter::printJson(const LogStats& stats, std::FILE* out) {
-  std::fprintf(out, "{\n");
-  std::fprintf(out, "  \"linesRead\": %zu,\n", stats.linesRead);
-  std::fprintf(out, "  \"bytesProcessed\": %zu,\n", stats.bytesProcessed);
-  std::fprintf(out, "  \"blocksFound\": %zu,\n", stats.blocksFound);
-  std::fprintf(out, "  \"uniqueBlocks\": %zu,\n", stats.uniqueBlocks);
-  std::fprintf(out, "  \"filteredCount\": %zu,\n", stats.filteredCount);
-  std::fprintf(out, "  \"parseErrors\": %zu,\n", stats.parseErrors);
-  std::fprintf(out, "  \"errorCounts\": {\n");
+void StatsPrinter::printJson(const LogStats& stats, std::FILE* out, bool detailed) {
+  json::Builder b;
+  b.add("linesRead", static_cast<int64_t>(stats.linesRead));
+  b.add("bytesProcessed", static_cast<int64_t>(stats.bytesProcessed));
+  b.add("blocksFound", static_cast<int64_t>(stats.blocksFound));
+  b.add("uniqueBlocks", static_cast<int64_t>(stats.uniqueBlocks));
+  b.add("filteredCount", static_cast<int64_t>(stats.filteredCount));
+  b.add("parseErrors", static_cast<int64_t>(stats.parseErrors));
+  
+  if (!stats.errorCounts.empty()) {
+      b.startObject("errorCounts");
+      for (const auto& [type, count] : stats.errorCounts) {
+          b.add(type, static_cast<int64_t>(count));
+      }
+      b.endObject();
+  }
+  
+  if (detailed) {
+      if (!stats.errorCountsByTid.empty()) {
+          b.startObject("errorCountsByTid");
+          for (const auto& [tid, count] : stats.errorCountsByTid) {
+               b.add(std::to_string(tid), static_cast<int64_t>(count));
+          }
+          b.endObject();
+      }
+       if (!stats.errorCountsByPid.empty()) {
+          b.startObject("errorCountsByPid");
+          for (const auto& [pid, count] : stats.errorCountsByPid) {
+               b.add(std::to_string(pid), static_cast<int64_t>(count));
+          }
+          b.endObject();
+      }
+  }
 
-  auto it = stats.errorCounts.begin();
-  for (size_t i = 0; i < stats.errorCounts.size(); ++i, ++it) {
-    std::fprintf(out, "    \"%s\": %zu%s\n", it->first.c_str(), it->second,
-                 (i < stats.errorCounts.size() - 1) ? "," : "");
-  }
-  std::fprintf(out, "  },\n");
-  
-  std::fprintf(out, "  \"errorCountsByTid\": {\n");
-  auto tid_it = stats.errorCountsByTid.begin();
-  for (size_t i = 0; i < stats.errorCountsByTid.size(); ++i, ++tid_it) {
-      std::fprintf(out, "    \"%d\": %zu%s\n", tid_it->first, tid_it->second,
-                   (i < stats.errorCountsByTid.size() - 1) ? "," : "");
-  }
-  std::fprintf(out, "  }\n"); // End tid
-  
-  std::fprintf(out, "}\n");
+  std::string s = b.str();
+  std::fprintf(out, "%s\n", s.c_str());
 }

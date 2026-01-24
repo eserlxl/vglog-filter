@@ -89,11 +89,29 @@ Builder& Builder::startArray(std::string_view key) {
   return *this;
 }
 
-Builder& Builder::addStringToArray(std::string_view value) {
+
+
+Builder& Builder::addElement(std::string_view value) {
   ensureComma();
   buffer += "\"";
   buffer += json_utils::escape_string(std::string(value));
   buffer += "\"";
+  return *this;
+}
+
+Builder& Builder::addElement(int64_t value) {
+  ensureComma();
+  buffer += std::to_string(value);
+  return *this;
+}
+
+Builder& Builder::addElement(int value) {
+  return addElement(static_cast<int64_t>(value));
+}
+
+Builder& Builder::addElement(bool value) {
+  ensureComma();
+  buffer += (value ? "true" : "false");
   return *this;
 }
 

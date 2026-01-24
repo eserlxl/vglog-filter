@@ -305,6 +305,7 @@ if (BUILD_TESTING)
   add_test_exe(test_json_parser          "test/test_json_parser.cpp")
   add_test_exe(test_config_loading       "test/test_config_loading.cpp")
   add_test_exe(test_features_iter1_redux "test/test_features_iter1_redux.cpp")
+  add_test_exe(test_features_iter2_refactor "test/test_features_iter2_refactor.cpp")
 
 
 

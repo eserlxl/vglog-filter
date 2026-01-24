@@ -416,7 +416,7 @@ void LogProcessor::printStats(std::FILE* out) const {
   StatsPrinter::Format fmt = (opt.statsFormat == Options::StatsFormat::json) 
                              ? StatsPrinter::Format::Json 
                              : StatsPrinter::Format::Text;
-  StatsPrinter::print(stats, out, fmt);
+  StatsPrinter::print(stats, out, fmt, opt.detailedStats);
 }
 
 void LogProcessor::saveStatsJson() const {

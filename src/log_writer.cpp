@@ -140,7 +140,7 @@ struct LogWriter::Impl {
         if (!entry.stackTrace.empty()) {
             b.startArray("stackTrace");
             for (const auto& line : entry.stackTrace) {
-                b.addStringToArray(line);
+                b.addElement(line);
             }
             b.endArray();
         }
@@ -159,7 +159,7 @@ struct LogWriter::Impl {
         
         if (!entry.sourceContext.empty()) {
             b.startArray("sourceContext");
-            for (const auto& c : entry.sourceContext) b.addStringToArray(c);
+            for (const auto& c : entry.sourceContext) b.addElement(c);
             b.endArray();
         }
     }
@@ -191,7 +191,7 @@ void LogWriter::writeEntry(const LogEntry& entry) {
       pImpl->write_data(json.data(), json.size());
     }
   } else {
-    // Color logic
+    // ... (Color logic unchanged)
     // GitHub Actions Annotation
     if (pImpl->opt.githubActions) {
       std::string ghMsg = "::error";
@@ -221,34 +221,16 @@ void LogWriter::writeEntry(const LogEntry& entry) {
     }
 
     if (pImpl->useColor) {
-      // Very basic ANSI coloring: Red for errors, Reset at end
-      // Highlight "==PID==" in Cyan
-      // Highlight "at 0x..." in Green
-      // This is a simple heuristic implementation
-      // Semantic Coloring
+      // ... (Color logic unchanged)
       // We process line by line to highlight tokens.
-      // This is expensive but requested.
-      // Simple parse:
-      // pid -> CYAN
-      // errorType -> RED
-      // "at 0x..." -> GREEN address, MAGENTA func, BLUE file:line
-
       std::string buffer;
       buffer.reserve(entry.rawContent.size() * 2);
 
       std::istringstream stream(entry.rawContent);
       std::string line;
       while (std::getline(stream, line)) {
-        // Highlight PID
         if (entry.pid.size() > 0 && line.find(entry.pid) != std::string::npos) {
-          // This is tricky without regex replace.
-          // Let's just color the whole line if it's the header?
         }
-
-        // Simple heuristic:
-        // If line contains "Invalid read" or "blocks are", color RED.
-        // If line contains "at 0x", color parts.
-
         bool isHeader = (line.find("Invalid") != std::string::npos ||
                          line.find("blocks are") != std::string::npos);
         if (isHeader) {
@@ -291,137 +273,34 @@ void LogWriter::setUseColor(bool enable) {
   pImpl->useColor = enable;
 }
 
+#include "stats_printer.h"
+
 void LogWriter::writeStatsJson(const struct LogStats& stats, const std::string& path) const {
   if (path.empty())
     return;
-
-  std::string json = "{\"type\":\"stats\"";
-  json += ",\"linesRead\":" + std::to_string(stats.linesRead);
-  json += ",\"bytesProcessed\":" + std::to_string(stats.bytesProcessed);
-  json += ",\"blocksFound\":" + std::to_string(stats.blocksFound);
-  json += ",\"uniqueBlocks\":" + std::to_string(stats.uniqueBlocks);
-  json += ",\"filteredCount\":" + std::to_string(stats.filteredCount);
-  json += ",\"parseErrors\":" + std::to_string(stats.parseErrors);
-
-  if (!stats.errorCounts.empty()) {
-    json += ",\"error_breakdown\":{";
-    bool first = true;
-    for (const auto& [type, count] : stats.errorCounts) {
-      if (!first)
-        json += ",";
-      json += "\"" + json_utils::escape_string(type) + "\":" + std::to_string(count);
-      first = false;
-    }
-    json += "}";
-  }
-  json += "}\n";
-
   FileHandle fh(path.c_str(), "w");
   if (fh.get()) {
-    std::fwrite(json.data(), 1, json.size(), fh.get());
+      // Detailed stats always for writeStatsJson file? Or use option?
+      // LogProcessor used to use 'writeStatsJson' for dedicated stats file.
+      // Usually full stats. Let's assume detailed.
+      // Or we can check pImpl->opt.detailedStats? But LogWriter::writeStatsJson is const and doesn't access pImpl here (it takes path).
+      // wait, LogWriter has pImpl. 'this->pImpl->opt.detailedStats'.
+      // But method is const? pImpl is unique_ptr. const method can access pImpl.
+      // However, check if pImpl is visible in header call? No, it's opaque. But herein cpp we see it.
+      // We can use pImpl->opt.detailedStats.
+      StatsPrinter::print(stats, fh.get(), StatsPrinter::Format::Json, pImpl->opt.detailedStats);
   }
 }
 
 void LogWriter::writeStats(const struct LogStats& stats) {
   if (pImpl->opt.jsonOutput) {
-    // Manually construct JSON to avoid dependency on LogProcessor internals or complex serialization libs
-    // Note: This duplicates logic slightly but keeps LogWriter self-contained.
-    // In a larger system, we'd use a shared JSON builder.
-    std::string json = "{\"type\":\"stats\"";
-    json += ",\"linesRead\":" + std::to_string(stats.linesRead);
-    json += ",\"bytesProcessed\":" + std::to_string(stats.bytesProcessed);
-    json += ",\"blocksFound\":" + std::to_string(stats.blocksFound);
-    json += ",\"uniqueBlocks\":" + std::to_string(stats.uniqueBlocks);
-    json += ",\"filteredCount\":" + std::to_string(stats.filteredCount);
-    json += ",\"parseErrors\":" + std::to_string(stats.parseErrors);
-
-    if (!stats.errorCounts.empty()) {
-      json += ",\"error_breakdown\":{";
-      bool first = true;
-      for (const auto& [type, count] : stats.errorCounts) {
-        if (!first)
-          json += ",";
-        json += "\"" + json_utils::escape_string(type) + "\":" + std::to_string(count);
-        first = false;
-      }
-      json += "}";
-    }
-
-    if (pImpl->opt.detailedStats) {
-      if (!stats.errorCountsByPid.empty()) {
-        json += ",\"error_breakdown_by_pid\":{";
-        bool first = true;
-        for (const auto& [pid, count] : stats.errorCountsByPid) {
-          if (!first)
-            json += ",";
-          json += "\"" + std::to_string(pid) + "\":" + std::to_string(count);
-          first = false;
-        }
-        json += "}";
-      }
-      if (!stats.errorCountsByTid.empty()) {
-        json += ",\"error_breakdown_by_tid\":{";
-        bool first = true;
-        for (const auto& [tid, count] : stats.errorCountsByTid) {
-          if (!first)
-            json += ",";
-          json += "\"" + std::to_string(tid) + "\":" + std::to_string(count);
-          first = false;
-        }
-        json += "}";
-      }
-    }
-    json += "}\n";
-    pImpl->write_data(json.data(), json.size());
+     StatsPrinter::print(stats, pImpl->out_fp, StatsPrinter::Format::Json, pImpl->opt.detailedStats);
   } else {
+    // If statsFormat set to JSON, use that.
     if (pImpl->opt.statsFormat == Options::StatsFormat::json) {
-      // Print JSON to stdout
-      // We reuse writeStatsJson logic but to stdout?
-      // LogWriter::writeStatsJson writes to file path.
-      // Let's construct JSON here.
-      // ... (Duplicate logic, ideally refactor, but strict rules: "small helper abstractions").
-      // I'll call a private helper or just do it here.
-      std::string json = "{\"type\":\"stats\"";
-      json += ",\"linesRead\":" + std::to_string(stats.linesRead);
-      json += ",\"bytesProcessed\":" + std::to_string(stats.bytesProcessed);
-      json += ",\"blocksFound\":" + std::to_string(stats.blocksFound);
-      json += ",\"uniqueBlocks\":" + std::to_string(stats.uniqueBlocks);
-      json += ",\"filteredCount\":" + std::to_string(stats.filteredCount);
-      json += ",\"parseErrors\":" + std::to_string(stats.parseErrors);
-      if (!stats.errorCounts.empty()) {
-        json += ",\"error_breakdown\":{";
-        bool first = true;
-        for (const auto& [type, count] : stats.errorCounts) {
-          if (!first)
-            json += ",";
-          json += "\"" + json_utils::escape_string(type) + "\":" + std::to_string(count);
-          first = false;
-        }
-        json += "}";
-      }
-      json += "}\n";
-      std::fwrite(json.data(), 1, json.size(), pImpl->out_fp);
+       StatsPrinter::print(stats, pImpl->out_fp, StatsPrinter::Format::Json, pImpl->opt.detailedStats);
     } else {
-      std::fprintf(pImpl->out_fp, "--- Statistics ---\n");
-      std::fprintf(pImpl->out_fp, "Lines read      : %zu\n", stats.linesRead);
-      std::fprintf(pImpl->out_fp, "Bytes processed : %zu\n", stats.bytesProcessed);
-      std::fprintf(pImpl->out_fp, "Blocks found    : %zu\n", stats.blocksFound);
-      std::fprintf(pImpl->out_fp, "Unique blocks   : %zu\n", stats.uniqueBlocks);
-      std::fprintf(pImpl->out_fp, "Filtered blocks : %zu\n", stats.filteredCount);
-      if (!stats.errorCounts.empty()) {
-        std::fprintf(pImpl->out_fp, "\nError Breakdown:\n");
-        for (const auto& [type, count] : stats.errorCounts) {
-          std::fprintf(pImpl->out_fp, "  %-40s : %zu\n", type.c_str(), count);
-        }
-      }
-      if (pImpl->opt.detailedStats) {
-        // ... (rest of detailed stats)
-        // If we implement detailed stats for JSON stdout as well, we should.
-        // But audit summary said "Stats Format".
-      }
-      if (pImpl->opt.strictMode) {
-        std::fprintf(pImpl->out_fp, "Parse errors    : %zu\n", stats.parseErrors);
-      }
+       StatsPrinter::print(stats, pImpl->out_fp, StatsPrinter::Format::Text, pImpl->opt.detailedStats);
     }
   }
 }

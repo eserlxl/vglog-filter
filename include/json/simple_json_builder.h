@@ -29,7 +29,13 @@ public:
   Builder& endObject();
   
   Builder& startArray(std::string_view key);
-  Builder& addStringToArray(std::string_view value); // Add to current array
+  
+  // Array elements
+  Builder& addElement(std::string_view value); 
+  Builder& addElement(int64_t value);
+  Builder& addElement(int value);
+  Builder& addElement(bool value);
+
   Builder& endArray();
 
   std::string str() const;

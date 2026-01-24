@@ -7,9 +7,9 @@ class StatsPrinter {
 public:
   enum class Format { Text, Json };
 
-  static void print(const LogStats& stats, std::FILE* out, Format format);
+  static void print(const LogStats& stats, std::FILE* out, Format format, bool detailed = false);
 
 private:
   static void printText(const LogStats& stats, std::FILE* out);
-  static void printJson(const LogStats& stats, std::FILE* out);
+  static void printJson(const LogStats& stats, std::FILE* out, bool detailed);
 };

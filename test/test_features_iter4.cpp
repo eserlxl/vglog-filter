@@ -75,8 +75,8 @@ bool test_stats_printer() {
     std::string jsonContent((std::istreambuf_iterator<char>(ifs2)),
                             (std::istreambuf_iterator<char>()));
                             
-    if (jsonContent.find("\"linesRead\": 100") == std::string::npos) {
-        std::cerr << "FAIL: JSON output missing linesRead" << std::endl;
+    if (jsonContent.find("\"linesRead\":100") == std::string::npos) {
+        std::cerr << "FAIL: JSON output missing linesRead. Content: '" << jsonContent << "'" << std::endl;
         return false;
     }
     
